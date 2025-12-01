@@ -1,0 +1,50 @@
+import std.math
+import std.collections
+import std.os
+
+struct Vector3 {
+    x: f32,
+    y: f32,
+    z: f32,
+}
+
+fn create_vector(x: f32, y: f32) Vector3 {
+    return {x: x, y: y, z: 0.0};
+}
+
+fn main() {
+    const pos: Vector3 = create_vector(10.5, 20.0);
+    const numbers: std::array<i32, 3> = [1, 2, 3];
+    var dyn_numbers = std::vector<u32>::new();
+    var dyn_numbers_explicit: std::vector<i32> = std::vector::new();
+
+    var count = 100;
+
+    if pos.x < 50.0 {
+        print("Position is small: {pos.x}\n");
+    } else if pos.x > 100.0 {
+        println("Position is big: {}", pos.x * 2.0);
+    } else {
+        println(stderr, "Position should not be inside [50-100]");
+    }
+
+    while count > 0 {
+        count = count - 1;
+        count -= count.clamp(0 as u32, 200 as u32);
+    }
+
+    const file_content = std::os::read_file("input.txt");
+    var output_file = std::os::write_file("output.txt");
+    const lines: Vector<String> = file_content.split('\n');
+
+    for line in lines {
+        if line.contains('=') {
+            const parts = line.split_once('=');
+
+            const key = parts[1].parse<i32>();
+            if key != None {
+                output_file.write("{}", key.value);
+            }
+        }
+    }
+}
