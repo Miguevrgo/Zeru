@@ -1,0 +1,154 @@
+use std::{iter::Peekable, str::Chars};
+
+use crate::token::Token;
+
+pub struct Lexer<'a> {
+    input: Peekable<Chars<'a>>,
+}
+
+impl<'a> Lexer<'a> {
+    pub fn new(input: &'a str) -> Self {
+        Self {
+            input: input.chars().peekable(),
+        }
+    }
+
+    fn peek(&mut self) -> Option<&char> {
+        self.input.peek()
+    }
+
+    fn advance(&mut self) -> Option<char> {
+        self.input.next()
+    }
+
+    fn skip_whitespace(&mut self) {
+        while let Some(&ch) = self.peek() {
+            if !ch.is_whitespace() {
+                break;
+            }
+            self.advance();
+        }
+    }
+
+    pub fn next_token(&mut self) -> Token {
+        self.skip_whitespace();
+
+        let ch = match self.advance() {
+            Some(c) => c,
+            None => return Token::Eof,
+        };
+
+        match ch {
+            '=' => {
+                if self.peek() == Some(&'=') {
+                    self.advance();
+                    return Token::Eq;
+                }
+
+                Token::Assign
+            }
+            '!' => {
+                if self.peek() == Some(&'=') {
+                    self.advance();
+                    return Token::NotEq;
+                }
+
+                Token::Assign
+            }
+            '+' => Token::Plus,
+            '-' => Token::Minus,
+            '*' => Token::Star,
+            '/' => Token::Slash,
+            '<' => Token::Lt,
+            '>' => Token::Gt,
+            '(' => Token::LParen,
+            ')' => Token::RParen,
+            '{' => Token::LBrace,
+            '}' => Token::RBrace,
+            '[' => Token::LBracket,
+            ']' => Token::RBracket,
+            ':' => Token::Colon,
+            ';' => Token::Semicolon,
+            ',' => Token::Comma,
+            '.' => Token::Dot,
+
+            '"' => self.read_string(),
+
+            'a'..='z' | 'A'..='Z' | '_' => self.read_identifier(ch),
+            '0'..='9' => self.read_number(ch),
+
+            _ => Token::Illegal(ch.to_string()),
+        }
+    }
+
+    fn read_identifier(&mut self, ch: char) -> Token {
+        let mut literal = String::from(ch);
+
+        while let Some(&ch) = self.peek() {
+            if ch.is_alphanumeric() || ch == '_' {
+                unsafe {
+                    literal.push(self.advance().unwrap_unchecked());
+                }
+            } else {
+                break;
+            }
+        }
+
+        match literal.as_str() {
+            "fn" => Token::Fn,
+            "var" => Token::Var,
+            "const" => Token::Const,
+            "if" => Token::If,
+            "else" => Token::Else,
+            "import" => Token::Import,
+            "while" => Token::While,
+            "struct" => Token::Struct,
+            "return" => Token::Return,
+            "for" => Token::For,
+            "in" => Token::In,
+            "None" => Token::None,
+
+            _ => Token::Identifier(literal),
+        }
+    }
+
+    fn read_number(&mut self, ch: char) -> Token {
+        let mut literal = String::from(ch);
+        let mut dot = false;
+
+        while let Some(&ch) = self.peek() {
+            if ch.is_ascii_digit() {
+                unsafe {
+                    literal.push(self.advance().unwrap_unchecked());
+                }
+            } else if ch == '.' && !dot {
+                dot = true;
+                unsafe { literal.push(self.advance().unwrap_unchecked()) }
+            } else {
+                break;
+            }
+        }
+
+        if dot {
+            Token::Float(literal.parse::<f64>().unwrap_or(0.0))
+        } else {
+            Token::Int(literal.parse::<i64>().unwrap_or(0))
+        }
+    }
+
+    fn read_string(&mut self) -> Token {
+        let mut string_lit = String::new();
+
+        while let Some(&ch) = self.peek() {
+            if ch == '"' {
+                self.advance();
+                return Token::StringLit(string_lit);
+            }
+            unsafe {
+                string_lit.push(self.advance().unwrap_unchecked());
+            }
+        }
+
+        Token::Illegal("Unterminated String".to_string())
+    }
+}
