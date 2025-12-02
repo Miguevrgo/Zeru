@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     // Keywords
     Fn,
@@ -30,6 +30,7 @@ pub enum Token {
     NotEq,  // !=
     Lt,     // <
     Gt,     // >
+    Bang,   // !
 
     // Delimiters
     LParen,    // (

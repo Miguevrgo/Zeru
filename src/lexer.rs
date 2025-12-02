@@ -53,7 +53,7 @@ impl<'a> Lexer<'a> {
                     return Token::NotEq;
                 }
 
-                Token::Assign
+                Token::Bang
             }
             '+' => Token::Plus,
             '-' => Token::Minus,

@@ -1,9 +1,11 @@
 use crate::token::Token;
 
+#[derive(Debug)]
 pub struct Program {
     pub statements: Vec<Statement>,
 }
 
+#[derive(Debug)]
 pub enum Statement {
     Var {
         name: String,
@@ -38,6 +40,7 @@ pub enum Statement {
     },
 }
 
+#[derive(Debug)]
 pub enum Expression {
     Int(i64),
     Float(f64),
