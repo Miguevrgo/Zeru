@@ -53,6 +53,9 @@ impl<'a> Parser<'a> {
             Token::Return => self.parse_return_statement(),
             Token::Fn => self.parse_function_statement(),
             Token::If => self.parse_if_statement(),
+            Token::While => self.parse_while_statement(),
+            Token::For => self.parse_for_statement(),
+            Token::Struct => self.parse_struct_statement(),
             _ => self.parse_expression_statement(), //TODO: Hmmmmmm
         }
     }
@@ -249,6 +252,137 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_while_statement(&mut self) -> Option<Statement> {
+        self.next_token();
+
+        let cond = self.parse_expression(Precedence::Lowest)?;
+
+        if !self.expect_peek(&Token::LBrace) {
+            return None;
+        }
+        let body = Box::new(Statement::Block(self.parse_block_statement()));
+
+        Some(Statement::While { cond, body })
+    }
+
+    fn parse_for_statement(&mut self) -> Option<Statement> {
+        if !self.expect_peek_identifier() {
+            return None;
+        }
+        let variable = match &self.current_token {
+            Token::Identifier(n) => n.clone(),
+            _ => unreachable!(),
+        };
+
+        if !self.expect_peek(&Token::In) {
+            return None;
+        }
+        self.next_token();
+
+        let iterable = self.parse_expression(Precedence::Lowest)?;
+
+        if !self.expect_peek(&Token::LBrace) {
+            return None;
+        }
+        let body = Box::new(Statement::Block(self.parse_block_statement()));
+
+        Some(Statement::ForIn {
+            variable,
+            iterable,
+            body,
+        })
+    }
+
+    fn parse_struct_statement(&mut self) -> Option<Statement> {
+        if !self.expect_peek_identifier() {
+            return None;
+        }
+        let name = match &self.current_token {
+            Token::Identifier(n) => n.clone(),
+            _ => unreachable!(),
+        };
+
+        if !self.expect_peek(&Token::LBrace) {
+            return None;
+        }
+        let mut fields = Vec::new();
+
+        while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
+            self.next_token();
+            let field_name = match &self.current_token {
+                Token::Identifier(n) => n.clone(),
+                _ => {
+                    self.errors.push("Expected field name".into());
+                    return None;
+                }
+            };
+
+            if !self.expect_peek(&Token::Colon) {
+                return None;
+            }
+            self.next_token();
+
+            let field_type = match &self.current_token {
+                Token::Identifier(t) => t.clone(),
+                _ => {
+                    self.errors.push("Expected field type".into());
+                    return None;
+                }
+            };
+
+            fields.push((field_name, field_type));
+
+            if self.peek_token_is(&Token::RBrace) {
+                break;
+            }
+
+            if !self.expect_peek(&Token::Comma) {
+                return None;
+            }
+        }
+
+        if !self.expect_peek(&Token::RBrace) {
+            return None;
+        }
+        Some(Statement::Struct { name, fields })
+    }
+
+    fn parse_struct_literal(&mut self, name: String) -> Option<Expression> {
+        self.next_token();
+
+        let mut fields = Vec::new();
+
+        while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
+            self.next_token();
+            let field_name = match &self.current_token {
+                Token::Identifier(n) => n.clone(),
+                _ => return None,
+            };
+
+            if !self.expect_peek(&Token::Colon) {
+                return None;
+            }
+            self.next_token();
+
+            let value = self.parse_expression(Precedence::Lowest)?;
+            fields.push((field_name, value));
+
+            if self.peek_token_is(&Token::RBrace) {
+                break;
+            }
+
+            if !self.expect_peek(&Token::Comma) {
+                return None;
+            }
+        }
+
+        if !self.expect_peek(&Token::RBrace) {
+            return None;
+        }
+
+        Some(Expression::StructLiteral { name, fields })
+    }
+
     fn parse_block_statement(&mut self) -> Vec<Statement> {
         let mut block = Vec::new();
         self.next_token();
@@ -265,7 +399,14 @@ impl<'a> Parser<'a> {
 
     fn parse_expression(&mut self, precedence: Precedence) -> Option<Expression> {
         let mut left_exp = match &self.current_token {
-            Token::Identifier(name) => Some(Expression::Identifier(name.clone())),
+            Token::Identifier(name) => {
+                let starts_with_upper = name.chars().next().is_some_and(|c| c.is_uppercase());
+                if starts_with_upper && self.peek_token_is(&Token::LBrace) {
+                    self.parse_struct_literal(name.clone())
+                } else {
+                    Some(Expression::Identifier(name.clone()))
+                }
+            }
             Token::Int(val) => Some(Expression::Int(*val)),
             Token::Float(val) => Some(Expression::Float(*val)),
             Token::StringLit(val) => Some(Expression::StringLit(val.clone())),
@@ -447,7 +588,7 @@ enum Precedence {
 
 fn token_precedence(token: &Token) -> Precedence {
     match token {
-        Token::Eq | Token::NotEq => Precedence::Equals,
+        Token::Assign | Token::Eq | Token::NotEq => Precedence::Equals,
         Token::Gt | Token::Lt => Precedence::LessGreater,
         Token::Plus | Token::Minus => Precedence::Sum,
         Token::Star | Token::Slash => Precedence::Product,
@@ -463,6 +604,7 @@ mod tests {
         ast::{Expression, Program, Statement},
         lexer::Lexer,
         parser::Parser,
+        token::Token,
     };
 
     fn parse_input(input: &str) -> Program {
@@ -687,6 +829,114 @@ mod tests {
                 assert_eq!(arguments.len(), 3);
             }
             _ => panic!("Expected Call Expression"),
+        }
+    }
+
+    #[test]
+    fn test_while_call() {
+        let input = "
+            var i: i32 = 0;
+            while i < 60 {
+                i = i + 1; 
+            }
+        ";
+        let program = parse_input(input);
+        assert_eq!(program.statements.len(), 2);
+
+        match &program.statements[1] {
+            Statement::While { cond, body } => {
+                match cond {
+                    Expression::Infix {
+                        left,
+                        operator,
+                        right,
+                    } => {
+                        assert_eq!(*operator, Token::Lt);
+                        match &**left {
+                            Expression::Identifier(name) => assert_eq!(name, "i"),
+                            _ => panic!("Expected identifier 'i' in condition left side"),
+                        }
+                        match &**right {
+                            Expression::Int(val) => assert_eq!(*val, 60),
+                            _ => panic!("Expected integer '60' in condition right side"),
+                        }
+                    }
+                    _ => panic!("Expected Infix expression for while condition"),
+                }
+
+                match &**body {
+                    Statement::Block(stmts) => {
+                        assert_eq!(stmts.len(), 1);
+                    }
+                    _ => panic!("Expected Block statement for while body"),
+                }
+            }
+            _ => panic!("Expected While statement"),
+        }
+    }
+
+    #[test]
+    fn test_for_statement() {
+        let input = "
+        for item in items {
+            print(item);
+        }";
+        let program = parse_input(input);
+
+        assert_eq!(program.statements.len(), 1);
+
+        match &program.statements[0] {
+            Statement::ForIn {
+                variable,
+                iterable,
+                body,
+            } => {
+                assert_eq!(variable, "item");
+
+                match iterable {
+                    Expression::Identifier(name) => assert_eq!(name, "items"),
+                    _ => panic!("Expected identifier 'items' as iterable"),
+                }
+
+                match &**body {
+                    Statement::Block(stmts) => {
+                        assert!(!stmts.is_empty());
+                    }
+                    _ => panic!("Expected Block statement for for-loop body"),
+                }
+            }
+            _ => panic!("Expected ForIn statement"),
+        }
+    }
+
+    #[test]
+    fn test_structs() {
+        let input = "
+            struct Vector3 { x: f32, y: f32, z: f32 }
+            var v = Vector3 { x: 1.0, y: 2.0, z: 3.0 };
+        ";
+        let program = parse_input(input);
+        assert_eq!(program.statements.len(), 2);
+
+        match &program.statements[0] {
+            Statement::Struct { name, fields } => {
+                assert_eq!(name, "Vector3");
+                assert_eq!(fields.len(), 3);
+                assert_eq!(fields[0], ("x".to_string(), "f32".to_string()));
+            }
+            _ => panic!("Expected Struct definition"),
+        }
+
+        match &program.statements[1] {
+            Statement::Var { value, .. } => match value {
+                Expression::StructLiteral { name, fields } => {
+                    assert_eq!(name, "Vector3");
+                    assert_eq!(fields.len(), 3);
+                    assert_eq!(fields[0].0, "x");
+                }
+                _ => panic!("Expected StructLiteral"),
+            },
+            _ => panic!("Expected Var assignment"),
         }
     }
 }

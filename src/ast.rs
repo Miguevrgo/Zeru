@@ -33,6 +33,10 @@ pub enum Statement {
         return_type: Option<String>,
         body: Vec<Statement>,
     },
+    Struct {
+        name: String,
+        fields: Vec<(String, String)>,
+    },
     If {
         condition: Expression,
         then_branch: Box<Statement>,
@@ -59,6 +63,11 @@ pub enum Expression {
         left: Box<Expression>,
         operator: Token,
         right: Box<Expression>,
+    },
+
+    StructLiteral {
+        name: String,
+        fields: Vec<(String, Expression)>,
     },
 
     Call {
