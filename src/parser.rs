@@ -52,6 +52,7 @@ impl<'a> Parser<'a> {
             Token::Const => self.parse_var_statement::<true>(),
             Token::Return => self.parse_return_statement(),
             Token::Fn => self.parse_function_statement(),
+            Token::If => self.parse_if_statement(),
             _ => self.parse_expression_statement(), //TODO: Hmmmmmm
         }
     }
@@ -215,6 +216,39 @@ impl<'a> Parser<'a> {
         (name, type_name)
     }
 
+    fn parse_if_statement(&mut self) -> Option<Statement> {
+        self.next_token();
+
+        let condition = self.parse_expression(Precedence::Lowest)?;
+
+        if !self.expect_peek(&Token::LBrace) {
+            return None;
+        }
+
+        let then_branch = Box::new(Statement::Block(self.parse_block_statement()));
+
+        let else_branch = if self.peek_token_is(&Token::Else) {
+            self.next_token();
+            if self.peek_token_is(&Token::If) {
+                self.next_token();
+                Some(Box::new(self.parse_if_statement()?))
+            } else {
+                if !self.expect_peek(&Token::LBrace) {
+                    return None;
+                }
+                Some(Box::new(Statement::Block(self.parse_block_statement())))
+            }
+        } else {
+            None
+        };
+
+        Some(Statement::If {
+            condition,
+            then_branch,
+            else_branch,
+        })
+    }
+
     fn parse_block_statement(&mut self) -> Vec<Statement> {
         let mut block = Vec::new();
         self.next_token();
@@ -344,7 +378,8 @@ impl<'a> Parser<'a> {
             args.push(arg);
         }
 
-        while self.cur_token_is(&Token::Comma) {
+        while self.peek_token_is(&Token::Comma) {
+            self.next_token();
             self.next_token();
             if let Some(arg) = self.parse_expression(Precedence::Lowest) {
                 args.push(arg);
@@ -617,14 +652,41 @@ mod tests {
                         right,
                     } => {
                         assert_eq!(format!("{:?}", operator), "Lt");
-                        assert_eq!(format!("{:?}", left), "<");
-                        assert_eq!(format!("{:?}", right), ">");
+                        match &**left {
+                            Expression::Identifier(val) => assert_eq!(val, "x"),
+                            _ => panic!("Left side of condition should be identifier 'x'"),
+                        }
+
+                        match &**right {
+                            Expression::Identifier(val) => assert_eq!(val, "y"),
+                            _ => panic!("Right side of condition should be identifier 'y'"),
+                        }
                     }
                     _ => panic!("Invalid condition"),
                 }
                 assert!(else_branch.is_some());
             }
             _ => panic!("Expected If statement"),
+        }
+    }
+
+    #[test]
+    fn test_function_call() {
+        let input = "add(1, 2 * 3, 4 + 5);";
+        let program = parse_input(input);
+
+        match &program.statements[0] {
+            Statement::Expression(Expression::Call {
+                function,
+                arguments,
+            }) => {
+                match &**function {
+                    Expression::Identifier(name) => assert_eq!(name, "add"),
+                    _ => panic!("Expected identifier for function call"),
+                }
+                assert_eq!(arguments.len(), 3);
+            }
+            _ => panic!("Expected Call Expression"),
         }
     }
 }
