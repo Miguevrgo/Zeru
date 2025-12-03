@@ -79,4 +79,14 @@ pub enum Expression {
         object: Box<Expression>,
         name: String,
     },
+    ArrayLiteral(Vec<Expression>),
+    Assign {
+        target: Box<Expression>,
+        operator: Token,
+        value: Box<Expression>,
+    },
+    Index {
+        left: Box<Expression>,
+        index: Box<Expression>,
+    },
 }

@@ -50,17 +50,105 @@ impl<'a> Lexer<'a> {
             '!' => {
                 if self.peek() == Some(&'=') {
                     self.advance();
-                    return Token::NotEq;
+                    Token::NotEq
+                } else {
+                    Token::Bang
                 }
-
-                Token::Bang
             }
-            '+' => Token::Plus,
-            '-' => Token::Minus,
-            '*' => Token::Star,
-            '/' => Token::Slash,
-            '<' => Token::Lt,
-            '>' => Token::Gt,
+            '+' => {
+                if self.peek() == Some(&'=') {
+                    self.advance();
+                    Token::PlusEq
+                } else {
+                    Token::Plus
+                }
+            }
+            '-' => {
+                if self.peek() == Some(&'=') {
+                    self.advance();
+                    Token::MinusEq
+                } else {
+                    Token::Minus
+                }
+            }
+            '*' => {
+                if self.peek() == Some(&'=') {
+                    self.advance();
+                    Token::StarEq
+                } else {
+                    Token::Star
+                }
+            }
+            '/' => {
+                if self.peek() == Some(&'=') {
+                    self.advance();
+                    Token::SlashEq
+                } else {
+                    Token::Slash
+                }
+            }
+            '&' => {
+                if self.peek() == Some(&'=') {
+                    self.advance();
+                    Token::BitAndEq
+                } else if self.peek() == Some(&'&') {
+                    self.advance();
+                    Token::And
+                } else {
+                    Token::BitAnd
+                }
+            }
+            '|' => {
+                if self.peek() == Some(&'=') {
+                    self.advance();
+                    Token::BitOrEq
+                } else if self.peek() == Some(&'|') {
+                    self.advance();
+                    Token::Or
+                } else {
+                    Token::BitOr
+                }
+            }
+            '^' => {
+                if self.peek() == Some(&'=') {
+                    self.advance();
+                    Token::BitXorEq
+                } else {
+                    Token::BitXor
+                }
+            }
+            '<' => {
+                if self.peek() == Some(&'=') {
+                    self.advance();
+                    Token::Leq
+                } else if self.peek() == Some(&'<') {
+                    self.advance();
+                    if self.peek() == Some(&'=') {
+                        self.advance();
+                        Token::BitLShiftEq
+                    } else {
+                        Token::ShiftLeft
+                    }
+                } else {
+                    Token::Lt
+                }
+            }
+            '>' => {
+                if self.peek() == Some(&'=') {
+                    self.advance();
+                    Token::Geq
+                } else if self.peek() == Some(&'>') {
+                    self.advance();
+                    if self.peek() == Some(&'=') {
+                        self.advance();
+                        Token::BitRShiftEq
+                    } else {
+                        Token::ShiftRight
+                    }
+                } else {
+                    Token::Gt
+                }
+            }
             '(' => Token::LParen,
             ')' => Token::RParen,
             '{' => Token::LBrace,

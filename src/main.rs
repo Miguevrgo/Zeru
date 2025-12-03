@@ -12,7 +12,7 @@ fn main() {
             const Z = x * y;
             return Z;
         }
-    
+
         fn main() {
             var x = 10.5 + 5 * 2;
             pos.x;

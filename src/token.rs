@@ -20,6 +20,28 @@ pub enum Token {
     Float(f64),
     StringLit(String),
 
+    // Logic
+    And, // &&
+    Or,  // ||
+
+    // Bitwise
+    ShiftLeft,  // <<
+    ShiftRight, // >>
+    BitXor,     // ^
+    BitAnd,     // &
+    BitOr,      // |
+
+    // Compound Assign
+    PlusEq,      // +=
+    MinusEq,     // -=
+    StarEq,      // *=
+    SlashEq,     // /=
+    BitXorEq,    // ^=
+    BitAndEq,    // &=
+    BitOrEq,     // |=
+    BitRShiftEq, // >>=
+    BitLShiftEq, // <<=
+
     // Single-Character & Double tokens
     Assign, // =
     Plus,   // +
@@ -29,7 +51,9 @@ pub enum Token {
     Eq,     // ==
     NotEq,  // !=
     Lt,     // <
+    Leq,    // <=
     Gt,     // >
+    Geq,    // >=
     Bang,   // !
 
     // Delimiters

@@ -399,6 +399,7 @@ impl<'a> Parser<'a> {
 
     fn parse_expression(&mut self, precedence: Precedence) -> Option<Expression> {
         let mut left_exp = match &self.current_token {
+            Token::LBracket => self.parse_array_literal(),
             Token::Identifier(name) => {
                 let starts_with_upper = name.chars().next().is_some_and(|c| c.is_uppercase());
                 if starts_with_upper && self.peek_token_is(&Token::LBrace) {
@@ -459,12 +460,37 @@ impl<'a> Parser<'a> {
     fn parse_infix_expression(&mut self, left: Expression) -> Option<Expression> {
         let operator = self.current_token.clone();
 
+        if operator == Token::LBracket {
+            return self.parse_index_expression(left);
+        }
         if operator == Token::LParen {
             return self.parse_call_expression(left);
         }
-
         if operator == Token::Dot {
             return self.parse_get_expression(left);
+        }
+
+        match operator {
+            Token::Assign
+            | Token::PlusEq
+            | Token::MinusEq
+            | Token::StarEq
+            | Token::SlashEq
+            | Token::BitAndEq
+            | Token::BitOrEq
+            | Token::BitXorEq
+            | Token::BitLShiftEq
+            | Token::BitRShiftEq => {
+                let precedence = token_precedence(&self.current_token);
+                self.next_token();
+                let value = self.parse_expression(precedence)?;
+                return Some(Expression::Assign {
+                    target: Box::new(left),
+                    operator,
+                    value: Box::new(value),
+                });
+            }
+            _ => {}
         }
 
         let precedence = token_precedence(&self.current_token);
@@ -475,6 +501,42 @@ impl<'a> Parser<'a> {
             left: Box::new(left),
             operator,
             right: Box::new(right_val),
+        })
+    }
+
+    fn parse_array_literal(&mut self) -> Option<Expression> {
+        self.next_token();
+        let mut elements = Vec::new();
+
+        if self.cur_token_is(&Token::RBracket) {
+            self.next_token();
+            return Some(Expression::ArrayLiteral(elements));
+        }
+
+        elements.push(self.parse_expression(Precedence::Lowest)?);
+
+        while self.peek_token_is(&Token::Comma) {
+            self.next_token();
+            self.next_token();
+            elements.push(self.parse_expression(Precedence::Lowest)?);
+        }
+
+        if !self.expect_peek(&Token::RBracket) {
+            return None;
+        }
+        Some(Expression::ArrayLiteral(elements))
+    }
+
+    fn parse_index_expression(&mut self, left: Expression) -> Option<Expression> {
+        self.next_token();
+        let index = self.parse_expression(Precedence::Lowest)?;
+
+        if !self.expect_peek(&Token::RBracket) {
+            return None;
+        }
+        Some(Expression::Index {
+            left: Box::new(left),
+            index: Box::new(index),
         })
     }
 
@@ -577,8 +639,15 @@ impl<'a> Parser<'a> {
 #[derive(PartialEq, PartialOrd)]
 enum Precedence {
     Lowest,
+    Assignment,
+    LogicalOr,
+    LogicalAnd,
+    BitwiseOr,
+    BitwiseXor,
+    BitwiseAnd,
     Equals,
     LessGreater,
+    Shift,
     Sum,
     Product,
     Prefix,
@@ -588,10 +657,32 @@ enum Precedence {
 
 fn token_precedence(token: &Token) -> Precedence {
     match token {
-        Token::Assign | Token::Eq | Token::NotEq => Precedence::Equals,
-        Token::Gt | Token::Lt => Precedence::LessGreater,
+        Token::Assign
+        | Token::PlusEq
+        | Token::MinusEq
+        | Token::StarEq
+        | Token::SlashEq
+        | Token::BitAndEq
+        | Token::BitOrEq
+        | Token::BitXorEq
+        | Token::BitRShiftEq
+        | Token::BitLShiftEq => Precedence::Assignment,
+
+        Token::Or => Precedence::LogicalOr,
+        Token::And => Precedence::LogicalAnd,
+
+        Token::BitOr => Precedence::BitwiseOr,
+        Token::BitXor => Precedence::BitwiseXor,
+        Token::BitAnd => Precedence::BitwiseAnd,
+
+        Token::Eq | Token::NotEq => Precedence::Equals,
+
+        Token::Gt | Token::Lt | Token::Geq | Token::Leq => Precedence::LessGreater,
+        Token::ShiftLeft | Token::ShiftRight => Precedence::Shift,
+
         Token::Plus | Token::Minus => Precedence::Sum,
         Token::Star | Token::Slash => Precedence::Product,
+
         Token::LParen => Precedence::Call,
         Token::Dot | Token::LBracket => Precedence::Index,
         _ => Precedence::Lowest,
@@ -938,5 +1029,118 @@ mod tests {
             },
             _ => panic!("Expected Var assignment"),
         }
+    }
+
+    #[test]
+    fn test_advanced_expressions() {
+        let input = "
+            var list = [1, 2, 3];
+            list[0] += 5 << 1;
+            var result = (a && b) || (c & d);
+        ";
+        let program = parse_input(input);
+        assert_eq!(program.statements.len(), 3);
+
+        if let Statement::Var {
+            value: Expression::ArrayLiteral(elems),
+            ..
+        } = &program.statements[0]
+        {
+            assert_eq!(elems.len(), 3);
+        } else {
+            panic!("Expected array literal");
+        }
+
+        match &program.statements[1] {
+            Statement::Expression(Expression::Assign {
+                target,
+                operator,
+                value,
+            }) => {
+                assert_eq!(*operator, Token::PlusEq);
+                if let Expression::Index { .. } = &**target {
+                } else {
+                    panic!("Expected Index");
+                }
+                if let Expression::Infix { operator, .. } = &**value {
+                    assert_eq!(*operator, Token::ShiftLeft);
+                } else {
+                    panic!("Expected Shift");
+                }
+            }
+            _ => panic!("Expected assign statement"),
+        }
+
+        match &program.statements[2] {
+            Statement::Var { value, .. } => {
+                if let Expression::Infix {
+                    operator,
+                    left: _,
+                    right: _,
+                } = value
+                {
+                    assert_eq!(*operator, Token::Or);
+                }
+            }
+            _ => panic!("Expected logic var"),
+        }
+    }
+    #[test]
+    fn test_bitwise_and_compound_ops() {
+        let input = "
+            var bitwise = x & y | z ^ w; 
+            var shift = x << 1 >> 2;
+            x &= 1;
+            x |= 2;
+            x ^= 3;
+            x <<= 4;
+            x >>= 5;
+            x *= 6;
+            x /= 7;
+        ";
+        let program = parse_input(input);
+        assert_eq!(program.statements.len(), 9);
+
+        let check_assign = |index: usize, expected_op: Token| match &program.statements[index] {
+            Statement::Expression(Expression::Assign { operator, .. }) => {
+                assert_eq!(*operator, expected_op, "Error at statement index {}", index);
+            }
+            _ => panic!("Expected assignment at index {}", index),
+        };
+
+        if let Statement::Var { value, .. } = &program.statements[0] {
+            if let Expression::Infix {
+                operator,
+                left: _,
+                right,
+            } = value
+            {
+                assert_eq!(*operator, Token::BitOr);
+
+                if let Expression::Infix { operator: op_r, .. } = &**right {
+                    assert_eq!(*op_r, Token::BitXor);
+                } else {
+                    panic!("Right side of | should be ^");
+                }
+            } else {
+                panic!("Expected infix for bitwise");
+            }
+        }
+
+        if let Statement::Var {
+            value: Expression::Infix { operator, .. },
+            ..
+        } = &program.statements[1]
+        {
+            assert_eq!(*operator, Token::ShiftRight);
+        }
+
+        check_assign(2, Token::BitAndEq); // &=
+        check_assign(3, Token::BitOrEq); // |=
+        check_assign(4, Token::BitXorEq); // ^=
+        check_assign(5, Token::BitLShiftEq); // <<=
+        check_assign(6, Token::BitRShiftEq); // >>=
+        check_assign(7, Token::StarEq); // *=
+        check_assign(8, Token::SlashEq); // /=
     }
 }
