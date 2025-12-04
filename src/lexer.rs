@@ -23,10 +23,48 @@ impl<'a> Lexer<'a> {
 
     fn skip_whitespace(&mut self) {
         while let Some(&ch) = self.peek() {
-            if !ch.is_whitespace() {
-                break;
+            match ch {
+                ' ' | '\t' | '\n' | '\r' => {
+                    self.advance();
+                }
+                '/' => {
+                    let mut lookahead = self.input.clone();
+                    lookahead.next();
+
+                    match lookahead.peek() {
+                        Some('/') => {
+                            self.advance();
+                            self.advance();
+
+                            while let Some(&c) = self.peek() {
+                                if c == '\n' {
+                                    break;
+                                }
+                                self.advance();
+                            }
+                        }
+                        Some('*') => {
+                            self.advance();
+                            self.advance();
+
+                            loop {
+                                match self.advance() {
+                                    Some('*') => {
+                                        if self.peek() == Some(&'/') {
+                                            self.advance();
+                                            break;
+                                        }
+                                    }
+                                    Some(_) => continue,
+                                    None => break,
+                                }
+                            }
+                        }
+                        _ => return,
+                    }
+                }
+                _ => return,
             }
-            self.advance();
         }
     }
 
