@@ -56,7 +56,10 @@ impl<'a> Parser<'a> {
             Token::While => self.parse_while_statement(),
             Token::For => self.parse_for_statement(),
             Token::Struct => self.parse_struct_statement(),
-            _ => self.parse_expression_statement(), //TODO: Hmmmmmm
+            Token::Break => self.parse_break_statement(),
+            Token::Continue => self.parse_continue_statement(),
+            Token::LBrace => self.parse_block_statement_wrapper(),
+            _ => self.parse_expression_statement(),
         }
     }
 
@@ -85,13 +88,8 @@ impl<'a> Parser<'a> {
             self.next_token();
             self.next_token();
 
-            //TODO: Support complex types
-            if let Token::Identifier(t_name) = &self.current_token {
-                type_annotation = Some(t_name.clone());
-            } else {
-                self.error_peek("Type expected after ':'");
-                return None;
-            }
+            type_annotation = self.parse_type();
+            type_annotation.as_ref()?;
         }
 
         if !self.expect_peek(&Token::Assign) {
@@ -111,6 +109,33 @@ impl<'a> Parser<'a> {
             value,
             type_annotation,
         })
+    }
+
+    fn parse_type(&mut self) -> Option<String> {
+        let mut type_str = String::new();
+
+        if let Token::Identifier(name) = &self.current_token {
+            type_str.push_str(name);
+        } else {
+            self.error_peek("Type identifier");
+            return None;
+        }
+
+        while self.peek_token_is(&Token::DoubleColon) {
+            self.next_token();
+
+            type_str.push_str("::");
+
+            if !self.expect_peek_identifier() {
+                return None;
+            }
+
+            if let Token::Identifier(name) = &self.current_token {
+                type_str.push_str(name);
+            }
+        }
+
+        Some(type_str)
     }
 
     fn parse_return_statement(&mut self) -> Option<Statement> {
@@ -148,13 +173,8 @@ impl<'a> Parser<'a> {
 
         if !self.peek_token_is(&Token::LBrace) {
             self.next_token();
-            //TODO: Complex types
-            if let Token::Identifier(t) = &self.current_token {
-                return_type = Some(t.clone());
-            } else {
-                self.error_peek("Fucntion return type or '{'");
-                return None;
-            }
+            return_type = self.parse_type();
+            return_type.as_ref()?;
         }
 
         if !self.expect_peek(&Token::LBrace) {
@@ -196,8 +216,7 @@ impl<'a> Parser<'a> {
         let name = match &self.current_token {
             Token::Identifier(n) => n.clone(),
             _ => {
-                self.errors
-                    .push("Expected parameter name in fn definition".into());
+                self.errors.push("Expected param name".into());
                 String::new()
             }
         };
@@ -207,15 +226,7 @@ impl<'a> Parser<'a> {
         }
         self.next_token();
 
-        let type_name = match &self.current_token {
-            Token::Identifier(t) => t.clone(),
-            _ => {
-                self.errors
-                    .push("Expected parameter type in fn definition".into());
-                String::new()
-            }
-        };
-
+        let type_name = self.parse_type().unwrap_or_default();
         (name, type_name)
     }
 
@@ -321,15 +332,7 @@ impl<'a> Parser<'a> {
                 return None;
             }
             self.next_token();
-
-            let field_type = match &self.current_token {
-                Token::Identifier(t) => t.clone(),
-                _ => {
-                    self.errors.push("Expected field type".into());
-                    return None;
-                }
-            };
-
+            let field_type = self.parse_type()?;
             fields.push((field_name, field_type));
 
             if self.peek_token_is(&Token::RBrace) {
@@ -381,6 +384,30 @@ impl<'a> Parser<'a> {
         }
 
         Some(Expression::StructLiteral { name, fields })
+    }
+
+    fn parse_block_statement_wrapper(&mut self) -> Option<Statement> {
+        Some(Statement::Block(self.parse_block_statement()))
+    }
+
+    fn parse_break_statement(&mut self) -> Option<Statement> {
+        self.next_token();
+
+        if self.peek_token_is(&Token::Semicolon) {
+            self.next_token();
+        }
+
+        Some(Statement::Break)
+    }
+
+    fn parse_continue_statement(&mut self) -> Option<Statement> {
+        self.next_token();
+
+        if self.peek_token_is(&Token::Semicolon) {
+            self.next_token();
+        }
+
+        Some(Statement::Continue)
     }
 
     fn parse_block_statement(&mut self) -> Vec<Statement> {
@@ -468,6 +495,17 @@ impl<'a> Parser<'a> {
         }
         if operator == Token::Dot {
             return self.parse_get_expression(left);
+        }
+
+        if operator == Token::As {
+            let precedence = token_precedence(&self.current_token);
+            self.next_token();
+
+            let target = self.parse_expression(precedence)?;
+            return Some(Expression::Cast {
+                left: Box::new(left),
+                target: Box::new(target),
+            });
         }
 
         match operator {
@@ -560,7 +598,6 @@ impl<'a> Parser<'a> {
                 return None;
             }
         };
-        self.next_token();
 
         Some(Expression::Get {
             object: Box::new(obj),
@@ -651,6 +688,7 @@ enum Precedence {
     Sum,
     Product,
     Prefix,
+    Cast,
     Call,
     Index,
 }
@@ -683,8 +721,9 @@ fn token_precedence(token: &Token) -> Precedence {
         Token::Plus | Token::Minus => Precedence::Sum,
         Token::Star | Token::Slash => Precedence::Product,
 
+        Token::As => Precedence::Cast,
         Token::LParen => Precedence::Call,
-        Token::Dot | Token::LBracket => Precedence::Index,
+        Token::Dot | Token::LBracket | Token::DoubleColon => Precedence::Index,
         _ => Precedence::Lowest,
     }
 }
@@ -1142,5 +1181,38 @@ mod tests {
         check_assign(6, Token::BitRShiftEq); // >>=
         check_assign(7, Token::StarEq); // *=
         check_assign(8, Token::SlashEq); // /=
+    }
+
+    #[test]
+    fn test_break_continue() {
+        let input = "
+            while true {
+                if x > 10 { break; }
+                continue;
+            }
+        ";
+        let program = parse_input(input);
+
+        match &program.statements[0] {
+            Statement::While { body, .. } => match &**body {
+                Statement::Block(stmts) => {
+                    assert_eq!(stmts.len(), 2);
+
+                    if let Statement::If { then_branch, .. } = &stmts[0] {
+                        if let Statement::Block(inner_stmts) = &**then_branch {
+                            assert!(matches!(inner_stmts[0], Statement::Break));
+                        } else {
+                            panic!("Expected block in if");
+                        }
+                    } else {
+                        panic!("Expected if");
+                    }
+
+                    assert!(matches!(stmts[1], Statement::Continue));
+                }
+                _ => panic!("Expected block body"),
+            },
+            _ => panic!("Expected While"),
+        }
     }
 }

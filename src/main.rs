@@ -8,18 +8,45 @@ use crate::parser::Parser;
 
 fn main() {
     let input = r#"
-        fn foo(x: f32, y: i32) i32 {
-            const Z = x * y;
-            return Z;
+    struct Vector3 {
+        x: f32,
+        y: f32,
+        z: f32,
+    }
+
+    fn create_vector(x: f32, y: f32) Vector3 {
+        return Vector3 {x: x, y: y, z: 0.0};
+    }
+
+    fn main() {
+        const pos: Vector3 = create_vector(10.5, 20.0);
+        const numbers: std::array = [1, 2, 3];
+        var count = 100;
+
+        if pos.x < 50.0 {
+            print("Position is small");
+        } else if pos.x > 100.0 {
+            println("Position is big", pos.x * 2.0);
+        } else {
+            println(stderr, "Position should not be inside [50-100]");
         }
 
-        fn main() {
-            var x = 10.5 + 5 * 2;
-            pos.x;
-            print(x);
-            const Y: i32 = 20;
-            return;
+        while count > 0 {
+            count = count - 1;
+            count -= count.clamp(0 as u32, 200 as u32);
         }
+
+        const lines: Vector = file_content.split_lines();
+
+        for line in lines {
+            const content = std::os::read("file.txt");
+            if content != None {
+                output_file.write("{}", key.value);
+            } else {
+                break;
+            }
+        }
+    }
     "#;
     const BOLD: &str = "\x1b[1m";
     const RESET: &str = "\x1b[0m";

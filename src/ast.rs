@@ -89,4 +89,8 @@ pub enum Expression {
         left: Box<Expression>,
         index: Box<Expression>,
     },
+    Cast {
+        left: Box<Expression>,
+        target: Box<Expression>,
+    },
 }

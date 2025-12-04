@@ -193,7 +193,14 @@ impl<'a> Lexer<'a> {
             '}' => Token::RBrace,
             '[' => Token::LBracket,
             ']' => Token::RBracket,
-            ':' => Token::Colon,
+            ':' => {
+                if self.peek() == Some(&':') {
+                    self.advance();
+                    Token::DoubleColon
+                } else {
+                    Token::Colon
+                }
+            }
             ';' => Token::Semicolon,
             ',' => Token::Comma,
             '.' => Token::Dot,
@@ -232,6 +239,9 @@ impl<'a> Lexer<'a> {
             "return" => Token::Return,
             "for" => Token::For,
             "in" => Token::In,
+            "break" => Token::Break,
+            "continue" => Token::Continue,
+            "as" => Token::As,
             "None" => Token::None,
 
             _ => Token::Identifier(literal),

@@ -13,6 +13,10 @@ pub enum Token {
     For,
     In,
     None,
+    Break,
+    Continue,
+    As,
+    DoubleColon,
 
     // Literals
     Identifier(String),
