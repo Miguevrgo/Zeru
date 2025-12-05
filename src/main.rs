@@ -8,6 +8,7 @@ use crate::parser::Parser;
 
 fn main() {
     let input = r#"
+    import std.math
     struct Vector3 {
         x: f32,
         y: f32,
@@ -24,11 +25,11 @@ fn main() {
         var count = 100;
 
         if pos.x < 50.0 {
-            print("Position is small");
+            print("Position is small\n");
         } else if pos.x > 100.0 {
             println("Position is big", pos.x * 2.0);
         } else {
-            println(stderr, "Position should not be inside [50-100]");
+            println(stderr, "\tPosition should not be inside \"[50-100]\"");
         }
 
         while count > 0 {

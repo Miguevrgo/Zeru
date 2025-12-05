@@ -276,12 +276,28 @@ impl<'a> Lexer<'a> {
         let mut string_lit = String::new();
 
         while let Some(&ch) = self.peek() {
-            if ch == '"' {
-                self.advance();
-                return Token::StringLit(string_lit);
-            }
-            unsafe {
-                string_lit.push(self.advance().unwrap_unchecked());
+            match ch {
+                '"' => {
+                    self.advance();
+                    return Token::StringLit(string_lit);
+                }
+                '\\' => {
+                    self.advance();
+
+                    match self.advance() {
+                        Some('n') => string_lit.push('\n'),
+                        Some('t') => string_lit.push('\t'),
+                        Some('r') => string_lit.push('\r'),
+                        Some('"') => string_lit.push('"'),
+                        Some('\\') => string_lit.push('\\'),
+                        Some(c) => {
+                            string_lit.push('\\');
+                            string_lit.push(c);
+                        }
+                        None => return Token::Illegal("Unterminated string escape".to_string()),
+                    }
+                }
+                _ => unsafe { string_lit.push(self.advance().unwrap_unchecked()) },
             }
         }
 

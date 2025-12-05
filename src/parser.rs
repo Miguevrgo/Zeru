@@ -59,6 +59,7 @@ impl<'a> Parser<'a> {
             Token::Break => self.parse_break_statement(),
             Token::Continue => self.parse_continue_statement(),
             Token::LBrace => self.parse_block_statement_wrapper(),
+            Token::Import => self.parse_import_statement(), // TODO:
             _ => self.parse_expression_statement(),
         }
     }
