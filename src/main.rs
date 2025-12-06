@@ -16,10 +16,21 @@ fn main() {
         x: f32,
         y: f32,
         z: f32,
+
+        fn new(x: f32, y: f32) Vector3 {
+            return Vector3 {x: x, y: y, z: 0};
+        }
+
+        fn sum(self, amount: i32) i32 {
+            self.x += amount as f32;
+            self.y += amount as f32;
+            self.z += amount as f32;
+        }
     }
 
-    fn create_vector(x: f32, y: f32) Vector3 {
-        return Vector3 {x: x, y: y, z: 0.0};
+    fn print_value(val: f32) f32 {
+        println("{}", y);
+        return y;
     }
 
     fn main() {

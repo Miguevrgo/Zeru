@@ -215,6 +215,10 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_parameter(&mut self) -> (String, String) {
+        if self.cur_token_is(&Token::SelfToken) {
+            return ("self".to_string(), String::new());
+        }
+
         let name = match &self.current_token {
             Token::Identifier(n) => n.clone(),
             _ => {
