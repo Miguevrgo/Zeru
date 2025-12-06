@@ -4,12 +4,14 @@ use crate::token::Token;
 
 pub struct Lexer<'a> {
     input: Peekable<Chars<'a>>,
+    line: usize,
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
             input: input.chars().peekable(),
+            line: 1,
         }
     }
 
@@ -18,7 +20,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn advance(&mut self) -> Option<char> {
-        self.input.next()
+        let ch = self.input.next();
+        if let Some('\n') = ch {
+            self.line += 1;
+        }
+        ch
     }
 
     fn skip_whitespace(&mut self) {
@@ -68,15 +74,17 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> (Token, usize) {
         self.skip_whitespace();
+
+        let start_line = self.line;
 
         let ch = match self.advance() {
             Some(c) => c,
-            None => return Token::Eof,
+            None => return (Token::Eof, start_line),
         };
 
-        match ch {
+        let token = match ch {
             '=' => {
                 if self.peek() == Some(&'=') {
                     self.advance();
@@ -214,7 +222,8 @@ impl<'a> Lexer<'a> {
             '0'..='9' => self.read_number(ch),
 
             _ => Token::Illegal(ch.to_string()),
-        }
+        };
+        (token, start_line)
     }
 
     fn read_identifier(&mut self, ch: char) -> Token {

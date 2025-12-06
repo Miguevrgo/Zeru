@@ -10,8 +10,8 @@ use crate::parser::Parser;
 fn main() {
     let input = r#"
     import std.math
-    import std.os;
-    import std.collections::Array;
+    import std.os
+    import std.collections::{Array}
 
     struct Vector3 {
         x: f32,

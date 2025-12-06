@@ -1,5 +1,5 @@
 import std.math
-import std.collections
+import std.collections::{Array}
 import std.os
 
 struct Vector3 {
@@ -14,9 +14,9 @@ fn create_vector(x: f32, y: f32) Vector3 {
 
 fn main() {
     const pos: Vector3 = create_vector(10.5, 20.0);
-    const numbers: std::array<i32, 3> = [1, 2, 3];
-    var dyn_numbers = std::vector<u32>::new();
-    var dyn_numbers_explicit: std::vector<i32> = std::vector::new();
+    const numbers: array<i32, 3> = [1, 2, 3];
+    var dyn_numbers = vector<u32>::new();
+    var dyn_numbers_explicit: vector<i32> = vector::new();
 
     var count = 100;
 
@@ -33,8 +33,8 @@ fn main() {
         count -= count.clamp(0 as u32, 200 as u32);
     }
 
-    const file_content = std::os::read_file("input.txt");
-    var output_file = std::os::write_file("output.txt");
+    const file_content = os::read_file("input.txt");
+    var output_file = os::write_file("output.txt");
     const lines: Vector<String> = file_content.split('\n');
 
     for line in lines {

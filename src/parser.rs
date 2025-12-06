@@ -9,6 +9,7 @@ pub struct Parser<'a> {
 
     current_token: Token,
     peek_token: Token,
+    peek_line: usize,
 
     pub errors: Vec<String>,
 }
@@ -19,6 +20,7 @@ impl<'a> Parser<'a> {
             lexer,
             current_token: Token::Eof,
             peek_token: Token::Eof,
+            peek_line: 0,
             errors: Vec::new(),
         };
 
@@ -30,7 +32,9 @@ impl<'a> Parser<'a> {
 
     fn next_token(&mut self) {
         self.current_token = self.peek_token.clone();
-        self.peek_token = self.lexer.next_token();
+        let (tok, line) = self.lexer.next_token();
+        self.peek_token = tok;
+        self.peek_line = line;
     }
 
     pub fn parse_program(&mut self) -> Program {
@@ -576,8 +580,8 @@ impl<'a> Parser<'a> {
             Token::Match => self.parse_match_expression(),
             Token::SelfToken => Some(Expression::Identifier("self".to_string())),
             _ => {
-                self.error_peek(
-                    format!("No prefix parse function for {:?}", &self.current_token).as_str(),
+                self.error_current(
+                    format!("Expected expression, found: {:?}", &self.current_token).as_str(),
                 );
                 None
             }
@@ -843,8 +847,16 @@ impl<'a> Parser<'a> {
 
     fn error_peek(&mut self, expected: &str) {
         self.errors.push(format!(
-            "Syntax error: {expected} expected, found: {:?}",
-            self.peek_token
+            "[Line {}] \x1b[31mSyntax error:\x1b[0m {expected} expected, found: {:?}",
+            self.peek_line, self.current_token
+        ));
+    }
+
+    fn error_current(&mut self, msg: &str) {
+        self.errors.push(format!(
+            "[Line {}] \x1b[31mSyntax error:\x1b[0m {}",
+            self.peek_line - 1,
+            msg
         ));
     }
 }

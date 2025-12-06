@@ -121,4 +121,44 @@ impl Type {
             _ => false,
         }
     }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            Type::Integer { signed, width } => {
+                let sign_str = match signed {
+                    Signedness::Signed => "i",
+                    Signedness::Unsigned => "u",
+                };
+                let width_str = match width {
+                    IntWidth::W8 => "8",
+                    IntWidth::W16 => "16",
+                    IntWidth::W32 => "32",
+                    IntWidth::W64 => "64",
+                    IntWidth::WSize => "size",
+                };
+                format!("{}{}", sign_str, width_str)
+            }
+            Type::Float(width) => match width {
+                FloatWidth::W32 => "f32".to_string(),
+                FloatWidth::W64 => "f64".to_string(),
+            },
+            Type::Bool => "bool".to_string(),
+            Type::String => "String".to_string(),
+            Type::Void => "void".to_string(),
+
+            Type::Struct { name, .. } => name.clone(),
+            Type::Enum { name, .. } => name.clone(),
+
+            Type::Array { elem_type, len } => format!("[{}; {}]", elem_type.to_string(), len),
+            Type::Pointer {
+                elem_type,
+                is_mutable,
+            } => {
+                let mut_str = if *is_mutable { "mut " } else { "" };
+                format!("&{}{}", mut_str, elem_type.to_string())
+            }
+
+            Type::Unknown => "<unknown>".to_string(),
+        }
+    }
 }
