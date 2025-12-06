@@ -47,7 +47,10 @@ pub enum Statement {
         then_branch: Box<Statement>,
         else_branch: Option<Box<Statement>>,
     },
-    Import(String),
+    Import {
+        path: String,
+        symbols: Vec<String>,
+    },
 }
 
 #[derive(Debug)]

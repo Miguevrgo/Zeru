@@ -484,11 +484,42 @@ impl<'a> Parser<'a> {
             }
         }
 
+        let mut symbols = Vec::new();
+
+        if self.peek_token_is(&Token::DoubleColon) {
+            self.next_token();
+
+            if !self.expect_peek(&Token::LBrace) {
+                return None;
+            }
+
+            while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
+                self.next_token();
+                if let Token::Identifier(sym) = &self.current_token {
+                    symbols.push(sym.clone());
+                } else {
+                    self.errors.push("Expected symbol name in import".into());
+                    return None;
+                }
+
+                if self.peek_token_is(&Token::RBrace) {
+                    break;
+                }
+                if !self.expect_peek(&Token::Comma) {
+                    return None;
+                }
+            }
+
+            if !self.expect_peek(&Token::RBrace) {
+                return None;
+            }
+        }
+
         if self.peek_token_is(&Token::Semicolon) {
             self.next_token();
         }
 
-        Some(Statement::Import(path))
+        Some(Statement::Import { path, symbols })
     }
 
     fn parse_break_statement(&mut self) -> Option<Statement> {
@@ -1364,26 +1395,34 @@ mod tests {
     #[test]
     fn test_imports() {
         let input = "
-            import std.os
+            import std.os;
             import std.math
-            import std.collections.hashmap;
+            import std.collections::{Array, HashMap};
         ";
         let program = parse_input(input);
         assert_eq!(program.statements.len(), 3);
 
-        match &program.statements[0] {
-            Statement::Import(path) => assert_eq!(path, "std.os"),
-            _ => panic!("Expected import std.os"),
+        if let Statement::Import { path, symbols } = &program.statements[0] {
+            assert_eq!(path, "std.os");
+            assert!(symbols.is_empty());
+        } else {
+            panic!("Expected import std.os");
         }
 
-        match &program.statements[1] {
-            Statement::Import(path) => assert_eq!(path, "std.math"),
-            _ => panic!("Expected import std.math"),
+        if let Statement::Import { path, symbols } = &program.statements[1] {
+            assert_eq!(path, "std.math");
+            assert!(symbols.is_empty());
+        } else {
+            panic!("Expected import std.math");
         }
 
-        match &program.statements[2] {
-            Statement::Import(path) => assert_eq!(path, "std.collections.hashmap"),
-            _ => panic!("Expected import std.collections.hashmap"),
+        if let Statement::Import { path, symbols } = &program.statements[2] {
+            assert_eq!(path, "std.collections");
+            assert_eq!(symbols.len(), 2);
+            assert_eq!(symbols[0], "Array");
+            assert_eq!(symbols[1], "HashMap");
+        } else {
+            panic!("Expected import std.collections");
         }
     }
 

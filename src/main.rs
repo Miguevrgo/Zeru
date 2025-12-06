@@ -11,6 +11,7 @@ fn main() {
     let input = r#"
     import std.math
     import std.os;
+    import std.collections::Array;
 
     struct Vector3 {
         x: f32,
@@ -35,7 +36,7 @@ fn main() {
 
     fn main() {
         const pos: Vector3 = create_vector(10.5, 20.0);
-        const numbers: std::array = [1, 2, 3];
+        const numbers: Array = [1, 2, 3];
         var count = 100;
 
         if pos.x < 50.0 {
@@ -54,7 +55,7 @@ fn main() {
         const lines: Vector = file_content.split_lines();
 
         for line in lines {
-            const content = std::os::read("file.txt");
+            const content = os::read("file.txt");
             if content != None {
                 output_file.write("{}", key.value);
             } else {
