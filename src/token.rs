@@ -72,6 +72,13 @@ pub enum Token {
     Comma,     // ,
     Dot,       // .
 
+    // Custom
+    SelfToken, // self
+    Match,     // match
+    Default,   // default
+    Enum,      // enum
+    Arrow,     // =>
+
     // Special
     Eof,
     Illegal(String),

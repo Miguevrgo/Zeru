@@ -1,6 +1,7 @@
 mod ast;
 mod lexer;
 mod parser;
+mod sema;
 mod token;
 
 use crate::lexer::Lexer;
@@ -9,6 +10,8 @@ use crate::parser::Parser;
 fn main() {
     let input = r#"
     import std.math
+    import std.os;
+
     struct Vector3 {
         x: f32,
         y: f32,

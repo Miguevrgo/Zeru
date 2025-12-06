@@ -56,10 +56,11 @@ impl<'a> Parser<'a> {
             Token::While => self.parse_while_statement(),
             Token::For => self.parse_for_statement(),
             Token::Struct => self.parse_struct_statement(),
+            Token::Enum => self.parse_enum_statement(),
             Token::Break => self.parse_break_statement(),
             Token::Continue => self.parse_continue_statement(),
             Token::LBrace => self.parse_block_statement_wrapper(),
-            Token::Import => self.parse_import_statement(), // TODO:
+            Token::Import => self.parse_import_statement(),
             _ => self.parse_expression_statement(),
         }
     }
@@ -317,9 +318,30 @@ impl<'a> Parser<'a> {
         if !self.expect_peek(&Token::LBrace) {
             return None;
         }
+
         let mut fields = Vec::new();
+        let mut methods = Vec::new();
+        let mut parsing_methods = false;
 
         while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
+            if self.peek_token_is(&Token::Fn) {
+                parsing_methods = true;
+                self.next_token();
+
+                if let Some(method) = self.parse_function_statement() {
+                    methods.push(method);
+                }
+                continue;
+            }
+
+            if parsing_methods {
+                self.errors.push(format!(
+                    "Struct '{}': Fields must be declared before methods.",
+                    name
+                ));
+                return None;
+            }
+
             self.next_token();
             let field_name = match &self.current_token {
                 Token::Identifier(n) => n.clone(),
@@ -333,6 +355,7 @@ impl<'a> Parser<'a> {
                 return None;
             }
             self.next_token();
+
             let field_type = self.parse_type()?;
             fields.push((field_name, field_type));
 
@@ -348,7 +371,50 @@ impl<'a> Parser<'a> {
         if !self.expect_peek(&Token::RBrace) {
             return None;
         }
-        Some(Statement::Struct { name, fields })
+        Some(Statement::Struct {
+            name,
+            fields,
+            methods,
+        })
+    }
+
+    fn parse_enum_statement(&mut self) -> Option<Statement> {
+        if !self.expect_peek_identifier() {
+            return None;
+        }
+
+        let name = match &self.current_token {
+            Token::Identifier(n) => n.clone(),
+            _ => unreachable!(),
+        };
+
+        if !self.expect_peek(&Token::LBrace) {
+            return None;
+        }
+
+        let mut variants = Vec::new();
+        while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
+            self.next_token();
+            if let Token::Identifier(v) = &self.current_token {
+                variants.push(v.clone())
+            } else {
+                self.errors.push("Expected enum variant name".into());
+                return None;
+            }
+
+            if self.peek_token_is(&Token::RBrace) {
+                break;
+            }
+            if !self.expect_peek(&Token::Comma) {
+                return None;
+            }
+        }
+
+        if !self.expect_peek(&Token::RBrace) {
+            return None;
+        }
+
+        Some(Statement::Enum { name, variants })
     }
 
     fn parse_struct_literal(&mut self, name: String) -> Option<Expression> {
@@ -389,6 +455,36 @@ impl<'a> Parser<'a> {
 
     fn parse_block_statement_wrapper(&mut self) -> Option<Statement> {
         Some(Statement::Block(self.parse_block_statement()))
+    }
+
+    fn parse_import_statement(&mut self) -> Option<Statement> {
+        if !self.expect_peek_identifier() {
+            return None;
+        }
+
+        let mut path = match &self.current_token {
+            Token::Identifier(n) => n.clone(),
+            _ => unreachable!(),
+        };
+
+        while self.peek_token_is(&Token::Dot) {
+            self.next_token();
+            path.push('.');
+
+            if !self.expect_peek_identifier() {
+                return None;
+            }
+
+            if let Token::Identifier(n) = &self.current_token {
+                path.push_str(n);
+            }
+        }
+
+        if self.peek_token_is(&Token::Semicolon) {
+            self.next_token();
+        }
+
+        Some(Statement::Import(path))
     }
 
     fn parse_break_statement(&mut self) -> Option<Statement> {
@@ -442,6 +538,8 @@ impl<'a> Parser<'a> {
             Token::None => Some(Expression::None),
             Token::LParen => self.parse_grouped_expression(),
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
+            Token::Match => self.parse_match_expression(),
+            Token::SelfToken => Some(Expression::Identifier("self".to_string())),
             _ => {
                 self.error_peek(
                     format!("No prefix parse function for {:?}", &self.current_token).as_str(),
@@ -470,6 +568,48 @@ impl<'a> Parser<'a> {
             return None;
         }
         exp
+    }
+
+    fn parse_match_expression(&mut self) -> Option<Expression> {
+        self.next_token();
+        let value = self.parse_expression(Precedence::Lowest)?;
+
+        if !self.expect_peek(&Token::LBrace) {
+            return None;
+        }
+
+        let mut arms = Vec::new();
+
+        while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
+            self.next_token();
+
+            let pattern = if self.cur_token_is(&Token::Default) {
+                Expression::Identifier("default".to_string())
+            } else {
+                self.parse_expression(Precedence::Lowest)?
+            };
+
+            if !self.expect_peek(&Token::Arrow) {
+                return None;
+            }
+            self.next_token();
+
+            let body = self.parse_expression(Precedence::Lowest)?;
+            arms.push((pattern, body));
+
+            if self.peek_token_is(&Token::Comma) {
+                self.next_token();
+            }
+        }
+
+        if !self.expect_peek(&Token::RBrace) {
+            return None;
+        }
+
+        Some(Expression::Match {
+            value: Box::new(value),
+            arms,
+        })
     }
 
     fn parse_prefix_expression(&mut self) -> Option<Expression> {
@@ -1050,7 +1190,7 @@ mod tests {
         assert_eq!(program.statements.len(), 2);
 
         match &program.statements[0] {
-            Statement::Struct { name, fields } => {
+            Statement::Struct { name, fields, .. } => {
                 assert_eq!(name, "Vector3");
                 assert_eq!(fields.len(), 3);
                 assert_eq!(fields[0], ("x".to_string(), "f32".to_string()));
@@ -1214,6 +1354,102 @@ mod tests {
                 _ => panic!("Expected block body"),
             },
             _ => panic!("Expected While"),
+        }
+    }
+
+    #[test]
+    fn test_imports() {
+        let input = "
+            import std.os
+            import std.math
+            import std.collections.hashmap;
+        ";
+        let program = parse_input(input);
+        assert_eq!(program.statements.len(), 3);
+
+        match &program.statements[0] {
+            Statement::Import(path) => assert_eq!(path, "std.os"),
+            _ => panic!("Expected import std.os"),
+        }
+
+        match &program.statements[1] {
+            Statement::Import(path) => assert_eq!(path, "std.math"),
+            _ => panic!("Expected import std.math"),
+        }
+
+        match &program.statements[2] {
+            Statement::Import(path) => assert_eq!(path, "std.collections.hashmap"),
+            _ => panic!("Expected import std.collections.hashmap"),
+        }
+    }
+
+    #[test]
+    fn test_unified_struct_enum_match() {
+        let input = "
+            enum Color { Red, Green, Blue }
+
+            struct Player {
+                name: String,
+                health: i32,
+
+                fn new(name: String) Player {
+                    return Player { name: name, health: 100 };
+                }
+
+                fn take_damage(self, amount: i32) {
+                    self.health -= amount;
+                }
+            }
+
+            var status = match x {
+                0 => \"Dead\",
+                1 => \"Alive\",
+                default => \"Unknown\"
+            };
+        ";
+        let program = parse_input(input);
+        assert_eq!(program.statements.len(), 3);
+
+        if let Statement::Enum { name, variants } = &program.statements[0] {
+            assert_eq!(name, "Color");
+            assert_eq!(variants.len(), 3);
+        } else {
+            panic!("Expected Enum");
+        }
+
+        if let Statement::Struct {
+            name,
+            fields,
+            methods,
+        } = &program.statements[1]
+        {
+            assert_eq!(name, "Player");
+            assert_eq!(fields.len(), 2);
+            assert_eq!(methods.len(), 2);
+
+            if let Statement::Function { name, params, .. } = &methods[1] {
+                assert_eq!(name, "take_damage");
+                assert_eq!(params[0].0, "self");
+            } else {
+                panic!("Expected method take_damage");
+            }
+        } else {
+            panic!("Expected Struct");
+        }
+
+        if let Statement::Var { value, .. } = &program.statements[2] {
+            if let Expression::Match { value: _, arms } = value {
+                assert_eq!(arms.len(), 3);
+                if let Expression::Identifier(p) = &arms[2].0 {
+                    assert_eq!(p, "default");
+                } else {
+                    panic!("Expected default pattern");
+                }
+            } else {
+                panic!("Expected Match expr");
+            }
+        } else {
+            panic!("Expected Var declaration");
         }
     }
 }

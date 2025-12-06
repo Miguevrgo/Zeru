@@ -36,12 +36,18 @@ pub enum Statement {
     Struct {
         name: String,
         fields: Vec<(String, String)>,
+        methods: Vec<Statement>,
+    },
+    Enum {
+        name: String,
+        variants: Vec<String>,
     },
     If {
         condition: Expression,
         then_branch: Box<Statement>,
         else_branch: Option<Box<Statement>>,
     },
+    Import(String),
 }
 
 #[derive(Debug)]
@@ -92,5 +98,9 @@ pub enum Expression {
     Cast {
         left: Box<Expression>,
         target: Box<Expression>,
+    },
+    Match {
+        value: Box<Expression>,
+        arms: Vec<(Expression, Expression)>,
     },
 }

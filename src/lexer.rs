@@ -80,10 +80,13 @@ impl<'a> Lexer<'a> {
             '=' => {
                 if self.peek() == Some(&'=') {
                     self.advance();
-                    return Token::Eq;
+                    Token::Eq
+                } else if self.peek() == Some(&'>') {
+                    self.advance();
+                    Token::Arrow
+                } else {
+                    Token::Assign
                 }
-
-                Token::Assign
             }
             '!' => {
                 if self.peek() == Some(&'=') {
@@ -235,13 +238,17 @@ impl<'a> Lexer<'a> {
             "else" => Token::Else,
             "import" => Token::Import,
             "while" => Token::While,
-            "struct" => Token::Struct,
             "return" => Token::Return,
             "for" => Token::For,
             "in" => Token::In,
             "break" => Token::Break,
             "continue" => Token::Continue,
             "as" => Token::As,
+            "struct" => Token::Struct,
+            "enum" => Token::Enum,
+            "match" => Token::Match,
+            "default" => Token::Default,
+            "self" => Token::SelfToken,
             "None" => Token::None,
 
             _ => Token::Identifier(literal),
