@@ -6,62 +6,38 @@ mod token;
 
 use crate::lexer::Lexer;
 use crate::parser::Parser;
+use crate::sema::analyzer::SemanticAnalyzer;
 
 fn main() {
     let input = r#"
-    import std.math
-    import std.os
-    import std.collections::{Array}
-
-    struct Vector3 {
+    struct Vector2 {
         x: f32,
-        y: f32,
-        z: f32,
-
-        fn new(x: f32, y: f32) Vector3 {
-            return Vector3 {x: x, y: y, z: 0};
-        }
-
-        fn sum(self, amount: i32) i32 {
-            self.x += amount as f32;
-            self.y += amount as f32;
-            self.z += amount as f32;
-        }
+        y: f32
     }
 
-    fn print_value(val: f32) f32 {
-        println("{}", y);
-        return y;
+    fn make_vec(a: f32) Vector2 {
+        return Vector2 { x: a, y: a * 2.0 };
     }
 
     fn main() {
-        const pos: Vector3 = create_vector(10.5, 20.0);
-        const numbers: Array = [1, 2, 3];
-        var count = 100;
+        // Struct + Functions test
+        var v = make_vec(10.0);
+ 
+        // Shadowing 
+        var v = 100; 
 
-        if pos.x < 50.0 {
-            print("Position is small\n");
-        } else if pos.x > 100.0 {
-            println("Position is big", pos.x * 2.0);
-        } else {
-            println(stderr, "\tPosition should not be inside \"[50-100]\"");
+        // Mutability
+        const PI: f32 = 3.14159;
+        // PI = 3.0;
+
+        // Scopes and blocks
+        if v > 50 {
+            var inner = 1;
+            v = v + inner;
         }
+        // inner = 2;
 
-        while count > 0 {
-            count = count - 1;
-            count -= count.clamp(0 as u32, 200 as u32);
-        }
-
-        const lines: Vector = file_content.split_lines();
-
-        for line in lines {
-            const content = os::read("file.txt");
-            if content != None {
-                output_file.write("{}", key.value);
-            } else {
-                break;
-            }
-        }
+        // var error = v + 50.0;
     }
     "#;
     const BOLD: &str = "\x1b[1m";
@@ -69,17 +45,32 @@ fn main() {
     println!("{BOLD}\x1b[31mInput:{RESET}\n{input}");
     println!("{BOLD}\x1b[32mTokens:{RESET}");
 
+    println!("Compiling Zeru...\n");
+
     let lexer = Lexer::new(input);
     let mut parser = Parser::new(lexer);
-
     let program = parser.parse_program();
 
     if !parser.errors.is_empty() {
-        println!("Errors detected during parsing:");
+        println!("❌ Parser Errors:");
         for err in parser.errors {
             println!("\t{}", err);
         }
+        return;
+    }
+
+    println!("✅ Parsing OK. Running Semantic Analysis...");
+
+    let mut analyzer = SemanticAnalyzer::new();
+    analyzer.analyze(&program);
+
+    if !analyzer.errors.is_empty() {
+        println!("❌ Semantic Errors:");
+        for err in analyzer.errors {
+            println!("\t{}", err);
+        }
     } else {
-        println!("AST generated:\n{:#?}", program);
+        println!("✅ Semantic Analysis OK! Symbol Table Validated.");
+        println!("   (Ready for Code Generation in Phase 2)");
     }
 }

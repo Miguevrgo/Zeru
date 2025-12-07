@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use super::types::Type;
 
+#[derive(Clone)]
 pub enum Symbol {
     Var { ty: Type, is_const: bool },
     Function { params: Vec<Type>, ret_type: Type },

@@ -1,4 +1,4 @@
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum IntWidth {
     W8,
     W16,
@@ -7,19 +7,19 @@ pub enum IntWidth {
     WSize,
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum FloatWidth {
     W32,
     W64,
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Signedness {
     Signed,
     Unsigned,
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     Integer {
         signed: Signedness,
