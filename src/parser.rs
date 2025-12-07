@@ -575,6 +575,8 @@ impl<'a> Parser<'a> {
             Token::Float(val) => Some(Expression::Float(*val)),
             Token::StringLit(val) => Some(Expression::StringLit(val.clone())),
             Token::None => Some(Expression::None),
+            Token::True => Some(Expression::Boolean(true)),
+            Token::False => Some(Expression::Boolean(false)),
             Token::LParen => self.parse_grouped_expression(),
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
             Token::Match => self.parse_match_expression(),
@@ -694,6 +696,7 @@ impl<'a> Parser<'a> {
             | Token::MinusEq
             | Token::StarEq
             | Token::SlashEq
+            | Token::ModEq
             | Token::BitAndEq
             | Token::BitOrEq
             | Token::BitXorEq
@@ -888,6 +891,7 @@ fn token_precedence(token: &Token) -> Precedence {
         | Token::MinusEq
         | Token::StarEq
         | Token::SlashEq
+        | Token::ModEq
         | Token::BitAndEq
         | Token::BitOrEq
         | Token::BitXorEq
@@ -907,7 +911,7 @@ fn token_precedence(token: &Token) -> Precedence {
         Token::ShiftLeft | Token::ShiftRight => Precedence::Shift,
 
         Token::Plus | Token::Minus => Precedence::Sum,
-        Token::Star | Token::Slash => Precedence::Product,
+        Token::Star | Token::Slash | Token::Mod => Precedence::Product,
 
         Token::As => Precedence::Cast,
         Token::LParen => Precedence::Call,
@@ -1072,11 +1076,16 @@ mod tests {
             ("5 - 5;", "(5 - 5)"),
             ("5 * 5;", "(5 * 5)"),
             ("5 / 5;", "(5 / 5)"),
+            ("5 % 5;", "(5 % 5)"),
             ("5 > 5 == 3 < 4;", "((5 > 5) == (3 < 4))"),
             ("5 < 5 != 3 > 4;", "((5 < 5) != (3 > 4))"),
             (
                 "3 + 4 * 5 == 3 * 1 + 4 * 5;",
                 "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
+            ),
+            (
+                "4 + 5 % 2 == 4 * 1 + 5 % 2;",
+                "((4 + (5 % 2)) == ((4 * 1) + (5 % 2)))",
             ),
             ("true;", "true"),
             ("false;", "false"),
@@ -1324,9 +1333,10 @@ mod tests {
             x >>= 5;
             x *= 6;
             x /= 7;
+            x %= 8;
         ";
         let program = parse_input(input);
-        assert_eq!(program.statements.len(), 9);
+        assert_eq!(program.statements.len(), 10);
 
         let check_assign = |index: usize, expected_op: Token| match &program.statements[index] {
             Statement::Expression(Expression::Assign { operator, .. }) => {
@@ -1369,6 +1379,7 @@ mod tests {
         check_assign(6, Token::BitRShiftEq); // >>=
         check_assign(7, Token::StarEq); // *=
         check_assign(8, Token::SlashEq); // /=
+        check_assign(9, Token::ModEq); // %=
     }
 
     #[test]

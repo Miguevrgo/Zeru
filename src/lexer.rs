@@ -136,6 +136,14 @@ impl<'a> Lexer<'a> {
                     Token::Slash
                 }
             }
+            '%' => {
+                if self.peek() == Some(&'=') {
+                    self.advance();
+                    Token::ModEq
+                } else {
+                    Token::Mod
+                }
+            }
             '&' => {
                 if self.peek() == Some(&'=') {
                     self.advance();
@@ -258,6 +266,8 @@ impl<'a> Lexer<'a> {
             "match" => Token::Match,
             "default" => Token::Default,
             "self" => Token::SelfTok,
+            "true" => Token::True,
+            "false" => Token::False,
             "None" => Token::None,
 
             _ => Token::Identifier(literal),

@@ -25,8 +25,10 @@ pub enum Token {
     StringLit(String),
 
     // Logic
-    And, // &&
-    Or,  // ||
+    And,   // &&
+    Or,    // ||
+    True,  // true
+    False, // false
 
     // Bitwise
     ShiftLeft,  // <<
@@ -40,6 +42,7 @@ pub enum Token {
     MinusEq,     // -=
     StarEq,      // *=
     SlashEq,     // /=
+    ModEq,       // %=
     BitXorEq,    // ^=
     BitAndEq,    // &=
     BitOrEq,     // |=
@@ -52,6 +55,7 @@ pub enum Token {
     Minus,  // -
     Star,   // *
     Slash,  // /
+    Mod,    // %
     Eq,     // ==
     NotEq,  // !=
     Lt,     // <
