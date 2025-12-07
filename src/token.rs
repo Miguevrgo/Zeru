@@ -73,11 +73,11 @@ pub enum Token {
     Dot,       // .
 
     // Custom
-    SelfToken, // self
-    Match,     // match
-    Default,   // default
-    Enum,      // enum
-    Arrow,     // =>
+    SelfTok, // self
+    Match,   // match
+    Default, // default
+    Enum,    // enum
+    Arrow,   // =>
 
     // Special
     Eof,

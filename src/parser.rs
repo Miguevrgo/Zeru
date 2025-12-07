@@ -219,7 +219,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_parameter(&mut self) -> (String, String) {
-        if self.cur_token_is(&Token::SelfToken) {
+        if self.cur_token_is(&Token::SelfTok) {
             return ("self".to_string(), String::new());
         }
 
@@ -578,7 +578,7 @@ impl<'a> Parser<'a> {
             Token::LParen => self.parse_grouped_expression(),
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
             Token::Match => self.parse_match_expression(),
-            Token::SelfToken => Some(Expression::Identifier("self".to_string())),
+            Token::SelfTok => Some(Expression::Identifier("self".to_string())),
             _ => {
                 self.error_current(
                     format!("Expected expression, found: {:?}", &self.current_token).as_str(),

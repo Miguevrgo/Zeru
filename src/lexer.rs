@@ -257,7 +257,7 @@ impl<'a> Lexer<'a> {
             "enum" => Token::Enum,
             "match" => Token::Match,
             "default" => Token::Default,
-            "self" => Token::SelfToken,
+            "self" => Token::SelfTok,
             "None" => Token::None,
 
             _ => Token::Identifier(literal),
