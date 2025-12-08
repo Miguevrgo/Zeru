@@ -10,9 +10,28 @@ use crate::sema::analyzer::SemanticAnalyzer;
 
 fn main() {
     let input = r#"
+    enum Status { Alive, Dead, Unknown }
+
+    struct Player {
+        name: String,
+        health: i32,
+
+        fn new(n: String) Player {
+            return Player { name: n, health: 100 };
+        }
+
+        fn take_damage(self, amount: i32) {
+            self.health -= amount;
+        }
+
+        fn heal(self) {
+            self.health = 100;
+        }
+    }
+
     struct Vector2 {
         x: f32,
-        y: f32
+        y: f32,
     }
 
     fn make_vec(a: f32) Vector2 {
@@ -21,22 +40,48 @@ fn main() {
 
     fn main() {
         // Struct + Functions test
-        var v = make_vec(10.0);
+        var p = Player { name: "Hero", health: 100 };
  
-        // Shadowing 
-        var v = 100; 
+        p.take_damage(20);
 
+        // Shadowing
+        var x: f64 = 5.5;
+        var x: i64 = 10; // Shadowing
+
+        var level = 1;
+        var rank = match level {
+            1 => "Novice",
+            2 => "Pro",
+            default => "God"
+        };
+
+        // For Each
+        const text: String = "Hello World";
+        var text_mayus: String = text;
+        var i = 0;
+        const distance: u8 = 32;
+        for ch in text {
+            var upper = ch - distance;
+            text_mayus[i] = upper
+            i += 1;
+        }
+
+        const zero: i64 = 0;
+        while (x > zero) {
+            const one: i64 = 1;
+            x -= one;
+        }
+ 
         // Mutability
         const PI: f32 = 3.14159;
         // PI = 3.0;
 
         // Scopes and blocks
-        if v > 50 {
-            var inner = 1;
-            v = v + inner;
+        if p.health < 50 || false {
+            p.heal();
         }
-        // inner = 2;
 
+        var v = 10;
         // var error = v + 50.0;
     }
     "#;
@@ -65,7 +110,7 @@ fn main() {
     analyzer.analyze(&program);
 
     if !analyzer.errors.is_empty() {
-        println!("❌ Semantic Errors:");
+        println!("{BOLD}\x1b[31m❌ Semantic Errors:{RESET}");
         for err in analyzer.errors {
             println!("\t{}", err);
         }

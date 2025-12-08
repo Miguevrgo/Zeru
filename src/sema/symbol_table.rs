@@ -19,7 +19,7 @@ impl Symbol {
                     .collect::<Vec<_>>()
                     .join(", ");
 
-                format!("fn({}) {}", params_str, ret_type.to_string())
+                format!("fn({params_str}) {ret_type}")
             }
         }
     }

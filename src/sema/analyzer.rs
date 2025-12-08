@@ -77,48 +77,98 @@ impl SemanticAnalyzer {
 
     fn scan_functions(&mut self, stmts: &[Statement]) {
         for stmt in stmts {
-            if let Statement::Function {
-                name,
-                params,
-                return_type,
-                ..
-            } = stmt
-            {
-                if self.symbols.lookup_current_scope(name).is_some() {
-                    self.error(format!("Function '{name}' is already defined"));
-                    continue;
+            match stmt {
+                Statement::Function {
+                    name,
+                    params,
+                    return_type,
+                    ..
+                } => {
+                    self.register_function(name.clone(), params, return_type, None);
                 }
 
-                if name == "main" {
-                    if !params.is_empty() {
-                        self.error("Function 'main' must not take arguments".into());
-                    }
-
-                    if let Some(rt_str) = return_type {
-                        let ret_ty = self.resolve_type(&rt_str);
-                        if ret_ty != Type::Void {
-                            self.error(format!(
-                                "Function 'main' must return void (or imply void). Found {:?}.",
-                                ret_ty
-                            ));
+                Statement::Struct {
+                    name: struct_name,
+                    methods,
+                    ..
+                } => {
+                    for method in methods {
+                        if let Statement::Function {
+                            name: method_name,
+                            params,
+                            return_type,
+                            ..
+                        } = method
+                        {
+                            let full_name = format!("{struct_name}::{method_name}");
+                            self.register_function(
+                                full_name,
+                                params,
+                                return_type,
+                                Some(struct_name),
+                            );
                         }
                     }
                 }
-
-                let mut param_types = Vec::new();
-                for (_, type_name) in params {
-                    param_types.push(self.resolve_type(type_name))
-                }
-
-                let ret_ty = if let Some(rt_str) = return_type {
-                    self.resolve_type(&rt_str)
-                } else {
-                    Type::Void
-                };
-
-                self.symbols.insert_fn(name.clone(), param_types, ret_ty);
+                _ => {}
             }
         }
+    }
+
+    fn register_function(
+        &mut self,
+        name: String,
+        params: &Vec<(String, String)>,
+        return_type: &Option<String>,
+        associated_struct: Option<&str>,
+    ) {
+        if self.symbols.lookup_current_scope(&name).is_some() {
+            self.error(format!("Function '{name}' is already defined"));
+            return;
+        }
+
+        if name == "main" {
+            if !params.is_empty() {
+                self.error("Function 'main' must not take arguments".into());
+            }
+
+            if let Some(rt_str) = return_type {
+                let ret_ty = self.resolve_type(rt_str);
+                if ret_ty != Type::Void {
+                    self.error(format!(
+                        "Function 'main' must return void (or imply void). Found {:?}.",
+                        ret_ty
+                    ));
+                }
+            }
+        }
+
+        let mut param_types = Vec::new();
+        for (param_name, type_name) in params {
+            if param_name == "self" {
+                if let Some(struct_name) = associated_struct {
+                    if let Some(ty) = self.struct_defs.get(struct_name) {
+                        param_types.push(ty.clone())
+                    } else {
+                        param_types.push(Type::Unknown);
+                        self.error("Self used in unknown struct context".into());
+                    }
+                } else {
+                    self.error("'self' parameter allowed only in struct methods".into());
+                    param_types.push(Type::Unknown);
+                }
+            } else {
+                param_types.push(self.resolve_type(type_name));
+            }
+        }
+
+        let ret_ty = if let Some(rt_str) = return_type {
+            self.resolve_type(rt_str)
+        } else {
+            Type::Void
+        };
+
+        self.symbols.insert_fn(name.clone(), param_types, ret_ty);
     }
 
     fn analyze_bodies(&mut self, stmts: &[Statement]) {
@@ -127,31 +177,59 @@ impl SemanticAnalyzer {
                 Statement::Function {
                     name, params, body, ..
                 } => {
-                    let function_symbol = self.symbols.lookup(name).unwrap().clone();
-
-                    if let super::symbol_table::Symbol::Function { ret_type, .. } = function_symbol
-                    {
-                        let prev_ret = self.current_fn_return_type.replace(ret_type.clone());
-
-                        self.symbols.enter_scope();
-
-                        for (param_name, type_str) in params {
-                            let param_type = self.resolve_type(type_str);
-                            self.symbols
-                                .insert_var(param_name.clone(), param_type, true);
+                    self.check_function_body(name.clone(), params, body);
+                }
+                Statement::Struct {
+                    name: struct_name,
+                    methods,
+                    ..
+                } => {
+                    for method in methods {
+                        if let Statement::Function {
+                            name: method_name,
+                            params,
+                            body,
+                            ..
+                        } = method
+                        {
+                            let full_name = format!("{struct_name}::{method_name}");
+                            self.check_function_body(full_name, params, body);
                         }
-
-                        for s in body {
-                            self.check_statement(s);
-                        }
-
-                        self.symbols.exit_scope();
-                        self.current_fn_return_type = prev_ret;
                     }
                 }
                 Statement::Var { .. } => self.check_statement(stmt),
                 _ => {}
             }
+        }
+    }
+
+    fn check_function_body(
+        &mut self,
+        name: String,
+        params: &[(String, String)],
+        body: &[Statement],
+    ) {
+        let function_symbol = self.symbols.lookup(&name).unwrap().clone();
+
+        if let super::symbol_table::Symbol::Function {
+            ret_type,
+            params: params_type_def,
+        } = function_symbol
+        {
+            let prev_ret = self.current_fn_return_type.replace(ret_type);
+            self.symbols.enter_scope();
+
+            for (i, (param_name, _)) in params.iter().enumerate() {
+                let ty = params_type_def.get(i).unwrap_or(&Type::Unknown).clone();
+                self.symbols.insert_var(param_name.clone(), ty, true);
+            }
+
+            for s in body {
+                self.check_statement(s);
+            }
+
+            self.symbols.exit_scope();
+            self.current_fn_return_type = prev_ret;
         }
     }
 
@@ -170,27 +248,29 @@ impl SemanticAnalyzer {
 
         match type_name {
             "int" | "signed" => {
-                self.error(format!(
+                self.error(
                     "Zeru is strict about sizes. 'int' is ambiguous. Did you mean 'i32'?"
-                ));
+                        .to_string(),
+                );
                 return Type::Unknown;
             }
             "uint" | "unsigned" => {
-                self.error(format!(
+                self.error(
                     "Zeru is strict about sizes. 'unsigned' is ambiguous. Did you mean 'u32'?"
-                ));
+                        .to_string(),
+                );
                 return Type::Unknown;
             }
             "float" => {
-                self.error(format!("Ambiguous float size. Did you mean 'f32'?"));
+                self.error("Ambiguous float size. Did you mean 'f32'?".to_string());
                 return Type::Unknown;
             }
             "double" => {
-                self.error(format!("Ambiguous float size. Did you mean 'f64'?"));
+                self.error("Ambiguous float size. Did you mean 'f64'?".to_string());
                 return Type::Unknown;
             }
             "char" => {
-                self.error(format!("Zeru uses 'u8' for bytes or 'String' for text. 'char' is not supported directly."));
+                self.error("Zeru uses 'u8' for bytes or 'String' for text. 'char' is not supported directly.".to_string());
                 return Type::Unknown;
             }
             "long" | "short" => {
@@ -248,13 +328,24 @@ impl SemanticAnalyzer {
                 let final_type = if let Some(type_str) = type_annotation {
                     let expected = self.resolve_type(type_str);
 
-                    if !expected.accepts(&value_type) && value_type != Type::Unknown {
+                    let is_compatible = if expected.accepts(&value_type) {
+                        true
+                    } else {
+                        matches!(
+                            (&expected, &value_type),
+                            (Type::Integer { .. }, Type::Integer { .. })
+                                | (Type::Float(FloatWidth::W64), Type::Float(FloatWidth::W32))
+                        )
+                    };
+
+                    if !is_compatible && value_type != Type::Unknown {
                         self.error(format!(
-                            "Type mismatch for variable '{name}'. Annotated as {:?} but got {:?}.",
+                            "Type mismatch for variable '{name}. Annotated as {:?} but got {:?}",
                             expected.to_string(),
-                            value_type.to_string(),
+                            value_type.to_string()
                         ));
                     }
+
                     expected
                 } else {
                     if value_type == Type::Unknown {
@@ -340,7 +431,52 @@ impl SemanticAnalyzer {
             Statement::Expression(expr) => {
                 self.check_expression(expr);
             }
-            //TODO: ForIn, Struct, Enum, Import
+
+            Statement::ForIn {
+                variable,
+                iterable,
+                body,
+            } => {
+                let iterable_type = self.check_expression(iterable);
+
+                let item_type = match iterable_type {
+                    Type::Array { elem_type, .. } => *elem_type,
+                    Type::String => Type::Integer {
+                        signed: Signedness::Unsigned,
+                        width: IntWidth::W8,
+                    },
+                    Type::Unknown => Type::Unknown,
+                    _ => {
+                        self.error(format!("Type {:?} is not iterable.", iterable_type));
+                        Type::Unknown
+                    }
+                };
+
+                let prev_loop = self.in_loop;
+                self.in_loop = true;
+
+                self.symbols.enter_scope();
+                self.symbols.insert_var(variable.clone(), item_type, true);
+                self.check_statement(body);
+
+                self.symbols.exit_scope();
+                self.in_loop = prev_loop;
+            }
+
+            Statement::Import { path: _, symbols } => {
+                //TODO: Check if symbols really exist
+                for sym in symbols {
+                    if !self.struct_defs.contains_key(sym) && !self.enum_defs.contains_key(sym) {
+                        self.struct_defs.insert(
+                            sym.clone(),
+                            Type::Struct {
+                                name: sym.clone(),
+                                fields: vec![],
+                            },
+                        );
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -394,12 +530,15 @@ impl SemanticAnalyzer {
                             }
                         }
                     } else {
-                        self.error(format!("Undeclared variable '{}'.", name));
+                        self.error(format!("Undeclared variable '{name}' in assignment."));
                     }
-                } else {
-                    //TODO: Complex assignment
-                    self.check_expression(target);
-                    self.check_expression(value);
+                } else if let Expression::Get { .. } = &**target {
+                    let target_type = self.check_expression(target);
+                    let value_type = self.check_expression(value);
+
+                    if !target_type.accepts(&value_type) {
+                        self.error("Type mismatch in field assignment".into());
+                    }
                 }
                 Type::Void
             }
@@ -443,70 +582,67 @@ impl SemanticAnalyzer {
                 arguments,
             } => {
                 if let Expression::Identifier(name) = &**function {
-                    if let Some(super::symbol_table::Symbol::Function { params, ret_type }) =
-                        self.symbols.lookup(name).cloned()
-                    {
-                        if arguments.len() != params.len() {
-                            self.error(format!(
-                                "Fucntion '{name}' expects {} arguments, got {}",
-                                params.len(),
-                                arguments.len()
-                            ));
-                        } else {
-                            for (i, arg_expr) in arguments.iter().enumerate() {
-                                let arg_type = self.check_expression(arg_expr);
-                                if !params[i].accepts(&arg_type) && arg_type != Type::Unknown {
-                                    self.error(format!("Argument {} mismatch in call to '{name}'. Expected {:?}, got {:?}", i + 1, params[i].to_string(), arg_type.to_string()));
-                                }
+                    self.check_call(name, arguments, None);
+                }
+
+                if let Expression::Get {
+                    object,
+                    name: method_name,
+                } = &**function
+                {
+                    let obj_type = self.check_expression(object);
+
+                    let struct_name = match &obj_type {
+                        Type::Struct { name, .. } => name.clone(),
+                        Type::Pointer { elem_type, .. } => {
+                            if let Type::Struct { name, .. } = &**elem_type {
+                                name.clone()
+                            } else {
+                                "".into()
                             }
                         }
-                        return ret_type;
-                    } else {
-                        self.error(format!("Function '{name}' not found"));
+                        _ => "".into(),
+                    };
+
+                    if struct_name.is_empty() {
+                        self.error(format!(
+                            "Cannot call method on non-struct type {:?}",
+                            obj_type.to_string()
+                        ));
+                        return Type::Unknown;
                     }
+                    let full_name = format!("{struct_name}::{method_name}");
+                    return self.check_call(&full_name, arguments, Some(obj_type));
                 }
+
+                self.error("Invalid call expression".into());
                 Type::Unknown
             }
 
             Expression::Get { object, name } => {
                 let obj_type = self.check_expression(object);
 
-                let struct_def_type = match &obj_type {
-                    Type::Struct { .. } => Some(&obj_type),
-                    Type::Pointer { elem_type, .. } => match &**elem_type {
-                        Type::Struct { .. } => Some(&**elem_type),
-                        _ => None,
-                    },
-                    _ => None,
+                let actual_type = if let Type::Pointer { elem_type, .. } = &obj_type {
+                    elem_type
+                } else {
+                    &obj_type
                 };
 
-                if let Some(Type::Struct {
-                    name: struct_name,
-                    fields: _,
-                }) = struct_def_type
+                if let Type::Struct {
+                    name: struct_name, ..
+                } = actual_type
                 {
-                    if let Some(Type::Struct {
-                        fields: def_fields, ..
-                    }) = self.struct_defs.get(struct_name)
-                    {
-                        for (f_name, f_type) in def_fields {
+                    if let Some(Type::Struct { fields, .. }) = self.struct_defs.get(struct_name) {
+                        for (f_name, f_type) in fields {
                             if f_name == name {
                                 return f_type.clone();
                             }
                         }
-
-                        self.error(format!(
-                            "Struct '{struct_name}' has no field named '{name}'"
-                        ));
+                        self.error(format!("Struct '{struct_name}' has no field '{name}'"));
                     }
                 } else if obj_type != Type::Unknown {
-                    self.error(format!(
-                        "Type '{:?}' is not a struct, cannot access property '{}'.",
-                        obj_type.to_string(),
-                        name
-                    ));
+                    self.error("Cannot access property on non-struct type.".into());
                 }
-
                 Type::Unknown
             }
 
@@ -542,8 +678,57 @@ impl SemanticAnalyzer {
                 }
                 Type::Unknown
             }
+
+            Expression::Match { arms, .. } => {
+                if !arms.is_empty() {
+                    self.check_expression(&arms[0].1)
+                } else {
+                    Type::Void
+                }
+            }
+
             _ => Type::Unknown,
         }
+    }
+
+    fn check_call(&mut self, name: &str, args: &[Expression], implicit_self: Option<Type>) -> Type {
+        if let Some(super::symbol_table::Symbol::Function { params, ret_type }) =
+            self.symbols.lookup(name).cloned()
+        {
+            let mut expected_args = params.clone();
+
+            if let Some(self_type) = implicit_self
+                && !expected_args.is_empty()
+            {
+                if !expected_args[0].accepts(&self_type) {
+                    self.error(format!(
+                        "Method '{name}' called on wrong type. Expected {:?}, got {:?}",
+                        expected_args[0].to_string(),
+                        self_type.to_string()
+                    ));
+                }
+                expected_args.remove(0);
+            }
+
+            if args.len() != expected_args.len() {
+                self.error(format!(
+                    "Function '{name}' expects {} arguments, got {}",
+                    expected_args.len(),
+                    args.len()
+                ));
+            } else {
+                for (i, expr) in args.iter().enumerate() {
+                    let arg_type = self.check_expression(expr);
+                    if !expected_args[i].accepts(&arg_type) {
+                        self.error(format!("Argument {} type mismatch.", i + 1));
+                    }
+                }
+            }
+            return ret_type;
+        }
+
+        self.error(format!("Function '{name}' not defined."));
+        Type::Unknown
     }
 
     fn error(&mut self, msg: String) {

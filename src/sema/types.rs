@@ -121,44 +121,46 @@ impl Type {
             _ => false,
         }
     }
+}
 
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Type::Integer { signed, width } => {
-                let sign_str = match signed {
+                let s = match signed {
                     Signedness::Signed => "i",
                     Signedness::Unsigned => "u",
                 };
-                let width_str = match width {
+                let w = match width {
                     IntWidth::W8 => "8",
                     IntWidth::W16 => "16",
                     IntWidth::W32 => "32",
                     IntWidth::W64 => "64",
                     IntWidth::WSize => "size",
                 };
-                format!("{}{}", sign_str, width_str)
+                write!(f, "{}{}", s, w)
             }
-            Type::Float(width) => match width {
-                FloatWidth::W32 => "f32".to_string(),
-                FloatWidth::W64 => "f64".to_string(),
-            },
-            Type::Bool => "bool".to_string(),
-            Type::String => "String".to_string(),
-            Type::Void => "void".to_string(),
-
-            Type::Struct { name, .. } => name.clone(),
-            Type::Enum { name, .. } => name.clone(),
-
-            Type::Array { elem_type, len } => format!("[{}; {}]", elem_type.to_string(), len),
+            Type::Float(w) => write!(
+                f,
+                "f{}",
+                match w {
+                    FloatWidth::W32 => "32",
+                    FloatWidth::W64 => "64",
+                }
+            ),
+            Type::Bool => write!(f, "bool"),
+            Type::String => write!(f, "String"),
+            Type::Void => write!(f, "void"),
+            Type::Struct { name, .. } => write!(f, "{}", name),
+            Type::Enum { name, .. } => write!(f, "{}", name),
+            Type::Array { elem_type, len } => write!(f, "[{}; {}]", elem_type, len),
             Type::Pointer {
                 elem_type,
                 is_mutable,
             } => {
-                let mut_str = if *is_mutable { "mut " } else { "" };
-                format!("&{}{}", mut_str, elem_type.to_string())
+                write!(f, "&{}{}", if *is_mutable { "mut " } else { "" }, elem_type)
             }
-
-            Type::Unknown => "<unknown>".to_string(),
+            Type::Unknown => write!(f, "<unknown>"),
         }
     }
 }
