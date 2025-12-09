@@ -138,6 +138,41 @@ impl<'a> Parser<'a> {
 
             if let Token::Identifier(name) = &self.current_token {
                 type_str.push_str(name);
+            } else {
+                self.error_current("Expected type name after '::'");
+            }
+        }
+
+        if self.peek_token_is(&Token::Lt) {
+            self.next_token();
+            type_str.push('<');
+
+            loop {
+                self.next_token();
+                match &self.current_token {
+                    Token::Int(n) => {
+                        type_str.push_str(&n.to_string());
+                    }
+                    _ => {
+                        let inner_type = self.parse_type()?;
+                        type_str.push_str(&inner_type);
+                    }
+                }
+
+                if self.peek_token_is(&Token::Comma) {
+                    self.next_token();
+                    type_str.push_str(", ");
+                } else if self.peek_token_is(&Token::Gt) {
+                    self.next_token();
+                    type_str.push('>');
+                    break;
+                } else {
+                    self.errors.push(format!(
+                        "Expected ',' or '>' in generic type, found {:?}",
+                        self.peek_token
+                    ));
+                    return None;
+                }
             }
         }
 
@@ -595,7 +630,11 @@ impl<'a> Parser<'a> {
             && precedence < token_precedence(&self.peek_token)
         {
             self.next_token();
-            left_exp = self.parse_infix_expression(left_exp.unwrap());
+            if let Some(left) = left_exp {
+                left_exp = self.parse_infix_expression(left);
+            } else {
+                break;
+            }
         }
 
         left_exp
@@ -734,7 +773,34 @@ impl<'a> Parser<'a> {
             return Some(Expression::ArrayLiteral(elements));
         }
 
-        elements.push(self.parse_expression(Precedence::Lowest)?);
+        let first_elem = self.parse_expression(Precedence::Lowest)?;
+
+        if self.peek_token_is(&Token::Semicolon) {
+            self.next_token();
+            self.next_token();
+
+            let count = match &self.current_token {
+                Token::Int(n) => *n,
+                _ => {
+                    self.errors
+                        .push("Array repeat count must be an integer literal".into());
+                    return None;
+                }
+            };
+
+            if !self.expect_peek(&Token::RBracket) {
+                return None;
+            }
+
+            let mut elements = Vec::new();
+            for _ in 0..count {
+                elements.push(first_elem.clone());
+            }
+            return Some(Expression::ArrayLiteral(elements));
+        }
+
+        let mut elements = Vec::new();
+        elements.push(first_elem);
 
         while self.peek_token_is(&Token::Comma) {
             self.next_token();
@@ -1516,6 +1582,60 @@ mod tests {
             }
         } else {
             panic!("Expected Var declaration");
+        }
+    }
+
+    #[test]
+    fn test_arrays_syntax() {
+        let input = "
+            var b: Array<i32, 5> = [10, 20, 30, 40, 50];
+            var c = [0; 3];
+        ";
+        let program = parse_input(input);
+
+        check_parser_errors(&Parser::new(Lexer::new(input)));
+        assert_eq!(program.statements.len(), 2);
+
+        match &program.statements[0] {
+            Statement::Var {
+                type_annotation, ..
+            } => {
+                assert_eq!(type_annotation.as_ref().unwrap(), "Array<i32, 5>");
+            }
+            _ => panic!("Expected Var a"),
+        }
+
+        match &program.statements[1] {
+            Statement::Var { value, .. } => {
+                if let Expression::ArrayLiteral(elements) = value {
+                    assert_eq!(elements.len(), 3);
+                    for expr in elements {
+                        if let Expression::Int(val) = expr {
+                            assert_eq!(*val, 0);
+                        } else {
+                            panic!("Expected Int(0)");
+                        }
+                    }
+                } else {
+                    panic!("Expected ArrayLiteral");
+                }
+            }
+            _ => panic!("Expected Var c"),
+        }
+    }
+
+    #[test]
+    fn test_nested_arrays() {
+        let input = "var matrix: Array<Array<i32, 2>, 2> = [[1, 2], [3, 4]];";
+        let program = parse_input(input);
+
+        match &program.statements[0] {
+            Statement::Var {
+                type_annotation, ..
+            } => {
+                assert_eq!(type_annotation.as_ref().unwrap(), "Array<Array<i32, 2>, 2>");
+            }
+            _ => panic!("Expected Matrix Var"),
         }
     }
 }

@@ -331,11 +331,32 @@ impl SemanticAnalyzer {
                     let is_compatible = if expected.accepts(&value_type) {
                         true
                     } else {
-                        matches!(
-                            (&expected, &value_type),
-                            (Type::Integer { .. }, Type::Integer { .. })
-                                | (Type::Float(FloatWidth::W64), Type::Float(FloatWidth::W32))
-                        )
+                        match (&expected, &value_type) {
+                            (Type::Integer { .. }, Type::Integer { .. }) => true,
+                            (Type::Float(FloatWidth::W64), Type::Float(FloatWidth::W32)) => true,
+
+                            (
+                                Type::Array {
+                                    elem_type: t1,
+                                    len: l1,
+                                },
+                                Type::Array {
+                                    elem_type: t2,
+                                    len: l2,
+                                },
+                            ) => {
+                                if l1 != l2 {
+                                    false
+                                } else {
+                                    matches!(
+                                        (&**t1, &**t2),
+                                        (Type::Integer { .. }, Type::Integer { .. })
+                                    )
+                                }
+                            }
+
+                            _ => false,
+                        }
                     };
 
                     if !is_compatible && value_type != Type::Unknown {
@@ -549,7 +570,23 @@ impl SemanticAnalyzer {
                 right,
             } => {
                 let l_ty = self.check_expression(left);
-                let r_ty = self.check_expression(right);
+                let r_ty = match &**right {
+                    Expression::Int(_) => {
+                        if let Type::Integer { .. } = l_ty {
+                            l_ty.clone()
+                        } else {
+                            self.check_expression(right)
+                        }
+                    }
+                    Expression::Float(_) => {
+                        if let Type::Float(_) = l_ty {
+                            l_ty.clone()
+                        } else {
+                            self.check_expression(right)
+                        }
+                    }
+                    _ => self.check_expression(right),
+                };
 
                 if l_ty == Type::Unknown || r_ty == Type::Unknown {
                     return Type::Unknown;
@@ -561,11 +598,6 @@ impl SemanticAnalyzer {
                 }
 
                 match operator {
-                    crate::token::Token::Plus
-                    | crate::token::Token::Minus
-                    | crate::token::Token::Star
-                    | crate::token::Token::Slash => l_ty,
-
                     crate::token::Token::Eq
                     | crate::token::Token::NotEq
                     | crate::token::Token::Lt
@@ -573,7 +605,7 @@ impl SemanticAnalyzer {
                     | crate::token::Token::Leq
                     | crate::token::Token::Geq => Type::Bool,
 
-                    _ => Type::Unknown,
+                    _ => l_ty,
                 }
             }
 
@@ -684,6 +716,34 @@ impl SemanticAnalyzer {
                     self.check_expression(&arms[0].1)
                 } else {
                     Type::Void
+                }
+            }
+
+            Expression::ArrayLiteral(elements) => {
+                if elements.is_empty() {
+                    return Type::Array {
+                        elem_type: Box::new(Type::Unknown),
+                        len: 0,
+                    };
+                }
+
+                let first_type = self.check_expression(&elements[0]);
+                for (i, elem) in elements.iter().enumerate().skip(1) {
+                    let elem_type = self.check_expression(elem);
+
+                    if !first_type.accepts(&elem_type) {
+                        self.error(format!(
+                            "Array element at index {} type mismatch. Expected {:?}, got {:?}.",
+                            i,
+                            first_type.to_string(),
+                            elem_type.to_string()
+                        ));
+                    }
+                }
+
+                Type::Array {
+                    elem_type: Box::new(first_type),
+                    len: elements.len(),
                 }
             }
 

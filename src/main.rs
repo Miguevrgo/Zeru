@@ -44,6 +44,10 @@ fn main() {
  
         p.take_damage(20);
 
+        var list: Array<i32, 3> = [1, 2, 3];
+        var zeros: Array<u8, 10> = [0; 10];
+        var auto = [10; 4];
+
         // Shadowing
         var x: f64 = 5.5;
         var x: i64 = 10; // Shadowing
@@ -59,17 +63,15 @@ fn main() {
         const text: String = "Hello World";
         var text_mayus: String = text;
         var i = 0;
-        const distance: u8 = 32;
         for ch in text {
-            var upper = ch - distance;
-            text_mayus[i] = upper
+            var upper = ch - 32;
+            text_mayus[i] = upper;
             i += 1;
         }
 
         const zero: i64 = 0;
         while (x > zero) {
-            const one: i64 = 1;
-            x -= one;
+            x -= (1 as i64);
         }
  
         // Mutability

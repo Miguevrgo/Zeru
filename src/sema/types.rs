@@ -55,6 +55,28 @@ pub enum Type {
 
 impl Type {
     pub fn from_string(name: &str) -> Option<Type> {
+        if let Some(start_angle) = name.find('<')
+            && name.ends_with('>')
+        {
+            let base_name = &name[0..start_angle];
+            let content = &name[start_angle + 1..name.len() - 1]; // "i32, 5"
+
+            let args: Vec<&str> = content.split(',').map(|s| s.trim()).collect();
+
+            if base_name == "Array" && args.len() == 2 {
+                let type_part = args[0];
+                let len_part = args[1];
+
+                if let Ok(len) = len_part.parse::<usize>()
+                    && let Some(elem_ty) = Type::from_string(type_part)
+                {
+                    return Some(Type::Array {
+                        elem_type: Box::new(elem_ty),
+                        len,
+                    });
+                }
+            }
+        }
         match name {
             "i8" => Some(Type::Integer {
                 signed: Signedness::Signed,
