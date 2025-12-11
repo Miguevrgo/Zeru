@@ -362,21 +362,11 @@ impl SemanticAnalyzer {
                 value,
                 type_annotation,
             } => {
-                let value_type = self.check_expression(value);
+                let expected_type = type_annotation.as_ref().map(|spec| self.resolve_spec(spec));
 
-                let final_type = if let Some(spec) = type_annotation {
-                    let expected = self.resolve_spec(spec);
+                let value_type = self.check_expression(value, expected_type.as_ref());
 
-                    if let Expression::Int(val) = value
-                        && let Type::Integer { width, signed } = &expected
-                        && !self.fits_in_int(*val, width.clone(), signed.clone())
-                    {
-                        self.error(format!(
-                            "Literal {} does not fit in type {:?}",
-                            val, expected
-                        ));
-                    }
-
+                let final_type = if let Some(expected) = expected_type {
                     let is_compatible = if expected.accepts(&value_type) {
                         true
                     } else {
@@ -429,13 +419,15 @@ impl SemanticAnalyzer {
             }
 
             Statement::Return(opt_expr) => {
+                let expected = self.current_fn_return_type.clone();
+
                 let expr_type = if let Some(expr) = opt_expr {
-                    self.check_expression(expr)
+                    self.check_expression(expr, expected.as_ref())
                 } else {
                     Type::Void
                 };
 
-                if let Some(expected) = &self.current_fn_return_type {
+                if let Some(expected) = expected {
                     if !expected.accepts(&expr_type) {
                         self.error(format!(
                             "Invalid return type. Function expects {:?}, returning {:?}",
@@ -461,7 +453,7 @@ impl SemanticAnalyzer {
                 then_branch,
                 else_branch,
             } => {
-                let cond_type = self.check_expression(condition);
+                let cond_type = self.check_expression(condition, Some(&Type::Bool));
                 if cond_type != Type::Bool && cond_type != Type::Unknown {
                     self.error(format!(
                         "If condition must be boolean, got {:?}",
@@ -476,7 +468,7 @@ impl SemanticAnalyzer {
             }
 
             Statement::While { cond, body } => {
-                let cond_type = self.check_expression(cond);
+                let cond_type = self.check_expression(cond, Some(&Type::Bool));
                 if cond_type != Type::Bool && cond_type != Type::Unknown {
                     self.error(format!(
                         "While condition must be boolean, got: {:?}",
@@ -497,7 +489,7 @@ impl SemanticAnalyzer {
             }
 
             Statement::Expression(expr) => {
-                self.check_expression(expr);
+                self.check_expression(expr, None);
             }
 
             Statement::ForIn {
@@ -505,7 +497,7 @@ impl SemanticAnalyzer {
                 iterable,
                 body,
             } => {
-                let iterable_type = self.check_expression(iterable);
+                let iterable_type = self.check_expression(iterable, None);
 
                 let item_type = match iterable_type {
                     Type::Array { elem_type, .. } => *elem_type,
@@ -548,13 +540,34 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn check_expression(&mut self, expr: &Expression) -> Type {
+    fn check_expression(&mut self, expr: &Expression, expected_type: Option<&Type>) -> Type {
         match expr {
-            Expression::Int(_) => Type::Integer {
-                signed: Signedness::Signed,
-                width: IntWidth::W32,
-            },
-            Expression::Float(_) => Type::Float(FloatWidth::W32),
+            Expression::Int(val) => {
+                if let Some(Type::Integer { width, signed }) = expected_type {
+                    if self.fits_in_int(*val, *width, *signed) {
+                        return Type::Integer {
+                            width: *width,
+                            signed: *signed,
+                        };
+                    } else {
+                        self.error(format!(
+                            "Literal {} does not fit in type {:?}",
+                            val,
+                            expected_type.unwrap()
+                        ));
+                    }
+                }
+                Type::Integer {
+                    signed: Signedness::Signed,
+                    width: IntWidth::W32,
+                }
+            }
+            Expression::Float(_) => {
+                if let Some(Type::Float(width)) = expected_type {
+                    return Type::Float(*width);
+                }
+                Type::Float(FloatWidth::W32)
+            }
             Expression::Boolean(_) => Type::Bool,
             Expression::StringLit(_) => Type::String,
             Expression::None => Type::Void,
@@ -579,33 +592,32 @@ impl SemanticAnalyzer {
                 operator: _,
                 value,
             } => {
-                if let Expression::Identifier(name) = &**target {
-                    if let Some(symbol) = self.symbols.lookup(name).cloned() {
-                        if let super::symbol_table::Symbol::Var { is_const, ty } = symbol {
-                            if is_const {
-                                self.error(format!(
-                                    "Cannot reassign constant variable '{}'.",
-                                    name
-                                ));
-                            }
-                            let val_type = self.check_expression(value);
-                            if !ty.accepts(&val_type) && val_type != Type::Unknown {
-                                self.error(format!(
-                                     "Type mismatch in assignment. Variable '{}' is {:?}, value is {:?}.", 
-                                     name, ty.to_string(), val_type.to_string()
-                                ));
-                            }
+                let target_type = if let Expression::Identifier(name) = &**target {
+                    if let Some(super::symbol_table::Symbol::Var { is_const, ty }) =
+                        self.symbols.lookup(name).cloned()
+                    {
+                        if is_const {
+                            self.error(format!("Cannot reassign constant variable '{}'.", name));
                         }
+                        Some(ty)
                     } else {
-                        self.error(format!("Undeclared variable '{name}' in assignment."));
+                        None
                     }
-                } else if let Expression::Get { .. } = &**target {
-                    let target_type = self.check_expression(target);
-                    let value_type = self.check_expression(value);
+                } else {
+                    Some(self.check_expression(target, None))
+                };
 
-                    if !target_type.accepts(&value_type) {
-                        self.error("Type mismatch in field assignment".into());
-                    }
+                let val_type = self.check_expression(value, target_type.as_ref());
+
+                if let Some(ty) = target_type
+                    && !ty.accepts(&val_type)
+                    && val_type != Type::Unknown
+                {
+                    self.error(format!(
+                        "Type mismatch in assignment. Expected {:?}, got {:?}.",
+                        ty.to_string(),
+                        val_type.to_string()
+                    ));
                 }
                 Type::Void
             }
@@ -615,24 +627,8 @@ impl SemanticAnalyzer {
                 operator,
                 right,
             } => {
-                let l_ty = self.check_expression(left);
-                let r_ty = match &**right {
-                    Expression::Int(_) => {
-                        if let Type::Integer { .. } = l_ty {
-                            l_ty.clone()
-                        } else {
-                            self.check_expression(right)
-                        }
-                    }
-                    Expression::Float(_) => {
-                        if let Type::Float(_) = l_ty {
-                            l_ty.clone()
-                        } else {
-                            self.check_expression(right)
-                        }
-                    }
-                    _ => self.check_expression(right),
-                };
+                let l_ty = self.check_expression(left, expected_type);
+                let r_ty = self.check_expression(right, Some(&l_ty));
 
                 if l_ty == Type::Unknown || r_ty == Type::Unknown {
                     return Type::Unknown;
@@ -668,7 +664,7 @@ impl SemanticAnalyzer {
                     name: method_name,
                 } = &**function
                 {
-                    let obj_type = self.check_expression(object);
+                    let obj_type = self.check_expression(object, None);
 
                     let struct_name = match &obj_type {
                         Type::Struct { name, .. } => name.clone(),
@@ -698,7 +694,7 @@ impl SemanticAnalyzer {
             }
 
             Expression::Get { object, name } => {
-                let obj_type = self.check_expression(object);
+                let obj_type = self.check_expression(object, None);
 
                 let actual_type = if let Type::Pointer { elem_type, .. } = &obj_type {
                     elem_type
@@ -733,7 +729,7 @@ impl SemanticAnalyzer {
                         for (def_name, def_type) in def_fields {
                             let found = fields.iter().find(|(n, _)| n == def_name);
                             if let Some((_, expr)) = found {
-                                let expr_type = self.check_expression(expr);
+                                let expr_type = self.check_expression(expr, Some(def_type));
                                 if !def_type.accepts(&expr_type) {
                                     self.error(format!(
                                         "Field '{}' in struct '{}' expected {:?}, got {:?}.",
@@ -759,7 +755,7 @@ impl SemanticAnalyzer {
 
             Expression::Match { arms, .. } => {
                 if !arms.is_empty() {
-                    self.check_expression(&arms[0].1)
+                    self.check_expression(&arms[0].1, expected_type)
                 } else {
                     Type::Void
                 }
@@ -767,15 +763,28 @@ impl SemanticAnalyzer {
 
             Expression::ArrayLiteral(elements) => {
                 if elements.is_empty() {
+                    if let Some(Type::Array { elem_type, len }) = expected_type {
+                        return Type::Array {
+                            elem_type: elem_type.clone(),
+                            len: *len,
+                        };
+                    }
                     return Type::Array {
                         elem_type: Box::new(Type::Unknown),
                         len: 0,
                     };
                 }
 
-                let first_type = self.check_expression(&elements[0]);
+                let elem_hint = if let Some(Type::Array { elem_type, .. }) = expected_type {
+                    Some(&**elem_type)
+                } else {
+                    None
+                };
+
+                let first_type = self.check_expression(&elements[0], elem_hint);
+
                 for (i, elem) in elements.iter().enumerate().skip(1) {
-                    let elem_type = self.check_expression(elem);
+                    let elem_type = self.check_expression(elem, Some(&first_type));
 
                     if !first_type.accepts(&elem_type) {
                         self.error(format!(
@@ -824,7 +833,7 @@ impl SemanticAnalyzer {
                 ));
             } else {
                 for (i, expr) in args.iter().enumerate() {
-                    let arg_type = self.check_expression(expr);
+                    let arg_type = self.check_expression(expr, Some(&expected_args[i]));
                     if !expected_args[i].accepts(&arg_type) {
                         self.error(format!("Argument {} type mismatch.", i + 1));
                     }

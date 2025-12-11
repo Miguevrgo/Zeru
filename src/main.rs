@@ -46,7 +46,7 @@ fn main() {
 
         var list: Array<i32, 3> = [1, 2, 3];
         var zeros: Array<u8, 10> = [0; 10];
-        var matrix: Array<Array<u8, 10>, 10> = [[2,3], [3,2]];
+        var matrix: Array<Array<u8, 2>, 2> = [[2,3], [3,2]];
         var auto = [10; 4];
 
         // Shadowing
