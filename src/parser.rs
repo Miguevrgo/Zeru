@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expression, Program, Statement},
+    ast::{Expression, Program, Statement, TypeSpec},
     lexer::Lexer,
     token::Token,
 };
@@ -144,66 +144,60 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_type(&mut self) -> Option<String> {
-        let mut type_str = String::new();
-
-        if let Token::Identifier(name) = &self.current_token {
-            type_str.push_str(name);
+    fn parse_type(&mut self) -> Option<TypeSpec> {
+        let mut name = if let Token::Identifier(n) = &self.current_token {
+            n.clone()
         } else {
-            self.error_peek("Type identifier");
+            self.error_current("Type identifier expected");
             return None;
-        }
+        };
 
         while self.peek_token_is(&Token::DoubleColon) {
             self.next_token();
-
-            type_str.push_str("::");
-
-            if !self.expect_peek_identifier() {
-                return None;
-            }
-
-            if let Token::Identifier(name) = &self.current_token {
-                type_str.push_str(name);
+            self.next_token();
+            if let Token::Identifier(n) = &self.current_token {
+                name.push_str("::");
+                name.push_str(n);
             } else {
                 self.error_current("Expected type name after '::'");
+                return None;
             }
         }
 
         if self.peek_token_is(&Token::Lt) {
             self.next_token();
-            type_str.push('<');
+            let mut args = Vec::new();
+
+            self.next_token();
 
             loop {
-                self.next_token();
-                match &self.current_token {
-                    Token::Int(n) => {
-                        type_str.push_str(&n.to_string());
-                    }
-                    _ => {
-                        let inner_type = self.parse_type()?;
-                        type_str.push_str(&inner_type);
-                    }
+                if self.current_token == Token::Gt {
+                    break;
+                }
+
+                if let Token::Int(val) = self.current_token {
+                    args.push(TypeSpec::IntLiteral(val));
+                } else {
+                    let sub_type = self.parse_type()?;
+                    args.push(sub_type);
                 }
 
                 if self.peek_token_is(&Token::Comma) {
                     self.next_token();
-                    type_str.push_str(", ");
+                    self.next_token();
+                    continue;
                 } else if self.peek_token_is(&Token::Gt) {
                     self.next_token();
-                    type_str.push('>');
                     break;
                 } else {
-                    self.errors.push(format!(
-                        "Expected ',' or '>' in generic type, found {:?}",
-                        self.peek_token
-                    ));
+                    self.error_peek("Expected ',' or '>' in generic type");
                     return None;
                 }
             }
+            return Some(TypeSpec::Generic { name, args });
         }
 
-        Some(type_str)
+        Some(TypeSpec::Named(name))
     }
 
     fn parse_return_statement(&mut self) -> Option<Statement> {
@@ -258,7 +252,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_function_parameters(&mut self) -> Vec<(String, String)> {
+    fn parse_function_parameters(&mut self) -> Vec<(String, TypeSpec)> {
         let mut params = Vec::new();
         if self.peek_token_is(&Token::RParen) {
             self.next_token();
@@ -280,9 +274,9 @@ impl<'a> Parser<'a> {
         params
     }
 
-    fn parse_parameter(&mut self) -> (String, String) {
+    fn parse_parameter(&mut self) -> (String, TypeSpec) {
         if self.cur_token_is(&Token::SelfTok) {
-            return ("self".to_string(), String::new());
+            return ("self".to_string(), TypeSpec::Named("self".to_string()));
         }
 
         let name = match &self.current_token {
@@ -294,12 +288,14 @@ impl<'a> Parser<'a> {
         };
 
         if !self.expect_peek(&Token::Colon) {
-            return (name, String::new());
+            return (name, TypeSpec::Named("Unknown".to_string()));
         }
         self.next_token();
 
-        let type_name = self.parse_type().unwrap_or_default();
-        (name, type_name)
+        let type_spec = self
+            .parse_type()
+            .unwrap_or(TypeSpec::Named("Unknown".to_string()));
+        (name, type_spec)
     }
 
     fn parse_if_statement(&mut self) -> Option<Statement> {
@@ -819,7 +815,6 @@ impl<'a> Parser<'a> {
                 return None;
             }
 
-            let mut elements = Vec::new();
             for _ in 0..count {
                 elements.push(first_elem.clone());
             }
@@ -1016,7 +1011,7 @@ fn token_precedence(token: &Token) -> Precedence {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{Expression, Program, Statement},
+        ast::{Expression, Program, Statement, TypeSpec},
         lexer::Lexer,
         parser::Parser,
         token::Token,
@@ -1289,7 +1284,10 @@ mod tests {
             Statement::Struct { name, fields, .. } => {
                 assert_eq!(name, "Vector3");
                 assert_eq!(fields.len(), 3);
-                assert_eq!(fields[0], ("x".to_string(), "f32".to_string()));
+                assert_eq!(
+                    fields[0],
+                    ("x".to_string(), TypeSpec::Named("f32".to_string()))
+                );
             }
             _ => panic!("Expected Struct definition"),
         }
@@ -1585,9 +1583,13 @@ mod tests {
             Statement::Var {
                 type_annotation, ..
             } => {
-                assert_eq!(type_annotation.as_ref().unwrap(), "Array<i32, 5>");
+                let expected = TypeSpec::Generic {
+                    name: "Array".to_string(),
+                    args: vec![TypeSpec::Named("i32".to_string()), TypeSpec::IntLiteral(5)],
+                };
+                assert_eq!(type_annotation.as_ref().unwrap(), &expected);
             }
-            _ => panic!("Expected Var a"),
+            _ => panic!("Expected Var b"),
         }
 
         match &body[1] {
@@ -1619,7 +1621,17 @@ mod tests {
             Statement::Var {
                 type_annotation, ..
             } => {
-                assert_eq!(type_annotation.as_ref().unwrap(), "Array<Array<i32, 2>, 2>");
+                let expected = TypeSpec::Generic {
+                    name: "Array".to_string(),
+                    args: vec![
+                        TypeSpec::Generic {
+                            name: "Array".to_string(),
+                            args: vec![TypeSpec::Named("i32".to_string()), TypeSpec::IntLiteral(2)],
+                        },
+                        TypeSpec::IntLiteral(2),
+                    ],
+                };
+                assert_eq!(type_annotation.as_ref().unwrap(), &expected);
             }
             _ => panic!("Expected Matrix Var"),
         }

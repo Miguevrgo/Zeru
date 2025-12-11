@@ -1,5 +1,12 @@
 use crate::token::Token;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum TypeSpec {
+    Named(String),
+    Generic { name: String, args: Vec<TypeSpec> },
+    IntLiteral(i64),
+}
+
 #[derive(Debug)]
 pub struct Program {
     pub statements: Vec<Statement>,
@@ -11,7 +18,7 @@ pub enum Statement {
         name: String,
         is_const: bool,
         value: Expression,
-        type_annotation: Option<String>,
+        type_annotation: Option<TypeSpec>,
     },
     Return(Option<Expression>),
     Break,
@@ -29,13 +36,13 @@ pub enum Statement {
     Block(Vec<Statement>),
     Function {
         name: String,
-        params: Vec<(String, String)>,
-        return_type: Option<String>,
+        params: Vec<(String, TypeSpec)>,
+        return_type: Option<TypeSpec>,
         body: Vec<Statement>,
     },
     Struct {
         name: String,
-        fields: Vec<(String, String)>,
+        fields: Vec<(String, TypeSpec)>,
         methods: Vec<Statement>,
     },
     Enum {

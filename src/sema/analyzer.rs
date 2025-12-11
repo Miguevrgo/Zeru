@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expression, Program, Statement},
+    ast::{Expression, Program, Statement, TypeSpec},
     sema::{
         symbol_table::SymbolTable,
         types::{FloatWidth, IntWidth, Signedness, Type},
@@ -46,8 +46,8 @@ impl SemanticAnalyzer {
                     }
 
                     let mut resolved_fields = Vec::new();
-                    for (f_name, f_type_str) in fields {
-                        let f_ty = self.resolve_type(f_type_str);
+                    for (f_name, f_type_spec) in fields {
+                        let f_ty = self.resolve_spec(f_type_spec);
                         resolved_fields.push((f_name.clone(), f_ty));
                     }
 
@@ -118,8 +118,8 @@ impl SemanticAnalyzer {
     fn register_function(
         &mut self,
         name: String,
-        params: &Vec<(String, String)>,
-        return_type: &Option<String>,
+        params: &Vec<(String, TypeSpec)>,
+        return_type: &Option<TypeSpec>,
         associated_struct: Option<&str>,
     ) {
         if self.symbols.lookup_current_scope(&name).is_some() {
@@ -132,8 +132,8 @@ impl SemanticAnalyzer {
                 self.error("Function 'main' must not take arguments".into());
             }
 
-            if let Some(rt_str) = return_type {
-                let ret_ty = self.resolve_type(rt_str);
+            if let Some(rt_spec) = return_type {
+                let ret_ty = self.resolve_spec(rt_spec);
                 if ret_ty != Type::Void {
                     self.error(format!(
                         "Function 'main' must return void (or imply void). Found {:?}.",
@@ -144,7 +144,7 @@ impl SemanticAnalyzer {
         }
 
         let mut param_types = Vec::new();
-        for (param_name, type_name) in params {
+        for (param_name, type_spec) in params {
             if param_name == "self" {
                 if let Some(struct_name) = associated_struct {
                     if let Some(ty) = self.struct_defs.get(struct_name) {
@@ -158,12 +158,12 @@ impl SemanticAnalyzer {
                     param_types.push(Type::Unknown);
                 }
             } else {
-                param_types.push(self.resolve_type(type_name));
+                param_types.push(self.resolve_spec(type_spec));
             }
         }
 
-        let ret_ty = if let Some(rt_str) = return_type {
-            self.resolve_type(rt_str)
+        let ret_ty = if let Some(rt_spec) = return_type {
+            self.resolve_spec(rt_spec)
         } else {
             Type::Void
         };
@@ -206,7 +206,7 @@ impl SemanticAnalyzer {
     fn check_function_body(
         &mut self,
         name: String,
-        params: &[(String, String)],
+        params: &[(String, TypeSpec)],
         body: &[Statement],
     ) {
         let function_symbol = self.symbols.lookup(&name).unwrap().clone();
@@ -233,86 +233,125 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn resolve_type(&mut self, type_name: &str) -> Type {
-        if let Some(ty) = Type::from_string(type_name) {
-            return ty;
-        }
+    fn resolve_spec(&mut self, spec: &TypeSpec) -> Type {
+        match spec {
+            TypeSpec::Named(name) => self.resolve_named_type(name),
+            TypeSpec::Generic { name, args } => {
+                if name == "Array" && args.len() == 2 {
+                    let elem_type = self.resolve_spec(&args[0]);
 
-        if let Some(ty) = self.struct_defs.get(type_name) {
+                    let len = if let TypeSpec::IntLiteral(val) = args[1] {
+                        val as usize
+                    } else {
+                        self.error("Array length must be an integer literal".into());
+                        0
+                    };
+
+                    return Type::Array {
+                        elem_type: Box::new(elem_type),
+                        len,
+                    };
+                }
+                self.error(format!("Unknown generic type or invalid args: {}", name));
+                Type::Unknown
+            }
+            TypeSpec::IntLiteral(_) => {
+                self.error("Unexpected integer literal in type position".into());
+                Type::Unknown
+            }
+        }
+    }
+
+    fn resolve_named_type(&mut self, name: &str) -> Type {
+        if let Some(ty) = self.struct_defs.get(name) {
             return ty.clone();
         }
 
-        if let Some(ty) = self.enum_defs.get(type_name) {
+        if let Some(ty) = self.enum_defs.get(name) {
             return ty.clone();
         }
 
-        match type_name {
-            "int" | "signed" => {
-                self.error(
-                    "Zeru is strict about sizes. 'int' is ambiguous. Did you mean 'i32'?"
-                        .to_string(),
-                );
-                return Type::Unknown;
+        match name {
+            "i8" => Type::Integer {
+                signed: Signedness::Signed,
+                width: IntWidth::W8,
+            },
+            "u8" => Type::Integer {
+                signed: Signedness::Unsigned,
+                width: IntWidth::W8,
+            },
+            "i16" => Type::Integer {
+                signed: Signedness::Signed,
+                width: IntWidth::W16,
+            },
+            "u16" => Type::Integer {
+                signed: Signedness::Unsigned,
+                width: IntWidth::W16,
+            },
+            "i32" => Type::Integer {
+                signed: Signedness::Signed,
+                width: IntWidth::W32,
+            },
+            "u32" => Type::Integer {
+                signed: Signedness::Unsigned,
+                width: IntWidth::W32,
+            },
+            "i64" => Type::Integer {
+                signed: Signedness::Signed,
+                width: IntWidth::W64,
+            },
+            "u64" => Type::Integer {
+                signed: Signedness::Unsigned,
+                width: IntWidth::W64,
+            },
+            "isize" => Type::Integer {
+                signed: Signedness::Signed,
+                width: IntWidth::WSize,
+            },
+            "usize" => Type::Integer {
+                signed: Signedness::Unsigned,
+                width: IntWidth::WSize,
+            },
+            "f32" => Type::Float(FloatWidth::W32),
+            "f64" => Type::Float(FloatWidth::W64),
+            "bool" => Type::Bool,
+            "String" => Type::String,
+            "void" => Type::Void,
+            "self" => Type::Unknown,
+            _ => {
+                let mut candidates = vec![
+                    "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f32", "f64", "bool",
+                    "String",
+                ];
+                for k in self.struct_defs.keys() {
+                    candidates.push(k);
+                }
+                for k in self.enum_defs.keys() {
+                    candidates.push(k);
+                }
+
+                let mut best_match = "";
+                let mut min_dist = usize::MAX;
+
+                for candidate in candidates {
+                    let dist = Self::levenshtein_distance(name, candidate);
+                    if dist < min_dist {
+                        min_dist = dist;
+                        best_match = candidate;
+                    }
+                }
+
+                if min_dist <= 2 && !best_match.is_empty() {
+                    self.error(format!(
+                        "Unknown type '{}'. Did you mean '{}'?",
+                        name, best_match
+                    ));
+                } else {
+                    self.error(format!("Unknown type '{}'", name));
+                }
+                Type::Unknown
             }
-            "uint" | "unsigned" => {
-                self.error(
-                    "Zeru is strict about sizes. 'unsigned' is ambiguous. Did you mean 'u32'?"
-                        .to_string(),
-                );
-                return Type::Unknown;
-            }
-            "float" => {
-                self.error("Ambiguous float size. Did you mean 'f32'?".to_string());
-                return Type::Unknown;
-            }
-            "double" => {
-                self.error("Ambiguous float size. Did you mean 'f64'?".to_string());
-                return Type::Unknown;
-            }
-            "char" => {
-                self.error("Zeru uses 'u8' for bytes or 'String' for text. 'char' is not supported directly.".to_string());
-                return Type::Unknown;
-            }
-            "long" | "short" => {
-                self.error(format!("C-style qualifiers like '{}' are not supported. Use explicit sizes (e.g., i64, i16).", type_name));
-                return Type::Unknown;
-            }
-            _ => {}
         }
-
-        let mut candidates = vec![
-            "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "isize", "usize", "f32", "f64",
-            "bool", "String", "void",
-        ];
-
-        for name in self.struct_defs.keys() {
-            candidates.push(name);
-        }
-        for name in self.enum_defs.keys() {
-            candidates.push(name);
-        }
-
-        let mut best_match = "";
-        let mut min_dist = usize::MAX;
-
-        for candidate in candidates {
-            let dist = Self::levenshtein_distance(type_name, candidate);
-            if dist < min_dist {
-                min_dist = dist;
-                best_match = candidate;
-            }
-        }
-
-        if min_dist <= 2 && !best_match.is_empty() {
-            self.error(format!(
-                "Unknown type '{}'. Did you mean '{}'?",
-                type_name, best_match
-            ));
-        } else {
-            self.error(format!("Unknown type '{}'", type_name));
-        }
-
-        Type::Unknown
     }
 
     fn check_statement(&mut self, stmt: &Statement) {
@@ -325,8 +364,18 @@ impl SemanticAnalyzer {
             } => {
                 let value_type = self.check_expression(value);
 
-                let final_type = if let Some(type_str) = type_annotation {
-                    let expected = self.resolve_type(type_str);
+                let final_type = if let Some(spec) = type_annotation {
+                    let expected = self.resolve_spec(spec);
+
+                    if let Expression::Int(val) = value
+                        && let Type::Integer { width, signed } = &expected
+                        && !self.fits_in_int(*val, width.clone(), signed.clone())
+                    {
+                        self.error(format!(
+                            "Literal {} does not fit in type {:?}",
+                            val, expected
+                        ));
+                    }
 
                     let is_compatible = if expected.accepts(&value_type) {
                         true
@@ -334,7 +383,6 @@ impl SemanticAnalyzer {
                         match (&expected, &value_type) {
                             (Type::Integer { .. }, Type::Integer { .. }) => true,
                             (Type::Float(FloatWidth::W64), Type::Float(FloatWidth::W32)) => true,
-
                             (
                                 Type::Array {
                                     elem_type: t1,
@@ -354,7 +402,6 @@ impl SemanticAnalyzer {
                                     )
                                 }
                             }
-
                             _ => false,
                         }
                     };
@@ -485,7 +532,6 @@ impl SemanticAnalyzer {
             }
 
             Statement::Import { path: _, symbols } => {
-                //TODO: Check if symbols really exist
                 for sym in symbols {
                     if !self.struct_defs.contains_key(sym) && !self.enum_defs.contains_key(sym) {
                         self.struct_defs.insert(
@@ -545,8 +591,8 @@ impl SemanticAnalyzer {
                             let val_type = self.check_expression(value);
                             if !ty.accepts(&val_type) && val_type != Type::Unknown {
                                 self.error(format!(
-                                       "Type mismatch in assignment. Variable '{}' is {:?}, value is {:?}.", 
-                                       name, ty.to_string(), val_type.to_string()
+                                     "Type mismatch in assignment. Variable '{}' is {:?}, value is {:?}.", 
+                                     name, ty.to_string(), val_type.to_string()
                                 ));
                             }
                         }
@@ -793,6 +839,19 @@ impl SemanticAnalyzer {
 
     fn error(&mut self, msg: String) {
         self.errors.push(format!("Semantic Error: {}", msg));
+    }
+
+    fn fits_in_int(&self, val: i64, width: IntWidth, signed: Signedness) -> bool {
+        let (min, max) = match (width, signed) {
+            (IntWidth::W8, Signedness::Unsigned) => (0, u8::MAX as i64),
+            (IntWidth::W8, Signedness::Signed) => (i8::MIN as i64, i8::MAX as i64),
+            (IntWidth::W16, Signedness::Unsigned) => (0, u16::MAX as i64),
+            (IntWidth::W16, Signedness::Signed) => (i16::MIN as i64, i16::MAX as i64),
+            (IntWidth::W32, Signedness::Unsigned) => (0, u32::MAX as i64),
+            (IntWidth::W32, Signedness::Signed) => (i32::MIN as i64, i32::MAX as i64),
+            _ => (i64::MIN, i64::MAX),
+        };
+        val >= min && val <= max
     }
 
     fn levenshtein_distance(s1: &str, s2: &str) -> usize {

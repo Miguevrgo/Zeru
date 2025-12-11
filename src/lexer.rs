@@ -239,9 +239,7 @@ impl<'a> Lexer<'a> {
 
         while let Some(&ch) = self.peek() {
             if ch.is_alphanumeric() || ch == '_' {
-                unsafe {
-                    literal.push(self.advance().unwrap_unchecked());
-                }
+                literal.push(self.advance().unwrap());
             } else {
                 break;
             }
