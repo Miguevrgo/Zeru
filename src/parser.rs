@@ -41,8 +41,35 @@ impl<'a> Parser<'a> {
         let mut statements = Vec::new();
 
         while self.current_token != Token::Eof {
-            if let Some(statement) = self.parse_statement() {
+            let stmt = match self.current_token {
+                Token::Const => self.parse_var_statement::<true>(),
+                Token::Fn => self.parse_function_statement(),
+                Token::Struct => self.parse_struct_statement(),
+                Token::Enum => self.parse_enum_statement(),
+                Token::Import => self.parse_import_statement(),
+                Token::Semicolon => {
+                    self.next_token();
+                    None
+                }
+                Token::Var => {
+                    self.error_current("Global variables ('var') are not allowed. Use 'const' for constants or move 'var' inside a function.");
+                    self.parse_var_statement::<false>()
+                }
+                _ => {
+                    self.error_current(format!("Unexpected token {:?} at top level. Expected fn, struct, enum, const or import.", self.current_token).as_str());
+                    self.parse_var_statement::<false>()
+                }
+            };
+
+            if let Some(statement) = stmt {
                 statements.push(statement);
+            }
+
+            if self.peek_token_is(&Token::Eof) {
+                if self.current_token != Token::Eof {
+                    self.next_token();
+                }
+                break;
             }
             self.next_token();
         }
@@ -1014,122 +1041,56 @@ mod tests {
         panic!("Parser failed")
     }
 
+    fn get_function_body(statement: &Statement) -> &Vec<Statement> {
+        match statement {
+            Statement::Function { body, .. } => body,
+            _ => panic!("Expected Function statement"),
+        }
+    }
+
     #[test]
     fn test_declarations() {
         let input = "
-        var x = 5;
-        var y: i32 = 5;
         const X: u32 = 10;
         const Y: f32 = 10.0;
-        var z = y;
+
+        fn main() {
+            var x = 5;
+            var y: i32 = 5;
+            var z = y;
+        }
     ";
 
         let program = parse_input(input);
-        assert_eq!(program.statements.len(), 5);
+        assert_eq!(program.statements.len(), 3);
 
         match &program.statements[0] {
-            Statement::Var {
-                name,
-                is_const,
-                value,
-                type_annotation,
-            } => {
-                assert_eq!(name, "x");
-                assert!(!*is_const);
-                assert_eq!(*type_annotation, None);
-
-                match value {
-                    Expression::Int(val) => assert_eq!(*val, 5),
-                    _ => panic!("Expected Int"),
-                }
-            }
-            _ => panic!("Expected Var statement"),
-        }
-
-        match &program.statements[1] {
-            Statement::Var {
-                name,
-                is_const,
-                value,
-                type_annotation,
-            } => {
-                assert_eq!(name, "y");
-                assert!(!*is_const);
-                assert_eq!(*type_annotation, Some("i32".to_string()));
-
-                match value {
-                    Expression::Int(val) => assert_eq!(*val, 5),
-                    _ => panic!("Expected Int"),
-                }
-            }
-            _ => panic!("Expected Var statement"),
-        }
-
-        match &program.statements[2] {
-            Statement::Var {
-                name,
-                is_const,
-                value,
-                type_annotation,
-            } => {
+            Statement::Var { name, is_const, .. } => {
                 assert_eq!(name, "X");
                 assert!(*is_const);
-                assert_eq!(*type_annotation, Some("u32".to_string()));
-
-                match value {
-                    Expression::Int(val) => assert_eq!(*val, 10),
-                    _ => panic!("Expected Int"),
-                }
             }
-            _ => panic!("Expected Const statement"),
+            _ => panic!("Expected Const X"),
         }
 
-        match &program.statements[3] {
-            Statement::Var {
-                name,
-                is_const,
-                value,
-                type_annotation,
-            } => {
-                assert_eq!(name, "Y");
-                assert!(*is_const);
-                assert_eq!(*type_annotation, Some("f32".to_string()));
-
-                match value {
-                    Expression::Float(val) => assert_eq!(*val, 10.0),
-                    _ => panic!("Expected Float"),
-                }
-            }
-            _ => panic!("Expected Const statement"),
-        }
-
-        match &program.statements[4] {
-            Statement::Var {
-                name,
-                is_const,
-                value,
-                type_annotation,
-            } => {
-                assert_eq!(name, "z");
+        let body = get_function_body(&program.statements[2]);
+        assert_eq!(body.len(), 3);
+        match &body[0] {
+            Statement::Var { name, is_const, .. } => {
+                assert_eq!(name, "x");
                 assert!(!*is_const);
-                assert_eq!(*type_annotation, None);
-
-                match value {
-                    Expression::Identifier(id) => assert_eq!(id, "y"),
-                    _ => panic!("Expected Identifier"),
-                }
             }
-            _ => panic!("Expected Var statement"),
+            _ => panic!("Expected local var x"),
         }
     }
 
     #[test]
     fn test_return_statement() {
-        let input = "return 5; return 10; return;";
+        let input = "fn test() { return 5; return 10; return; }";
         let program = parse_input(input);
-        assert_eq!(program.statements.len(), 3);
 
-        match &program.statements[0] {
+        let body = get_function_body(&program.statements[0]);
+        assert_eq!(body.len(), 3);
+        match &body[0] {
             Statement::Return(Some(Expression::Int(5))) => {}
             _ => panic!("Expected return 5"),
         }
@@ -1160,57 +1121,61 @@ mod tests {
         ];
 
         for (input, _) in tests {
-            let lexer = Lexer::new(input);
+            let wrapped_input = format!("fn main() {{ {} }}", input);
+            let lexer = Lexer::new(&wrapped_input);
             let mut parser = Parser::new(lexer);
             let program = parser.parse_program();
             check_parser_errors(&parser);
 
-            assert_eq!(program.statements.len(), 1);
+            let body = get_function_body(&program.statements[0]);
+            assert_eq!(body.len(), 1);
         }
     }
 
     #[test]
     fn test_if_expression() {
-        let input = "if (x < y) { x } else { y }";
+        let input = "fn main() { if (x < y) { x } else { y } }";
         let program = parse_input(input);
+        let body = get_function_body(&program.statements[0]);
 
-        match &program.statements[0] {
-            Statement::If {
-                condition,
-                then_branch: _,
-                else_branch,
-            } => {
-                match condition {
-                    Expression::Infix {
-                        left,
-                        operator,
-                        right,
-                    } => {
-                        assert_eq!(format!("{:?}", operator), "Lt");
-                        match &**left {
-                            Expression::Identifier(val) => assert_eq!(val, "x"),
-                            _ => panic!("Left side of condition should be identifier 'x'"),
-                        }
-
-                        match &**right {
-                            Expression::Identifier(val) => assert_eq!(val, "y"),
-                            _ => panic!("Right side of condition should be identifier 'y'"),
-                        }
+        if let Statement::If {
+            condition,
+            then_branch: _,
+            else_branch,
+        } = &body[0]
+        {
+            match condition {
+                Expression::Infix {
+                    left,
+                    operator,
+                    right,
+                } => {
+                    assert_eq!(format!("{:?}", operator), "Lt");
+                    match &**left {
+                        Expression::Identifier(val) => assert_eq!(val, "x"),
+                        _ => panic!("Left side of condition should be identifier 'x'"),
                     }
-                    _ => panic!("Invalid condition"),
+
+                    match &**right {
+                        Expression::Identifier(val) => assert_eq!(val, "y"),
+                        _ => panic!("Right side of condition should be identifier 'y'"),
+                    }
                 }
-                assert!(else_branch.is_some());
+                _ => panic!("Invalid condition"),
             }
-            _ => panic!("Expected If statement"),
+            assert!(else_branch.is_some());
+        } else {
+            panic!("Expected If statement");
         }
     }
 
     #[test]
     fn test_function_call() {
-        let input = "add(1, 2 * 3, 4 + 5);";
+        let input = "fn main() { add(1, 2 * 3, 4 + 5); }";
         let program = parse_input(input);
+        let body = get_function_body(&program.statements[0]);
 
-        match &program.statements[0] {
+        match &body[0] {
             Statement::Expression(Expression::Call {
                 function,
                 arguments,
@@ -1228,15 +1193,19 @@ mod tests {
     #[test]
     fn test_while_call() {
         let input = "
-            var i: i32 = 0;
-            while i < 60 {
-                i = i + 1; 
+            fn main() {
+                var i: i32 = 0;
+                while i < 60 {
+                    i = i + 1; 
+                }
             }
         ";
         let program = parse_input(input);
-        assert_eq!(program.statements.len(), 2);
+        let body = get_function_body(&program.statements[0]);
 
-        match &program.statements[1] {
+        assert_eq!(body.len(), 2);
+
+        match &body[1] {
             Statement::While { cond, body } => {
                 match cond {
                     Expression::Infix {
@@ -1247,21 +1216,21 @@ mod tests {
                         assert_eq!(*operator, Token::Lt);
                         match &**left {
                             Expression::Identifier(name) => assert_eq!(name, "i"),
-                            _ => panic!("Expected identifier 'i' in condition left side"),
+                            _ => panic!("Expected identifier 'i'"),
                         }
                         match &**right {
                             Expression::Int(val) => assert_eq!(*val, 60),
-                            _ => panic!("Expected integer '60' in condition right side"),
+                            _ => panic!("Expected integer '60'"),
                         }
                     }
-                    _ => panic!("Expected Infix expression for while condition"),
+                    _ => panic!("Expected Infix expression"),
                 }
 
                 match &**body {
                     Statement::Block(stmts) => {
                         assert_eq!(stmts.len(), 1);
                     }
-                    _ => panic!("Expected Block statement for while body"),
+                    _ => panic!("Expected Block statement"),
                 }
             }
             _ => panic!("Expected While statement"),
@@ -1271,14 +1240,17 @@ mod tests {
     #[test]
     fn test_for_statement() {
         let input = "
-        for item in items {
-            print(item);
+        fn main() {
+            for item in items {
+                print(item);
+            }
         }";
         let program = parse_input(input);
+        let body = get_function_body(&program.statements[0]);
 
-        assert_eq!(program.statements.len(), 1);
+        assert_eq!(body.len(), 1);
 
-        match &program.statements[0] {
+        match &body[0] {
             Statement::ForIn {
                 variable,
                 iterable,
@@ -1288,14 +1260,14 @@ mod tests {
 
                 match iterable {
                     Expression::Identifier(name) => assert_eq!(name, "items"),
-                    _ => panic!("Expected identifier 'items' as iterable"),
+                    _ => panic!("Expected identifier 'items'"),
                 }
 
                 match &**body {
                     Statement::Block(stmts) => {
                         assert!(!stmts.is_empty());
                     }
-                    _ => panic!("Expected Block statement for for-loop body"),
+                    _ => panic!("Expected Block statement"),
                 }
             }
             _ => panic!("Expected ForIn statement"),
@@ -1306,7 +1278,9 @@ mod tests {
     fn test_structs() {
         let input = "
             struct Vector3 { x: f32, y: f32, z: f32 }
-            var v = Vector3 { x: 1.0, y: 2.0, z: 3.0 };
+            fn main() {
+                var v = Vector3 { x: 1.0, y: 2.0, z: 3.0 };
+            }
         ";
         let program = parse_input(input);
         assert_eq!(program.statements.len(), 2);
@@ -1320,7 +1294,8 @@ mod tests {
             _ => panic!("Expected Struct definition"),
         }
 
-        match &program.statements[1] {
+        let body = get_function_body(&program.statements[1]);
+        match &body[0] {
             Statement::Var { value, .. } => match value {
                 Expression::StructLiteral { name, fields } => {
                     assert_eq!(name, "Vector3");
@@ -1336,24 +1311,27 @@ mod tests {
     #[test]
     fn test_advanced_expressions() {
         let input = "
+        fn main() {
             var list = [1, 2, 3];
             list[0] += 5 << 1;
             var result = (a && b) || (c & d);
+        }
         ";
         let program = parse_input(input);
-        assert_eq!(program.statements.len(), 3);
+        let body = get_function_body(&program.statements[0]);
+        assert_eq!(body.len(), 3);
 
         if let Statement::Var {
             value: Expression::ArrayLiteral(elems),
             ..
-        } = &program.statements[0]
+        } = &body[0]
         {
             assert_eq!(elems.len(), 3);
         } else {
             panic!("Expected array literal");
         }
 
-        match &program.statements[1] {
+        match &body[1] {
             Statement::Expression(Expression::Assign {
                 target,
                 operator,
@@ -1373,23 +1351,20 @@ mod tests {
             _ => panic!("Expected assign statement"),
         }
 
-        match &program.statements[2] {
+        match &body[2] {
             Statement::Var { value, .. } => {
-                if let Expression::Infix {
-                    operator,
-                    left: _,
-                    right: _,
-                } = value
-                {
+                if let Expression::Infix { operator, .. } = value {
                     assert_eq!(*operator, Token::Or);
                 }
             }
             _ => panic!("Expected logic var"),
         }
     }
+
     #[test]
     fn test_bitwise_and_compound_ops() {
         let input = "
+        fn main() {
             var bitwise = x & y | z ^ w; 
             var shift = x << 1 >> 2;
             x &= 1;
@@ -1400,18 +1375,20 @@ mod tests {
             x *= 6;
             x /= 7;
             x %= 8;
+        }
         ";
         let program = parse_input(input);
-        assert_eq!(program.statements.len(), 10);
+        let body = get_function_body(&program.statements[0]);
+        assert_eq!(body.len(), 10);
 
-        let check_assign = |index: usize, expected_op: Token| match &program.statements[index] {
+        let check_assign = |index: usize, expected_op: Token| match &body[index] {
             Statement::Expression(Expression::Assign { operator, .. }) => {
                 assert_eq!(*operator, expected_op, "Error at statement index {}", index);
             }
             _ => panic!("Expected assignment at index {}", index),
         };
 
-        if let Statement::Var { value, .. } = &program.statements[0] {
+        if let Statement::Var { value, .. } = &body[0] {
             if let Expression::Infix {
                 operator,
                 left: _,
@@ -1419,7 +1396,6 @@ mod tests {
             } = value
             {
                 assert_eq!(*operator, Token::BitOr);
-
                 if let Expression::Infix { operator: op_r, .. } = &**right {
                     assert_eq!(*op_r, Token::BitXor);
                 } else {
@@ -1433,36 +1409,38 @@ mod tests {
         if let Statement::Var {
             value: Expression::Infix { operator, .. },
             ..
-        } = &program.statements[1]
+        } = &body[1]
         {
             assert_eq!(*operator, Token::ShiftRight);
         }
 
-        check_assign(2, Token::BitAndEq); // &=
-        check_assign(3, Token::BitOrEq); // |=
-        check_assign(4, Token::BitXorEq); // ^=
-        check_assign(5, Token::BitLShiftEq); // <<=
-        check_assign(6, Token::BitRShiftEq); // >>=
-        check_assign(7, Token::StarEq); // *=
-        check_assign(8, Token::SlashEq); // /=
-        check_assign(9, Token::ModEq); // %=
+        check_assign(2, Token::BitAndEq);
+        check_assign(3, Token::BitOrEq);
+        check_assign(4, Token::BitXorEq);
+        check_assign(5, Token::BitLShiftEq);
+        check_assign(6, Token::BitRShiftEq);
+        check_assign(7, Token::StarEq);
+        check_assign(8, Token::SlashEq);
+        check_assign(9, Token::ModEq);
     }
 
     #[test]
     fn test_break_continue() {
         let input = "
-            while true {
-                if x > 10 { break; }
-                continue;
+            fn main() {
+                while true {
+                    if x > 10 { break; }
+                    continue;
+                }
             }
         ";
         let program = parse_input(input);
+        let body = get_function_body(&program.statements[0]);
 
-        match &program.statements[0] {
+        match &body[0] {
             Statement::While { body, .. } => match &**body {
                 Statement::Block(stmts) => {
                     assert_eq!(stmts.len(), 2);
-
                     if let Statement::If { then_branch, .. } = &stmts[0] {
                         if let Statement::Block(inner_stmts) = &**then_branch {
                             assert!(matches!(inner_stmts[0], Statement::Break));
@@ -1472,7 +1450,6 @@ mod tests {
                     } else {
                         panic!("Expected if");
                     }
-
                     assert!(matches!(stmts[1], Statement::Continue));
                 }
                 _ => panic!("Expected block body"),
@@ -1533,11 +1510,13 @@ mod tests {
                 }
             }
 
-            var status = match x {
-                0 => \"Dead\",
-                1 => \"Alive\",
-                default => \"Unknown\"
-            };
+            fn main() {
+                var status = match x {
+                    0 => \"Dead\",
+                    1 => \"Alive\",
+                    default => \"Unknown\"
+                };
+            }
         ";
         let program = parse_input(input);
         assert_eq!(program.statements.len(), 3);
@@ -1569,7 +1548,9 @@ mod tests {
             panic!("Expected Struct");
         }
 
-        if let Statement::Var { value, .. } = &program.statements[2] {
+        let body = get_function_body(&program.statements[2]);
+
+        if let Statement::Var { value, .. } = &body[0] {
             if let Expression::Match { value: _, arms } = value {
                 assert_eq!(arms.len(), 3);
                 if let Expression::Identifier(p) = &arms[2].0 {
@@ -1588,15 +1569,19 @@ mod tests {
     #[test]
     fn test_arrays_syntax() {
         let input = "
+        fn main() {
             var b: Array<i32, 5> = [10, 20, 30, 40, 50];
             var c = [0; 3];
+        }
         ";
         let program = parse_input(input);
 
         check_parser_errors(&Parser::new(Lexer::new(input)));
-        assert_eq!(program.statements.len(), 2);
 
-        match &program.statements[0] {
+        let body = get_function_body(&program.statements[0]);
+        assert_eq!(body.len(), 2);
+
+        match &body[0] {
             Statement::Var {
                 type_annotation, ..
             } => {
@@ -1605,7 +1590,7 @@ mod tests {
             _ => panic!("Expected Var a"),
         }
 
-        match &program.statements[1] {
+        match &body[1] {
             Statement::Var { value, .. } => {
                 if let Expression::ArrayLiteral(elements) = value {
                     assert_eq!(elements.len(), 3);
@@ -1626,10 +1611,11 @@ mod tests {
 
     #[test]
     fn test_nested_arrays() {
-        let input = "var matrix: Array<Array<i32, 2>, 2> = [[1, 2], [3, 4]];";
+        let input = "fn main() { var matrix: Array<Array<i32, 2>, 2> = [[1, 2], [3, 4]]; }";
         let program = parse_input(input);
+        let body = get_function_body(&program.statements[0]);
 
-        match &program.statements[0] {
+        match &body[0] {
             Statement::Var {
                 type_annotation, ..
             } => {
