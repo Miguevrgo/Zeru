@@ -12,7 +12,5 @@ fn main() {
     } else {
         x = 0;
     }
-
-    return x;
 }
 

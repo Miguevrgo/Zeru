@@ -133,4 +133,26 @@ mod testing {
         assert!(!errors.is_empty());
         assert!(errors[0].contains("expects 2 arguments"));
     }
+
+    #[test]
+    fn test_multiple_function_calls() {
+        let input = "
+            fn foo() u32 {
+                return 65536;
+            }
+
+            fn fizz() {
+                const unused: i32 = 5;
+            }
+
+            fn main() {
+                const a: u32 = foo();
+                fizz();
+
+                var returned_val = a % 2;
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
 }

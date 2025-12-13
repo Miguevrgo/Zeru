@@ -665,7 +665,7 @@ impl SemanticAnalyzer {
                 arguments,
             } => {
                 if let Expression::Identifier(name) = &**function {
-                    self.check_call(name, arguments, None);
+                    return self.check_call(name, arguments, None);
                 }
 
                 if let Expression::Get {
