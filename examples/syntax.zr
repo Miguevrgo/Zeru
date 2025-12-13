@@ -14,9 +14,10 @@ fn create_vector(x: f32, y: f32) Vector3 {
 
 fn main() {
     const pos: Vector3 = create_vector(10.5, 20.0);
-    const numbers: array<i32, 3> = [1, 2, 3];
-    var dyn_numbers = vector<u32>::new();
-    var dyn_numbers_explicit: vector<i32> = vector::new();
+    const numbers: Array<i32, 3> = [1, 2, 3];
+    const matrix: Array<Array<u8, 2>, 2> = [[2, 3], [4, 5]];
+    var dyn_numbers = Vector<u32>::new();
+    var dyn_numbers_explicit: Vector<i32> = Vector::new();
 
     var count = 100;
 

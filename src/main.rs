@@ -1,8 +1,11 @@
 mod ast;
+mod codegen;
 mod lexer;
 mod parser;
 mod sema;
 mod token;
+
+use inkwell::context::Context;
 
 use crate::lexer::Lexer;
 use crate::parser::Parser;
@@ -111,6 +114,10 @@ fn main() {
 
     let mut analyzer = SemanticAnalyzer::new();
     analyzer.analyze(&program);
+
+    let context = Context::create();
+    let module = context.create_module("zeru_module");
+    let builder = context.create_builder();
 
     if !analyzer.errors.is_empty() {
         println!("{BOLD}\x1b[31m❌ Semantic Errors:{RESET}");
