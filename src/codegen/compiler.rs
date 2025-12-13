@@ -81,6 +81,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
         }
 
+        //FIX: Support for i32 return in main will be eliminated as soon as there
+        // is an implementation for exit | change src/analyzer@register_function
+        if name == "main" && ret_type.is_none() {
+            let i32_type = self.context.i32_type();
+            let fn_type = i32_type.fn_type(&param_types, false);
+            return self.module.add_function(name, fn_type, None);
+        }
+
         let fn_type = match ret_type {
             Some(basic_ty) => basic_ty.fn_type(&param_types, false),
             None => self.context.void_type().fn_type(&param_types, false),
@@ -113,8 +121,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.compile_statement(stmt);
         }
 
-        if function.get_type().get_return_type().is_none() {
-            self.builder.build_return(None).unwrap();
+        let current_block = self.builder.get_insert_block().unwrap();
+
+        if current_block.get_terminator().is_none() {
+            let ret_opt = function.get_type().get_return_type();
+
+            if ret_opt.is_none() {
+                self.builder.build_return(None).unwrap();
+            } else if name == "main" {
+                // FIX: Delete support for this
+                let zero = self.context.i32_type().const_int(0, false);
+                self.builder.build_return(Some(&zero)).unwrap();
+            } else {
+                self.builder.build_unreachable().unwrap();
+            }
         }
     }
 

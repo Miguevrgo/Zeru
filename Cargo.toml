@@ -1,5 +1,5 @@
 [package]
-name = "Zeru"
+name = "zeru"
 version = "0.1.0"
 edition = "2024"
 authors = ["Miguel Angel <miguevrgo@proton.me>"]

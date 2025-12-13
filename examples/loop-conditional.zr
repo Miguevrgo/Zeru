@@ -2,12 +2,12 @@ fn main() {
     var x: i32 = 0;
 
     // Loop test
-    while x < 5 {
+    while x < 50 {
         x = x + 1;
     }
 
     // Branch test
-    if x == 5 {
+    if x == 50 {
         x = 100;
     } else {
         x = 0;

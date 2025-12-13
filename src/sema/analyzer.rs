@@ -135,10 +135,19 @@ impl SemanticAnalyzer {
             if let Some(rt_spec) = return_type {
                 let ret_ty = self.resolve_spec(rt_spec);
                 if ret_ty != Type::Void {
-                    self.error(format!(
-                        "Function 'main' must return void (or imply void). Found {:?}.",
-                        ret_ty
-                    ));
+                    match ret_ty {
+                        // FIX: Returning integer will only be allowed while there is not
+                        // exit() function. (Because it is easier to debug that way)
+                        Type::Void => {}
+                        Type::Integer {
+                            width: IntWidth::W32,
+                            signed: Signedness::Signed,
+                        } => {}
+                        _ => self.error(format!(
+                            "Function 'main' must return void or i32. Found {:?}.",
+                            ret_ty
+                        )),
+                    }
                 }
             }
         }
