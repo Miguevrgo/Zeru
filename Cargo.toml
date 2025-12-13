@@ -2,6 +2,9 @@
 name = "Zeru"
 version = "0.1.0"
 edition = "2024"
+authors = ["Miguel Angel <miguevrgo@proton.me>"]
+description = "The Zeru Programming language Compiler"
 
 [dependencies]
+clap = { version = "4.5.53", features = ["derive"] }
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm21-1"] }

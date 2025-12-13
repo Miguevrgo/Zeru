@@ -6,7 +6,7 @@ use inkwell::{
     context::Context,
     module::Module,
     types::{BasicType, BasicTypeEnum},
-    values::{BasicValue, BasicValueEnum, FunctionValue, PointerValue},
+    values::{BasicValueEnum, FunctionValue, PointerValue},
 };
 
 use crate::{
@@ -264,13 +264,37 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Some((ptr, ty)) => self.builder.build_load(*ty, *ptr, name).unwrap(),
                 None => panic!("Codegen: Undefined variable {}", name),
             },
+            Expression::Assign { target, value, .. } => {
+                let hint = if let Expression::Identifier(name) = &**target {
+                    self.variables.get(name).map(|(_, ty)| *ty)
+                } else {
+                    None
+                };
+
+                let val = self.compile_expression(value, hint);
+
+                if let Expression::Identifier(name) = &**target
+                    && let Some((ptr, _)) = self.variables.get(name)
+                {
+                    self.builder.build_store(*ptr, val).unwrap();
+                    return val;
+                }
+                panic!("Codegen: Assignment target invalid");
+            }
             Expression::Infix {
                 left,
                 operator,
                 right,
             } => {
-                let lhs = self.compile_expression(left, expected_type);
-                let rhs = self.compile_expression(right, expected_type);
+                let is_comparison = matches!(
+                    operator,
+                    Token::Eq | Token::NotEq | Token::Lt | Token::Leq | Token::Gt | Token::Geq
+                );
+
+                let operand_hint = if is_comparison { None } else { expected_type };
+
+                let lhs = self.compile_expression(left, operand_hint);
+                let rhs = self.compile_expression(right, Some(lhs.get_type()));
 
                 match (lhs, rhs) {
                     (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => match operator {

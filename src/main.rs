@@ -6,100 +6,56 @@ mod sema;
 mod token;
 
 use inkwell::context::Context;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
+use crate::codegen::compiler::Compiler;
 use crate::lexer::Lexer;
-use crate::parser::Parser;
 use crate::sema::analyzer::SemanticAnalyzer;
 
-fn main() {
-    let input = r#"
-    enum Status { Alive, Dead, Unknown }
+use clap::{Parser, Subcommand};
 
-    struct Player {
-        name: String,
-        health: i32,
+#[derive(Parser)]
+#[command(name = "zeru")]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
 
-        fn new(n: String) Player {
-            return Player { name: n, health: 100 };
+#[derive(Subcommand)]
+enum Commands {
+    Build {
+        file: PathBuf,
+        #[arg(short, long, default_value = "out")]
+        output: String,
+    },
+    Run {
+        file: PathBuf,
+    },
+    EmitIr {
+        file: PathBuf,
+    },
+}
+
+#[derive(PartialEq)]
+enum OutputType {
+    Binary,
+    IR,
+}
+
+fn compile_pipeline(path: &Path, output_name: &str, out_type: OutputType) -> bool {
+    let input = match fs::read_to_string(path) {
+        Ok(code) => code,
+        Err(e) => {
+            println!("❌ Error reading file: {}", e);
+            return false;
         }
+    };
 
-        fn take_damage(self, amount: i32) {
-            self.health -= amount;
-        }
-
-        fn heal(self) {
-            self.health = 100;
-        }
-    }
-
-    struct Vector2 {
-        x: f32,
-        y: f32,
-    }
-
-    fn make_vec(a: f32) Vector2 {
-        return Vector2 { x: a, y: a * 2.0 };
-    }
-
-    fn main() {
-        // Struct + Functions test
-        var p = Player { name: "Hero", health: 100 };
- 
-        p.take_damage(20);
-
-        var list: Array<i32, 3> = [1, 2, 3];
-        var zeros: Array<u8, 10> = [0; 10];
-        var matrix: Array<Array<u8, 2>, 2> = [[2,3], [3,2]];
-        var auto = [10; 4];
-
-        // Shadowing
-        var x: f64 = 5.5;
-        var x: i64 = 10; // Shadowing
-
-        var level = 1;
-        var rank = match level {
-            1 => "Novice",
-            2 => "Pro",
-            default => "God"
-        };
-
-        // For Each
-        const text: String = "Hello World";
-        var text_mayus: String = text;
-        var i = 0;
-        for ch in text {
-            var upper = ch - 32;
-            text_mayus[i] = upper;
-            i += 1;
-        }
-
-        const zero: i64 = 0;
-        while (x > zero) {
-            x -= (1 as i64);
-        }
- 
-        // Mutability
-        const PI: f32 = 3.14159;
-        // PI = 3.0;
-
-        // Scopes and blocks
-        if p.health < 50 || false {
-            p.heal();
-        }
-
-        var v = 10;
-        // var error = v + 50.0;
-    }
-    "#;
-    const BOLD: &str = "\x1b[1m";
-    const RESET: &str = "\x1b[0m";
-    println!("{BOLD}\x1b[31mInput:{RESET}\n{input}");
-    println!("{BOLD}\x1b[32mTokens:{RESET}");
-
-    println!("Compiling Zeru...\n");
-
-    let lexer = Lexer::new(input);
-    let mut parser = Parser::new(lexer);
+    let lexer = Lexer::new(&input);
+    let mut parser = crate::parser::Parser::new(lexer);
     let program = parser.parse_program();
 
     if !parser.errors.is_empty() {
@@ -107,25 +63,86 @@ fn main() {
         for err in parser.errors {
             println!("\t{}", err);
         }
-        return;
+        return false;
     }
-
-    println!("✅ Parsing OK. Running Semantic Analysis...");
 
     let mut analyzer = SemanticAnalyzer::new();
     analyzer.analyze(&program);
 
-    let context = Context::create();
-    let module = context.create_module("zeru_module");
-    let builder = context.create_builder();
-
     if !analyzer.errors.is_empty() {
-        println!("{BOLD}\x1b[31m❌ Semantic Errors:{RESET}");
+        println!("❌ Semantic Errors:");
         for err in analyzer.errors {
             println!("\t{}", err);
         }
+        return false;
+    }
+
+    let context = Context::create();
+    let module = context.create_module(path.file_stem().unwrap().to_str().unwrap());
+    let builder = context.create_builder();
+
+    let mut compiler = Compiler::new(&context, &builder, &module);
+    compiler.compile_program(&program);
+
+    if let Err(e) = module.verify() {
+        println!("❌ LLVM Verify Error: {}", e.to_string());
+        return false;
+    }
+
+    let ir_path = format!("{}.ll", output_name);
+    if let Err(e) = module.print_to_file(&ir_path) {
+        println!("❌ Failed to write LLVM IR: {}", e);
+        return false;
+    }
+
+    if out_type == OutputType::Binary {
+        let status = Command::new("clang")
+            .arg(&ir_path)
+            .arg("-o")
+            .arg(output_name)
+            .arg("-Wno-override-module")
+            .status();
+
+        match status {
+            Ok(s) if s.success() => {
+                println!("✅ Build successful: ./{}", output_name);
+                let _ = fs::remove_file(ir_path);
+                true
+            }
+            _ => {
+                println!("❌ Linking failed. Ensure 'clang' is installed.");
+                false
+            }
+        }
     } else {
-        println!("✅ Semantic Analysis OK! Symbol Table Validated.");
-        println!("   (Ready for Code Generation in Phase 2)");
+        println!("✅ IR generated: {}", ir_path);
+        true
+    }
+}
+
+fn main() {
+    let cli = Cli::parse();
+
+    match &cli.command {
+        Commands::Build { file, output } => {
+            compile_pipeline(file, output, OutputType::Binary);
+        }
+        Commands::Run { file } => {
+            let output_name = "temp_run";
+            if compile_pipeline(file, output_name, OutputType::Binary) {
+                let status = Command::new(format!("./{}", output_name))
+                    .status()
+                    .expect("Failed to run executable");
+
+                if let Some(code) = status.code() {
+                    println!("Process exited with code: {}", code);
+                }
+                let _ = fs::remove_file(output_name);
+            }
+        }
+        Commands::EmitIr { file } => {
+            let output_name = file.file_stem().unwrap().to_str().unwrap();
+            compile_pipeline(file, output_name, OutputType::IR);
+        }
     }
 }
