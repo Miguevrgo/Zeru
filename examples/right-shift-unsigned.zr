@@ -1,0 +1,9 @@
+fn main() {
+    var left = 500;
+    var right = 4;
+    var shifted = left >> right;
+
+    var u_left: u32 = 500;
+    var u_right: u32 = 4;
+    var u_shifted: u32 = u_left >> u_right;
+}

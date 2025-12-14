@@ -12,10 +12,10 @@ Goal: A robust compiler supporting arithmetic, control flow, and complex data ty
 
     Compiler Backend (CodeGen)
 
-        [ ] Aggregate Types: Implement Structs and Arrays using LLVM GEP (GetElementPtr) instructions.
+        [ ] Aggregate Types: Implement Structs and Arrays.
         [ ] Field Access: Support reading/writing fields (point.x = 10;).
         [ ] Refactor: Split expression compilation into L-Values (pointers) vs R-Values (values) to support complex assignments.
-        [ ] Test Suite Integration: Create a Python/Rust script to traverse tests/, compile .zr files, execute binaries, and verify exit codes.
+        [ ] Test Suite Integration: Expand the test suite script to traverse tests/, compile .zr files, execute binaries, and verify exit codes.
         [ ] Negative Tests: Ensure valid errors are thrown for invalid syntax or types (e.g., assigning string to int).
         [ ] Benchmark: Measure compilation time vs. LOC (Lines of Code).
         [ ] Code Cleanup: Run cargo clippy, remove dead code, and ensure 0 compiler warnings.

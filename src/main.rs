@@ -28,29 +28,49 @@ struct Cli {
 enum Commands {
     Build {
         file: PathBuf,
-        #[arg(short, long, default_value = "out")]
-        output: String,
+
+        #[arg(short, long)]
+        release: bool,
+
+        #[arg(long)]
+        emit_ir: bool,
     },
     Run {
         file: PathBuf,
-    },
-    EmitIr {
-        file: PathBuf,
+        #[arg(short, long)]
+        release: bool,
     },
 }
 
-#[derive(PartialEq)]
-enum OutputType {
-    Binary,
-    IR,
-}
+fn compile_pipeline(
+    path: &Path,
+    release: bool,
+    force_emit_ir: bool,
+    quiet: bool,
+) -> Option<PathBuf> {
+    if path.extension().and_then(|s| s.to_str()) != Some("zr") {
+        println!("⚠️ Warning: Zeru files usually end with .zr");
+    }
 
-fn compile_pipeline(path: &Path, output_name: &str, out_type: OutputType) -> bool {
+    let filename = path.file_stem().unwrap().to_str().unwrap();
+    let build_dir = Path::new("build");
+
+    let ir_path = build_dir.join(format!("{}.ll", filename));
+    let exe_path = build_dir.join(filename);
+
+    if !quiet {
+        println!(
+            "  Compiling {} [{}]...",
+            filename,
+            if release { "RELEASE" } else { "DEBUG" }
+        );
+    }
+
     let input = match fs::read_to_string(path) {
         Ok(code) => code,
         Err(e) => {
             println!("❌ Error reading file: {}", e);
-            return false;
+            return None;
         }
     };
 
@@ -63,7 +83,7 @@ fn compile_pipeline(path: &Path, output_name: &str, out_type: OutputType) -> boo
         for err in parser.errors {
             println!("\t{}", err);
         }
-        return false;
+        return None;
     }
 
     let mut analyzer = SemanticAnalyzer::new();
@@ -74,11 +94,11 @@ fn compile_pipeline(path: &Path, output_name: &str, out_type: OutputType) -> boo
         for err in analyzer.errors {
             println!("\t{}", err);
         }
-        return false;
+        return None;
     }
 
     let context = Context::create();
-    let module = context.create_module(path.file_stem().unwrap().to_str().unwrap());
+    let module = context.create_module(filename);
     let builder = context.create_builder();
 
     let mut compiler = Compiler::new(&context, &builder, &module);
@@ -86,63 +106,81 @@ fn compile_pipeline(path: &Path, output_name: &str, out_type: OutputType) -> boo
 
     if let Err(e) = module.verify() {
         println!("❌ LLVM Verify Error: {}", e.to_string());
-        return false;
+        return None;
     }
 
-    let ir_path = format!("{}.ll", output_name);
     if let Err(e) = module.print_to_file(&ir_path) {
         println!("❌ Failed to write LLVM IR: {}", e);
-        return false;
+        return None;
     }
 
-    if out_type == OutputType::Binary {
-        let status = Command::new("clang")
-            .arg(&ir_path)
-            .arg("-o")
-            .arg(output_name)
-            .arg("-Wno-override-module")
-            .status();
+    let optimization_flag = if release { "-O3" } else { "-O0" };
 
-        match status {
-            Ok(s) if s.success() => {
-                println!("✅ Build successful: ./{}", output_name);
+    let debug_flag = if release { "" } else { "-g" };
+
+    let mut cmd = Command::new("clang");
+    cmd.arg(ir_path.to_str().unwrap())
+        .arg("-o")
+        .arg(exe_path.to_str().unwrap())
+        .arg(optimization_flag)
+        .arg("-Wno-override-module");
+
+    if !debug_flag.is_empty() {
+        cmd.arg(debug_flag);
+    }
+
+    let status = cmd.status();
+
+    match status {
+        Ok(s) if s.success() => {
+            if !quiet {
+                println!("✅ Build successful: {}", exe_path.display());
+            }
+            let should_keep_ir = force_emit_ir || !release;
+
+            if !should_keep_ir {
                 let _ = fs::remove_file(ir_path);
-                true
+            } else if !quiet {
+                println!("  IR preserved: {}", ir_path.display());
             }
-            _ => {
-                println!("❌ Linking failed. Ensure 'clang' is installed.");
-                false
-            }
+
+            Some(exe_path)
         }
-    } else {
-        println!("✅ IR generated: {}", ir_path);
-        true
+        _ => {
+            println!("❌ Linking failed. Ensure 'clang' is installed.");
+            None
+        }
     }
 }
 
 fn main() {
     let cli = Cli::parse();
 
+    let build_dir = Path::new("build");
+    if !build_dir.exists() {
+        std::fs::create_dir(build_dir).expect("Failed to create build directory");
+    }
+
     match &cli.command {
-        Commands::Build { file, output } => {
-            compile_pipeline(file, output, OutputType::Binary);
+        Commands::Build {
+            file,
+            release,
+            emit_ir,
+        } => {
+            compile_pipeline(file, *release, *emit_ir, false);
         }
-        Commands::Run { file } => {
-            let output_name = "temp_run";
-            if compile_pipeline(file, output_name, OutputType::Binary) {
-                let status = Command::new(format!("./{}", output_name))
+        Commands::Run { file, release } => {
+            if let Some(executable_path) = compile_pipeline(file, *release, false, true) {
+                println!(" Running {}...\n", executable_path.display());
+
+                let status = Command::new(&executable_path)
                     .status()
                     .expect("Failed to run executable");
 
                 if let Some(code) = status.code() {
-                    println!("Process exited with code: {}", code);
+                    println!("\nProcess exited with code: {}", code);
                 }
-                let _ = fs::remove_file(output_name);
             }
-        }
-        Commands::EmitIr { file } => {
-            let output_name = file.file_stem().unwrap().to_str().unwrap();
-            compile_pipeline(file, output_name, OutputType::IR);
         }
     }
 }

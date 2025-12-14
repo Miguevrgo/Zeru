@@ -19,7 +19,7 @@ pub struct Compiler<'a, 'ctx> {
     pub builder: &'a Builder<'ctx>,
     pub module: &'a Module<'ctx>,
 
-    variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
+    variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>, bool)>,
     current_fn: Option<FunctionValue<'ctx>>,
 }
 
@@ -107,14 +107,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.variables.clear();
 
         for (i, arg) in function.get_param_iter().enumerate() {
-            let (param_name, _) = &params[i];
+            let (param_name, param_spec) = &params[i];
             let arg_type = arg.get_type();
 
             let alloca = self.create_entry_block_alloca(function, param_name, arg_type);
             self.builder.build_store(alloca, arg).unwrap();
 
+            let is_unsigned = if let TypeSpec::Named(t_name) = param_spec {
+                t_name.starts_with('u')
+            } else {
+                false
+            };
+
             self.variables
-                .insert(param_name.clone(), (alloca, arg_type));
+                .insert(param_name.clone(), (alloca, arg_type, is_unsigned));
         }
 
         for stmt in body {
@@ -146,6 +152,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 type_annotation,
                 ..
             } => {
+                // NOTE: We are using a bool in HashMap + a string + an starts_with just to know if
+                // the type is unsigned or not, also it only works for simple type, is this the
+                // right way?
+                let is_unsigned = if let Some(TypeSpec::Named(t_name)) = type_annotation {
+                    t_name.starts_with('u')
+                } else {
+                    false
+                };
+
                 let target_type = if let Some(spec) = type_annotation {
                     match self.get_llvm_type(spec) {
                         Some(ty) => Some(ty),
@@ -161,7 +176,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let alloca = self.create_entry_block_alloca(function, name, final_type);
 
                 self.builder.build_store(alloca, initial_val).unwrap();
-                self.variables.insert(name.clone(), (alloca, final_type));
+                self.variables
+                    .insert(name.clone(), (alloca, final_type, is_unsigned));
             }
             Statement::Return(opt_expr) => {
                 if let Some(expr) = opt_expr {
@@ -281,12 +297,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 float_type.const_float(*val).into()
             }
             Expression::Identifier(name) => match self.variables.get(name) {
-                Some((ptr, ty)) => self.builder.build_load(*ty, *ptr, name).unwrap(),
+                Some((ptr, ty, _)) => self.builder.build_load(*ty, *ptr, name).unwrap(),
                 None => panic!("Codegen: Undefined variable {}", name),
             },
             Expression::Assign { target, value, .. } => {
                 let hint = if let Expression::Identifier(name) = &**target {
-                    self.variables.get(name).map(|(_, ty)| *ty)
+                    self.variables.get(name).map(|(_, ty, _)| *ty)
                 } else {
                     None
                 };
@@ -294,7 +310,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let val = self.compile_expression(value, hint);
 
                 if let Expression::Identifier(name) = &**target
-                    && let Some((ptr, _)) = self.variables.get(name)
+                    && let Some((ptr, _, _)) = self.variables.get(name)
                 {
                     self.builder.build_store(*ptr, val).unwrap();
                     return val;
@@ -372,11 +388,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                             .unwrap()
                             .into(),
                         //FIX: Preserving sign (optimize for unsigned)
-                        Token::ShiftRight => self
-                            .builder
-                            .build_right_shift(l, r, false, "shrtmp")
-                            .unwrap()
-                            .into(),
+                        Token::ShiftRight => {
+                            let is_unsigned = if let Expression::Identifier(name) = &**left {
+                                if let Some((_, _, is_u)) = self.variables.get(name) {
+                                    *is_u
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            };
+                            self.builder
+                                .build_right_shift(l, r, !is_unsigned, "shrtmp")
+                                .unwrap()
+                                .into()
+                        }
                         _ => panic!("Op int not implemented"),
                     },
                     (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) => {
