@@ -1,7 +1,11 @@
 // test_struct.zr
 struct Vector2 {
     x: i32,
-    y: i32
+    y: i32,
+
+    fn sum(self) i32 {
+        return self.x + self.y;
+    }
 }
 
 fn new_vec(x: i32, y: i32) Vector2 {
@@ -14,4 +18,5 @@ fn main() {
 
     // 2. Test Field Write (L-Value assignment)
     v.x = 50;
+    const sum: i32 = v.sum();
 }

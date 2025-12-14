@@ -22,6 +22,8 @@ pub struct Compiler<'a, 'ctx> {
     variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>, bool)>,
     struct_defs: HashMap<String, (StructType<'ctx>, HashMap<String, u32>)>,
     current_fn: Option<FunctionValue<'ctx>>,
+
+    current_struct_context: Option<String>,
 }
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
@@ -37,6 +39,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             variables: HashMap::new(),
             struct_defs: HashMap::new(),
             current_fn: None,
+            current_struct_context: None,
         }
     }
 
@@ -51,7 +54,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         for stmt in &program.statements {
             if let Statement::Struct { name, fields, .. } = stmt {
+                self.current_struct_context = Some(name.clone());
                 self.compile_struct_body(name, fields);
+                self.current_struct_context = None;
             }
         }
 
@@ -65,6 +70,27 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             {
                 self.compile_fn_prototype(name, params, return_type);
             }
+            if let Statement::Struct {
+                name: struct_name,
+                methods,
+                ..
+            } = stmt
+            {
+                self.current_struct_context = Some(struct_name.clone());
+                for method in methods {
+                    if let Statement::Function {
+                        name: method_name,
+                        params,
+                        return_type,
+                        ..
+                    } = method
+                    {
+                        let mangled_name = format!("{}::{}", struct_name, method_name);
+                        self.compile_fn_prototype(&mangled_name, params, return_type);
+                    }
+                }
+                self.current_struct_context = None;
+            }
         }
 
         for stmt in &program.statements {
@@ -73,6 +99,28 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             } = stmt
             {
                 self.compile_fn_body(name, params, body);
+            }
+
+            if let Statement::Struct {
+                name: struct_name,
+                methods,
+                ..
+            } = stmt
+            {
+                self.current_struct_context = Some(struct_name.clone());
+                for method in methods {
+                    if let Statement::Function {
+                        name: method_name,
+                        params,
+                        body,
+                        ..
+                    } = method
+                    {
+                        let mangled_name = format!("{}::{}", struct_name, method_name);
+                        self.compile_fn_body(&mangled_name, params, body);
+                    }
+                }
+                self.current_struct_context = None;
             }
         }
     }
@@ -108,11 +156,30 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         };
 
         let mut param_types = Vec::new();
-        for (_, type_spec) in params {
+        for (param_name, type_spec) in params {
+            if param_name == "self" {
+                if let Some(struct_name) = &self.current_struct_context
+                    && let Some((st, _)) = self.struct_defs.get(struct_name)
+                {
+                    param_types.push(st.as_basic_type_enum().into());
+                    continue;
+                }
+                if let Some((struct_name, _)) = name.split_once("::")
+                    && let Some((st, _)) = self.struct_defs.get(struct_name)
+                {
+                    param_types.push(st.as_basic_type_enum().into());
+                    continue;
+                }
+                panic!(
+                    "'self' parameter used outside of struct context in function '{}'",
+                    name
+                );
+            }
+
             if let Some(ty) = self.get_llvm_type(type_spec) {
                 param_types.push(ty.into());
             } else {
-                panic!("Function parameter cannot be void");
+                panic!("Function parameter '{}' cannot be void", param_name);
             }
         }
 
@@ -143,7 +210,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         for (i, arg) in function.get_param_iter().enumerate() {
             let (param_name, param_spec) = &params[i];
-            let arg_type = arg.get_type();
+            let arg_type = if param_name == "self" {
+                if let Some(struct_name) = &self.current_struct_context {
+                    self.struct_defs
+                        .get(struct_name)
+                        .unwrap()
+                        .0
+                        .as_basic_type_enum()
+                } else {
+                    panic!("self in non-struct context body");
+                }
+            } else {
+                self.get_llvm_type(param_spec).expect("Invalid param type")
+            };
 
             let alloca = self.create_entry_block_alloca(function, param_name, arg_type);
             self.builder.build_store(alloca, arg).unwrap();
@@ -446,33 +525,47 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 function,
                 arguments,
             } => {
-                let fn_name = if let Expression::Identifier(name) = &**function {
-                    name
+                let (fn_val, method_args) = if let Expression::Get {
+                    object,
+                    name: method_name,
+                } = &**function
+                {
+                    let obj_val = self.compile_expression(object, None);
+                    let struct_name = match obj_val.get_type() {
+                        BasicTypeEnum::StructType(st) => {
+                            st.get_name().unwrap().to_str().unwrap().to_string()
+                        }
+                        _ => panic!("Method call on non-struct"),
+                    };
+                    let mangled = format!("{}::{}", struct_name, method_name);
+                    let func = self
+                        .module
+                        .get_function(&mangled)
+                        .expect("Method not found");
+                    let args: Vec<_> = vec![obj_val.into()];
+                    (func, args)
+                } else if let Expression::Identifier(name) = &**function {
+                    let func = self.module.get_function(name).expect("Function not found");
+                    (func, Vec::new())
                 } else {
-                    panic!("[Error] Indirect function calls not implemented");
+                    panic!("Indirect calls not implemented");
                 };
 
-                let function = match self.module.get_function(fn_name) {
-                    Some(f) => f,
-                    None => {
-                        panic!("[Error] Call to undefined function '{}'", fn_name);
-                    }
-                };
-
-                let mut compiled_args = Vec::new();
+                let mut compiled_args = method_args;
                 for arg in arguments {
                     compiled_args.push(self.compile_expression(arg, None).into());
                 }
 
                 let call_site = self
                     .builder
-                    .build_call(function, &compiled_args, "call_res")
+                    .build_call(fn_val, &compiled_args, "call_res")
                     .unwrap();
 
-                use inkwell::values::ValueKind;
                 match call_site.try_as_basic_value() {
-                    ValueKind::Basic(value) => value,
-                    ValueKind::Instruction(_) => self.context.i32_type().const_int(0, false).into(),
+                    inkwell::values::ValueKind::Basic(value) => value,
+                    inkwell::values::ValueKind::Instruction(_) => {
+                        self.context.i32_type().const_int(0, false).into()
+                    }
                 }
             }
             Expression::Infix {
@@ -659,6 +752,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 "f64" => Some(self.context.f64_type().into()),
                 "bool" => Some(self.context.bool_type().into()),
                 "void" => None,
+                "self" => {
+                    if let Some(struct_name) = &self.current_struct_context {
+                        if let Some((struct_ty, _)) = self.struct_defs.get(struct_name) {
+                            Some(struct_ty.as_basic_type_enum())
+                        } else {
+                            panic!("Self used in unknown struct: {}", struct_name);
+                        }
+                    } else {
+                        panic!("Self used outside struct context");
+                    }
+                }
                 _ => {
                     if let Some((struct_ty, _)) = self.struct_defs.get(name) {
                         Some(struct_ty.as_basic_type_enum())
