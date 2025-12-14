@@ -1,0 +1,17 @@
+// test_struct.zr
+struct Vector2 {
+    x: i32,
+    y: i32
+}
+
+fn new_vec(x: i32, y: i32) Vector2 {
+    return Vector2 { x: x, y: y };
+}
+
+fn main() {
+    // 1. Test Struct Literal & Assignment (R-Value)
+    var v = new_vec(10, 20);
+
+    // 2. Test Field Write (L-Value assignment)
+    v.x = 50;
+}

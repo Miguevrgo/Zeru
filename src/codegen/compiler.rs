@@ -5,7 +5,7 @@ use inkwell::{
     builder::Builder,
     context::Context,
     module::Module,
-    types::{BasicType, BasicTypeEnum},
+    types::{BasicType, BasicTypeEnum, StructType},
     values::{BasicValueEnum, FunctionValue, PointerValue},
 };
 
@@ -20,6 +20,7 @@ pub struct Compiler<'a, 'ctx> {
     pub module: &'a Module<'ctx>,
 
     variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>, bool)>,
+    struct_defs: HashMap<String, (StructType<'ctx>, HashMap<String, u32>)>,
     current_fn: Option<FunctionValue<'ctx>>,
 }
 
@@ -34,11 +35,26 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             builder,
             module,
             variables: HashMap::new(),
+            struct_defs: HashMap::new(),
             current_fn: None,
         }
     }
 
     pub fn compile_program(&mut self, program: &Program) {
+        for stmt in &program.statements {
+            if let Statement::Struct { name, .. } = stmt {
+                let struct_type = self.context.opaque_struct_type(name);
+                self.struct_defs
+                    .insert(name.clone(), (struct_type, HashMap::new()));
+            }
+        }
+
+        for stmt in &program.statements {
+            if let Statement::Struct { name, fields, .. } = stmt {
+                self.compile_struct_body(name, fields);
+            }
+        }
+
         for stmt in &program.statements {
             if let Statement::Function {
                 name,
@@ -58,6 +74,25 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             {
                 self.compile_fn_body(name, params, body);
             }
+        }
+    }
+
+    fn compile_struct_body(&mut self, name: &str, fields: &[(String, TypeSpec)]) {
+        let mut field_types = Vec::new();
+        let mut field_indices = HashMap::new();
+
+        for (i, (field_name, field_spec)) in fields.iter().enumerate() {
+            if let Some(ty) = self.get_llvm_type(field_spec) {
+                field_types.push(ty);
+                field_indices.insert(field_name.clone(), i as u32);
+            } else {
+                panic!("Compiler: Unknown type in struct field {}", field_name);
+            }
+        }
+
+        if let Some((struct_type, indices)) = self.struct_defs.get_mut(name) {
+            struct_type.set_body(&field_types, false);
+            *indices = field_indices;
         }
     }
 
@@ -274,6 +309,44 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
+    fn compile_lvalue(
+        &mut self,
+        expr: &Expression,
+    ) -> Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)> {
+        match expr {
+            Expression::Identifier(name) => {
+                self.variables.get(name).map(|(ptr, ty, _)| (*ptr, *ty))
+            }
+            Expression::Get { object, name } => {
+                let (ptr, val_type) = self.compile_lvalue(object)?;
+
+                if let BasicTypeEnum::StructType(struct_ty) = val_type {
+                    let struct_name = struct_ty
+                        .get_name()
+                        .expect("Anonymous struct in field access")
+                        .to_str()
+                        .unwrap();
+
+                    if let Some((_, indices)) = self.struct_defs.get(struct_name)
+                        && let Some(&index) = indices.get(name)
+                    {
+                        let field_ptr = self
+                            .builder
+                            .build_struct_gep(struct_ty, ptr, index, "field_ptr")
+                            .ok()?;
+
+                        let field_type = struct_ty.get_field_type_at_index(index)?;
+                        return Some((field_ptr, field_type));
+                    }
+                }
+                None
+            }
+
+            //TODO: Array indexing
+            _ => None,
+        }
+    }
+
     fn compile_expression(
         &mut self,
         expr: &Expression,
@@ -296,26 +369,111 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 float_type.const_float(*val).into()
             }
-            Expression::Identifier(name) => match self.variables.get(name) {
-                Some((ptr, ty, _)) => self.builder.build_load(*ty, *ptr, name).unwrap(),
-                None => panic!("Codegen: Undefined variable {}", name),
-            },
+            Expression::Identifier(_) | Expression::Get { .. } => {
+                if let Some((ptr, ty)) = self.compile_lvalue(expr) {
+                    return self.builder.build_load(ty, ptr, "loadtmp").unwrap();
+                }
+
+                if let Expression::Get { object, name } = expr {
+                    let obj_val = self.compile_expression(object, None);
+                    if let BasicValueEnum::StructValue(struct_val) = obj_val {
+                        let struct_ty = struct_val.get_type();
+                        let struct_name = struct_ty
+                            .get_name()
+                            .expect("Anonymous struct")
+                            .to_str()
+                            .unwrap();
+
+                        if let Some((_, indices)) = self.struct_defs.get(struct_name)
+                            && let Some(&index) = indices.get(name)
+                        {
+                            return self
+                                .builder
+                                .build_extract_value(struct_val, index, "extracttmp")
+                                .unwrap();
+                        }
+                    }
+                }
+
+                panic!("Codegen: Failed to load identifier/field {:?}", expr);
+            }
+            Expression::StructLiteral { name, fields } => {
+                let (struct_ty, field_tasks) =
+                    if let Some((st, indices)) = self.struct_defs.get(name) {
+                        let st = *st;
+                        let mut tasks = Vec::new();
+                        for (field_name, field_expr) in fields {
+                            if let Some(&index) = indices.get(field_name) {
+                                let field_type = st.get_field_type_at_index(index).unwrap();
+                                tasks.push((index, field_type, field_expr));
+                            } else {
+                                panic!("Unknown field {} in struct {}", field_name, name);
+                            }
+                        }
+                        (st, tasks)
+                    } else {
+                        panic!("Unknown struct type {}", name);
+                    };
+
+                let mut struct_val = struct_ty.get_undef();
+                for (index, field_type, field_expr) in field_tasks {
+                    let val = self.compile_expression(field_expr, Some(field_type));
+                    struct_val = self
+                        .builder
+                        .build_insert_value(struct_val, val, index, "inserttmp")
+                        .unwrap()
+                        .into_struct_value();
+                }
+                struct_val.into()
+            }
             Expression::Assign { target, value, .. } => {
-                let hint = if let Expression::Identifier(name) = &**target {
-                    self.variables.get(name).map(|(_, ty, _)| *ty)
+                let hint = if let Some((_, ty)) = self.compile_lvalue(target) {
+                    Some(ty)
                 } else {
                     None
                 };
 
                 let val = self.compile_expression(value, hint);
 
-                if let Expression::Identifier(name) = &**target
-                    && let Some((ptr, _, _)) = self.variables.get(name)
-                {
-                    self.builder.build_store(*ptr, val).unwrap();
+                if let Some((ptr, _)) = self.compile_lvalue(target) {
+                    self.builder.build_store(ptr, val).unwrap();
                     return val;
                 }
+
                 panic!("Codegen: Assignment target invalid");
+            }
+            Expression::Call {
+                function,
+                arguments,
+            } => {
+                let fn_name = if let Expression::Identifier(name) = &**function {
+                    name
+                } else {
+                    panic!("[Error] Indirect function calls not implemented");
+                };
+
+                let function = match self.module.get_function(fn_name) {
+                    Some(f) => f,
+                    None => {
+                        panic!("[Error] Call to undefined function '{}'", fn_name);
+                    }
+                };
+
+                let mut compiled_args = Vec::new();
+                for arg in arguments {
+                    compiled_args.push(self.compile_expression(arg, None).into());
+                }
+
+                let call_site = self
+                    .builder
+                    .build_call(function, &compiled_args, "call_res")
+                    .unwrap();
+
+                use inkwell::values::ValueKind;
+                match call_site.try_as_basic_value() {
+                    ValueKind::Basic(value) => value,
+                    ValueKind::Instruction(_) => self.context.i32_type().const_int(0, false).into(),
+                }
             }
             Expression::Infix {
                 left,
@@ -501,7 +659,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 "f64" => Some(self.context.f64_type().into()),
                 "bool" => Some(self.context.bool_type().into()),
                 "void" => None,
-                _ => panic!("Codegen: Unknown type {}", name),
+                _ => {
+                    if let Some((struct_ty, _)) = self.struct_defs.get(name) {
+                        Some(struct_ty.as_basic_type_enum())
+                    } else {
+                        panic!("Codegen: Unknown type {name}");
+                    }
+                }
             },
             _ => panic!("Codegen: Complex types not implemented yet"),
         }
