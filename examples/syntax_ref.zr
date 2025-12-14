@@ -1,0 +1,113 @@
+import std.math
+import std.collections::{Hashmap, Hashset}
+import std.os
+
+// --- Globals (Constants Only) ---
+const MAX_RETRIES: u32 = 5;
+const PI: f64 = 3.14159265359;
+
+// --- Enums ---
+enum Status {
+    Connected,
+    Disconnected,
+    Connecting,
+    Error
+}
+
+// --- Structs & Methods ---
+struct Vector3 {
+    x: f32,
+    y: f32,
+    z: f32,
+
+    // Static Constructor (Factory)
+    fn new(x: f32, y: f32, z: f32) Vector3 {
+        return Vector3 { x: x, y: y, z: z };
+    }
+
+    // Instance Method (self)
+    fn distance_sq(self, other: Vector3) f32 {
+        var dx = self.x - other.x;
+        var dy = self.y - other.y;
+        var dz = self.z - other.z;
+        return dx*dx + dy*dy + dz*dz;
+    }
+
+    // Mutating Method
+    // TODO: Think about syntax
+    fn normalize(mut self) {}
+}
+
+// --- Regular Functions ---
+fn calculate_fibonacci(n: i32) i32 {
+    if n <= 1 { return n; }
+    return calculate_fibonacci(n - 1) + calculate_fibonacci(n - 2);
+}
+
+fn main() {
+    // --- Variables, Types & Shadowing ---
+    var counter: i32 = 10;
+    var inferred = 20;
+
+    // Shadowing allowed
+    var raw_data: i32 = 500;
+    var raw_data: f32 = (raw_data as f32) / 100.0;
+
+    // --- Arrays & Generics ---
+    const explicit_arr: Array<i32, 4> = [10, 20, 30, 40];
+    var zero_filled: Array<u8, 1024> = [0; 1024]; 
+    var matrix: Array<Array<f32, 2>, 2> = [
+        [1.0, 0.0],
+        [0.0, 1.0]
+    ];
+
+    // Vectors (Dynamic)
+    var players = Vector<String>::new();
+    players.push("Player1");
+
+    // --- Struct Usage ---
+    var vec_a = Vector3::new(0.0, 10.0, 0.0);
+    var vec_b = Vector3 { x: 5.0, y: 5.0, z: 0.0 };
+
+    vec_a.normalize();
+    var dist = vec_a.distance_sq(vec_b);
+
+    // --- Control Flow: Switch / Match ---
+    var connection_status = Status::Connected;
+    var message = match connection_status {
+        Status::Connected => "Online",
+        Status::Disconnected => "Offline",
+        Status::Error => "Fault",
+        default => "Unknown State"
+    };
+
+    // --- Control Flow: Loops ---
+    // While
+    while counter > 0 {
+        counter -= 1;
+        if counter == 5 { continue; }
+    }
+
+    // For Each
+    for value in explicit_arr {
+        if value % 2 == 0 {
+            print("Even number: {}", value);
+        } else {
+            println("Odd number: {}", value);
+        }
+    }
+
+    // --- Logic & Bitwise (Signed vs Unsigned) ---
+    var signed_val: i32 = -8;
+    var unsigned_val: u32 = 8;
+
+    var arith_shift = signed_val >> 1;   // ashr (Arithmetic)
+    var logic_shift = unsigned_val >> 1; // lshr (Logical)
+
+    // --- String & OS ---
+    const filename: String = "config.ini";
+    // 'os' module used via import std.os
+    if filename.ends_with(".ini") {
+        var content = os::read_file(filename);
+    }
+}
