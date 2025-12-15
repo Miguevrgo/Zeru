@@ -40,6 +40,7 @@ enum Commands {
         #[arg(short, long)]
         release: bool,
     },
+    Clean,
 }
 
 fn compile_pipeline(
@@ -158,7 +159,7 @@ fn main() {
 
     let build_dir = Path::new("build");
     if !build_dir.exists() {
-        std::fs::create_dir(build_dir).expect("Failed to create build directory");
+        fs::create_dir(build_dir).expect("Failed to create build directory");
     }
 
     match &cli.command {
@@ -180,6 +181,13 @@ fn main() {
                 if let Some(code) = status.code() {
                     println!("\nProcess exited with code: {}", code);
                 }
+            }
+        }
+        Commands::Clean => {
+            // It is guaranteed but lets keep it redundant for safety
+            if build_dir.exists() {
+                fs::remove_dir_all(build_dir).expect("Failed to clean build directory");
+                println!("✅ Build directory cleaned");
             }
         }
     }
