@@ -12,56 +12,74 @@ Goal: A robust compiler supporting arithmetic, control flow, and complex data ty
 
     Compiler Backend (CodeGen)
 
-        [ ] Aggregate Types: Implement Structs and Arrays.
-        [ ] Field Access: Support reading/writing fields (point.x = 10;).
-        [ ] Refactor: Split expression compilation into L-Values (pointers) vs R-Values (values) to support complex assignments.
-        [ ] Test Suite Integration: Expand the test suite script to traverse tests/, compile .zr files, execute binaries, and verify exit codes.
-        [ ] Negative Tests: Ensure valid errors are thrown for invalid syntax or types (e.g., assigning string to int).
-        [ ] Benchmark: Measure compilation time vs. LOC (Lines of Code).
-        [ ] Code Cleanup: Run cargo clippy, remove dead code, and ensure 0 compiler warnings.
-        [ ] Professional README.md with installation guide, syntax examples, and this roadmap.
+- [x] Professional README.md with installation guide, syntax examples, and this roadmap.
+- [x] Field Access: Support reading/writing fields (point.x = 10;).
+- [x] Refactor: Split expression compilation into L-Values (pointers) vs R-Values (values) to support complex assignments.
+- [ ] GitHub Actions
+- [ ] Aggregate Types: Implement Structs and Arrays.
+- [ ] Test Suite Integration: Expand the test suite script to traverse tests/, compile .zr files, execute binaries, and verify exit codes.
+- [ ] Negative Tests: Ensure valid errors are thrown for invalid syntax or types (e.g., assigning string to int).
+- [ ] Benchmark: Measure compilation time vs. LOC (Lines of Code).
+- [ ] Code Cleanup: Run cargo clippy, remove dead code, and ensure 0 compiler warnings.
 
 ## Version 0.2.0: "The System Language"
 
 Goal: Transition from a "calculator" to a true system language capable of interacting with the OS and managing memory manually.
 
-    Syntax & Parser
-        [ ] Pointers: Add * (dereference) and & (address-of) tokens.
-        [ ] FFI (Foreign Function Interface): Add extern "C" support to link against C libraries.
-    Semantic Analyzer (Sema)
-        [ ] Pointer Validation: Strict type checking for pointers (*i32 vs i32).
-        [ ] Proper Main: Allow fn main() void.
-    CodeGen & Runtime
-        [ ] LibC Linking: Enable calls to malloc, free, exit, and printf.
-        [ ] Exit Code Fix: Remove the explicit i32 return requirement for main; the runtime will handle exit(0).
-    Tooling
-        [ ] Basic syntax highlighting and file icons (.zr with emoji support ⚡).
-        [ ] LSP Initial: Basic Language Server Protocol scaffolding.
+##### Syntax & Parser
+
+- [ ] Pointers: Add * (dereference) and & (address-of) tokens.
+- [ ] FFI (Foreign Function Interface): Add extern "C" support to link against C libraries.
+
+##### Semantic Analyzer (Sema)
+
+- [ ] Pointer Validation: Strict type checking for pointers (*i32 vs i32).
+- [ ] Proper Main: Allow fn main() void.
+
+##### CodeGen & Runtime
+
+- [ ] LibC Linking: Enable calls to malloc, free, exit, and printf || Enable calls not depending on libc.
+- [ ] Exit Code Fix: Remove the explicit i32 return requirement for main; the runtime will handle exit(0).
+
+##### Tooling
+
+- [ ] Basic syntax highlighting and file icons (.zr with emoji support ⚡).
+[ ] LSP Initial: Basic Language Server Protocol scaffolding.
 
 ## Version 0.3.0: "The Abstraction Layer"
 
 Goal: Introduce high-level abstractions with zero runtime cost, moving closer to Rust/C++ capabilities.
 
-    Generics (Templates)
-        [ ] Generic Structs: Support struct Box<T> { value: T }.
-        [ ] Generic Functions: Support fn id<T>(x: T) T.
-        [ ] Monomorphization: Compiler generates specialized code for each type used (like C++ templates).
-    Memory & Safety
-        [ ] RAII (Resource Acquisition Is Initialization): Implement destructors (like Drop) to automatically free memory when variables go out of scope.
-        [ ] Smart Pointers: Implement UniquePtr or Box using RAII and the FFI from v0.2.0.
-    Standard Library (STL) - Phase 1
-        [ ] Option & Result: Implement tagged unions (enum with data) for error handling.
-        [ ] Vec<T>: Implement dynamic arrays using malloc/realloc.
+##### Generics (Templates)
+
+- [ ] Generic Structs: Support struct Box<T> { value: T }.
+- [ ] Generic Functions: Support fn id<T>(x: T) T.
+- [ ] Monomorphization: Compiler generates specialized code for each type used (like C++ templates).
+
+##### Memory & Safety
+
+- [ ] RAII (Resource Acquisition Is Initialization): Implement destructors (like Drop) to automatically free memory when variables go out of scope.
+- [ ] Smart Pointers: Implement UniquePtr or Box using RAII and the FFI from v0.2.0.
+
+##### Standard Library (STL) - Phase 1
+
+- [ ] Option & Result: Implement tagged unions (enum with data) for error handling.
+- [ ] Vec<T>: Implement dynamic arrays using malloc/realloc.
 
 ## Version 1.0.0: "Production Ready"
 
 Goal: A safe, fast language with a complete developer ecosystem.
 
-    Advanced Safety
-        [ ] Borrow Checker (Lite): Static analysis to prevent dangling pointers and double-frees (simpler than Rust, focused on basic ownership).
-    Performance
-        [ ] Optimizations: Enable LLVM optimization passes (-O2, -O3) via CLI flags (zeru build --release).
-    Ecosytem
-        [ ] Module System: robust import system for external libraries and multi-file projects.
-        [ ] Full LSP: Autocomplete, "Go to Definition", and error diagnostics in the editor.
-        [ ] Complete STL: Functional iterators (map, filter, reduce) and advanced math libraries.
+##### Advanced Safety
+
+- [ ] Borrow Checker (Lite): Static analysis to prevent dangling pointers and double-frees (simpler than Rust, focused on basic ownership).
+
+##### Performance
+
+- [ ] Optimizations: Enable LLVM optimization passes (-O2, -O3) via CLI flags (zeru build --release).
+
+##### Ecosytem
+
+- [ ] Module System: robust import system for external libraries and multi-file projects.
+- [ ] Full LSP: Autocomplete, "Go to Definition", and error diagnostics in the editor.
+- [ ] Complete STL: Functional iterators (map, filter, reduce) and advanced math libraries.
