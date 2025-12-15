@@ -588,18 +588,34 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         Token::Plus => self.builder.build_int_add(l, r, "addtmp").unwrap().into(),
                         Token::Minus => self.builder.build_int_sub(l, r, "subtmp").unwrap().into(),
                         Token::Star => self.builder.build_int_mul(l, r, "multmp").unwrap().into(),
-                        Token::Slash => self
-                            .builder
-                            .build_int_signed_div(l, r, "divtmp")
-                            .unwrap()
-                            .into(),
-
-                        Token::Mod => self
-                            .builder
-                            .build_int_signed_rem(l, r, "modtmp")
-                            .unwrap()
-                            .into(),
-
+                        Token::Slash => {
+                            let is_signed = self.is_signed_integer(expr).unwrap_or(true);
+                            if is_signed {
+                                self.builder
+                                    .build_int_signed_div(l, r, "divtmp")
+                                    .unwrap()
+                                    .into()
+                            } else {
+                                self.builder
+                                    .build_int_unsigned_div(l, r, "udivtmp")
+                                    .unwrap()
+                                    .into()
+                            }
+                        }
+                        Token::Mod => {
+                            let is_signed = self.is_signed_integer(expr).unwrap_or(true);
+                            if is_signed {
+                                self.builder
+                                    .build_int_signed_rem(l, r, "modtmp")
+                                    .unwrap()
+                                    .into()
+                            } else {
+                                self.builder
+                                    .build_int_unsigned_rem(l, r, "umodtmp")
+                                    .unwrap()
+                                    .into()
+                            }
+                        }
                         Token::Eq => self
                             .builder
                             .build_int_compare(IntPredicate::EQ, l, r, "eqtmp")
@@ -638,19 +654,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                             .build_left_shift(l, r, "shltmp")
                             .unwrap()
                             .into(),
-                        //FIX: Preserving sign (optimize for unsigned)
                         Token::ShiftRight => {
-                            let is_unsigned = if let Expression::Identifier(name) = &**left {
-                                if let Some((_, _, is_u)) = self.variables.get(name) {
-                                    *is_u
-                                } else {
-                                    false
-                                }
-                            } else {
-                                false
-                            };
+                            let is_signed = self.is_signed_integer(left).unwrap_or(true);
                             self.builder
-                                .build_right_shift(l, r, !is_unsigned, "shrtmp")
+                                .build_right_shift(l, r, is_signed, "shrtmp")
                                 .unwrap()
                                 .into()
                         }
@@ -721,6 +728,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
             }
             _ => panic!("Codegen: Unimplemented expression {:?}", expr),
+        }
+    }
+
+    fn is_signed_integer(&self, expr: &Expression) -> Option<bool> {
+        match expr {
+            Expression::Identifier(name) => {
+                if let Some((_, _, is_unsigned)) = self.variables.get(name) {
+                    Some(!is_unsigned)
+                } else {
+                    None
+                }
+            }
+            //TODO: Binary operations should be handled?
+            _ => None,
         }
     }
 
