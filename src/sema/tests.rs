@@ -198,7 +198,7 @@ mod testing {
         ";
         let errors = analyze(input);
         assert!(!errors.is_empty());
-        assert!(errors[0].contains("type mismatch"));
+        assert!(errors[0].to_lowercase().contains("type mismatch"));
     }
 
     #[test]
@@ -402,6 +402,18 @@ mod testing {
         ";
         let errors = analyze(input);
         assert!(!errors.is_empty());
+    }
+
+    #[test]
+    fn test_valid_numeric_base_literals() {
+        let input = "
+            fn main() {
+                var octal: i32 = 0o1047;
+                var binary: i32 = 0b010110;
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
     }
 
     #[test]
@@ -1312,7 +1324,7 @@ mod testing {
             fn main() {
                 var p = create_point(3.0, 4.0);
                 var dist = p.distance_from_origin();
-                
+
                 if dist > 10.0 {
                     var msg = \"far\";
                 } else {

@@ -130,6 +130,8 @@ impl Type {
         match (self, other) {
             (t1, t2) if t1 == t2 => true,
             (Type::Unknown, _) | (_, Type::Unknown) => true,
+            (Type::Struct { name: n1, .. }, Type::Struct { name: n2, .. }) => n1 == n2,
+            (Type::Enum { name: n1, .. }, Type::Enum { name: n2, .. }) => n1 == n2,
             (
                 Type::Pointer {
                     elem_type: e1,
@@ -139,7 +141,17 @@ impl Type {
                     elem_type: e2,
                     is_mutable: _,
                 },
-            ) => e1 == e2,
+            ) => e1.accepts(e2),
+            (
+                Type::Array {
+                    elem_type: e1,
+                    len: l1,
+                },
+                Type::Array {
+                    elem_type: e2,
+                    len: l2,
+                },
+            ) => l1 == l2 && e1.accepts(e2),
             _ => false,
         }
     }

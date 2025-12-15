@@ -39,21 +39,15 @@ impl SemanticAnalyzer {
     fn scan_types(&mut self, stmts: &[Statement]) {
         for stmt in stmts {
             match stmt {
-                Statement::Struct { name, fields, .. } => {
+                Statement::Struct { name, .. } => {
                     if self.struct_defs.contains_key(name) || self.enum_defs.contains_key(name) {
                         self.error(format!("Type {name} is already defined"));
                         continue;
                     }
 
-                    let mut resolved_fields = Vec::new();
-                    for (f_name, f_type_spec) in fields {
-                        let f_ty = self.resolve_spec(f_type_spec);
-                        resolved_fields.push((f_name.clone(), f_ty));
-                    }
-
                     let struct_type = Type::Struct {
                         name: name.clone(),
-                        fields: resolved_fields,
+                        fields: vec![],
                     };
 
                     self.struct_defs.insert(name.clone(), struct_type);
@@ -71,6 +65,20 @@ impl SemanticAnalyzer {
                     self.enum_defs.insert(name.clone(), enum_type);
                 }
                 _ => {}
+            }
+        }
+
+        for stmt in stmts {
+            if let Statement::Struct { name, fields, .. } = stmt {
+                let mut resolved_fields = Vec::with_capacity(fields.len());
+                for (f_name, f_type_spec) in fields {
+                    let f_ty = self.resolve_spec(f_type_spec);
+                    resolved_fields.push((f_name.clone(), f_ty));
+                }
+
+                if let Some(Type::Struct { fields: f, .. }) = self.struct_defs.get_mut(name) {
+                    *f = resolved_fields;
+                }
             }
         }
     }
@@ -380,7 +388,6 @@ impl SemanticAnalyzer {
                         true
                     } else {
                         match (&expected, &value_type) {
-                            (Type::Integer { .. }, Type::Integer { .. }) => true,
                             (Type::Float(FloatWidth::W64), Type::Float(FloatWidth::W32)) => true,
                             (
                                 Type::Array {
@@ -395,10 +402,7 @@ impl SemanticAnalyzer {
                                 if l1 != l2 {
                                     false
                                 } else {
-                                    matches!(
-                                        (&**t1, &**t2),
-                                        (Type::Integer { .. }, Type::Integer { .. })
-                                    )
+                                    t1.accepts(t2)
                                 }
                             }
                             _ => false,
@@ -582,6 +586,26 @@ impl SemanticAnalyzer {
             Expression::None => Type::Void,
 
             Expression::Identifier(name) => {
+                if name.contains("::") {
+                    let parts: Vec<&str> = name.split("::").collect();
+
+                    if parts.len() == 2 {
+                        let enum_name = parts[0];
+                        let variant_name = parts[1];
+                        if let Some(Type::Enum { variants, .. }) = self.enum_defs.get(enum_name) {
+                            if variants.contains(&variant_name.to_string()) {
+                                return self.enum_defs.get(enum_name).unwrap().clone();
+                            } else {
+                                self.error(format!(
+                                    "Enum '{}' has no variant '{}'",
+                                    enum_name, variant_name
+                                ));
+                                return Type::Unknown;
+                            }
+                        }
+                    }
+                }
+
                 if let Some(symbol) = self.symbols.lookup(name) {
                     match symbol {
                         super::symbol_table::Symbol::Var { ty, .. } => ty.clone(),
@@ -591,7 +615,15 @@ impl SemanticAnalyzer {
                         }
                     }
                 } else {
-                    self.error(format!("Undeclared variable '{}'.", name));
+                    let suggestion = self.find_similar_variable(name);
+                    if let Some(similar) = suggestion {
+                        self.error(format!(
+                            "Undeclared variable '{}'. Did you mean '{}'?",
+                            name, similar
+                        ));
+                    } else {
+                        self.error(format!("Undeclared variable '{}'.", name));
+                    }
                     Type::Unknown
                 }
             }
@@ -636,6 +668,26 @@ impl SemanticAnalyzer {
                 operator,
                 right,
             } => {
+                if *operator == crate::token::Token::DoubleColon
+                    && let (Expression::Identifier(enum_name), Expression::Identifier(variant_name)) =
+                        (&**left, &**right)
+                {
+                    if let Some(Type::Enum { variants, .. }) = self.enum_defs.get(enum_name) {
+                        if variants.contains(variant_name) {
+                            return self.enum_defs.get(enum_name).unwrap().clone();
+                        } else {
+                            self.error(format!(
+                                "Enum '{}' has no variant '{}'",
+                                enum_name, variant_name
+                            ));
+                            return Type::Unknown;
+                        }
+                    } else {
+                        self.error(format!("'{}' is not an enum type", enum_name));
+                        return Type::Unknown;
+                    }
+                }
+
                 let l_ty = self.check_expression(left, expected_type);
                 let r_ty = self.check_expression(right, Some(&l_ty));
 
@@ -735,13 +787,27 @@ impl SemanticAnalyzer {
                         fields: def_fields, ..
                     } = &def
                     {
+                        for (field_name, _) in fields {
+                            if !def_fields.iter().any(|(n, _)| n == field_name) {
+                                self.error(format!(
+                                    "Unknown field '{}' in struct '{}'",
+                                    field_name, name
+                                ));
+                            }
+                        }
+
                         for (def_name, def_type) in def_fields {
                             let found = fields.iter().find(|(n, _)| n == def_name);
                             if let Some((_, expr)) = found {
                                 let expr_type = self.check_expression(expr, Some(def_type));
-                                if !def_type.accepts(&expr_type) {
+                                let types_match = match (def_type, &expr_type) {
+                                    (Type::Float(_), Type::Integer { .. }) => false,
+                                    (Type::Integer { .. }, Type::Float(_)) => false,
+                                    _ => def_type.accepts(&expr_type),
+                                };
+                                if !types_match && expr_type != Type::Unknown {
                                     self.error(format!(
-                                        "Field '{}' in struct '{}' expected {:?}, got {:?}.",
+                                        "Type mismatch: Field '{}' in struct '{}' expected {:?}, got {:?}.",
                                         def_name,
                                         name,
                                         def_type.to_string(),
@@ -762,14 +828,113 @@ impl SemanticAnalyzer {
                 Type::Unknown
             }
 
-            Expression::Match { arms, .. } => {
-                if !arms.is_empty() {
-                    self.check_expression(&arms[0].1, expected_type)
+            Expression::Match { value, arms } => {
+                let _match_type = self.check_expression(value, None);
+
+                if arms.is_empty() {
+                    return Type::Void;
+                }
+
+                let first_arm_type = self.check_expression(&arms[0].1, expected_type);
+
+                for (i, (_, result)) in arms.iter().enumerate().skip(1) {
+                    let arm_type = self.check_expression(result, Some(&first_arm_type));
+                    if !first_arm_type.accepts(&arm_type)
+                        && arm_type != Type::Unknown
+                        && first_arm_type != Type::Unknown
+                    {
+                        self.error(format!(
+                            "Match arm {} has inconsistent type. Expected {:?}, got {:?}",
+                            i + 1,
+                            first_arm_type.to_string(),
+                            arm_type.to_string()
+                        ));
+                    }
+                }
+
+                first_arm_type
+            }
+            Expression::Prefix { operator, right } => match operator {
+                crate::token::Token::Minus => {
+                    if let Expression::Int(val) = &**right
+                        && let Some(Type::Integer { width, signed }) = expected_type
+                    {
+                        let negated = -val;
+                        if self.fits_in_int(negated, *width, *signed) {
+                            return Type::Integer {
+                                width: *width,
+                                signed: *signed,
+                            };
+                        } else {
+                            self.error(format!(
+                                "Literal {} does not fit in type {:?}",
+                                negated,
+                                expected_type.unwrap()
+                            ));
+                            return Type::Integer {
+                                width: *width,
+                                signed: *signed,
+                            };
+                        }
+                    }
+
+                    let right_type = self.check_expression(right, expected_type);
+                    match &right_type {
+                        Type::Integer { .. } | Type::Float(_) => right_type,
+                        _ => {
+                            self.error(format!(
+                                "Cannot negate non-numeric type {:?}",
+                                right_type.to_string()
+                            ));
+                            Type::Unknown
+                        }
+                    }
+                }
+                crate::token::Token::Bang => {
+                    let right_type = self.check_expression(right, None);
+                    if right_type != Type::Bool && right_type != Type::Unknown {
+                        self.error(format!(
+                            "Logical NOT requires bool, got {:?}",
+                            right_type.to_string()
+                        ));
+                    }
+                    Type::Bool
+                }
+                _ => self.check_expression(right, expected_type),
+            },
+            Expression::Cast { left, target } => {
+                let _source_type = self.check_expression(left, None);
+
+                if let Expression::Identifier(type_name) = &**target {
+                    self.resolve_named_type(type_name)
                 } else {
-                    Type::Void
+                    Type::Unknown
                 }
             }
+            Expression::Index { left, index } => {
+                let left_type = self.check_expression(left, None);
+                //FIX: Use usize
+                let _index_type = self.check_expression(
+                    index,
+                    Some(&Type::Integer {
+                        signed: Signedness::Signed,
+                        width: IntWidth::W32,
+                    }),
+                );
 
+                match left_type {
+                    Type::Array { elem_type, .. } => *elem_type,
+                    Type::String => Type::Integer {
+                        signed: Signedness::Unsigned,
+                        width: IntWidth::W8,
+                    },
+                    Type::Unknown => Type::Unknown,
+                    _ => {
+                        self.error(format!("Cannot index type {:?}", left_type.to_string()));
+                        Type::Unknown
+                    }
+                }
+            }
             Expression::ArrayLiteral(elements) => {
                 if elements.is_empty() {
                     if let Some(Type::Array { elem_type, len }) = expected_type {
@@ -810,8 +975,6 @@ impl SemanticAnalyzer {
                     len: elements.len(),
                 }
             }
-
-            _ => Type::Unknown,
         }
     }
 
@@ -870,6 +1033,25 @@ impl SemanticAnalyzer {
             _ => (i64::MIN, i64::MAX),
         };
         val >= min && val <= max
+    }
+
+    fn find_similar_variable(&self, name: &str) -> Option<String> {
+        let mut best_match: Option<String> = None;
+        let mut min_dist = usize::MAX;
+
+        for scope in self.symbols.get_all_scopes() {
+            for (var_name, symbol) in scope {
+                if let super::symbol_table::Symbol::Var { .. } = symbol {
+                    let dist = Self::levenshtein_distance(name, var_name);
+                    if dist < min_dist && dist <= 2 {
+                        min_dist = dist;
+                        best_match = Some(var_name.clone());
+                    }
+                }
+            }
+        }
+
+        best_match
     }
 
     fn levenshtein_distance(s1: &str, s2: &str) -> usize {

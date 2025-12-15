@@ -62,6 +62,10 @@ impl SymbolTable {
         }
     }
 
+    pub fn get_all_scopes(&self) -> &Vec<HashMap<String, Symbol>> {
+        &self.scopes
+    }
+
     pub fn lookup(&self, name: &str) -> Option<&Symbol> {
         for scope in self.scopes.iter().rev() {
             if let Some(symbol) = scope.get(name) {

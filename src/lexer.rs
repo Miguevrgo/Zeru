@@ -276,14 +276,57 @@ impl<'a> Lexer<'a> {
         let mut literal = String::from(ch);
         let mut dot = false;
 
+        if ch == '0'
+            && let Some(&ch) = self.peek()
+        {
+            match ch {
+                'x' => {
+                    literal.clear();
+                    self.advance().unwrap();
+                    while let Some(&n_ch) = self.peek() {
+                        if n_ch.is_ascii_hexdigit() {
+                            literal.push(self.advance().unwrap());
+                        } else {
+                            break;
+                        }
+                    }
+                    return Token::Int(i64::from_str_radix(&literal, 16).unwrap_or(0));
+                }
+                'b' => {
+                    literal.clear();
+                    self.advance().unwrap();
+                    while let Some(&n_ch) = self.peek() {
+                        if n_ch == '0' || n_ch == '1' {
+                            literal.push(self.advance().unwrap());
+                        } else {
+                            break;
+                        }
+                    }
+
+                    return Token::Int(i64::from_str_radix(&literal, 2).unwrap_or(0));
+                }
+                'o' => {
+                    literal.clear();
+                    self.advance().unwrap();
+                    while let Some(&n_ch) = self.peek() {
+                        if n_ch as u8 >= b'0' && n_ch as u8 <= b'7' {
+                            literal.push(self.advance().unwrap());
+                        } else {
+                            break;
+                        }
+                    }
+                    return Token::Int(i64::from_str_radix(&literal, 8).unwrap_or(0));
+                }
+                _ => {}
+            }
+        }
+
         while let Some(&ch) = self.peek() {
             if ch.is_ascii_digit() {
-                unsafe {
-                    literal.push(self.advance().unwrap_unchecked());
-                }
+                literal.push(self.advance().unwrap());
             } else if ch == '.' && !dot {
                 dot = true;
-                unsafe { literal.push(self.advance().unwrap_unchecked()) }
+                literal.push(self.advance().unwrap())
             } else {
                 break;
             }
