@@ -8,23 +8,6 @@ pub enum Symbol {
     Function { params: Vec<Type>, ret_type: Type },
 }
 
-impl Symbol {
-    pub fn type_name(&self) -> String {
-        match self {
-            Symbol::Var { ty, .. } => ty.to_string(),
-            Symbol::Function { params, ret_type } => {
-                let params_str = params
-                    .iter()
-                    .map(|t| t.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
-                format!("fn({params_str}) {ret_type}")
-            }
-        }
-    }
-}
-
 pub struct SymbolTable {
     scopes: Vec<HashMap<String, Symbol>>,
 }
@@ -55,7 +38,7 @@ impl SymbolTable {
     }
 
     pub fn insert_fn(&mut self, name: String, params: Vec<Type>, ret_type: Type) {
-        //NOTE: Currently there is only support for global functions so insertion is
+        // NOTE: Currently there is only support for global functions so insertion is
         // performed in the current scope
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(name, Symbol::Function { params, ret_type });
