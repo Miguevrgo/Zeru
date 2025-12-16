@@ -784,6 +784,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .bool_type()
                 .const_int(*val as u64, false)
                 .into(),
+            Expression::StringLit(s) => {
+                let string_val = self.builder.build_global_string_ptr(s, "str").unwrap();
+                string_val.as_pointer_value().into()
+            }
             Expression::Prefix { operator, right } => {
                 let operand = self.compile_expression(right, expected_type);
                 match operator {

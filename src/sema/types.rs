@@ -45,6 +45,8 @@ pub enum Type {
         len: usize,
     },
 
+    /// TODO: Pointer type for v0.2.0 | will support '*' and '&'
+    #[allow(dead_code)]
     Pointer {
         elem_type: Box<Type>,
         is_mutable: bool,
@@ -54,78 +56,6 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn from_string(name: &str) -> Option<Type> {
-        if let Some(start_angle) = name.find('<')
-            && name.ends_with('>')
-        {
-            let base_name = &name[0..start_angle];
-            let content = &name[start_angle + 1..name.len() - 1]; // "i32, 5"
-
-            let args: Vec<&str> = content.split(',').map(|s| s.trim()).collect();
-
-            if base_name == "Array" && args.len() == 2 {
-                let type_part = args[0];
-                let len_part = args[1];
-
-                if let Ok(len) = len_part.parse::<usize>()
-                    && let Some(elem_ty) = Type::from_string(type_part)
-                {
-                    return Some(Type::Array {
-                        elem_type: Box::new(elem_ty),
-                        len,
-                    });
-                }
-            }
-        }
-        match name {
-            "i8" => Some(Type::Integer {
-                signed: Signedness::Signed,
-                width: IntWidth::W8,
-            }),
-            "u8" => Some(Type::Integer {
-                signed: Signedness::Unsigned,
-                width: IntWidth::W8,
-            }),
-            "i16" => Some(Type::Integer {
-                signed: Signedness::Signed,
-                width: IntWidth::W16,
-            }),
-            "i32" => Some(Type::Integer {
-                signed: Signedness::Signed,
-                width: IntWidth::W32,
-            }),
-            "i64" => Some(Type::Integer {
-                signed: Signedness::Signed,
-                width: IntWidth::W64,
-            }),
-            "u16" => Some(Type::Integer {
-                signed: Signedness::Unsigned,
-                width: IntWidth::W16,
-            }),
-            "u32" => Some(Type::Integer {
-                signed: Signedness::Unsigned,
-                width: IntWidth::W32,
-            }),
-            "u64" => Some(Type::Integer {
-                signed: Signedness::Unsigned,
-                width: IntWidth::W64,
-            }),
-            "usize" => Some(Type::Integer {
-                signed: Signedness::Unsigned,
-                width: IntWidth::WSize,
-            }),
-
-            "f32" => Some(Type::Float(FloatWidth::W32)),
-            "f64" => Some(Type::Float(FloatWidth::W64)),
-
-            "bool" => Some(Type::Bool),
-            "String" => Some(Type::String),
-            "void" => Some(Type::Void),
-
-            _ => None,
-        }
-    }
-
     pub fn accepts(&self, other: &Type) -> bool {
         match (self, other) {
             (t1, t2) if t1 == t2 => true,
