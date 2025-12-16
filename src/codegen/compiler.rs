@@ -552,21 +552,26 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
                 array_val.into()
             }
-            Expression::Assign { target, value, .. } => {
-                let hint = if let Some((_, ty)) = self.compile_lvalue(target) {
-                    Some(ty)
+            Expression::Assign {
+                target,
+                operator,
+                value,
+            } => {
+                let (ptr, ty) = self
+                    .compile_lvalue(target)
+                    .expect("Codegen: Assignment target invalid");
+
+                let final_val = if *operator == Token::Assign {
+                    self.compile_expression(value, Some(ty))
                 } else {
-                    None
+                    let current_val = self.builder.build_load(ty, ptr, "loadtmp").unwrap();
+                    let rhs = self.compile_expression(value, Some(ty));
+
+                    self.apply_compound_op(current_val, rhs, operator)
                 };
 
-                let val = self.compile_expression(value, hint);
-
-                if let Some((ptr, _)) = self.compile_lvalue(target) {
-                    self.builder.build_store(ptr, val).unwrap();
-                    return val;
-                }
-
-                panic!("Codegen: Assignment target invalid");
+                self.builder.build_store(ptr, final_val).unwrap();
+                final_val
             }
             Expression::Call {
                 function,
@@ -892,6 +897,77 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
 
         builder.build_alloca(ty, name).unwrap()
+    }
+
+    fn apply_compound_op(
+        &self,
+        lhs: BasicValueEnum<'ctx>,
+        rhs: BasicValueEnum<'ctx>,
+        operator: &Token,
+    ) -> BasicValueEnum<'ctx> {
+        match (lhs, rhs) {
+            (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => match operator {
+                Token::PlusEq => self.builder.build_int_add(l, r, "addtmp").unwrap().into(),
+                Token::MinusEq => self.builder.build_int_sub(l, r, "subtmp").unwrap().into(),
+                Token::StarEq => self.builder.build_int_mul(l, r, "multmp").unwrap().into(),
+                Token::SlashEq => self
+                    .builder
+                    .build_int_signed_div(l, r, "divtmp")
+                    .unwrap()
+                    .into(),
+                Token::ModEq => self
+                    .builder
+                    .build_int_signed_rem(l, r, "modtmp")
+                    .unwrap()
+                    .into(),
+                Token::BitAndEq => self.builder.build_and(l, r, "andtmp").unwrap().into(),
+                Token::BitOrEq => self.builder.build_or(l, r, "ortmp").unwrap().into(),
+                Token::BitXorEq => self.builder.build_xor(l, r, "xortmp").unwrap().into(),
+                Token::BitLShiftEq => self
+                    .builder
+                    .build_left_shift(l, r, "shltmp")
+                    .unwrap()
+                    .into(),
+                Token::BitRShiftEq => self
+                    .builder
+                    .build_right_shift(l, r, true, "shrtmp")
+                    .unwrap()
+                    .into(),
+                _ => panic!("Codegen: Unknown compound operator {:?}", operator),
+            },
+            (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) => match operator {
+                Token::PlusEq => self
+                    .builder
+                    .build_float_add(l, r, "faddtmp")
+                    .unwrap()
+                    .into(),
+                Token::MinusEq => self
+                    .builder
+                    .build_float_sub(l, r, "fsubtmp")
+                    .unwrap()
+                    .into(),
+                Token::StarEq => self
+                    .builder
+                    .build_float_mul(l, r, "fmultmp")
+                    .unwrap()
+                    .into(),
+                Token::SlashEq => self
+                    .builder
+                    .build_float_div(l, r, "fdivtmp")
+                    .unwrap()
+                    .into(),
+                Token::ModEq => self
+                    .builder
+                    .build_float_rem(l, r, "fmodtmp")
+                    .unwrap()
+                    .into(),
+                _ => panic!(
+                    "Codegen: Compound operator {:?} not supported for floats",
+                    operator
+                ),
+            },
+            _ => panic!("Codegen: Type mismatch in compound assignment"),
+        }
     }
 
     fn get_llvm_type(&self, spec: &TypeSpec) -> Option<BasicTypeEnum<'ctx>> {

@@ -316,3 +316,118 @@ fn test_recursive_function() {
         ";
     assert_ir_contains(input, &["call i32 @factorial"]);
 }
+
+#[test]
+fn test_compound_add_assign() {
+    let input = "
+        fn main() {
+            var x: i32 = 10;
+            x += 5;
+        }
+    ";
+    // Should generate: load, add, store
+    assert_ir_contains(input, &["load i32", "add i32", "store i32"]);
+}
+
+#[test]
+fn test_compound_sub_assign() {
+    let input = "
+        fn main() {
+            var x: i32 = 10;
+            x -= 3;
+        }
+    ";
+    assert_ir_contains(input, &["load i32", "sub i32", "store i32"]);
+}
+
+#[test]
+fn test_compound_mul_assign() {
+    let input = "
+        fn main() {
+            var x: i32 = 10;
+            x *= 2;
+        }
+    ";
+    assert_ir_contains(input, &["load i32", "mul i32", "store i32"]);
+}
+
+#[test]
+fn test_compound_div_assign() {
+    let input = "
+        fn main() {
+            var x: i32 = 10;
+            x /= 2;
+        }
+    ";
+    assert_ir_contains(input, &["load i32", "sdiv i32", "store i32"]);
+}
+
+#[test]
+fn test_compound_bitwise_and_assign() {
+    let input = "
+        fn main() {
+            var x: i32 = 0xFF;
+            x &= 0x0F;
+        }
+    ";
+    assert_ir_contains(input, &["load i32", "and i32", "store i32"]);
+}
+
+#[test]
+fn test_compound_bitwise_or_assign() {
+    let input = "
+        fn main() {
+            var x: i32 = 0x0F;
+            x |= 0xF0;
+        }
+    ";
+    assert_ir_contains(input, &["load i32", "or i32", "store i32"]);
+}
+
+#[test]
+fn test_compound_shift_left_assign() {
+    let input = "
+        fn main() {
+            var x: i32 = 1;
+            x <<= 4;
+        }
+    ";
+    assert_ir_contains(input, &["load i32", "shl i32", "store i32"]);
+}
+
+#[test]
+fn test_compound_shift_right_assign() {
+    let input = "
+        fn main() {
+            var x: i32 = 16;
+            x >>= 2;
+        }
+    ";
+    assert_ir_contains(input, &["load i32", "ashr i32", "store i32"]);
+}
+
+#[test]
+fn test_compound_float_add_assign() {
+    let input = "
+        fn main() {
+            var f: f32 = 1.0;
+            f += 2.5;
+        }
+    ";
+    assert_ir_contains(input, &["load float", "fadd float", "store float"]);
+}
+
+#[test]
+fn test_compound_in_loop() {
+    let input = "
+        fn main() {
+            var sum: i32 = 0;
+            var i: i32 = 0;
+            while i < 10 {
+                sum += i;
+                i += 1;
+            }
+        }
+    ";
+    assert_ir_contains(input, &["loop_cond:", "loop_body:", "add i32"]);
+}
