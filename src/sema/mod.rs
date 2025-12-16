@@ -1,4 +1,6 @@
 pub mod analyzer;
 mod symbol_table;
-pub mod tests;
+#[cfg(test)]
+mod tests;
 mod types;
+
