@@ -1357,4 +1357,194 @@ mod testing {
         let errors = analyze(input);
         assert!(errors.is_empty());
     }
+
+    #[test]
+    fn test_usize_type() {
+        let input = "
+            fn main() {
+                var idx: usize = 0;
+                var other: usize = 100;
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_array_index_with_usize() {
+        let input = "
+            fn main() {
+                var arr: Array<i32, 5> = [1, 2, 3, 4, 5];
+                var idx: usize = 2;
+                var elem = arr[idx];
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_array_index_assignment_with_usize() {
+        let input = "
+            fn main() {
+                var arr: Array<i32, 3> = [10, 20, 30];
+                var idx: usize = 1;
+                arr[idx] = 100;
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_prefix_negation_int() {
+        let input = "
+            fn main() {
+                var x: i32 = 42;
+                var neg: i32 = -x;
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_prefix_negation_float() {
+        let input = "
+            fn main() {
+                var x: f32 = 3.14;
+                var neg: f32 = -x;
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_prefix_not_bool() {
+        let input = "
+            fn main() {
+                var flag: bool = true;
+                var negated: bool = !flag;
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_boolean_literal_true() {
+        let input = "
+            fn main() {
+                var t: bool = true;
+                var f: bool = false;
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_cast_i32_to_i64() {
+        let input = "
+            fn main() {
+                var small: i32 = 100;
+                var large: i64 = small as i64;
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_cast_i64_to_i32_truncate() {
+        let input = "
+            fn main() {
+                var large: i64 = 1000;
+                var small: i32 = large as i32;
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_cast_f32_to_f64() {
+        let input = "
+            fn main() {
+                var f: f32 = 3.14;
+                var d: f64 = f as f64;
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_cast_f64_to_f32() {
+        let input = "
+            fn main() {
+                var d: f64 = 3.141592653589793;
+                var f: f32 = d as f32;
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_array_as_function_param() {
+        let input = "
+            fn sum_first_two(arr: Array<i32, 3>) i32 {
+                return arr[0] + arr[1];
+            }
+            fn main() {
+                var nums: Array<i32, 3> = [10, 20, 30];
+                var result: i32 = sum_first_two(nums);
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_array_element_modification_in_loop() {
+        let input = "
+            fn main() {
+                var arr: Array<i32, 5> = [1, 2, 3, 4, 5];
+                var i: usize = 0;
+                while i < 5 {
+                    arr[i] = arr[i] * 2;
+                    i = i + 1;
+                }
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_nested_negation() {
+        let input = "
+            fn main() {
+                var x: i32 = 10;
+                var y: i32 = --x;
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_combined_array_and_cast() {
+        let input = "
+            fn main() {
+                var arr: Array<i32, 3> = [1, 2, 3];
+                var idx: i32 = 1;
+                var elem: i32 = arr[idx as usize];
+            }
+        ";
+        let errors = analyze(input);
+        assert!(errors.is_empty());
+    }
 }

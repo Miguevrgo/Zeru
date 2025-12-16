@@ -15,10 +15,10 @@ Goal: A robust compiler supporting arithmetic, control flow, and complex data ty
 - [x] Professional README.md with installation guide, syntax examples, and this roadmap.
 - [x] Field Access: Support reading/writing fields (point.x = 10;).
 - [x] Refactor: Split expression compilation into L-Values (pointers) vs R-Values (values) to support complex assignments.
-- [ ] GitHub Actions
-- [ ] Aggregate Types: Implement Structs and Arrays.
+- [x] GitHub Actions
+- [x] Aggregate Types: Implement Structs and Arrays.
 - [ ] Test Suite Integration: Expand the test suite script to traverse tests/, compile .zr files, execute binaries, and verify exit codes.
-- [ ] Negative Tests: Ensure valid errors are thrown for invalid syntax or types (e.g., assigning string to int).
+- [x] Negative Tests: Ensure valid errors are thrown for invalid syntax or types (e.g., assigning string to int).
 - [ ] Benchmark: Measure compilation time vs. LOC (Lines of Code).
 - [ ] Code Cleanup: Run cargo clippy, remove dead code, and ensure 0 compiler warnings.
 
@@ -44,7 +44,7 @@ Goal: Transition from a "calculator" to a true system language capable of intera
 ##### Tooling
 
 - [ ] Basic syntax highlighting and file icons (.zr with emoji support ⚡).
-[ ] LSP Initial: Basic Language Server Protocol scaffolding.
+- [ ] LSP Initial: Basic Language Server Protocol scaffolding.
 
 ## Version 0.3.0: "The Abstraction Layer"
 
@@ -58,8 +58,8 @@ Goal: Introduce high-level abstractions with zero runtime cost, moving closer to
 
 ##### Memory & Safety
 
-- [ ] RAII (Resource Acquisition Is Initialization): Implement destructors (like Drop) to automatically free memory when variables go out of scope.
-- [ ] Smart Pointers: Implement UniquePtr or Box using RAII and the FFI from v0.2.0.
+- [ ] Consider possible solutions for easy/secure/fast language (debug|release-safe|release-fast)
+- [ ] Generational References / Borrow Checker / Arenas ??
 
 ##### Standard Library (STL) - Phase 1
 

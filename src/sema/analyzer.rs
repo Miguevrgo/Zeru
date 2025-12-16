@@ -913,12 +913,11 @@ impl SemanticAnalyzer {
             }
             Expression::Index { left, index } => {
                 let left_type = self.check_expression(left, None);
-                //FIX: Use usize
                 let _index_type = self.check_expression(
                     index,
                     Some(&Type::Integer {
-                        signed: Signedness::Signed,
-                        width: IntWidth::W32,
+                        signed: Signedness::Unsigned,
+                        width: IntWidth::WSize,
                     }),
                 );
 

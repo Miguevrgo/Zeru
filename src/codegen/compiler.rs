@@ -421,7 +421,27 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 None
             }
 
-            //TODO: Array indexing
+            Expression::Index { left, index } => {
+                let (ptr, array_type) = self.compile_lvalue(left)?;
+
+                if let BasicTypeEnum::ArrayType(array_ty) = array_type {
+                    let index_val = self
+                        .compile_expression(index, Some(self.context.i64_type().into()))
+                        .into_int_value();
+
+                    let zero = self.context.i64_type().const_zero();
+                    let elem_ptr = unsafe {
+                        self.builder
+                            .build_in_bounds_gep(array_ty, ptr, &[zero, index_val], "elem_ptr")
+                            .ok()?
+                    };
+
+                    let elem_type = array_ty.get_element_type();
+                    return Some((elem_ptr, elem_type));
+                }
+                None
+            }
+
             _ => None,
         }
     }
@@ -448,7 +468,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 float_type.const_float(*val).into()
             }
-            Expression::Identifier(_) | Expression::Get { .. } => {
+            Expression::Identifier(_) | Expression::Get { .. } | Expression::Index { .. } => {
                 if let Some((ptr, ty)) = self.compile_lvalue(expr) {
                     return self.builder.build_load(ty, ptr, "loadtmp").unwrap();
                 }
@@ -505,6 +525,33 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
                 struct_val.into()
             }
+            Expression::ArrayLiteral(elements) => {
+                if elements.is_empty() {
+                    if let Some(BasicTypeEnum::ArrayType(arr_ty)) = expected_type {
+                        return arr_ty.get_undef().into();
+                    }
+                    panic!("Cannot infer type from an empty array literal");
+                }
+
+                let elem_type = if let Some(BasicTypeEnum::ArrayType(arr_ty)) = expected_type {
+                    arr_ty.get_element_type()
+                } else {
+                    self.compile_expression(&elements[0], None).get_type()
+                };
+
+                let array_type = elem_type.array_type(elements.len() as u32);
+                let mut array_val = array_type.get_undef();
+
+                for (i, elem_expr) in elements.iter().enumerate() {
+                    let elem_val = self.compile_expression(elem_expr, Some(elem_type));
+                    array_val = self
+                        .builder
+                        .build_insert_value(array_val, elem_val, i as u32, "arr_insert")
+                        .unwrap()
+                        .into_array_value();
+                }
+                array_val.into()
+            }
             Expression::Assign { target, value, .. } => {
                 let hint = if let Some((_, ty)) = self.compile_lvalue(target) {
                     Some(ty)
@@ -525,7 +572,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 function,
                 arguments,
             } => {
-                let (fn_val, method_args) = if let Expression::Get {
+                let (fn_val, ..) = if let Expression::Get {
                     object,
                     name: method_name,
                 } = &**function
@@ -542,7 +589,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .module
                         .get_function(&mangled)
                         .expect("Method not found");
-                    let args: Vec<_> = vec![obj_val.into()];
+                    let args: Vec<BasicValueEnum> = vec![obj_val];
                     (func, args)
                 } else if let Expression::Identifier(name) = &**function {
                     let func = self.module.get_function(name).expect("Function not found");
@@ -551,7 +598,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     panic!("Indirect calls not implemented");
                 };
 
-                let mut compiled_args = method_args;
+                let mut compiled_args = Vec::new();
                 for arg in arguments {
                     compiled_args.push(self.compile_expression(arg, None).into());
                 }
@@ -727,6 +774,91 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     _ => panic!("Type mismatch in binary operation"),
                 }
             }
+            Expression::Boolean(val) => self
+                .context
+                .bool_type()
+                .const_int(*val as u64, false)
+                .into(),
+            Expression::Prefix { operator, right } => {
+                let operand = self.compile_expression(right, expected_type);
+                match operator {
+                    Token::Minus => match operand {
+                        BasicValueEnum::IntValue(v) => {
+                            self.builder.build_int_neg(v, "negtmp").unwrap().into()
+                        }
+                        BasicValueEnum::FloatValue(v) => {
+                            self.builder.build_float_neg(v, "fnegtmp").unwrap().into()
+                        }
+                        _ => panic!("Codegen: Cannot negate non-numeric type"),
+                    },
+                    Token::Bang => {
+                        if let BasicValueEnum::IntValue(v) = operand {
+                            self.builder.build_not(v, "nottmp").unwrap().into()
+                        } else {
+                            panic!("Codegen: Cannot apply '!' operator to non-integer type");
+                        }
+                    }
+                    _ => panic!("Codegen: Unimplemented prefix operator: {operator:?}"),
+                }
+            }
+            Expression::Cast { left, target } => {
+                let src_val = self.compile_expression(left, None);
+
+                if let Expression::Identifier(type_name) = &**target {
+                    let target_type = self
+                        .get_llvm_type(&TypeSpec::Named(type_name.clone()))
+                        .expect("Cast to void not allowed");
+
+                    match (src_val, target_type) {
+                        (BasicValueEnum::IntValue(v), BasicTypeEnum::IntType(t)) => {
+                            let src_bits = v.get_type().get_bit_width();
+                            let dst_bits = t.get_bit_width();
+                            if src_bits == dst_bits {
+                                v.into()
+                            } else if src_bits < dst_bits {
+                                self.builder
+                                    .build_int_z_extend(v, t, "zexttmp")
+                                    .unwrap()
+                                    .into()
+                            } else {
+                                self.builder
+                                    .build_int_truncate(v, t, "trunctmp")
+                                    .unwrap()
+                                    .into()
+                            }
+                        }
+                        (BasicValueEnum::FloatValue(v), BasicTypeEnum::IntType(t)) => self
+                            .builder
+                            .build_float_to_signed_int(v, t, "fptosi")
+                            .unwrap()
+                            .into(),
+                        (BasicValueEnum::IntValue(v), BasicTypeEnum::FloatType(t)) => self
+                            .builder
+                            .build_signed_int_to_float(v, t, "sitofp")
+                            .unwrap()
+                            .into(),
+                        (BasicValueEnum::FloatValue(v), BasicTypeEnum::FloatType(t)) => {
+                            if v.get_type() == t {
+                                v.into()
+                            } else {
+                                let src_is_f32 = v.get_type() == self.context.f32_type();
+                                let dst_is_f32 = t == self.context.f32_type();
+                                if src_is_f32 && !dst_is_f32 {
+                                    self.builder.build_float_ext(v, t, "fext").unwrap().into()
+                                } else {
+                                    self.builder
+                                        .build_float_trunc(v, t, "ftrunc")
+                                        .unwrap()
+                                        .into()
+                                }
+                            }
+                        }
+                        _ => panic!("Codegen: Unsupported cast combination"),
+                    }
+                } else {
+                    panic!("Codegen: Cast target must be a type name");
+                }
+            }
             _ => panic!("Codegen: Unimplemented expression {:?}", expr),
         }
     }
@@ -769,6 +901,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 "i16" | "u16" => Some(self.context.i16_type().into()),
                 "i32" | "u32" => Some(self.context.i32_type().into()),
                 "i64" | "u64" => Some(self.context.i64_type().into()),
+                "isize" | "usize" => Some(self.context.i64_type().into()),
                 "f32" => Some(self.context.f32_type().into()),
                 "f64" => Some(self.context.f64_type().into()),
                 "bool" => Some(self.context.bool_type().into()),
@@ -792,7 +925,22 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     }
                 }
             },
-            _ => panic!("Codegen: Complex types not implemented yet"),
+            TypeSpec::Generic { name, args } => {
+                if name == "Array" && args.len() == 2 {
+                    let elem_type = self.get_llvm_type(&args[0])?;
+                    let len = if let TypeSpec::IntLiteral(val) = args[1] {
+                        val as u32
+                    } else {
+                        panic!("Array length must be an integer type");
+                    };
+
+                    return Some(elem_type.array_type(len).into());
+                }
+                panic!("Codegen: Unknown generic type {name}");
+            }
+            TypeSpec::IntLiteral(_) => {
+                panic!("Codegen: Unexpected integer literal in type position")
+            }
         }
     }
 }
