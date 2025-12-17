@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expression, Program, Statement, TypeSpec},
+    ast::{Expression, ExpressionKind, Program, Statement, StatementKind, TypeSpec},
     errors::{Span, ZeruError},
     lexer::Lexer,
     token::Token,
@@ -143,16 +143,23 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expression_statement(&mut self) -> Option<Statement> {
+        let start_span = self.current_span;
         let expr = self.parse_expression(Precedence::Lowest)?;
+        let end_span = self.current_span;
 
         if self.peek_token_is(&Token::Semicolon) {
             self.next_token();
         }
 
-        Some(Statement::Expression(expr))
+        Some(Statement::new(
+            StatementKind::Expression(expr),
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_var_statement<const CONSTANT: bool>(&mut self) -> Option<Statement> {
+        let start_span = self.current_span;
+
         if !self.expect_peek_identifier() {
             return None;
         }
@@ -182,12 +189,16 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        Some(Statement::Var {
-            name,
-            is_const: CONSTANT,
-            value,
-            type_annotation,
-        })
+        let end_span = self.current_span;
+        Some(Statement::new(
+            StatementKind::Var {
+                name,
+                is_const: CONSTANT,
+                value,
+                type_annotation,
+            },
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_type(&mut self) -> Option<TypeSpec> {
@@ -247,6 +258,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_return_statement(&mut self) -> Option<Statement> {
+        let start_span = self.current_span;
         self.next_token();
 
         let return_value = if self.cur_token_is(&Token::Semicolon) {
@@ -259,10 +271,16 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        Some(Statement::Return(return_value))
+        let end_span = self.current_span;
+        Some(Statement::new(
+            StatementKind::Return(return_value),
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_function_statement(&mut self) -> Option<Statement> {
+        let start_span = self.current_span;
+
         if !self.expect_peek_identifier() {
             return None;
         }
@@ -289,13 +307,17 @@ impl<'a> Parser<'a> {
             return None;
         }
         let body = self.parse_block_statement();
+        let end_span = self.current_span;
 
-        Some(Statement::Function {
-            name,
-            params,
-            return_type,
-            body,
-        })
+        Some(Statement::new(
+            StatementKind::Function {
+                name,
+                params,
+                return_type,
+                body,
+            },
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_function_parameters(&mut self) -> Vec<(String, TypeSpec)> {
@@ -345,6 +367,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_if_statement(&mut self) -> Option<Statement> {
+        let start_span = self.current_span;
         self.next_token();
 
         let condition = self.parse_expression(Precedence::Lowest)?;
@@ -353,7 +376,13 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        let then_branch = Box::new(Statement::Block(self.parse_block_statement()));
+        let block_start = self.current_span;
+        let block_stmts = self.parse_block_statement();
+        let block_end = self.current_span;
+        let then_branch = Box::new(Statement::new(
+            StatementKind::Block(block_stmts),
+            block_start.merge(block_end),
+        ));
 
         let else_branch = if self.peek_token_is(&Token::Else) {
             self.next_token();
@@ -364,20 +393,31 @@ impl<'a> Parser<'a> {
                 if !self.expect_peek(&Token::LBrace) {
                     return None;
                 }
-                Some(Box::new(Statement::Block(self.parse_block_statement())))
+                let else_block_start = self.current_span;
+                let else_block_stmts = self.parse_block_statement();
+                let else_block_end = self.current_span;
+                Some(Box::new(Statement::new(
+                    StatementKind::Block(else_block_stmts),
+                    else_block_start.merge(else_block_end),
+                )))
             }
         } else {
             None
         };
 
-        Some(Statement::If {
-            condition,
-            then_branch,
-            else_branch,
-        })
+        let end_span = self.current_span;
+        Some(Statement::new(
+            StatementKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            },
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_while_statement(&mut self) -> Option<Statement> {
+        let start_span = self.current_span;
         self.next_token();
 
         let cond = self.parse_expression(Precedence::Lowest)?;
@@ -385,12 +425,24 @@ impl<'a> Parser<'a> {
         if !self.expect_peek(&Token::LBrace) {
             return None;
         }
-        let body = Box::new(Statement::Block(self.parse_block_statement()));
+        let block_start = self.current_span;
+        let block_stmts = self.parse_block_statement();
+        let block_end = self.current_span;
+        let body = Box::new(Statement::new(
+            StatementKind::Block(block_stmts),
+            block_start.merge(block_end),
+        ));
 
-        Some(Statement::While { cond, body })
+        let end_span = self.current_span;
+        Some(Statement::new(
+            StatementKind::While { cond, body },
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_for_statement(&mut self) -> Option<Statement> {
+        let start_span = self.current_span;
+
         if !self.expect_peek_identifier() {
             return None;
         }
@@ -409,16 +461,28 @@ impl<'a> Parser<'a> {
         if !self.expect_peek(&Token::LBrace) {
             return None;
         }
-        let body = Box::new(Statement::Block(self.parse_block_statement()));
+        let block_start = self.current_span;
+        let block_stmts = self.parse_block_statement();
+        let block_end = self.current_span;
+        let body = Box::new(Statement::new(
+            StatementKind::Block(block_stmts),
+            block_start.merge(block_end),
+        ));
 
-        Some(Statement::ForIn {
-            variable,
-            iterable,
-            body,
-        })
+        let end_span = self.current_span;
+        Some(Statement::new(
+            StatementKind::ForIn {
+                variable,
+                iterable,
+                body,
+            },
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_struct_statement(&mut self) -> Option<Statement> {
+        let start_span = self.current_span;
+
         if !self.expect_peek_identifier() {
             return None;
         }
@@ -518,14 +582,20 @@ impl<'a> Parser<'a> {
         if !self.expect_peek(&Token::RBrace) {
             return None;
         }
-        Some(Statement::Struct {
-            name,
-            fields,
-            methods,
-        })
+        let end_span = self.current_span;
+        Some(Statement::new(
+            StatementKind::Struct {
+                name,
+                fields,
+                methods,
+            },
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_enum_statement(&mut self) -> Option<Statement> {
+        let start_span = self.current_span;
+
         if !self.expect_peek_identifier() {
             return None;
         }
@@ -561,10 +631,14 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        Some(Statement::Enum { name, variants })
+        let end_span = self.current_span;
+        Some(Statement::new(
+            StatementKind::Enum { name, variants },
+            start_span.merge(end_span),
+        ))
     }
 
-    fn parse_struct_literal(&mut self, name: String) -> Option<Expression> {
+    fn parse_struct_literal(&mut self, name: String, start_span: Span) -> Option<Expression> {
         self.next_token();
 
         let mut fields = Vec::new();
@@ -597,14 +671,26 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        Some(Expression::StructLiteral { name, fields })
+        let end_span = self.current_span;
+        Some(Expression::new(
+            ExpressionKind::StructLiteral { name, fields },
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_block_statement_wrapper(&mut self) -> Option<Statement> {
-        Some(Statement::Block(self.parse_block_statement()))
+        let start_span = self.current_span;
+        let stmts = self.parse_block_statement();
+        let end_span = self.current_span;
+        Some(Statement::new(
+            StatementKind::Block(stmts),
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_import_statement(&mut self) -> Option<Statement> {
+        let start_span = self.current_span;
+
         if !self.expect_peek_identifier() {
             return None;
         }
@@ -662,27 +748,41 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        Some(Statement::Import { path, symbols })
+        let end_span = self.current_span;
+        Some(Statement::new(
+            StatementKind::Import { path, symbols },
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_break_statement(&mut self) -> Option<Statement> {
+        let start_span = self.current_span;
         self.next_token();
 
         if self.peek_token_is(&Token::Semicolon) {
             self.next_token();
         }
 
-        Some(Statement::Break)
+        let end_span = self.current_span;
+        Some(Statement::new(
+            StatementKind::Break,
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_continue_statement(&mut self) -> Option<Statement> {
+        let start_span = self.current_span;
         self.next_token();
 
         if self.peek_token_is(&Token::Semicolon) {
             self.next_token();
         }
 
-        Some(Statement::Continue)
+        let end_span = self.current_span;
+        Some(Statement::new(
+            StatementKind::Continue,
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_block_statement(&mut self) -> Vec<Statement> {
@@ -700,26 +800,49 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expression(&mut self, precedence: Precedence) -> Option<Expression> {
+        let start_span = self.current_span;
         let mut left_exp = match &self.current_token {
             Token::LBracket => self.parse_array_literal(),
             Token::Identifier(name) => {
+                let name_clone = name.clone();
                 let starts_with_upper = name.chars().next().is_some_and(|c| c.is_uppercase());
                 if starts_with_upper && self.peek_token_is(&Token::LBrace) {
-                    self.parse_struct_literal(name.clone())
+                    self.parse_struct_literal(name_clone, start_span)
                 } else {
-                    Some(Expression::Identifier(name.clone()))
+                    Some(Expression::new(
+                        ExpressionKind::Identifier(name_clone),
+                        self.current_span,
+                    ))
                 }
             }
-            Token::Int(val) => Some(Expression::Int(*val)),
-            Token::Float(val) => Some(Expression::Float(*val)),
-            Token::StringLit(val) => Some(Expression::StringLit(val.clone())),
-            Token::None => Some(Expression::None),
-            Token::True => Some(Expression::Boolean(true)),
-            Token::False => Some(Expression::Boolean(false)),
+            Token::Int(val) => Some(Expression::new(
+                ExpressionKind::Int(*val),
+                self.current_span,
+            )),
+            Token::Float(val) => Some(Expression::new(
+                ExpressionKind::Float(*val),
+                self.current_span,
+            )),
+            Token::StringLit(val) => Some(Expression::new(
+                ExpressionKind::StringLit(val.clone()),
+                self.current_span,
+            )),
+            Token::None => Some(Expression::new(ExpressionKind::None, self.current_span)),
+            Token::True => Some(Expression::new(
+                ExpressionKind::Boolean(true),
+                self.current_span,
+            )),
+            Token::False => Some(Expression::new(
+                ExpressionKind::Boolean(false),
+                self.current_span,
+            )),
             Token::LParen => self.parse_grouped_expression(),
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
             Token::Match => self.parse_match_expression(),
-            Token::SelfTok => Some(Expression::Identifier("self".to_string())),
+            Token::SelfTok => Some(Expression::new(
+                ExpressionKind::Identifier("self".to_string()),
+                self.current_span,
+            )),
             _ => {
                 self.error_current(
                     format!("Expected expression, found: {:?}", &self.current_token).as_str(),
@@ -755,6 +878,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_match_expression(&mut self) -> Option<Expression> {
+        let start_span = self.current_span;
         self.next_token();
         let value = self.parse_expression(Precedence::Lowest)?;
 
@@ -768,7 +892,10 @@ impl<'a> Parser<'a> {
             self.next_token();
 
             let pattern = if self.cur_token_is(&Token::Default) {
-                Expression::Identifier("default".to_string())
+                Expression::new(
+                    ExpressionKind::Identifier("default".to_string()),
+                    self.current_span,
+                )
             } else {
                 self.parse_expression(Precedence::Lowest)?
             };
@@ -790,26 +917,36 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        Some(Expression::Match {
-            value: Box::new(value),
-            arms,
-        })
+        let end_span = self.current_span;
+        Some(Expression::new(
+            ExpressionKind::Match {
+                value: Box::new(value),
+                arms,
+            },
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_prefix_expression(&mut self) -> Option<Expression> {
+        let start_span = self.current_span;
         let operator = self.current_token.clone();
 
         self.next_token();
 
         let right = self.parse_expression(Precedence::Prefix)?;
+        let end_span = self.current_span;
 
-        Some(Expression::Prefix {
-            operator,
-            right: Box::new(right),
-        })
+        Some(Expression::new(
+            ExpressionKind::Prefix {
+                operator,
+                right: Box::new(right),
+            },
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_infix_expression(&mut self, left: Expression) -> Option<Expression> {
+        let start_span = left.span;
         let operator = self.current_token.clone();
 
         if operator == Token::LBracket {
@@ -827,10 +964,14 @@ impl<'a> Parser<'a> {
             self.next_token();
 
             let target = self.parse_expression(precedence)?;
-            return Some(Expression::Cast {
-                left: Box::new(left),
-                target: Box::new(target),
-            });
+            let end_span = self.current_span;
+            return Some(Expression::new(
+                ExpressionKind::Cast {
+                    left: Box::new(left),
+                    target: Box::new(target),
+                },
+                start_span.merge(end_span),
+            ));
         }
 
         match operator {
@@ -848,11 +989,15 @@ impl<'a> Parser<'a> {
                 let precedence = token_precedence(&self.current_token);
                 self.next_token();
                 let value = self.parse_expression(precedence)?;
-                return Some(Expression::Assign {
-                    target: Box::new(left),
-                    operator,
-                    value: Box::new(value),
-                });
+                let end_span = self.current_span;
+                return Some(Expression::new(
+                    ExpressionKind::Assign {
+                        target: Box::new(left),
+                        operator,
+                        value: Box::new(value),
+                    },
+                    start_span.merge(end_span),
+                ));
             }
             _ => {}
         }
@@ -861,20 +1006,31 @@ impl<'a> Parser<'a> {
         self.next_token();
         let right = self.parse_expression(precedence);
 
-        right.map(|right_val| Expression::Infix {
-            left: Box::new(left),
-            operator,
-            right: Box::new(right_val),
+        right.map(|right_val| {
+            let end_span = right_val.span;
+            Expression::new(
+                ExpressionKind::Infix {
+                    left: Box::new(left),
+                    operator,
+                    right: Box::new(right_val),
+                },
+                start_span.merge(end_span),
+            )
         })
     }
 
     fn parse_array_literal(&mut self) -> Option<Expression> {
+        let start_span = self.current_span;
         self.next_token();
         let mut elements = Vec::new();
 
         if self.cur_token_is(&Token::RBracket) {
+            let end_span = self.current_span;
             self.next_token();
-            return Some(Expression::ArrayLiteral(elements));
+            return Some(Expression::new(
+                ExpressionKind::ArrayLiteral(elements),
+                start_span.merge(end_span),
+            ));
         }
 
         let first_elem = self.parse_expression(Precedence::Lowest)?;
@@ -898,7 +1054,11 @@ impl<'a> Parser<'a> {
             for _ in 0..count {
                 elements.push(first_elem.clone());
             }
-            return Some(Expression::ArrayLiteral(elements));
+            let end_span = self.current_span;
+            return Some(Expression::new(
+                ExpressionKind::ArrayLiteral(elements),
+                start_span.merge(end_span),
+            ));
         }
 
         let mut elements = Vec::new();
@@ -913,33 +1073,48 @@ impl<'a> Parser<'a> {
         if !self.expect_peek(&Token::RBracket) {
             return None;
         }
-        Some(Expression::ArrayLiteral(elements))
+        let end_span = self.current_span;
+        Some(Expression::new(
+            ExpressionKind::ArrayLiteral(elements),
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_index_expression(&mut self, left: Expression) -> Option<Expression> {
+        let start_span = left.span;
         self.next_token();
         let index = self.parse_expression(Precedence::Lowest)?;
 
         if !self.expect_peek(&Token::RBracket) {
             return None;
         }
-        Some(Expression::Index {
-            left: Box::new(left),
-            index: Box::new(index),
-        })
+        let end_span = self.current_span;
+        Some(Expression::new(
+            ExpressionKind::Index {
+                left: Box::new(left),
+                index: Box::new(index),
+            },
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_call_expression(&mut self, function: Expression) -> Option<Expression> {
+        let start_span = function.span;
         self.next_token();
         let arguments = self.parse_call_arguments();
+        let end_span = self.current_span;
 
-        Some(Expression::Call {
-            function: Box::new(function),
-            arguments,
-        })
+        Some(Expression::new(
+            ExpressionKind::Call {
+                function: Box::new(function),
+                arguments,
+            },
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_get_expression(&mut self, obj: Expression) -> Option<Expression> {
+        let start_span = obj.span;
         self.next_token();
 
         let name = match &self.current_token {
@@ -950,10 +1125,14 @@ impl<'a> Parser<'a> {
             }
         };
 
-        Some(Expression::Get {
-            object: Box::new(obj),
-            name,
-        })
+        let end_span = self.current_span;
+        Some(Expression::new(
+            ExpressionKind::Get {
+                object: Box::new(obj),
+                name,
+            },
+            start_span.merge(end_span),
+        ))
     }
 
     fn parse_call_arguments(&mut self) -> Vec<Expression> {
@@ -1098,7 +1277,7 @@ fn token_precedence(token: &Token) -> Precedence {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{Expression, Program, Statement, TypeSpec},
+        ast::{ExpressionKind, Program, Statement, StatementKind, TypeSpec},
         lexer::Lexer,
         parser::Parser,
         token::Token,
@@ -1124,8 +1303,8 @@ mod tests {
     }
 
     fn get_function_body(statement: &Statement) -> &Vec<Statement> {
-        match statement {
-            Statement::Function { body, .. } => body,
+        match &statement.kind {
+            StatementKind::Function { body, .. } => body,
             _ => panic!("Expected Function statement"),
         }
     }
@@ -1146,8 +1325,8 @@ mod tests {
         let program = parse_input(input);
         assert_eq!(program.statements.len(), 3);
 
-        match &program.statements[0] {
-            Statement::Var { name, is_const, .. } => {
+        match &program.statements[0].kind {
+            StatementKind::Var { name, is_const, .. } => {
                 assert_eq!(name, "X");
                 assert!(*is_const);
             }
@@ -1156,8 +1335,8 @@ mod tests {
 
         let body = get_function_body(&program.statements[2]);
         assert_eq!(body.len(), 3);
-        match &body[0] {
-            Statement::Var { name, is_const, .. } => {
+        match &body[0].kind {
+            StatementKind::Var { name, is_const, .. } => {
                 assert_eq!(name, "x");
                 assert!(!*is_const);
             }
@@ -1172,8 +1351,11 @@ mod tests {
 
         let body = get_function_body(&program.statements[0]);
         assert_eq!(body.len(), 3);
-        match &body[0] {
-            Statement::Return(Some(Expression::Int(5))) => {}
+        match &body[0].kind {
+            StatementKind::Return(Some(expr)) => match &expr.kind {
+                ExpressionKind::Int(5) => {}
+                _ => panic!("Expected return 5"),
+            },
             _ => panic!("Expected return 5"),
         }
     }
@@ -1220,26 +1402,26 @@ mod tests {
         let program = parse_input(input);
         let body = get_function_body(&program.statements[0]);
 
-        if let Statement::If {
+        if let StatementKind::If {
             condition,
             then_branch: _,
             else_branch,
-        } = &body[0]
+        } = &body[0].kind
         {
-            match condition {
-                Expression::Infix {
+            match &condition.kind {
+                ExpressionKind::Infix {
                     left,
                     operator,
                     right,
                 } => {
                     assert_eq!(format!("{:?}", operator), "Lt");
-                    match left.as_ref() {
-                        Expression::Identifier(val) => assert_eq!(val, "x"),
+                    match &left.kind {
+                        ExpressionKind::Identifier(val) => assert_eq!(val, "x"),
                         _ => panic!("Left side of condition should be identifier 'x'"),
                     }
 
-                    match right.as_ref() {
-                        Expression::Identifier(val) => assert_eq!(val, "y"),
+                    match &right.kind {
+                        ExpressionKind::Identifier(val) => assert_eq!(val, "y"),
                         _ => panic!("Right side of condition should be identifier 'y'"),
                     }
                 }
@@ -1257,17 +1439,20 @@ mod tests {
         let program = parse_input(input);
         let body = get_function_body(&program.statements[0]);
 
-        match &body[0] {
-            Statement::Expression(Expression::Call {
-                function,
-                arguments,
-            }) => {
-                match function.as_ref() {
-                    Expression::Identifier(name) => assert_eq!(name, "add"),
-                    _ => panic!("Expected identifier for function call"),
+        match &body[0].kind {
+            StatementKind::Expression(expr) => match &expr.kind {
+                ExpressionKind::Call {
+                    function,
+                    arguments,
+                } => {
+                    match &function.kind {
+                        ExpressionKind::Identifier(name) => assert_eq!(name, "add"),
+                        _ => panic!("Expected identifier for function call"),
+                    }
+                    assert_eq!(arguments.len(), 3);
                 }
-                assert_eq!(arguments.len(), 3);
-            }
+                _ => panic!("Expected Call Expression"),
+            },
             _ => panic!("Expected Call Expression"),
         }
     }
@@ -1287,29 +1472,29 @@ mod tests {
 
         assert_eq!(body.len(), 2);
 
-        match &body[1] {
-            Statement::While { cond, body } => {
-                match cond {
-                    Expression::Infix {
+        match &body[1].kind {
+            StatementKind::While { cond, body } => {
+                match &cond.kind {
+                    ExpressionKind::Infix {
                         left,
                         operator,
                         right,
                     } => {
                         assert_eq!(*operator, Token::Lt);
-                        match left.as_ref() {
-                            Expression::Identifier(name) => assert_eq!(name, "i"),
+                        match &left.kind {
+                            ExpressionKind::Identifier(name) => assert_eq!(name, "i"),
                             _ => panic!("Expected identifier 'i'"),
                         }
-                        match right.as_ref() {
-                            Expression::Int(val) => assert_eq!(*val, 60),
+                        match &right.kind {
+                            ExpressionKind::Int(val) => assert_eq!(*val, 60),
                             _ => panic!("Expected integer '60'"),
                         }
                     }
                     _ => panic!("Expected Infix expression"),
                 }
 
-                match body.as_ref() {
-                    Statement::Block(stmts) => {
+                match &body.kind {
+                    StatementKind::Block(stmts) => {
                         assert_eq!(stmts.len(), 1);
                     }
                     _ => panic!("Expected Block statement"),
@@ -1332,21 +1517,21 @@ mod tests {
 
         assert_eq!(body.len(), 1);
 
-        match &body[0] {
-            Statement::ForIn {
+        match &body[0].kind {
+            StatementKind::ForIn {
                 variable,
                 iterable,
                 body,
             } => {
                 assert_eq!(variable, "item");
 
-                match iterable {
-                    Expression::Identifier(name) => assert_eq!(name, "items"),
+                match &iterable.kind {
+                    ExpressionKind::Identifier(name) => assert_eq!(name, "items"),
                     _ => panic!("Expected identifier 'items'"),
                 }
 
-                match body.as_ref() {
-                    Statement::Block(stmts) => {
+                match &body.kind {
+                    StatementKind::Block(stmts) => {
                         assert!(!stmts.is_empty());
                     }
                     _ => panic!("Expected Block statement"),
@@ -1367,8 +1552,8 @@ mod tests {
         let program = parse_input(input);
         assert_eq!(program.statements.len(), 2);
 
-        match &program.statements[0] {
-            Statement::Struct { name, fields, .. } => {
+        match &program.statements[0].kind {
+            StatementKind::Struct { name, fields, .. } => {
                 assert_eq!(name, "Vector3");
                 assert_eq!(fields.len(), 3);
                 assert_eq!(
@@ -1380,9 +1565,9 @@ mod tests {
         }
 
         let body = get_function_body(&program.statements[1]);
-        match &body[0] {
-            Statement::Var { value, .. } => match value {
-                Expression::StructLiteral { name, fields } => {
+        match &body[0].kind {
+            StatementKind::Var { value, .. } => match &value.kind {
+                ExpressionKind::StructLiteral { name, fields } => {
                     assert_eq!(name, "Vector3");
                     assert_eq!(fields.len(), 3);
                     assert_eq!(fields[0].0, "x");
@@ -1406,39 +1591,42 @@ mod tests {
         let body = get_function_body(&program.statements[0]);
         assert_eq!(body.len(), 3);
 
-        if let Statement::Var {
-            value: Expression::ArrayLiteral(elems),
-            ..
-        } = &body[0]
-        {
-            assert_eq!(elems.len(), 3);
+        if let StatementKind::Var { value, .. } = &body[0].kind {
+            if let ExpressionKind::ArrayLiteral(elems) = &value.kind {
+                assert_eq!(elems.len(), 3);
+            } else {
+                panic!("Expected array literal");
+            }
         } else {
             panic!("Expected array literal");
         }
 
-        match &body[1] {
-            Statement::Expression(Expression::Assign {
-                target,
-                operator,
-                value,
-            }) => {
-                assert_eq!(*operator, Token::PlusEq);
-                if let Expression::Index { .. } = target.as_ref() {
-                } else {
-                    panic!("Expected Index");
+        match &body[1].kind {
+            StatementKind::Expression(expr) => match &expr.kind {
+                ExpressionKind::Assign {
+                    target,
+                    operator,
+                    value,
+                } => {
+                    assert_eq!(*operator, Token::PlusEq);
+                    if let ExpressionKind::Index { .. } = &target.kind {
+                    } else {
+                        panic!("Expected Index");
+                    }
+                    if let ExpressionKind::Infix { operator, .. } = &value.kind {
+                        assert_eq!(*operator, Token::ShiftLeft);
+                    } else {
+                        panic!("Expected Shift");
+                    }
                 }
-                if let Expression::Infix { operator, .. } = value.as_ref() {
-                    assert_eq!(*operator, Token::ShiftLeft);
-                } else {
-                    panic!("Expected Shift");
-                }
-            }
+                _ => panic!("Expected assign expression"),
+            },
             _ => panic!("Expected assign statement"),
         }
 
-        match &body[2] {
-            Statement::Var { value, .. } => {
-                if let Expression::Infix { operator, .. } = value {
+        match &body[2].kind {
+            StatementKind::Var { value, .. } => {
+                if let ExpressionKind::Infix { operator, .. } = &value.kind {
                     assert_eq!(*operator, Token::Or);
                 }
             }
@@ -1466,22 +1654,25 @@ mod tests {
         let body = get_function_body(&program.statements[0]);
         assert_eq!(body.len(), 10);
 
-        let check_assign = |index: usize, expected_op: Token| match &body[index] {
-            Statement::Expression(Expression::Assign { operator, .. }) => {
-                assert_eq!(*operator, expected_op, "Error at statement index {}", index);
-            }
+        let check_assign = |index: usize, expected_op: Token| match &body[index].kind {
+            StatementKind::Expression(expr) => match &expr.kind {
+                ExpressionKind::Assign { operator, .. } => {
+                    assert_eq!(*operator, expected_op, "Error at statement index {}", index);
+                }
+                _ => panic!("Expected assignment at index {}", index),
+            },
             _ => panic!("Expected assignment at index {}", index),
         };
 
-        if let Statement::Var { value, .. } = &body[0] {
-            if let Expression::Infix {
+        if let StatementKind::Var { value, .. } = &body[0].kind {
+            if let ExpressionKind::Infix {
                 operator,
                 left: _,
                 right,
-            } = value
+            } = &value.kind
             {
                 assert_eq!(*operator, Token::BitOr);
-                if let Expression::Infix { operator: op_r, .. } = right.as_ref() {
+                if let ExpressionKind::Infix { operator: op_r, .. } = &right.kind {
                     assert_eq!(*op_r, Token::BitXor);
                 } else {
                     panic!("Right side of | should be ^");
@@ -1491,12 +1682,10 @@ mod tests {
             }
         }
 
-        if let Statement::Var {
-            value: Expression::Infix { operator, .. },
-            ..
-        } = &body[1]
-        {
-            assert_eq!(*operator, Token::ShiftRight);
+        if let StatementKind::Var { value, .. } = &body[1].kind {
+            if let ExpressionKind::Infix { operator, .. } = &value.kind {
+                assert_eq!(*operator, Token::ShiftRight);
+            }
         }
 
         check_assign(2, Token::BitAndEq);
@@ -1522,20 +1711,20 @@ mod tests {
         let program = parse_input(input);
         let body = get_function_body(&program.statements[0]);
 
-        match &body[0] {
-            Statement::While { body, .. } => match body.as_ref() {
-                Statement::Block(stmts) => {
+        match &body[0].kind {
+            StatementKind::While { body, .. } => match &body.kind {
+                StatementKind::Block(stmts) => {
                     assert_eq!(stmts.len(), 2);
-                    if let Statement::If { then_branch, .. } = &stmts[0] {
-                        if let Statement::Block(inner_stmts) = then_branch.as_ref() {
-                            assert!(matches!(inner_stmts[0], Statement::Break));
+                    if let StatementKind::If { then_branch, .. } = &stmts[0].kind {
+                        if let StatementKind::Block(inner_stmts) = &then_branch.kind {
+                            assert!(matches!(inner_stmts[0].kind, StatementKind::Break));
                         } else {
                             panic!("Expected block in if");
                         }
                     } else {
                         panic!("Expected if");
                     }
-                    assert!(matches!(stmts[1], Statement::Continue));
+                    assert!(matches!(stmts[1].kind, StatementKind::Continue));
                 }
                 _ => panic!("Expected block body"),
             },
@@ -1553,21 +1742,21 @@ mod tests {
         let program = parse_input(input);
         assert_eq!(program.statements.len(), 3);
 
-        if let Statement::Import { path, symbols } = &program.statements[0] {
+        if let StatementKind::Import { path, symbols } = &program.statements[0].kind {
             assert_eq!(path, "std.os");
             assert!(symbols.is_empty());
         } else {
             panic!("Expected import std.os");
         }
 
-        if let Statement::Import { path, symbols } = &program.statements[1] {
+        if let StatementKind::Import { path, symbols } = &program.statements[1].kind {
             assert_eq!(path, "std.math");
             assert!(symbols.is_empty());
         } else {
             panic!("Expected import std.math");
         }
 
-        if let Statement::Import { path, symbols } = &program.statements[2] {
+        if let StatementKind::Import { path, symbols } = &program.statements[2].kind {
             assert_eq!(path, "std.collections");
             assert_eq!(symbols.len(), 2);
             assert_eq!(symbols[0], "Array");
@@ -1606,24 +1795,24 @@ mod tests {
         let program = parse_input(input);
         assert_eq!(program.statements.len(), 3);
 
-        if let Statement::Enum { name, variants } = &program.statements[0] {
+        if let StatementKind::Enum { name, variants } = &program.statements[0].kind {
             assert_eq!(name, "Color");
             assert_eq!(variants.len(), 3);
         } else {
             panic!("Expected Enum");
         }
 
-        if let Statement::Struct {
+        if let StatementKind::Struct {
             name,
             fields,
             methods,
-        } = &program.statements[1]
+        } = &program.statements[1].kind
         {
             assert_eq!(name, "Player");
             assert_eq!(fields.len(), 2);
             assert_eq!(methods.len(), 2);
 
-            if let Statement::Function { name, params, .. } = &methods[1] {
+            if let StatementKind::Function { name, params, .. } = &methods[1].kind {
                 assert_eq!(name, "take_damage");
                 assert_eq!(params[0].0, "self");
             } else {
@@ -1635,10 +1824,10 @@ mod tests {
 
         let body = get_function_body(&program.statements[2]);
 
-        if let Statement::Var { value, .. } = &body[0] {
-            if let Expression::Match { value: _, arms } = value {
+        if let StatementKind::Var { value, .. } = &body[0].kind {
+            if let ExpressionKind::Match { value: _, arms } = &value.kind {
                 assert_eq!(arms.len(), 3);
-                if let Expression::Identifier(p) = &arms[2].0 {
+                if let ExpressionKind::Identifier(p) = &arms[2].0.kind {
                     assert_eq!(p, "default");
                 } else {
                     panic!("Expected default pattern");
@@ -1666,8 +1855,8 @@ mod tests {
         let body = get_function_body(&program.statements[0]);
         assert_eq!(body.len(), 2);
 
-        match &body[0] {
-            Statement::Var {
+        match &body[0].kind {
+            StatementKind::Var {
                 type_annotation, ..
             } => {
                 let expected = TypeSpec::Generic {
@@ -1679,12 +1868,12 @@ mod tests {
             _ => panic!("Expected Var b"),
         }
 
-        match &body[1] {
-            Statement::Var { value, .. } => {
-                if let Expression::ArrayLiteral(elements) = value {
+        match &body[1].kind {
+            StatementKind::Var { value, .. } => {
+                if let ExpressionKind::ArrayLiteral(elements) = &value.kind {
                     assert_eq!(elements.len(), 3);
                     for expr in elements {
-                        if let Expression::Int(val) = expr {
+                        if let ExpressionKind::Int(val) = &expr.kind {
                             assert_eq!(*val, 0);
                         } else {
                             panic!("Expected Int(0)");
@@ -1704,8 +1893,8 @@ mod tests {
         let program = parse_input(input);
         let body = get_function_body(&program.statements[0]);
 
-        match &body[0] {
-            Statement::Var {
+        match &body[0].kind {
+            StatementKind::Var {
                 type_annotation, ..
             } => {
                 let expected = TypeSpec::Generic {

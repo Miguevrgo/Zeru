@@ -11,7 +11,7 @@ use inkwell::{
 };
 
 use crate::{
-    ast::{Expression, Program, Statement, TypeSpec},
+    ast::{Expression, ExpressionKind, Program, Statement, StatementKind, TypeSpec},
     token::Token,
 };
 
@@ -48,7 +48,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub fn compile_program(&mut self, program: &Program) {
         for stmt in &program.statements {
-            if let Statement::Struct { name, .. } = stmt {
+            if let StatementKind::Struct { name, .. } = &stmt.kind {
                 let struct_type = self.context.opaque_struct_type(name);
                 self.struct_defs
                     .insert(name.clone(), (struct_type, HashMap::new()));
@@ -56,7 +56,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
 
         for stmt in &program.statements {
-            if let Statement::Struct { name, fields, .. } = stmt {
+            if let StatementKind::Struct { name, fields, .. } = &stmt.kind {
                 self.current_struct_context = Some(name.clone());
                 self.compile_struct_body(name, fields);
                 self.current_struct_context = None;
@@ -64,29 +64,29 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
 
         for stmt in &program.statements {
-            if let Statement::Function {
+            if let StatementKind::Function {
                 name,
                 params,
                 return_type,
                 ..
-            } = stmt
+            } = &stmt.kind
             {
                 self.compile_fn_prototype(name, params, return_type);
             }
-            if let Statement::Struct {
+            if let StatementKind::Struct {
                 name: struct_name,
                 methods,
                 ..
-            } = stmt
+            } = &stmt.kind
             {
                 self.current_struct_context = Some(struct_name.clone());
                 for method in methods {
-                    if let Statement::Function {
+                    if let StatementKind::Function {
                         name: method_name,
                         params,
                         return_type,
                         ..
-                    } = method
+                    } = &method.kind
                     {
                         let mangled_name = format!("{}::{}", struct_name, method_name);
                         self.compile_fn_prototype(&mangled_name, params, return_type);
@@ -97,27 +97,27 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
 
         for stmt in &program.statements {
-            if let Statement::Function {
+            if let StatementKind::Function {
                 name, params, body, ..
-            } = stmt
+            } = &stmt.kind
             {
                 self.compile_fn_body(name, params, body);
             }
 
-            if let Statement::Struct {
+            if let StatementKind::Struct {
                 name: struct_name,
                 methods,
                 ..
-            } = stmt
+            } = &stmt.kind
             {
                 self.current_struct_context = Some(struct_name.clone());
                 for method in methods {
-                    if let Statement::Function {
+                    if let StatementKind::Function {
                         name: method_name,
                         params,
                         body,
                         ..
-                    } = method
+                    } = &method.kind
                     {
                         let mangled_name = format!("{}::{}", struct_name, method_name);
                         self.compile_fn_body(&mangled_name, params, body);
@@ -262,8 +262,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn compile_statement(&mut self, stmt: &Statement) {
-        match stmt {
-            Statement::Var {
+        match &stmt.kind {
+            StatementKind::Var {
                 name,
                 value,
                 type_annotation,
@@ -296,7 +296,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.variables
                     .insert(name.clone(), (alloca, final_type, is_unsigned));
             }
-            Statement::Return(opt_expr) => {
+            StatementKind::Return(opt_expr) => {
                 if let Some(expr) = opt_expr {
                     let ret_hint = self.current_fn.and_then(|f| f.get_type().get_return_type());
                     let val = self.compile_expression(expr, ret_hint);
@@ -305,15 +305,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     self.builder.build_return(None).unwrap();
                 }
             }
-            Statement::Expression(expr) => {
+            StatementKind::Expression(expr) => {
                 self.compile_expression(expr, None);
             }
-            Statement::Block(stmts) => {
+            StatementKind::Block(stmts) => {
                 for statement in stmts {
                     self.compile_statement(statement);
                 }
             }
-            Statement::If {
+            StatementKind::If {
                 condition,
                 then_branch,
                 else_branch,
@@ -359,7 +359,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder.position_at_end(merge_bb);
             }
 
-            Statement::While { cond, body } => {
+            StatementKind::While { cond, body } => {
                 let parent_fn = self.current_fn.unwrap();
 
                 let loop_cond_bb = self.context.append_basic_block(parent_fn, "loop_cond");
@@ -397,21 +397,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 self.builder.position_at_end(after_loop_bb);
             }
-            Statement::Break => {
+            StatementKind::Break => {
                 if let Some(loop_ctx) = self.loop_stack.last() {
                     self.builder
                         .build_unconditional_branch(loop_ctx.break_block)
                         .unwrap();
                 }
             }
-            Statement::Continue => {
+            StatementKind::Continue => {
                 if let Some(loop_ctx) = self.loop_stack.last() {
                     self.builder
                         .build_unconditional_branch(loop_ctx.continue_block)
                         .unwrap();
                 }
             }
-            _ => println!("Codegen: Unimplemented statement: {stmt:?}"),
+            _ => println!("Codegen: Unimplemented statement: {:?}", stmt.kind),
         }
     }
 
@@ -419,11 +419,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         &mut self,
         expr: &Expression,
     ) -> Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)> {
-        match expr {
-            Expression::Identifier(name) => {
+        match &expr.kind {
+            ExpressionKind::Identifier(name) => {
                 self.variables.get(name).map(|(ptr, ty, _)| (*ptr, *ty))
             }
-            Expression::Get { object, name } => {
+            ExpressionKind::Get { object, name } => {
                 let (ptr, val_type) = self.compile_lvalue(object)?;
 
                 if let BasicTypeEnum::StructType(struct_ty) = val_type {
@@ -448,7 +448,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 None
             }
 
-            Expression::Index { left, index } => {
+            ExpressionKind::Index { left, index } => {
                 let (ptr, array_type) = self.compile_lvalue(left)?;
 
                 if let BasicTypeEnum::ArrayType(array_ty) = array_type {
@@ -478,8 +478,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         expr: &Expression,
         expected_type: Option<BasicTypeEnum<'ctx>>,
     ) -> BasicValueEnum<'ctx> {
-        match expr {
-            Expression::Int(val) => {
+        match &expr.kind {
+            ExpressionKind::Int(val) => {
                 let int_type = match expected_type {
                     Some(BasicTypeEnum::IntType(t)) => t,
                     _ => self.context.i32_type(),
@@ -487,7 +487,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 int_type.const_int(*val as u64, false).into()
             }
-            Expression::Float(val) => {
+            ExpressionKind::Float(val) => {
                 let float_type = match expected_type {
                     Some(BasicTypeEnum::FloatType(t)) => t,
                     _ => self.context.f32_type(),
@@ -495,12 +495,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 float_type.const_float(*val).into()
             }
-            Expression::Identifier(_) | Expression::Get { .. } | Expression::Index { .. } => {
+            ExpressionKind::Identifier(_)
+            | ExpressionKind::Get { .. }
+            | ExpressionKind::Index { .. } => {
                 if let Some((ptr, ty)) = self.compile_lvalue(expr) {
                     return self.builder.build_load(ty, ptr, "loadtmp").unwrap();
                 }
 
-                if let Expression::Get { object, name } = expr {
+                if let ExpressionKind::Get { object, name } = &expr.kind {
                     let obj_val = self.compile_expression(object, None);
                     if let BasicValueEnum::StructValue(struct_val) = obj_val {
                         let struct_ty = struct_val.get_type();
@@ -523,7 +525,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 panic!("Codegen: Failed to load identifier/field {:?}", expr);
             }
-            Expression::StructLiteral { name, fields } => {
+            ExpressionKind::StructLiteral { name, fields } => {
                 let (struct_ty, field_tasks) =
                     if let Some((st, indices)) = self.struct_defs.get(name) {
                         let st = *st;
@@ -552,7 +554,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
                 struct_val.into()
             }
-            Expression::ArrayLiteral(elements) => {
+            ExpressionKind::ArrayLiteral(elements) => {
                 if elements.is_empty() {
                     if let Some(BasicTypeEnum::ArrayType(arr_ty)) = expected_type {
                         return arr_ty.get_undef().into();
@@ -579,7 +581,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
                 array_val.into()
             }
-            Expression::Assign {
+            ExpressionKind::Assign {
                 target,
                 operator,
                 value,
@@ -600,14 +602,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder.build_store(ptr, final_val).unwrap();
                 final_val
             }
-            Expression::Call {
+            ExpressionKind::Call {
                 function,
                 arguments,
             } => {
-                let (fn_val, implicit_args) = if let Expression::Get {
+                let (fn_val, implicit_args) = if let ExpressionKind::Get {
                     object,
                     name: method_name,
-                } = &**function
+                } = &function.kind
                 {
                     let obj_val = self.compile_expression(object, None);
                     let struct_name = match obj_val.get_type() {
@@ -623,7 +625,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .expect("Method not found");
                     let args: Vec<BasicMetadataValueEnum> = vec![obj_val.into()];
                     (func, args)
-                } else if let Expression::Identifier(name) = &**function {
+                } else if let ExpressionKind::Identifier(name) = &function.kind {
                     let func = self.module.get_function(name).expect("Function not found");
                     (func, Vec::new())
                 } else {
@@ -647,7 +649,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     }
                 }
             }
-            Expression::Infix {
+            ExpressionKind::Infix {
                 left,
                 operator,
                 right,
@@ -806,16 +808,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     _ => panic!("Type mismatch in binary operation"),
                 }
             }
-            Expression::Boolean(val) => self
+            ExpressionKind::Boolean(val) => self
                 .context
                 .bool_type()
                 .const_int(*val as u64, false)
                 .into(),
-            Expression::StringLit(s) => {
+            ExpressionKind::StringLit(s) => {
                 let string_val = self.builder.build_global_string_ptr(s, "str").unwrap();
                 string_val.as_pointer_value().into()
             }
-            Expression::Prefix { operator, right } => {
+            ExpressionKind::Prefix { operator, right } => {
                 let operand = self.compile_expression(right, expected_type);
                 match operator {
                     Token::Minus => match operand {
@@ -837,10 +839,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     _ => panic!("Codegen: Unimplemented prefix operator: {operator:?}"),
                 }
             }
-            Expression::Cast { left, target } => {
+            ExpressionKind::Cast { left, target } => {
                 let src_val = self.compile_expression(left, None);
 
-                if let Expression::Identifier(type_name) = &**target {
+                if let ExpressionKind::Identifier(type_name) = &target.kind {
                     let target_type = self
                         .get_llvm_type(&TypeSpec::Named(type_name.clone()))
                         .expect("Cast to void not allowed");
@@ -895,13 +897,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     panic!("Codegen: Cast target must be a type name");
                 }
             }
-            _ => panic!("Codegen: Unimplemented expression {:?}", expr),
+            _ => panic!("Codegen: Unimplemented expression {:?}", expr.kind),
         }
     }
 
     fn is_signed_integer(&self, expr: &Expression) -> Option<bool> {
-        match expr {
-            Expression::Identifier(name) => {
+        match &expr.kind {
+            ExpressionKind::Identifier(name) => {
                 if let Some((_, _, is_unsigned)) = self.variables.get(name) {
                     Some(!is_unsigned)
                 } else {

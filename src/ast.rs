@@ -1,3 +1,4 @@
+use crate::errors::Span;
 use crate::token::Token;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -13,7 +14,13 @@ pub struct Program {
 }
 
 #[derive(Debug)]
-pub enum Statement {
+pub struct Statement {
+    pub kind: StatementKind,
+    pub span: Span,
+}
+
+#[derive(Debug)]
+pub enum StatementKind {
     Var {
         name: String,
         is_const: bool,
@@ -63,7 +70,13 @@ pub enum Statement {
 }
 
 #[derive(Debug, Clone)]
-pub enum Expression {
+pub struct Expression {
+    pub kind: ExpressionKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub enum ExpressionKind {
     Int(i64),
     Float(f64),
     StringLit(String),
@@ -115,4 +128,16 @@ pub enum Expression {
         value: Box<Expression>,
         arms: Vec<(Expression, Expression)>,
     },
+}
+
+impl Statement {
+    pub fn new(kind: StatementKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+}
+
+impl Expression {
+    pub fn new(kind: ExpressionKind, span: Span) -> Self {
+        Self { kind, span }
+    }
 }
