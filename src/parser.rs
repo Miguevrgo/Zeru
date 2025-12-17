@@ -16,6 +16,7 @@ pub struct Parser<'a> {
     peek_line: usize,
 
     pub errors: Vec<ZeruError>,
+    panic_mode: bool,
 }
 
 impl<'a> Parser<'a> {
@@ -29,6 +30,7 @@ impl<'a> Parser<'a> {
             peek_span: Span::default(),
             peek_line: 0,
             errors: Vec::new(),
+            panic_mode: false,
         };
 
         p.next_token();
@@ -47,10 +49,38 @@ impl<'a> Parser<'a> {
         self.peek_span = span;
     }
 
+    fn synchronize(&mut self) {
+        self.panic_mode = false;
+
+        while self.current_token != Token::Eof {
+            if self.current_token == Token::Semicolon {
+                self.next_token();
+                return;
+            }
+        }
+
+        match self.peek_token {
+            Token::Var
+            | Token::Fn
+            | Token::Const
+            | Token::Struct
+            | Token::Enum
+            | Token::If
+            | Token::While
+            | Token::For
+            | Token::Return
+            | Token::RBrace => return,
+            _ => {}
+        }
+
+        self.next_token();
+    }
+
     pub fn parse_program(&mut self) -> Program {
         let mut statements = Vec::new();
 
         while self.current_token != Token::Eof {
+            self.panic_mode = false;
             let stmt = match self.current_token {
                 Token::Const => self.parse_var_statement::<true>(),
                 Token::Fn => self.parse_function_statement(),
@@ -63,16 +93,20 @@ impl<'a> Parser<'a> {
                 }
                 Token::Var => {
                     self.error_current("Global variables ('var') are not allowed. Use 'const' for constants or move 'var' inside a function.");
-                    self.parse_var_statement::<false>()
+                    self.synchronize();
+                    None
                 }
                 _ => {
                     self.error_current(format!("Unexpected token {:?} at top level. Expected fn, struct, enum, const or import.", self.current_token).as_str());
-                    self.parse_var_statement::<false>()
+                    self.synchronize();
+                    None
                 }
             };
 
             if let Some(statement) = stmt {
                 statements.push(statement);
+            } else if self.panic_mode {
+                self.synchronize();
             }
 
             if self.peek_token_is(&Token::Eof) {
@@ -88,6 +122,8 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_statement(&mut self) -> Option<Statement> {
+        self.panic_mode = false;
+
         match self.current_token {
             Token::Var => self.parse_var_statement::<false>(),
             Token::Const => self.parse_var_statement::<true>(),
@@ -423,24 +459,59 @@ impl<'a> Parser<'a> {
                 Token::Identifier(n) => n.clone(),
                 _ => {
                     self.error_current("Expected field name");
-                    return None;
+                    while !self.peek_token_is(&Token::Comma)
+                        && !self.peek_token_is(&Token::RBrace)
+                        && !self.peek_token_is(&Token::Eof)
+                    {
+                        self.next_token();
+                    }
+                    if self.peek_token_is(&Token::Comma) {
+                        self.next_token();
+                    }
+                    continue;
                 }
             };
 
             if !self.expect_peek(&Token::Colon) {
-                return None;
+                while !self.peek_token_is(&Token::Comma)
+                    && !self.peek_token_is(&Token::RBrace)
+                    && !self.peek_token_is(&Token::Eof)
+                {
+                    self.next_token();
+                }
+                if self.peek_token_is(&Token::Comma) {
+                    self.next_token();
+                }
+                continue;
             }
             self.next_token();
 
-            let field_type = self.parse_type()?;
+            let field_type = match self.parse_type() {
+                Some(t) => t,
+                None => {
+                    while !self.peek_token_is(&Token::Comma)
+                        && !self.peek_token_is(&Token::RBrace)
+                        && !self.peek_token_is(&Token::Eof)
+                    {
+                        self.next_token();
+                    }
+                    if self.peek_token_is(&Token::Comma) {
+                        self.next_token();
+                    }
+                    continue;
+                }
+            };
             fields.push((field_name, field_type));
 
             if self.peek_token_is(&Token::RBrace) {
                 break;
             }
 
-            if !self.expect_peek(&Token::Comma) {
-                return None;
+            if !self.peek_token_is(&Token::Comma) {
+                self.error_peek("Comma");
+                self.panic_mode = false;
+            } else {
+                self.next_token();
             }
         }
 
@@ -944,6 +1015,10 @@ impl<'a> Parser<'a> {
     }
 
     fn error_peek(&mut self, expected: &str) {
+        if self.panic_mode {
+            return;
+        }
+        self.panic_mode = true;
         self.errors.push(ZeruError::syntax(
             format!("{expected} expected, found: {:?}", self.peek_token),
             self.current_span,
@@ -952,6 +1027,10 @@ impl<'a> Parser<'a> {
     }
 
     fn error_current(&mut self, msg: &str) {
+        if self.panic_mode {
+            return;
+        }
+        self.panic_mode = true;
         self.errors.push(ZeruError::syntax(
             msg.to_string(),
             self.current_span,
