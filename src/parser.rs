@@ -1146,12 +1146,12 @@ mod tests {
                     right,
                 } => {
                     assert_eq!(format!("{:?}", operator), "Lt");
-                    match &**left {
+                    match left.as_ref() {
                         Expression::Identifier(val) => assert_eq!(val, "x"),
                         _ => panic!("Left side of condition should be identifier 'x'"),
                     }
 
-                    match &**right {
+                    match right.as_ref() {
                         Expression::Identifier(val) => assert_eq!(val, "y"),
                         _ => panic!("Right side of condition should be identifier 'y'"),
                     }
@@ -1175,7 +1175,7 @@ mod tests {
                 function,
                 arguments,
             }) => {
-                match &**function {
+                match function.as_ref() {
                     Expression::Identifier(name) => assert_eq!(name, "add"),
                     _ => panic!("Expected identifier for function call"),
                 }
@@ -1209,11 +1209,11 @@ mod tests {
                         right,
                     } => {
                         assert_eq!(*operator, Token::Lt);
-                        match &**left {
+                        match left.as_ref() {
                             Expression::Identifier(name) => assert_eq!(name, "i"),
                             _ => panic!("Expected identifier 'i'"),
                         }
-                        match &**right {
+                        match right.as_ref() {
                             Expression::Int(val) => assert_eq!(*val, 60),
                             _ => panic!("Expected integer '60'"),
                         }
@@ -1221,7 +1221,7 @@ mod tests {
                     _ => panic!("Expected Infix expression"),
                 }
 
-                match &**body {
+                match body.as_ref() {
                     Statement::Block(stmts) => {
                         assert_eq!(stmts.len(), 1);
                     }
@@ -1258,7 +1258,7 @@ mod tests {
                     _ => panic!("Expected identifier 'items'"),
                 }
 
-                match &**body {
+                match body.as_ref() {
                     Statement::Block(stmts) => {
                         assert!(!stmts.is_empty());
                     }
@@ -1336,11 +1336,11 @@ mod tests {
                 value,
             }) => {
                 assert_eq!(*operator, Token::PlusEq);
-                if let Expression::Index { .. } = &**target {
+                if let Expression::Index { .. } = target.as_ref() {
                 } else {
                     panic!("Expected Index");
                 }
-                if let Expression::Infix { operator, .. } = &**value {
+                if let Expression::Infix { operator, .. } = value.as_ref() {
                     assert_eq!(*operator, Token::ShiftLeft);
                 } else {
                     panic!("Expected Shift");
@@ -1394,7 +1394,7 @@ mod tests {
             } = value
             {
                 assert_eq!(*operator, Token::BitOr);
-                if let Expression::Infix { operator: op_r, .. } = &**right {
+                if let Expression::Infix { operator: op_r, .. } = right.as_ref() {
                     assert_eq!(*op_r, Token::BitXor);
                 } else {
                     panic!("Right side of | should be ^");
@@ -1436,11 +1436,11 @@ mod tests {
         let body = get_function_body(&program.statements[0]);
 
         match &body[0] {
-            Statement::While { body, .. } => match &**body {
+            Statement::While { body, .. } => match body.as_ref() {
                 Statement::Block(stmts) => {
                     assert_eq!(stmts.len(), 2);
                     if let Statement::If { then_branch, .. } = &stmts[0] {
-                        if let Statement::Block(inner_stmts) = &**then_branch {
+                        if let Statement::Block(inner_stmts) = then_branch.as_ref() {
                             assert!(matches!(inner_stmts[0], Statement::Break));
                         } else {
                             panic!("Expected block in if");

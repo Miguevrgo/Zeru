@@ -633,7 +633,7 @@ impl SemanticAnalyzer {
                 operator: _,
                 value,
             } => {
-                let target_type = if let Expression::Identifier(name) = &**target {
+                let target_type = if let Expression::Identifier(name) = target.as_ref() {
                     if let Some(super::symbol_table::Symbol::Var { is_const, ty }) =
                         self.symbols.lookup(name).cloned()
                     {
@@ -670,7 +670,7 @@ impl SemanticAnalyzer {
             } => {
                 if *operator == crate::token::Token::DoubleColon
                     && let (Expression::Identifier(enum_name), Expression::Identifier(variant_name)) =
-                        (&**left, &**right)
+                        (left.as_ref(), right.as_ref())
                 {
                     if let Some(Type::Enum { variants, .. }) = self.enum_defs.get(enum_name) {
                         if variants.contains(variant_name) {
@@ -716,21 +716,21 @@ impl SemanticAnalyzer {
                 function,
                 arguments,
             } => {
-                if let Expression::Identifier(name) = &**function {
+                if let Expression::Identifier(name) = function.as_ref() {
                     return self.check_call(name, arguments, None);
                 }
 
                 if let Expression::Get {
                     object,
                     name: method_name,
-                } = &**function
+                } = function.as_ref()
                 {
                     let obj_type = self.check_expression(object, None);
 
                     let struct_name = match &obj_type {
                         Type::Struct { name, .. } => name.clone(),
                         Type::Pointer { elem_type, .. } => {
-                            if let Type::Struct { name, .. } = &**elem_type {
+                            if let Type::Struct { name, .. } = elem_type.as_ref() {
                                 name.clone()
                             } else {
                                 "".into()
@@ -856,7 +856,7 @@ impl SemanticAnalyzer {
             }
             Expression::Prefix { operator, right } => match operator {
                 crate::token::Token::Minus => {
-                    if let Expression::Int(val) = &**right
+                    if let Expression::Int(val) = right.as_ref()
                         && let Some(Type::Integer { width, signed }) = expected_type
                     {
                         let negated = -val;
@@ -905,7 +905,7 @@ impl SemanticAnalyzer {
             Expression::Cast { left, target } => {
                 let _source_type = self.check_expression(left, None);
 
-                if let Expression::Identifier(type_name) = &**target {
+                if let Expression::Identifier(type_name) = target.as_ref() {
                     self.resolve_named_type(type_name)
                 } else {
                     Type::Unknown
@@ -949,7 +949,7 @@ impl SemanticAnalyzer {
                 }
 
                 let elem_hint = if let Some(Type::Array { elem_type, .. }) = expected_type {
-                    Some(&**elem_type)
+                    Some(elem_type.as_ref())
                 } else {
                     None
                 };
