@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use inkwell::{
     FloatPredicate, IntPredicate,
+    basic_block::BasicBlock,
     builder::Builder,
     context::Context,
     module::Module,
@@ -24,6 +25,7 @@ pub struct Compiler<'a, 'ctx> {
     current_fn: Option<FunctionValue<'ctx>>,
 
     current_struct_context: Option<String>,
+    loop_stack: Vec<LoopContext<'ctx>>,
 }
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
@@ -40,6 +42,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             struct_defs: HashMap::new(),
             current_fn: None,
             current_struct_context: None,
+            loop_stack: Vec::new(),
         }
     }
 
@@ -336,14 +339,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 self.builder.position_at_end(then_bb);
                 self.compile_statement(then_branch);
-                if then_bb.get_terminator().is_none() {
+                let then_end_bb = self.builder.get_insert_block().unwrap();
+                if then_end_bb.get_terminator().is_none() {
                     self.builder.build_unconditional_branch(merge_bb).unwrap();
                 }
 
                 if let Some(else_stmt) = else_branch {
                     self.builder.position_at_end(else_bb);
                     self.compile_statement(else_stmt);
-                    if else_bb.get_terminator().is_none() {
+                    let else_end_bb = self.builder.get_insert_block().unwrap();
+                    if else_end_bb.get_terminator().is_none() {
                         self.builder.build_unconditional_branch(merge_bb).unwrap();
                     }
                 } else {
@@ -373,16 +378,38 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .build_conditional_branch(cond_bool, loop_body_bb, after_loop_bb)
                     .unwrap();
 
+                self.loop_stack.push(LoopContext {
+                    continue_block: loop_cond_bb,
+                    break_block: after_loop_bb,
+                });
+
                 self.builder.position_at_end(loop_body_bb);
                 self.compile_statement(body);
 
-                if loop_body_bb.get_terminator().is_none() {
+                self.loop_stack.pop();
+
+                let current_bb = self.builder.get_insert_block().unwrap();
+                if current_bb.get_terminator().is_none() {
                     self.builder
                         .build_unconditional_branch(loop_cond_bb)
                         .unwrap();
                 }
 
                 self.builder.position_at_end(after_loop_bb);
+            }
+            Statement::Break => {
+                if let Some(loop_ctx) = self.loop_stack.last() {
+                    self.builder
+                        .build_unconditional_branch(loop_ctx.break_block)
+                        .unwrap();
+                }
+            }
+            Statement::Continue => {
+                if let Some(loop_ctx) = self.loop_stack.last() {
+                    self.builder
+                        .build_unconditional_branch(loop_ctx.continue_block)
+                        .unwrap();
+                }
             }
             _ => println!("Codegen: Unimplemented statement: {stmt:?}"),
         }
@@ -1023,4 +1050,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
         }
     }
+}
+
+struct LoopContext<'ctx> {
+    continue_block: BasicBlock<'ctx>,
+    break_block: BasicBlock<'ctx>,
 }

@@ -55,6 +55,8 @@ pub enum Statement {
         else_branch: Option<Box<Statement>>,
     },
     Import {
+        #[allow(dead_code)]
+        // TODO: Version 1.0.0 module system
         path: String,
         symbols: Vec<String>,
     },

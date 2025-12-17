@@ -17,10 +17,10 @@ Goal: A robust compiler supporting arithmetic, control flow, and complex data ty
 - [x] Refactor: Split expression compilation into L-Values (pointers) vs R-Values (values) to support complex assignments.
 - [x] GitHub Actions
 - [x] Aggregate Types: Implement Structs and Arrays.
-- [ ] Test Suite Integration: Expand the test suite script to traverse tests/, compile .zr files, execute binaries, and verify exit codes.
+- [x] Test Suite Integration: Expand the test suite.
 - [x] Negative Tests: Ensure valid errors are thrown for invalid syntax or types (e.g., assigning string to int).
-- [ ] Benchmark: Measure compilation time vs. LOC (Lines of Code).
-- [ ] Code Cleanup: Run cargo clippy, remove dead code, and ensure 0 compiler warnings.
+- [x] Benchmark: Measure compilation time vs. LOC (Lines of Code).
+- [x] Code Cleanup: Run cargo clippy, remove dead code, and ensure 0 compiler warnings.
 
 ## Version 0.2.0: "The System Language"
 

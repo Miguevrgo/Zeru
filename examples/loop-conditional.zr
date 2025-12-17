@@ -12,5 +12,14 @@ fn main() {
     } else {
         x = 0;
     }
+
+    while x < 150 {
+        x += 1;
+        if x == 120 {
+            continue;
+        } else if x == 123 {
+            break;
+        }
+    }
 }
 

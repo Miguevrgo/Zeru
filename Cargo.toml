@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Miguel Angel <miguevrgo@proton.me>"]
 description = "The Zeru Programming language Compiler"
+repository = "https://github.com/Miguevrgo/Zeru"
+license = "MIT"
+keywords = ["compiler", "programming-language", "llvm"]
+categories = ["compilers", "development-tools"]
 
 [dependencies]
 clap = { version = "4.5.53", features = ["derive"] }
