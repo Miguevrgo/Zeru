@@ -13,10 +13,9 @@ jobs:
   build_and_test:
     name: Build & Test (LLVM 21)
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install LLVM 21
         run: |
@@ -28,15 +27,12 @@ jobs:
       - name: Set LLVM_SYS_210_PREFIX
         run: echo "LLVM_SYS_210_PREFIX=/usr/lib/llvm-21" >> $GITHUB_ENV
 
-      - name: Verify LLVM Version
-        run: /usr/lib/llvm-21/bin/llvm-config --version
-
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
-      - name: Cache Cargo Registry & Index
+      - name: Cache Cargo Registry
         uses: Swatinem/rust-cache@v2
 
       - name: Check Formatting
@@ -45,8 +41,5 @@ jobs:
       - name: Lint with Clippy
         run: cargo clippy -- -D warnings
 
-      - name: Build (Release)
-        run: cargo build --release --verbose
-
       - name: Run Unit Tests
-        run: cargo test --verbose
+        run: cargo test --release --verbose

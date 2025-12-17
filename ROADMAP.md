@@ -71,14 +71,6 @@ Goal: Introduce high-level abstractions with zero runtime cost, moving closer to
 
 Goal: A safe, fast language with a complete developer ecosystem.
 
-##### Advanced Safety
-
-- [ ] Borrow Checker (Lite): Static analysis to prevent dangling pointers and double-frees (simpler than Rust, focused on basic ownership).
-
-##### Performance
-
-- [ ] Optimizations: Enable LLVM optimization passes (-O2, -O3) via CLI flags (zeru build --release).
-
 ##### Ecosytem
 
 - [ ] Module System: robust import system for external libraries and multi-file projects.
