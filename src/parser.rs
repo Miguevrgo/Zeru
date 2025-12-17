@@ -132,8 +132,8 @@ impl<'a> Parser<'a> {
         self.next_token();
         let value = self.parse_expression(Precedence::Lowest)?;
 
-        if self.peek_token_is(&Token::Semicolon) {
-            self.next_token();
+        if !self.expect_peek(&Token::Semicolon) {
+            return None;
         }
 
         Some(Statement::Var {
@@ -881,7 +881,6 @@ impl<'a> Parser<'a> {
 
         // Empty call: ()
         if self.cur_token_is(&Token::RParen) {
-            self.next_token();
             return args;
         }
 
@@ -900,7 +899,6 @@ impl<'a> Parser<'a> {
         if !self.expect_peek(&Token::RParen) {
             return Vec::new();
         }
-        self.next_token();
 
         args
     }
