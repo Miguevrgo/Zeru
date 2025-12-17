@@ -1,10 +1,12 @@
 use std::{iter::Peekable, str::Chars};
 
+use crate::errors::Span;
 use crate::token::Token;
 
 pub struct Lexer<'a> {
     input: Peekable<Chars<'a>>,
     line: usize,
+    pos: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -12,6 +14,7 @@ impl<'a> Lexer<'a> {
         Self {
             input: input.chars().peekable(),
             line: 1,
+            pos: 0,
         }
     }
 
@@ -21,8 +24,11 @@ impl<'a> Lexer<'a> {
 
     fn advance(&mut self) -> Option<char> {
         let ch = self.input.next();
-        if let Some('\n') = ch {
-            self.line += 1;
+        if let Some(c) = ch {
+            self.pos += c.len_utf8();
+            if c == '\n' {
+                self.line += 1;
+            }
         }
         ch
     }
@@ -74,14 +80,15 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn next_token(&mut self) -> (Token, usize) {
+    pub fn next_token(&mut self) -> (Token, usize, Span) {
         self.skip_whitespace();
 
         let start_line = self.line;
+        let start_pos = self.pos;
 
         let ch = match self.advance() {
             Some(c) => c,
-            None => return (Token::Eof, start_line),
+            None => return (Token::Eof, start_line, Span::new(start_pos, self.pos)),
         };
 
         let token = match ch {
@@ -231,7 +238,7 @@ impl<'a> Lexer<'a> {
 
             _ => Token::Illegal(ch.to_string()),
         };
-        (token, start_line)
+        (token, start_line, Span::new(start_pos, self.pos))
     }
 
     fn read_identifier(&mut self, ch: char) -> Token {

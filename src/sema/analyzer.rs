@@ -1,5 +1,6 @@
 use crate::{
     ast::{Expression, Program, Statement, TypeSpec},
+    errors::{Span, ZeruError},
     sema::{
         symbol_table::SymbolTable,
         types::{FloatWidth, IntWidth, Signedness, Type},
@@ -8,7 +9,7 @@ use crate::{
 use std::collections::HashMap;
 
 pub struct SemanticAnalyzer {
-    pub errors: Vec<String>,
+    pub errors: Vec<ZeruError>,
 
     symbols: SymbolTable,
     struct_defs: HashMap<String, Type>,
@@ -1018,7 +1019,10 @@ impl SemanticAnalyzer {
     }
 
     fn error(&mut self, msg: String) {
-        self.errors.push(format!("Semantic Error: {}", msg));
+        // TODO: For now, semantic errors use a default span since AST doesn't have span info yet.
+        // add spans to AST nodes.
+        self.errors
+            .push(ZeruError::semantic(msg, Span::default(), 0));
     }
 
     fn fits_in_int(&self, val: i64, width: IntWidth, signed: Signedness) -> bool {

@@ -10,14 +10,16 @@ fn compile_to_ir(input: &str) -> Result<String, String> {
     let program = parser.parse_program();
 
     if !parser.errors.is_empty() {
-        return Err(format!("Parser errors: {:?}", parser.errors));
+        let msgs: Vec<_> = parser.errors.iter().map(|e| e.message.as_str()).collect();
+        return Err(format!("Parser errors: {:?}", msgs));
     }
 
     let mut analyzer = SemanticAnalyzer::new();
     analyzer.analyze(&program);
 
     if !analyzer.errors.is_empty() {
-        return Err(format!("Semantic errors: {:?}", analyzer.errors));
+        let msgs: Vec<_> = analyzer.errors.iter().map(|e| e.message.as_str()).collect();
+        return Err(format!("Semantic errors: {:?}", msgs));
     }
 
     let context = Context::create();
@@ -325,7 +327,6 @@ fn test_compound_add_assign() {
             x += 5;
         }
     ";
-    // Should generate: load, add, store
     assert_ir_contains(input, &["load i32", "add i32", "store i32"]);
 }
 

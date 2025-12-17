@@ -1,5 +1,6 @@
 mod ast;
 mod codegen;
+mod errors;
 mod lexer;
 mod parser;
 mod sema;
@@ -11,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::codegen::compiler::Compiler;
+use crate::errors::report_errors;
 use crate::lexer::Lexer;
 use crate::sema::analyzer::SemanticAnalyzer;
 
@@ -79,11 +81,10 @@ fn compile_pipeline(
     let mut parser = crate::parser::Parser::new(lexer);
     let program = parser.parse_program();
 
+    let filepath_str = path.to_str().unwrap_or("unknown");
+
     if !parser.errors.is_empty() {
-        println!("❌ Parser Errors:");
-        for err in parser.errors {
-            println!("\t{}", err);
-        }
+        report_errors(&parser.errors, filepath_str, &input);
         return None;
     }
 
@@ -91,10 +92,7 @@ fn compile_pipeline(
     analyzer.analyze(&program);
 
     if !analyzer.errors.is_empty() {
-        println!("❌ Semantic Errors:");
-        for err in analyzer.errors {
-            println!("\t{}", err);
-        }
+        report_errors(&analyzer.errors, filepath_str, &input);
         return None;
     }
 

@@ -1,5 +1,6 @@
 use crate::{
     ast::{Expression, Program, Statement, TypeSpec},
+    errors::{Span, ZeruError},
     lexer::Lexer,
     token::Token,
 };
@@ -8,10 +9,13 @@ pub struct Parser<'a> {
     lexer: Lexer<'a>,
 
     current_token: Token,
+    current_span: Span,
+    current_line: usize,
     peek_token: Token,
+    peek_span: Span,
     peek_line: usize,
 
-    pub errors: Vec<String>,
+    pub errors: Vec<ZeruError>,
 }
 
 impl<'a> Parser<'a> {
@@ -19,7 +23,10 @@ impl<'a> Parser<'a> {
         let mut p = Self {
             lexer,
             current_token: Token::Eof,
+            current_span: Span::default(),
+            current_line: 1,
             peek_token: Token::Eof,
+            peek_span: Span::default(),
             peek_line: 0,
             errors: Vec::new(),
         };
@@ -32,9 +39,12 @@ impl<'a> Parser<'a> {
 
     fn next_token(&mut self) {
         self.current_token = self.peek_token.clone();
-        let (tok, line) = self.lexer.next_token();
+        self.current_span = self.peek_span;
+        self.current_line = self.peek_line;
+        let (tok, line, span) = self.lexer.next_token();
         self.peek_token = tok;
         self.peek_line = line;
+        self.peek_span = span;
     }
 
     pub fn parse_program(&mut self) -> Program {
@@ -282,7 +292,7 @@ impl<'a> Parser<'a> {
         let name = match &self.current_token {
             Token::Identifier(n) => n.clone(),
             _ => {
-                self.errors.push("Expected param name".into());
+                self.error_current("Expected parameter name");
                 String::new()
             }
         };
@@ -401,7 +411,7 @@ impl<'a> Parser<'a> {
             }
 
             if parsing_methods {
-                self.errors.push(format!(
+                self.error_current(&format!(
                     "Struct '{}': Fields must be declared before methods.",
                     name
                 ));
@@ -412,7 +422,7 @@ impl<'a> Parser<'a> {
             let field_name = match &self.current_token {
                 Token::Identifier(n) => n.clone(),
                 _ => {
-                    self.errors.push("Expected field name".into());
+                    self.error_current("Expected field name");
                     return None;
                 }
             };
@@ -464,7 +474,7 @@ impl<'a> Parser<'a> {
             if let Token::Identifier(v) = &self.current_token {
                 variants.push(v.clone())
             } else {
-                self.errors.push("Expected enum variant name".into());
+                self.error_current("Expected enum variant name");
                 return None;
             }
 
@@ -560,7 +570,7 @@ impl<'a> Parser<'a> {
                 if let Token::Identifier(sym) = &self.current_token {
                     symbols.push(sym.clone());
                 } else {
-                    self.errors.push("Expected symbol name in import".into());
+                    self.error_current("Expected symbol name in import");
                     return None;
                 }
 
@@ -805,8 +815,7 @@ impl<'a> Parser<'a> {
             let count = match &self.current_token {
                 Token::Int(n) => *n,
                 _ => {
-                    self.errors
-                        .push("Array repeat count must be an integer literal".into());
+                    self.error_current("Array repeat count must be an integer literal");
                     return None;
                 }
             };
@@ -935,17 +944,18 @@ impl<'a> Parser<'a> {
     }
 
     fn error_peek(&mut self, expected: &str) {
-        self.errors.push(format!(
-            "[Line {}] \x1b[31mSyntax error:\x1b[0m {expected} expected, found: {:?}",
-            self.peek_line, self.current_token
+        self.errors.push(ZeruError::syntax(
+            format!("{expected} expected, found: {:?}", self.current_token),
+            self.peek_span,
+            self.peek_line,
         ));
     }
 
     fn error_current(&mut self, msg: &str) {
-        self.errors.push(format!(
-            "[Line {}] \x1b[31mSyntax error:\x1b[0m {}",
-            self.peek_line - 1,
-            msg
+        self.errors.push(ZeruError::syntax(
+            msg.to_string(),
+            self.current_span,
+            self.current_line,
         ));
     }
 }
@@ -1028,8 +1038,8 @@ mod tests {
             return;
         }
         eprintln!("Parser has {} errors:", parser.errors.len());
-        for msg in &parser.errors {
-            eprintln!("Parser error: {}", msg);
+        for err in &parser.errors {
+            eprintln!("Parser error: {}", err.message);
         }
         panic!("Parser failed")
     }

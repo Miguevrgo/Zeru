@@ -7,12 +7,15 @@ fn analyze(input: &str) -> Vec<String> {
     let program = parser.parse_program();
 
     if !parser.errors.is_empty() {
-        panic!("Parser errors in test: {:?}", parser.errors);
+        panic!(
+            "Parser errors in test: {:?}",
+            parser.errors.iter().map(|e| &e.message).collect::<Vec<_>>()
+        );
     }
 
     let mut analyzer = SemanticAnalyzer::new();
     analyzer.analyze(&program);
-    analyzer.errors
+    analyzer.errors.iter().map(|e| e.message.clone()).collect()
 }
 
 #[test]
