@@ -431,3 +431,45 @@ fn test_compound_in_loop() {
     ";
     assert_ir_contains(input, &["loop_cond:", "loop_body:", "add i32"]);
 }
+
+#[test]
+fn test_string_literal_basic() {
+    let input = r#"
+        fn main() {
+            var msg = "Hello, World!";
+        }
+    "#;
+    assert_ir_contains(input, &["@str", "Hello, World!"]);
+}
+
+#[test]
+fn test_string_literal_empty() {
+    let input = r#"
+        fn main() {
+            var empty = "";
+        }
+    "#;
+    assert_compiles(input);
+}
+
+#[test]
+fn test_string_literal_with_escapes() {
+    let input = r#"
+        fn main() {
+            var escaped = "Line1\nLine2\tTabbed";
+        }
+    "#;
+    assert_compiles(input);
+}
+
+#[test]
+fn test_multiple_string_literals() {
+    let input = r#"
+        fn main() {
+            var a = "first";
+            var b = "second";
+            var c = "third";
+        }
+    "#;
+    assert_ir_contains(input, &["first", "second", "third"]);
+}
