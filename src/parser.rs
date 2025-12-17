@@ -57,23 +57,23 @@ impl<'a> Parser<'a> {
                 self.next_token();
                 return;
             }
-        }
 
-        match self.peek_token {
-            Token::Var
-            | Token::Fn
-            | Token::Const
-            | Token::Struct
-            | Token::Enum
-            | Token::If
-            | Token::While
-            | Token::For
-            | Token::Return
-            | Token::RBrace => return,
-            _ => {}
-        }
+            match self.peek_token {
+                Token::Var
+                | Token::Fn
+                | Token::Const
+                | Token::Struct
+                | Token::Enum
+                | Token::If
+                | Token::While
+                | Token::For
+                | Token::Return
+                | Token::RBrace => return,
+                _ => {}
+            }
 
-        self.next_token();
+            self.next_token();
+        }
     }
 
     pub fn parse_program(&mut self) -> Program {
