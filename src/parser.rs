@@ -945,9 +945,9 @@ impl<'a> Parser<'a> {
 
     fn error_peek(&mut self, expected: &str) {
         self.errors.push(ZeruError::syntax(
-            format!("{expected} expected, found: {:?}", self.current_token),
-            self.peek_span,
-            self.peek_line,
+            format!("{expected} expected, found: {:?}", self.peek_token),
+            self.current_span,
+            self.current_line,
         ));
     }
 

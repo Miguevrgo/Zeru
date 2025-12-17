@@ -1,4 +1,4 @@
-use ariadne::{Color, Label, Report, ReportKind, Source};
+use ariadne::{Color, Label, Report, ReportKind};
 
 /// Represents a span in the source code (byte offsets)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -60,7 +60,7 @@ impl ZeruError {
         }
     }
 
-    pub fn report(&self, _filename: &str, source: &str) {
+    pub fn report(&self, filename: &str, source: &str) {
         let kind = match self.kind {
             ErrorKind::Syntax => ReportKind::Error,
             ErrorKind::Semantic => ReportKind::Error,
@@ -69,11 +69,6 @@ impl ZeruError {
         let color = match self.kind {
             ErrorKind::Syntax => Color::Red,
             ErrorKind::Semantic => Color::Magenta,
-        };
-
-        let label_msg = match self.kind {
-            ErrorKind::Syntax => "syntax error here",
-            ErrorKind::Semantic => "error here",
         };
 
         let span_start = self.span.start.min(source.len());
@@ -88,21 +83,27 @@ impl ZeruError {
             return;
         }
 
-        Report::build(kind, self.span.start..self.span.end)
-            .with_message(&self.message)
-            .with_label(
-                Label::new(span_start..span_end)
-                    .with_message(label_msg)
-                    .with_color(color),
-            )
-            .finish()
-            .eprint(Source::from(source))
-            .unwrap();
+        let filename = filename.to_string();
+        let source = source.to_string();
+
+        Report::<(String, std::ops::Range<usize>)>::build(
+            kind,
+            (filename.clone(), span_start..span_end),
+        )
+        .with_message(&self.message)
+        .with_label(
+            Label::new((filename.clone(), span_start..span_end))
+                .with_message(&self.message)
+                .with_color(color),
+        )
+        .finish()
+        .eprint(ariadne::sources([(filename, source)]))
+        .unwrap();
     }
 }
 
-pub fn report_errors(errors: &[ZeruError], _filename: &str, source: &str) {
+pub fn report_errors(errors: &[ZeruError], filename: &str, source: &str) {
     for error in errors {
-        error.report(_filename, source);
+        error.report(filename, source);
     }
 }
