@@ -30,6 +30,7 @@ Goal: Transition from a "calculator" to a true system language capable of intera
 
 - [ ] Pointers: Add * (dereference) and & (address-of) tokens.
 - [ ] FFI (Foreign Function Interface): Add extern "C" support to link against C libraries.
+- [ ] Friendly errors messages
 
 ##### Semantic Analyzer (Sema)
 

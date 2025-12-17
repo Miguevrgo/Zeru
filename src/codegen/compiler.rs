@@ -7,7 +7,7 @@ use inkwell::{
     context::Context,
     module::Module,
     types::{BasicType, BasicTypeEnum, StructType},
-    values::{BasicValueEnum, FunctionValue, PointerValue},
+    values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PointerValue},
 };
 
 use crate::{
@@ -604,7 +604,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 function,
                 arguments,
             } => {
-                let (fn_val, ..) = if let Expression::Get {
+                let (fn_val, implicit_args) = if let Expression::Get {
                     object,
                     name: method_name,
                 } = &**function
@@ -621,7 +621,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .module
                         .get_function(&mangled)
                         .expect("Method not found");
-                    let args: Vec<BasicValueEnum> = vec![obj_val];
+                    let args: Vec<BasicMetadataValueEnum> = vec![obj_val.into()];
                     (func, args)
                 } else if let Expression::Identifier(name) = &**function {
                     let func = self.module.get_function(name).expect("Function not found");
@@ -630,7 +630,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     panic!("Indirect calls not implemented");
                 };
 
-                let mut compiled_args = Vec::new();
+                let mut compiled_args: Vec<BasicMetadataValueEnum> = implicit_args;
                 for arg in arguments {
                     compiled_args.push(self.compile_expression(arg, None).into());
                 }
