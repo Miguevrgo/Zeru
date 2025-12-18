@@ -1624,3 +1624,69 @@ fn test_pointer_to_struct() {
     let errors = analyze(input);
     assert!(errors.is_empty());
 }
+
+#[test]
+fn test_tuple_basic() {
+    let input = "
+            fn main() {
+                var t: (i32, bool) = (42, true);
+            }
+        ";
+    let errors = analyze(input);
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_tuple_type_inference() {
+    let input = "
+            fn main() {
+                var t = (42, true, 3.14);
+            }
+        ";
+    let errors = analyze(input);
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_tuple_type_mismatch() {
+    let input = "
+            fn main() {
+                var t: (i32, bool) = (true, 42);
+            }
+        ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty());
+}
+
+#[test]
+fn test_tuple_length_mismatch() {
+    let input = "
+            fn main() {
+                var t: (i32, bool, f64) = (42, true);
+            }
+        ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty());
+}
+
+#[test]
+fn test_tuple_nested() {
+    let input = "
+            fn main() {
+                var t: ((i32, i32), bool) = ((1, 2), true);
+            }
+        ";
+    let errors = analyze(input);
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_empty_tuple() {
+    let input = "
+            fn main() {
+                var t: () = ();
+            }
+        ";
+    let errors = analyze(input);
+    assert!(errors.is_empty());
+}

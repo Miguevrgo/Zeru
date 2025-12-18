@@ -576,3 +576,33 @@ fn test_release_fast_no_null_checks() {
     );
     assert!(!ir.contains("@abort"), "ReleaseFast should NOT call abort");
 }
+
+#[test]
+fn test_tuple_basic_codegen() {
+    let input = "
+        fn main() i32 {
+            var t: (i32, i32) = (10, 20);
+            return 0;
+        }
+    ";
+    let ir = compile_to_ir(input).unwrap();
+    assert!(
+        ir.contains("{ i32, i32 }"),
+        "Tuple should be compiled to struct type"
+    );
+}
+
+#[test]
+fn test_tuple_with_different_types() {
+    let input = "
+        fn main() i32 {
+            var t: (i32, bool, f64) = (42, true, 3.14);
+            return 0;
+        }
+    ";
+    let ir = compile_to_ir(input).unwrap();
+    assert!(
+        ir.contains("{ i32, i1, double }"),
+        "Mixed-type tuple should compile correctly"
+    );
+}

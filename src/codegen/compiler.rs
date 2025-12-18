@@ -992,6 +992,30 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     panic!("Codegen: Cannot dereference non-pointer value");
                 }
             }
+            ExpressionKind::Tuple(elements) => {
+                let mut field_types: Vec<BasicTypeEnum<'ctx>> = Vec::with_capacity(elements.len());
+                let mut field_values: Vec<BasicValueEnum<'ctx>> =
+                    Vec::with_capacity(elements.len());
+
+                for elem in elements {
+                    let val = self.compile_expression(elem, None);
+                    field_types.push(val.get_type());
+                    field_values.push(val);
+                }
+
+                let tuple_type = self.context.struct_type(&field_types, false);
+                let mut tuple_val = tuple_type.get_undef();
+
+                for (i, val) in field_values.into_iter().enumerate() {
+                    tuple_val = self
+                        .builder
+                        .build_insert_value(tuple_val, val, i as u32, "tuple_insert")
+                        .unwrap()
+                        .into_struct_value();
+                }
+
+                tuple_val.into()
+            }
             _ => panic!("Codegen: Unimplemented expression {:?}", expr.kind),
         }
     }
@@ -1145,9 +1169,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             TypeSpec::IntLiteral(_) => {
                 panic!("Codegen: Unexpected integer literal in type position")
             }
-            TypeSpec::Tuple(_) => {
-                //TODO:
-                panic!("Codegen: Tuple types not yet supported")
+            TypeSpec::Tuple(types) => {
+                let field_types: Vec<BasicTypeEnum<'ctx>> =
+                    types.iter().filter_map(|t| self.get_llvm_type(t)).collect();
+                Some(self.context.struct_type(&field_types, false).into())
             }
             TypeSpec::Pointer(inner) => {
                 let _inner_type = self.get_llvm_type(inner);

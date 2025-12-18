@@ -132,7 +132,7 @@ pub enum ExpressionKind {
     },
     AddressOf(Box<Expression>),
     Dereference(Box<Expression>),
-    //TODO: Tuples
+    Tuple(Vec<Expression>),
 }
 
 impl Statement {

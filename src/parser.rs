@@ -900,13 +900,51 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_grouped_expression(&mut self) -> Option<Expression> {
+        let start_span = self.current_span;
         self.next_token();
-        let exp = self.parse_expression(Precedence::Lowest);
+
+        if self.cur_token_is(&Token::RParen) {
+            return Some(Expression::new(
+                ExpressionKind::Tuple(vec![]),
+                start_span.merge(self.current_span),
+            ));
+        }
+
+        let first = self.parse_expression(Precedence::Lowest)?;
+
+        if self.peek_token_is(&Token::Comma) {
+            let mut elements = vec![first];
+
+            while self.peek_token_is(&Token::Comma) {
+                self.next_token();
+
+                if self.peek_token_is(&Token::RParen) {
+                    self.next_token();
+                    return Some(Expression::new(
+                        ExpressionKind::Tuple(elements),
+                        start_span.merge(self.current_span),
+                    ));
+                }
+
+                self.next_token();
+                let elem = self.parse_expression(Precedence::Lowest)?;
+                elements.push(elem);
+            }
+
+            if !self.expect_peek(&Token::RParen) {
+                return None;
+            }
+
+            return Some(Expression::new(
+                ExpressionKind::Tuple(elements),
+                start_span.merge(self.current_span),
+            ));
+        }
 
         if !self.expect_peek(&Token::RParen) {
             return None;
         }
-        exp
+        Some(first)
     }
 
     fn parse_match_expression(&mut self) -> Option<Expression> {
@@ -1968,6 +2006,94 @@ mod tests {
                 assert_eq!(type_annotation.as_ref().unwrap(), &expected);
             }
             _ => panic!("Expected Matrix Var"),
+        }
+    }
+
+    #[test]
+    fn test_tuple_parsing() {
+        let input = "fn main() { var t: (i32, bool) = (42, true); }";
+        let program = parse_input(input);
+        let body = get_function_body(&program.statements[0]);
+
+        match &body[0].kind {
+            StatementKind::Var {
+                type_annotation,
+                value,
+                ..
+            } => {
+                let expected_type = TypeSpec::Tuple(vec![
+                    TypeSpec::Named("i32".to_string()),
+                    TypeSpec::Named("bool".to_string()),
+                ]);
+                assert_eq!(type_annotation.as_ref().unwrap(), &expected_type);
+
+                match &value.kind {
+                    ExpressionKind::Tuple(elements) => {
+                        assert_eq!(elements.len(), 2);
+                    }
+                    _ => panic!("Expected Tuple expression"),
+                }
+            }
+            _ => panic!("Expected Var statement"),
+        }
+    }
+
+    #[test]
+    fn test_empty_tuple_parsing() {
+        let input = "fn main() { var t: () = (); }";
+        let program = parse_input(input);
+        let body = get_function_body(&program.statements[0]);
+
+        match &body[0].kind {
+            StatementKind::Var {
+                type_annotation,
+                value,
+                ..
+            } => {
+                assert_eq!(type_annotation.as_ref().unwrap(), &TypeSpec::Tuple(vec![]));
+                match &value.kind {
+                    ExpressionKind::Tuple(elements) => {
+                        assert!(elements.is_empty());
+                    }
+                    _ => panic!("Expected empty Tuple expression"),
+                }
+            }
+            _ => panic!("Expected Var statement"),
+        }
+    }
+
+    #[test]
+    fn test_single_element_with_comma_is_tuple() {
+        let input = "fn main() { var t = (42,); }";
+        let program = parse_input(input);
+        let body = get_function_body(&program.statements[0]);
+
+        match &body[0].kind {
+            StatementKind::Var { value, .. } => match &value.kind {
+                ExpressionKind::Tuple(elements) => {
+                    assert_eq!(elements.len(), 1);
+                }
+                _ => panic!("Expected single-element Tuple"),
+            },
+            _ => panic!("Expected Var statement"),
+        }
+    }
+
+    #[test]
+    fn test_grouped_expression_not_tuple() {
+        let input = "fn main() { var x = (42); }";
+        let program = parse_input(input);
+        let body = get_function_body(&program.statements[0]);
+
+        match &body[0].kind {
+            StatementKind::Var { value, .. } => match &value.kind {
+                ExpressionKind::Int(_) => {}
+                ExpressionKind::Tuple(_) => {
+                    panic!("(42) should not be a tuple, use (42,) for single-element tuple")
+                }
+                _ => panic!("Expected integer literal from grouped expression"),
+            },
+            _ => panic!("Expected Var statement"),
         }
     }
 }

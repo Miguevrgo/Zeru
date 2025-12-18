@@ -301,10 +301,9 @@ impl SemanticAnalyzer {
                 );
                 Type::Unknown
             }
-            TypeSpec::Tuple(_) => {
-                // TODO: Tuples
-                self.error("Tuple types are not yet supported".into(), Span::default());
-                Type::Unknown
+            TypeSpec::Tuple(types) => {
+                let resolved: Vec<Type> = types.iter().map(|t| self.resolve_spec(t)).collect();
+                Type::Tuple(resolved)
             }
             TypeSpec::Pointer(inner) => {
                 let elem_type = self.resolve_spec(inner);
@@ -1106,6 +1105,36 @@ impl SemanticAnalyzer {
                         Type::Unknown
                     }
                 }
+            }
+            ExpressionKind::Tuple(elements) => {
+                let expected_types = if let Some(Type::Tuple(types)) = expected_type {
+                    Some(types.as_slice())
+                } else {
+                    None
+                };
+
+                let mut result_types = Vec::with_capacity(elements.len());
+
+                for (i, elem) in elements.iter().enumerate() {
+                    let expected = expected_types.and_then(|types| types.get(i));
+                    let elem_type = self.check_expression(elem, expected);
+                    result_types.push(elem_type);
+                }
+
+                if let Some(expected_types) = expected_types
+                    && expected_types.len() != elements.len()
+                {
+                    self.error(
+                        format!(
+                            "Tuple has {} elements, but expected {}",
+                            elements.len(),
+                            expected_types.len()
+                        ),
+                        expr.span,
+                    );
+                }
+
+                Type::Tuple(result_types)
             }
         }
     }
