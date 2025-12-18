@@ -284,7 +284,14 @@ impl<'a> Parser<'a> {
             return Some(TypeSpec::Generic { name, args });
         }
 
-        Some(TypeSpec::Named(name))
+        let base_type = TypeSpec::Named(name);
+
+        if self.peek_token_is(&Token::Question) {
+            self.next_token();
+            return Some(TypeSpec::Optional(Box::new(base_type)));
+        }
+
+        Some(base_type)
     }
 
     fn parse_return_statement(&mut self) -> Option<Statement> {

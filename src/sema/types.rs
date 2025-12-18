@@ -47,6 +47,7 @@ pub enum Type {
 
     Pointer(Box<Type>),
     Tuple(Vec<Type>),
+    Optional(Box<Type>),
     Unknown,
 }
 
@@ -58,6 +59,8 @@ impl Type {
             (Type::Struct { name: n1, .. }, Type::Struct { name: n2, .. }) => n1 == n2,
             (Type::Enum { name: n1, .. }, Type::Enum { name: n2, .. }) => n1 == n2,
             (Type::Pointer(e1), Type::Pointer(e2)) => e1.accepts(e2),
+            (Type::Optional(e1), Type::Optional(e2)) => e1.accepts(e2),
+            (Type::Optional(inner), other) => inner.accepts(other),
             (Type::Tuple(t1), Type::Tuple(t2)) => {
                 t1.len() == t2.len() && t1.iter().zip(t2.iter()).all(|(a, b)| a.accepts(b))
             }
@@ -109,6 +112,7 @@ impl std::fmt::Display for Type {
             Type::Enum { name, .. } => write!(f, "{}", name),
             Type::Array { elem_type, len } => write!(f, "[{}; {}]", elem_type, len),
             Type::Pointer(elem_type) => write!(f, "*{}", elem_type),
+            Type::Optional(elem_type) => write!(f, "{}?", elem_type),
             Type::Tuple(types) => {
                 write!(f, "(")?;
                 for (i, t) in types.iter().enumerate() {

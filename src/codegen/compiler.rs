@@ -23,6 +23,7 @@ pub struct Compiler<'a, 'ctx> {
 
     variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>, bool)>,
     struct_defs: HashMap<String, (StructType<'ctx>, HashMap<String, u32>)>,
+    enum_defs: HashMap<String, Vec<String>>,
     current_fn: Option<FunctionValue<'ctx>>,
 
     current_struct_context: Option<String>,
@@ -44,6 +45,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             module,
             variables: HashMap::new(),
             struct_defs: HashMap::new(),
+            enum_defs: HashMap::new(),
             current_fn: None,
             current_struct_context: None,
             loop_stack: Vec::new(),
@@ -58,6 +60,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let struct_type = self.context.opaque_struct_type(name);
                 self.struct_defs
                     .insert(name.clone(), (struct_type, HashMap::new()));
+            }
+            if let StatementKind::Enum { name, variants } = &stmt.kind {
+                self.enum_defs.insert(name.clone(), variants.clone());
             }
         }
 
@@ -559,9 +564,51 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         expr: &Expression,
         expected_type: Option<BasicTypeEnum<'ctx>>,
     ) -> BasicValueEnum<'ctx> {
+        let result = self.compile_expression_inner(expr, expected_type);
+
+        if let Some(BasicTypeEnum::StructType(opt_type)) = expected_type
+            && opt_type.count_fields() == 2
+            && opt_type.get_field_type_at_index(0) == Some(self.context.bool_type().into())
+            && !matches!(result, BasicValueEnum::StructValue(s) if s.get_type() == opt_type)
+        {
+            let has_value = self.context.bool_type().const_int(1, false);
+            let mut opt_val = opt_type.get_undef();
+            opt_val = self
+                .builder
+                .build_insert_value(opt_val, has_value, 0, "opt_tag")
+                .unwrap()
+                .into_struct_value();
+            opt_val = self
+                .builder
+                .build_insert_value(opt_val, result, 1, "opt_val")
+                .unwrap()
+                .into_struct_value();
+            return opt_val.into();
+        }
+
+        result
+    }
+
+    fn compile_expression_inner(
+        &mut self,
+        expr: &Expression,
+        expected_type: Option<BasicTypeEnum<'ctx>>,
+    ) -> BasicValueEnum<'ctx> {
+        let inner_expected = if let Some(BasicTypeEnum::StructType(opt_type)) = expected_type {
+            if opt_type.count_fields() == 2
+                && opt_type.get_field_type_at_index(0) == Some(self.context.bool_type().into())
+            {
+                opt_type.get_field_type_at_index(1)
+            } else {
+                expected_type
+            }
+        } else {
+            expected_type
+        };
+
         match &expr.kind {
             ExpressionKind::Int(val) => {
-                let int_type = match expected_type {
+                let int_type = match inner_expected {
                     Some(BasicTypeEnum::IntType(t)) => t,
                     _ => self.context.i32_type(),
                 };
@@ -569,7 +616,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 int_type.const_int(*val as u64, false).into()
             }
             ExpressionKind::Float(val) => {
-                let float_type = match expected_type {
+                let float_type = match inner_expected {
                     Some(BasicTypeEnum::FloatType(t)) => t,
                     _ => self.context.f32_type(),
                 };
@@ -579,6 +626,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ExpressionKind::Identifier(_)
             | ExpressionKind::Get { .. }
             | ExpressionKind::Index { .. } => {
+                if let ExpressionKind::Get { object, name } = &expr.kind
+                    && let ExpressionKind::Identifier(enum_name) = &object.kind
+                    && let Some(variants) = self.enum_defs.get(enum_name)
+                    && let Some(index) = variants.iter().position(|v| v == name)
+                {
+                    return self
+                        .context
+                        .i32_type()
+                        .const_int(index as u64, false)
+                        .into();
+                }
+
                 if let Some((ptr, ty)) = self.compile_lvalue(expr) {
                     return self.builder.build_load(ty, ptr, "loadtmp").unwrap();
                 }
@@ -735,6 +794,25 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 operator,
                 right,
             } => {
+                if *operator == Token::DoubleColon
+                    && let (
+                        ExpressionKind::Identifier(enum_name),
+                        ExpressionKind::Identifier(variant_name),
+                    ) = (&left.kind, &right.kind)
+                {
+                    if let Some(variants) = self.enum_defs.get(enum_name)
+                        && let Some(index) = variants.iter().position(|v| v == variant_name)
+                    {
+                        return self
+                            .context
+                            .i32_type()
+                            .const_int(index as u64, false)
+                            .into();
+                    }
+
+                    panic!("Codegen: Invalid :: expression");
+                }
+
                 let is_comparison = matches!(
                     operator,
                     Token::Eq | Token::NotEq | Token::Lt | Token::Leq | Token::Gt | Token::Geq
@@ -1021,7 +1099,116 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 tuple_val.into()
             }
-            _ => panic!("Codegen: Unimplemented expression {:?}", expr.kind),
+            ExpressionKind::Match { value, arms } => {
+                let parent_fn = self.current_fn.unwrap();
+                let match_val = self.compile_expression(value, None).into_int_value();
+
+                let merge_bb = self.context.append_basic_block(parent_fn, "match_merge");
+
+                let mut arm_blocks: Vec<(BasicBlock<'ctx>, BasicValueEnum<'ctx>)> = Vec::new();
+                let mut default_block: Option<BasicBlock<'ctx>> = None;
+                let mut cases: Vec<(inkwell::values::IntValue<'ctx>, BasicBlock<'ctx>)> =
+                    Vec::new();
+
+                for (pattern, _) in arms {
+                    let block = self.context.append_basic_block(parent_fn, "match_arm");
+
+                    if let ExpressionKind::Identifier(name) = &pattern.kind
+                        && name == "default"
+                    {
+                        default_block = Some(block);
+                        continue;
+                    }
+
+                    let pattern_val = self.compile_expression(pattern, None).into_int_value();
+                    cases.push((pattern_val, block));
+                }
+
+                let default_bb = default_block.unwrap_or_else(|| {
+                    let bb = self.context.append_basic_block(parent_fn, "match_default");
+                    self.builder.position_at_end(bb);
+                    self.builder.build_unreachable().unwrap();
+                    bb
+                });
+
+                let entry_bb = self.builder.get_insert_block().unwrap();
+                self.builder.position_at_end(entry_bb);
+
+                let switch = self
+                    .builder
+                    .build_switch(match_val, default_bb, &cases)
+                    .unwrap();
+                let _ = switch;
+
+                let mut arm_idx = 0;
+                for (pattern, result) in arms {
+                    let is_default = if let ExpressionKind::Identifier(name) = &pattern.kind {
+                        name == "default"
+                    } else {
+                        false
+                    };
+
+                    let block = if is_default {
+                        default_block.unwrap()
+                    } else {
+                        let (_, block) = cases[arm_idx];
+                        arm_idx += 1;
+                        block
+                    };
+
+                    self.builder.position_at_end(block);
+                    let result_val = self.compile_expression(result, expected_type);
+                    let current_bb = self.builder.get_insert_block().unwrap();
+                    if current_bb.get_terminator().is_none() {
+                        self.builder.build_unconditional_branch(merge_bb).unwrap();
+                    }
+                    arm_blocks.push((self.builder.get_insert_block().unwrap(), result_val));
+                }
+
+                self.builder.position_at_end(merge_bb);
+
+                if arm_blocks.is_empty() {
+                    return self.context.i32_type().const_int(0, false).into();
+                }
+
+                let result_type = arm_blocks[0].1.get_type();
+                let phi = self.builder.build_phi(result_type, "match_result").unwrap();
+
+                for (block, val) in &arm_blocks {
+                    phi.add_incoming(&[(val, *block)]);
+                }
+
+                phi.as_basic_value()
+            }
+            ExpressionKind::None => {
+                if let Some(BasicTypeEnum::StructType(opt_type)) = expected_type {
+                    let has_value = self.context.bool_type().const_int(0, false);
+                    let inner_type = opt_type.get_field_type_at_index(1).unwrap();
+                    let zero_val: BasicValueEnum = match inner_type {
+                        BasicTypeEnum::IntType(t) => t.const_int(0, false).into(),
+                        BasicTypeEnum::FloatType(t) => t.const_float(0.0).into(),
+                        BasicTypeEnum::PointerType(t) => t.const_null().into(),
+                        BasicTypeEnum::StructType(t) => t.get_undef().into(),
+                        BasicTypeEnum::ArrayType(t) => t.get_undef().into(),
+                        BasicTypeEnum::VectorType(t) => t.get_undef().into(),
+                        BasicTypeEnum::ScalableVectorType(t) => t.get_undef().into(),
+                    };
+                    let mut opt_val = opt_type.get_undef();
+                    opt_val = self
+                        .builder
+                        .build_insert_value(opt_val, has_value, 0, "opt_tag")
+                        .unwrap()
+                        .into_struct_value();
+                    opt_val = self
+                        .builder
+                        .build_insert_value(opt_val, zero_val, 1, "opt_val")
+                        .unwrap()
+                        .into_struct_value();
+                    opt_val.into()
+                } else {
+                    panic!("Codegen: None requires known optional type context");
+                }
+            }
         }
     }
 
@@ -1153,6 +1340,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 _ => {
                     if let Some((struct_ty, _)) = self.struct_defs.get(name) {
                         Some(struct_ty.as_basic_type_enum())
+                    } else if self.enum_defs.contains_key(name) {
+                        Some(self.context.i32_type().into())
                     } else {
                         panic!("Codegen: Unknown type {name}");
                     }
@@ -1184,6 +1373,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Some(
                     self.context
                         .ptr_type(inkwell::AddressSpace::default())
+                        .into(),
+                )
+            }
+            TypeSpec::Optional(inner) => {
+                let inner_type = self.get_llvm_type(inner)?;
+                let tag_type = self.context.bool_type().into();
+                Some(
+                    self.context
+                        .struct_type(&[tag_type, inner_type], false)
                         .into(),
                 )
             }

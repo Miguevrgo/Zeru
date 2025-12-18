@@ -8,6 +8,7 @@ pub enum TypeSpec {
     IntLiteral(i64),
     Tuple(Vec<TypeSpec>),
     Pointer(Box<TypeSpec>),
+    Optional(Box<TypeSpec>),
 }
 
 #[derive(Debug)]

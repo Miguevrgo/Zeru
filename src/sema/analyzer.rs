@@ -310,6 +310,10 @@ impl SemanticAnalyzer {
                 let elem_type = self.resolve_spec(inner);
                 Type::Pointer(Box::new(elem_type))
             }
+            TypeSpec::Optional(inner) => {
+                let elem_type = self.resolve_spec(inner);
+                Type::Optional(Box::new(elem_type))
+            }
         }
     }
 
@@ -638,7 +642,22 @@ impl SemanticAnalyzer {
             }
             ExpressionKind::Boolean(_) => Type::Bool,
             ExpressionKind::StringLit(_) => Type::String,
-            ExpressionKind::None => Type::Void,
+            ExpressionKind::None => {
+                if let Some(Type::Optional(inner)) = expected_type {
+                    Type::Optional(inner.clone())
+                } else if expected_type.is_some() {
+                    self.error(
+                        format!(
+                            "'None' can only be assigned to optional types, got {:?}",
+                            expected_type.unwrap()
+                        ),
+                        expr.span,
+                    );
+                    Type::Unknown
+                } else {
+                    Type::Unknown
+                }
+            }
 
             ExpressionKind::Identifier(name) => {
                 if name.contains("::") {

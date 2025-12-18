@@ -75,6 +75,7 @@ pub enum Token {
     Semicolon, // ;
     Comma,     // ,
     Dot,       // .
+    Question,  // ?
 
     // Custom
     SelfTok, // self

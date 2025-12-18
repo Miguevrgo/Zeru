@@ -230,6 +230,7 @@ impl<'a> Lexer<'a> {
             ';' => Token::Semicolon,
             ',' => Token::Comma,
             '.' => Token::Dot,
+            '?' => Token::Question,
 
             '"' => self.read_string(),
 

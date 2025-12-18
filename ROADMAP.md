@@ -30,8 +30,9 @@ Goal: Transition from a "calculator" to a true system language capable of intera
 
 - [x] Pointers: Add * (dereference) and & (address-of) tokens.
 - [x] Tuples: Support tuple types and expressions (i32, bool).
-- [ ] Mutable Parameters: Add `mut` keyword for function parameters.
-- [ ] Optional Types: Add `T?` syntax for nullable types with .is_none(), .unwrap(), .unwrap_or().
+- [x] Mutable Parameters: Add `var` keyword for function parameters.
+- [x] Optional Types: Add `T?` syntax for nullable types.
+- [x] Enum Match Codegen: Generate code for match expressions with enum variants.
 - [ ] FFI (Foreign Function Interface): Add extern "C" support to link against C libraries.
 - [x] Friendly errors messages (ariadne integration)
 
@@ -39,7 +40,7 @@ Goal: Transition from a "calculator" to a true system language capable of intera
 
 - [x] Pointer Validation: Strict type checking for pointers (*i32 vs i32).
 - [ ] Proper Main: Allow fn main() void.
-- [ ] Optional Type Checking: Ensure .unwrap() calls are validated.
+- [x] Optional Type Checking: Basic optional type checking (T? accepts T and None).
 
 ##### CodeGen & Runtime
 
