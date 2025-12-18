@@ -6,6 +6,8 @@ pub enum TypeSpec {
     Named(String),
     Generic { name: String, args: Vec<TypeSpec> },
     IntLiteral(i64),
+    Tuple(Vec<TypeSpec>),
+    Pointer(Box<TypeSpec>),
 }
 
 #[derive(Debug)]
@@ -128,6 +130,9 @@ pub enum ExpressionKind {
         value: Box<Expression>,
         arms: Vec<(Expression, Expression)>,
     },
+    AddressOf(Box<Expression>),
+    Dereference(Box<Expression>),
+    //TODO: Tuples
 }
 
 impl Statement {

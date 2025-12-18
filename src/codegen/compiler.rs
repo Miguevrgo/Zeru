@@ -12,6 +12,7 @@ use inkwell::{
 
 use crate::{
     ast::{Expression, ExpressionKind, Program, Statement, StatementKind, TypeSpec},
+    codegen::SafetyMode,
     token::Token,
 };
 
@@ -26,6 +27,8 @@ pub struct Compiler<'a, 'ctx> {
 
     current_struct_context: Option<String>,
     loop_stack: Vec<LoopContext<'ctx>>,
+    safety_mode: SafetyMode,
+    panic_fn: Option<FunctionValue<'ctx>>,
 }
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
@@ -33,6 +36,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         context: &'ctx Context,
         builder: &'a Builder<'ctx>,
         module: &'a Module<'ctx>,
+        safety_mode: SafetyMode,
     ) -> Self {
         Self {
             context,
@@ -43,6 +47,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             current_fn: None,
             current_struct_context: None,
             loop_stack: Vec::new(),
+            safety_mode,
+            panic_fn: None,
         }
     }
 
@@ -126,6 +132,63 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.current_struct_context = None;
             }
         }
+    }
+
+    fn get_or_create_panic_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(f) = self.panic_fn {
+            return f;
+        }
+
+        let void_type = self.context.void_type();
+        let abort_fn_type = void_type.fn_type(&[], false);
+        let abort_fn = self.module.add_function(
+            "abort",
+            abort_fn_type,
+            Some(inkwell::module::Linkage::External),
+        );
+
+        self.panic_fn = Some(abort_fn);
+        abort_fn
+    }
+
+    fn emit_null_check(&mut self, ptr: PointerValue<'ctx>, error_msg: &str) {
+        if !self.safety_mode.emit_safety_checks() {
+            return;
+        }
+
+        let current_fn = self
+            .current_fn
+            .expect("emit_null_check called outside function");
+
+        let null_ptr = self
+            .context
+            .ptr_type(inkwell::AddressSpace::default())
+            .const_null();
+        let is_null = self
+            .builder
+            .build_int_compare(IntPredicate::EQ, ptr, null_ptr, "is_null")
+            .unwrap();
+
+        let panic_block = self.context.append_basic_block(current_fn, "null_panic");
+        let continue_block = self.context.append_basic_block(current_fn, "null_ok");
+
+        self.builder
+            .build_conditional_branch(is_null, panic_block, continue_block)
+            .unwrap();
+
+        self.builder.position_at_end(panic_block);
+
+        let _msg = self
+            .builder
+            .build_global_string_ptr(error_msg, "panic_msg")
+            .unwrap();
+
+        // TODO: For now, just call abort.
+        let abort_fn = self.get_or_create_panic_fn();
+        self.builder.build_call(abort_fn, &[], "").unwrap();
+        self.builder.build_unreachable().unwrap();
+
+        self.builder.position_at_end(continue_block);
     }
 
     fn compile_struct_body(&mut self, name: &str, fields: &[(String, TypeSpec)]) {
@@ -467,6 +530,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     return Some((elem_ptr, elem_type));
                 }
                 None
+            }
+
+            ExpressionKind::Dereference(inner) => {
+                let ptr_val = self.compile_expression(inner, None);
+
+                if let BasicValueEnum::PointerValue(ptr) = ptr_val {
+                    self.emit_null_check(ptr, "null pointer dereference in assignment");
+
+                    let elem_type = self.context.i64_type().into();
+                    Some((ptr, elem_type))
+                } else {
+                    None
+                }
             }
 
             _ => None,
@@ -897,6 +973,25 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     panic!("Codegen: Cast target must be a type name");
                 }
             }
+            ExpressionKind::AddressOf(inner) => {
+                if let Some((ptr, _ty)) = self.compile_lvalue(inner) {
+                    ptr.into()
+                } else {
+                    panic!("Codegen: Cannot take address of non-lvalue expression");
+                }
+            }
+            ExpressionKind::Dereference(inner) => {
+                let ptr_val = self.compile_expression(inner, None);
+
+                if let BasicValueEnum::PointerValue(ptr) = ptr_val {
+                    self.emit_null_check(ptr, "null pointer dereference");
+
+                    let load_type = expected_type.unwrap_or_else(|| self.context.i64_type().into());
+                    self.builder.build_load(load_type, ptr, "deref").unwrap()
+                } else {
+                    panic!("Codegen: Cannot dereference non-pointer value");
+                }
+            }
             _ => panic!("Codegen: Unimplemented expression {:?}", expr.kind),
         }
     }
@@ -1049,6 +1144,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             TypeSpec::IntLiteral(_) => {
                 panic!("Codegen: Unexpected integer literal in type position")
+            }
+            TypeSpec::Tuple(_) => {
+                //TODO:
+                panic!("Codegen: Tuple types not yet supported")
+            }
+            TypeSpec::Pointer(inner) => {
+                let _inner_type = self.get_llvm_type(inner);
+                Some(
+                    self.context
+                        .ptr_type(inkwell::AddressSpace::default())
+                        .into(),
+                )
             }
         }
     }

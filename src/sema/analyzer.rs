@@ -301,6 +301,15 @@ impl SemanticAnalyzer {
                 );
                 Type::Unknown
             }
+            TypeSpec::Tuple(_) => {
+                // TODO: Tuples
+                self.error("Tuple types are not yet supported".into(), Span::default());
+                Type::Unknown
+            }
+            TypeSpec::Pointer(inner) => {
+                let elem_type = self.resolve_spec(inner);
+                Type::Pointer(Box::new(elem_type))
+            }
         }
     }
 
@@ -792,7 +801,7 @@ impl SemanticAnalyzer {
 
                     let struct_name = match &obj_type {
                         Type::Struct { name, .. } => name.clone(),
-                        Type::Pointer { elem_type, .. } => {
+                        Type::Pointer(elem_type) => {
                             if let Type::Struct { name, .. } = elem_type.as_ref() {
                                 name.clone()
                             } else {
@@ -823,7 +832,7 @@ impl SemanticAnalyzer {
             ExpressionKind::Get { object, name } => {
                 let obj_type = self.check_expression(object, None);
 
-                let actual_type = if let Type::Pointer { elem_type, .. } = &obj_type {
+                let actual_type = if let Type::Pointer(elem_type) = &obj_type {
                     elem_type
                 } else {
                     &obj_type
@@ -1063,6 +1072,39 @@ impl SemanticAnalyzer {
                 Type::Array {
                     elem_type: Box::new(first_type),
                     len: elements.len(),
+                }
+            }
+            ExpressionKind::AddressOf(inner) => {
+                let inner_type = self.check_expression(inner, None);
+
+                match &inner.kind {
+                    ExpressionKind::Identifier(_)
+                    | ExpressionKind::Get { .. }
+                    | ExpressionKind::Index { .. }
+                    | ExpressionKind::Dereference(_) => {}
+                    _ => {
+                        self.error("Cannot take address of a temporary value".into(), expr.span);
+                    }
+                }
+
+                Type::Pointer(Box::new(inner_type))
+            }
+            ExpressionKind::Dereference(inner) => {
+                let inner_type = self.check_expression(inner, None);
+
+                match inner_type {
+                    Type::Pointer(elem_type) => *elem_type,
+                    Type::Unknown => Type::Unknown,
+                    _ => {
+                        self.error(
+                            format!(
+                                "Cannot dereference non-pointer type {:?}",
+                                inner_type.to_string()
+                            ),
+                            expr.span,
+                        );
+                        Type::Unknown
+                    }
                 }
             }
         }

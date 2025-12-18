@@ -11,6 +11,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::codegen::SafetyMode;
 use crate::codegen::compiler::Compiler;
 use crate::errors::report_errors;
 use crate::lexer::Lexer;
@@ -31,28 +32,35 @@ enum Commands {
     Build {
         file: PathBuf,
 
-        #[arg(short, long)]
-        release: bool,
+        #[arg(long)]
+        release_safe: bool,
+
+        #[arg(long)]
+        release_fast: bool,
 
         #[arg(long)]
         emit_ir: bool,
     },
     Run {
         file: PathBuf,
-        #[arg(short, long)]
-        release: bool,
+
+        #[arg(long)]
+        release_safe: bool,
+
+        #[arg(long)]
+        release_fast: bool,
     },
     Clean,
 }
 
 fn compile_pipeline(
     path: &Path,
-    release: bool,
+    safety_mode: SafetyMode,
     force_emit_ir: bool,
     quiet: bool,
 ) -> Option<PathBuf> {
     if path.extension().and_then(|s| s.to_str()) != Some("zr") {
-        println!("⚠️ Warning: Zeru files usually end with .zr");
+        println!("⚠️ Warning: Zeru extension is .zr");
     }
 
     let filename = path.file_stem().unwrap().to_str().unwrap();
@@ -61,12 +69,14 @@ fn compile_pipeline(
     let ir_path = build_dir.join(format!("{}.ll", filename));
     let exe_path = build_dir.join(filename);
 
+    let mode_str = match safety_mode {
+        SafetyMode::Debug => "DEBUG",
+        SafetyMode::ReleaseSafe => "RELEASE-SAFE",
+        SafetyMode::ReleaseFast => "RELEASE-FAST",
+    };
+
     if !quiet {
-        println!(
-            "  Compiling {} [{}]...",
-            filename,
-            if release { "RELEASE" } else { "DEBUG" }
-        );
+        println!("  Compiling {} [{}]...", filename, mode_str);
     }
 
     let input = match fs::read_to_string(path) {
@@ -100,7 +110,7 @@ fn compile_pipeline(
     let module = context.create_module(filename);
     let builder = context.create_builder();
 
-    let mut compiler = Compiler::new(&context, &builder, &module);
+    let mut compiler = Compiler::new(&context, &builder, &module, safety_mode.clone());
     compiler.compile_program(&program);
 
     if let Err(e) = module.verify() {
@@ -113,19 +123,21 @@ fn compile_pipeline(
         return None;
     }
 
-    let optimization_flag = if release { "-O3" } else { "-O0" };
-
-    let debug_flag = if release { "" } else { "-g" };
+    let (opt_level, debug_flag) = match &safety_mode {
+        SafetyMode::Debug => ("-O0", Some("-g")),
+        SafetyMode::ReleaseSafe => ("-O2", None),
+        SafetyMode::ReleaseFast => ("-O3", None),
+    };
 
     let mut cmd = Command::new("clang");
-    cmd.arg(ir_path.to_str().unwrap())
+    cmd.arg(&ir_path)
         .arg("-o")
-        .arg(exe_path.to_str().unwrap())
-        .arg(optimization_flag)
+        .arg(&exe_path)
+        .arg(opt_level)
         .arg("-Wno-override-module");
 
-    if !debug_flag.is_empty() {
-        cmd.arg(debug_flag);
+    if let Some(flag) = debug_flag {
+        cmd.arg(flag);
     }
 
     let status = cmd.status();
@@ -135,7 +147,7 @@ fn compile_pipeline(
             if !quiet {
                 println!("✅ Build successful: {}", exe_path.display());
             }
-            let should_keep_ir = force_emit_ir || !release;
+            let should_keep_ir = force_emit_ir || safety_mode == SafetyMode::Debug;
 
             if !should_keep_ir {
                 let _ = fs::remove_file(ir_path);
@@ -163,13 +175,32 @@ fn main() {
     match &cli.command {
         Commands::Build {
             file,
-            release,
+            release_safe,
+            release_fast,
             emit_ir,
         } => {
-            compile_pipeline(file, *release, *emit_ir, false);
+            let safety_mode = if *release_fast {
+                SafetyMode::ReleaseFast
+            } else if *release_safe {
+                SafetyMode::ReleaseSafe
+            } else {
+                SafetyMode::Debug
+            };
+            compile_pipeline(file, safety_mode, *emit_ir, false);
         }
-        Commands::Run { file, release } => {
-            if let Some(executable_path) = compile_pipeline(file, *release, false, true) {
+        Commands::Run {
+            file,
+            release_safe,
+            release_fast,
+        } => {
+            let safety_mode = if *release_fast {
+                SafetyMode::ReleaseFast
+            } else if *release_safe {
+                SafetyMode::ReleaseSafe
+            } else {
+                SafetyMode::Debug
+            };
+            if let Some(executable_path) = compile_pipeline(file, safety_mode, false, true) {
                 println!(" Running {}...\n", executable_path.display());
 
                 let status = Command::new(&executable_path)

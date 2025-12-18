@@ -1,3 +1,4 @@
+use crate::codegen::SafetyMode;
 use crate::codegen::compiler::Compiler;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
@@ -5,6 +6,10 @@ use crate::sema::analyzer::SemanticAnalyzer;
 use inkwell::context::Context;
 
 fn compile_to_ir(input: &str) -> Result<String, String> {
+    compile_to_ir_with_mode(input, SafetyMode::Debug)
+}
+
+fn compile_to_ir_with_mode(input: &str, safety_mode: SafetyMode) -> Result<String, String> {
     let lexer = Lexer::new(input);
     let mut parser = Parser::new(lexer);
     let program = parser.parse_program();
@@ -26,7 +31,7 @@ fn compile_to_ir(input: &str) -> Result<String, String> {
     let module = context.create_module("test");
     let builder = context.create_builder();
 
-    let mut compiler = Compiler::new(&context, &builder, &module);
+    let mut compiler = Compiler::new(&context, &builder, &module, safety_mode);
     compiler.compile_program(&program);
 
     Ok(module.print_to_string().to_string())
@@ -473,4 +478,101 @@ fn test_multiple_string_literals() {
         }
     "#;
     assert_ir_contains(input, &["first", "second", "third"]);
+}
+
+#[test]
+fn test_pointer_address_of() {
+    let input = "
+        fn main() {
+            var x: i32 = 42;
+            var ptr: *i32 = &x;
+        }
+    ";
+    assert_ir_contains(input, &["alloca i32", "alloca ptr", "store ptr"]);
+}
+
+#[test]
+fn test_pointer_dereference_read() {
+    let input = "
+        fn main() i32 {
+            var x: i32 = 42;
+            var ptr: *i32 = &x;
+            return *ptr;
+        }
+    ";
+    assert_ir_contains(input, &["load ptr", "load i32"]);
+}
+
+#[test]
+fn test_pointer_dereference_write() {
+    let input = "
+        fn main() i32 {
+            var x: i32 = 42;
+            var ptr: *i32 = &x;
+            *ptr = 100;
+            return x;
+        }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_debug_mode_emits_null_checks() {
+    let input = "
+        fn main() i32 {
+            var x: i32 = 42;
+            var ptr: *i32 = &x;
+            return *ptr;
+        }
+    ";
+    let ir = compile_to_ir_with_mode(input, SafetyMode::Debug).unwrap();
+    assert!(
+        ir.contains("icmp eq ptr"),
+        "Debug mode should emit null pointer check"
+    );
+    assert!(
+        ir.contains("null_panic"),
+        "Debug mode should have panic block"
+    );
+    assert!(
+        ir.contains("@abort"),
+        "Debug mode should call abort on null"
+    );
+}
+
+#[test]
+fn test_release_safe_emits_null_checks() {
+    let input = "
+        fn main() i32 {
+            var x: i32 = 42;
+            var ptr: *i32 = &x;
+            return *ptr;
+        }
+    ";
+    let ir = compile_to_ir_with_mode(input, SafetyMode::ReleaseSafe).unwrap();
+    assert!(
+        ir.contains("icmp eq ptr"),
+        "ReleaseSafe should emit null pointer check"
+    );
+    assert!(
+        ir.contains("null_panic"),
+        "ReleaseSafe should have panic block"
+    );
+}
+
+#[test]
+fn test_release_fast_no_null_checks() {
+    let input = "
+        fn main() i32 {
+            var x: i32 = 42;
+            var ptr: *i32 = &x;
+            return *ptr;
+        }
+    ";
+    let ir = compile_to_ir_with_mode(input, SafetyMode::ReleaseFast).unwrap();
+    assert!(
+        !ir.contains("null_panic"),
+        "ReleaseFast should NOT have null check blocks"
+    );
+    assert!(!ir.contains("@abort"), "ReleaseFast should NOT call abort");
 }

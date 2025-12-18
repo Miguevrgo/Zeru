@@ -377,4 +377,5 @@ impl<'a> Lexer<'a> {
 
         Token::Illegal("Unterminated String".to_string())
     }
+    //TODO: Read_char
 }

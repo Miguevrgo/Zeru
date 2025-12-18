@@ -45,13 +45,7 @@ pub enum Type {
         len: usize,
     },
 
-    /// TODO: Pointer type for v0.2.0 | will support '*' and '&'
-    #[allow(dead_code)]
-    Pointer {
-        elem_type: Box<Type>,
-        is_mutable: bool,
-    },
-
+    Pointer(Box<Type>),
     Unknown,
 }
 
@@ -62,16 +56,8 @@ impl Type {
             (Type::Unknown, _) | (_, Type::Unknown) => true,
             (Type::Struct { name: n1, .. }, Type::Struct { name: n2, .. }) => n1 == n2,
             (Type::Enum { name: n1, .. }, Type::Enum { name: n2, .. }) => n1 == n2,
-            (
-                Type::Pointer {
-                    elem_type: e1,
-                    is_mutable: false,
-                },
-                Type::Pointer {
-                    elem_type: e2,
-                    is_mutable: _,
-                },
-            ) => e1.accepts(e2),
+            (Type::Pointer(e1), Type::Pointer(e2)) => e1.accepts(e2),
+
             (
                 Type::Array {
                     elem_type: e1,
@@ -118,12 +104,7 @@ impl std::fmt::Display for Type {
             Type::Struct { name, .. } => write!(f, "{}", name),
             Type::Enum { name, .. } => write!(f, "{}", name),
             Type::Array { elem_type, len } => write!(f, "[{}; {}]", elem_type, len),
-            Type::Pointer {
-                elem_type,
-                is_mutable,
-            } => {
-                write!(f, "&{}{}", if *is_mutable { "mut " } else { "" }, elem_type)
-            }
+            Type::Pointer(elem_type) => write!(f, "*{}", elem_type),
             Type::Unknown => write!(f, "<unknown>"),
         }
     }

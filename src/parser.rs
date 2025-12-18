@@ -202,6 +202,36 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type(&mut self) -> Option<TypeSpec> {
+        if self.current_token == Token::Star {
+            self.next_token();
+            let inner = self.parse_type()?;
+            return Some(TypeSpec::Pointer(Box::new(inner)));
+        }
+
+        if self.current_token == Token::LParen {
+            let mut types = Vec::new();
+
+            if self.peek_token_is(&Token::RParen) {
+                self.next_token();
+                return Some(TypeSpec::Tuple(types));
+            }
+
+            self.next_token();
+            types.push(self.parse_type()?);
+
+            while self.peek_token_is(&Token::Comma) {
+                self.next_token();
+                self.next_token();
+                types.push(self.parse_type()?);
+            }
+
+            if !self.expect_peek(&Token::RParen) {
+                return None;
+            }
+
+            return Some(TypeSpec::Tuple(types));
+        }
+
         let mut name = if let Token::Identifier(n) = &self.current_token {
             n.clone()
         } else {
@@ -838,6 +868,8 @@ impl<'a> Parser<'a> {
             )),
             Token::LParen => self.parse_grouped_expression(),
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
+            Token::Star => self.parse_dereference_expression(),
+            Token::BitAnd => self.parse_address_of_expression(),
             Token::Match => self.parse_match_expression(),
             Token::SelfTok => Some(Expression::new(
                 ExpressionKind::Identifier("self".to_string()),
@@ -941,6 +973,32 @@ impl<'a> Parser<'a> {
                 operator,
                 right: Box::new(right),
             },
+            start_span.merge(end_span),
+        ))
+    }
+
+    fn parse_address_of_expression(&mut self) -> Option<Expression> {
+        let start_span = self.current_span;
+        self.next_token();
+
+        let expr = self.parse_expression(Precedence::Prefix)?;
+        let end_span = self.current_span;
+
+        Some(Expression::new(
+            ExpressionKind::AddressOf(Box::new(expr)),
+            start_span.merge(end_span),
+        ))
+    }
+
+    fn parse_dereference_expression(&mut self) -> Option<Expression> {
+        let start_span = self.current_span;
+        self.next_token();
+
+        let expr = self.parse_expression(Precedence::Prefix)?;
+        let end_span = self.current_span;
+
+        Some(Expression::new(
+            ExpressionKind::Dereference(Box::new(expr)),
             start_span.merge(end_span),
         ))
     }
@@ -1682,10 +1740,10 @@ mod tests {
             }
         }
 
-        if let StatementKind::Var { value, .. } = &body[1].kind {
-            if let ExpressionKind::Infix { operator, .. } = &value.kind {
-                assert_eq!(*operator, Token::ShiftRight);
-            }
+        if let StatementKind::Var { value, .. } = &body[1].kind
+            && let ExpressionKind::Infix { operator, .. } = &value.kind
+        {
+            assert_eq!(*operator, Token::ShiftRight);
         }
 
         check_assign(2, Token::BitAndEq);

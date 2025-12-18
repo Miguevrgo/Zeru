@@ -1548,3 +1548,79 @@ fn test_combined_array_and_cast() {
     let errors = analyze(input);
     assert!(errors.is_empty());
 }
+
+#[test]
+fn test_pointer_declaration() {
+    let input = "
+            fn main() {
+                var x: i32 = 42;
+                var ptr: *i32 = &x;
+            }
+        ";
+    let errors = analyze(input);
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_pointer_dereference() {
+    let input = "
+            fn main() {
+                var x: i32 = 42;
+                var ptr: *i32 = &x;
+                var y: i32 = *ptr;
+            }
+        ";
+    let errors = analyze(input);
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_pointer_dereference_assignment() {
+    let input = "
+            fn main() {
+                var x: i32 = 42;
+                var ptr: *i32 = &x;
+                *ptr = 100;
+            }
+        ";
+    let errors = analyze(input);
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_dereference_non_pointer_error() {
+    let input = "
+            fn main() {
+                var x: i32 = 42;
+                var y: i32 = *x;
+            }
+        ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty());
+    assert!(errors[0].contains("Cannot dereference non-pointer"));
+}
+
+#[test]
+fn test_address_of_temporary_error() {
+    let input = "
+            fn main() {
+                var ptr: *i32 = &42;
+            }
+        ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty());
+    assert!(errors[0].contains("Cannot take address of a temporary"));
+}
+
+#[test]
+fn test_pointer_to_struct() {
+    let input = "
+            struct Point { x: i32, y: i32 }
+            fn main() {
+                var p: Point = Point { x: 10, y: 20 };
+                var ptr: *Point = &p;
+            }
+        ";
+    let errors = analyze(input);
+    assert!(errors.is_empty());
+}
