@@ -265,7 +265,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.module.add_function(name, fn_type, None)
     }
 
-    fn compile_fn_body(&mut self, name: &str, params: &[(String, TypeSpec, bool)], body: &[Statement]) {
+    fn compile_fn_body(
+        &mut self,
+        name: &str,
+        params: &[(String, TypeSpec, bool)],
+        body: &[Statement],
+    ) {
         let function = self.module.get_function(name).unwrap();
         self.current_fn = Some(function);
 

@@ -381,7 +381,11 @@ impl<'a> Parser<'a> {
         };
 
         if self.cur_token_is(&Token::SelfTok) {
-            return ("self".to_string(), TypeSpec::Named("self".to_string()), is_mut);
+            return (
+                "self".to_string(),
+                TypeSpec::Named("self".to_string()),
+                is_mut,
+            );
         }
 
         let name = match &self.current_token {
