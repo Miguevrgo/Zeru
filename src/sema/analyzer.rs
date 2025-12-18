@@ -645,11 +645,11 @@ impl SemanticAnalyzer {
             ExpressionKind::None => {
                 if let Some(Type::Optional(inner)) = expected_type {
                     Type::Optional(inner.clone())
-                } else if expected_type.is_some() {
+                } else if let Some(exp_type) = expected_type {
                     self.error(
                         format!(
                             "'None' can only be assigned to optional types, got {:?}",
-                            expected_type.unwrap()
+                            exp_type
                         ),
                         expr.span,
                     );
