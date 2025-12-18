@@ -127,7 +127,7 @@ impl SemanticAnalyzer {
     fn register_function(
         &mut self,
         name: String,
-        params: &Vec<(String, TypeSpec)>,
+        params: &Vec<(String, TypeSpec, bool)>,
         return_type: &Option<TypeSpec>,
         associated_struct: Option<&str>,
     ) {
@@ -171,7 +171,7 @@ impl SemanticAnalyzer {
         }
 
         let mut param_types = Vec::new();
-        for (param_name, type_spec) in params {
+        for (param_name, type_spec, _is_mut) in params {
             if param_name == "self" {
                 if let Some(struct_name) = associated_struct {
                     if let Some(ty) = self.struct_defs.get(struct_name) {
@@ -239,7 +239,7 @@ impl SemanticAnalyzer {
     fn check_function_body(
         &mut self,
         name: String,
-        params: &[(String, TypeSpec)],
+        params: &[(String, TypeSpec, bool)],
         body: &[Statement],
     ) {
         let function_symbol = self.symbols.lookup(&name).unwrap().clone();
@@ -252,9 +252,10 @@ impl SemanticAnalyzer {
             let prev_ret = self.current_fn_return_type.replace(ret_type);
             self.symbols.enter_scope();
 
-            for (i, (param_name, _)) in params.iter().enumerate() {
+            for (i, (param_name, _, is_mut)) in params.iter().enumerate() {
                 let ty = params_type_def.get(i).unwrap_or(&Type::Unknown).clone();
-                self.symbols.insert_var(param_name.clone(), ty, true);
+                let is_const = !is_mut;
+                self.symbols.insert_var(param_name.clone(), ty, is_const);
             }
 
             for s in body {

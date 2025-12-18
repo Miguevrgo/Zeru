@@ -213,7 +213,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn compile_fn_prototype(
         &self,
         name: &str,
-        params: &[(String, TypeSpec)],
+        params: &[(String, TypeSpec, bool)],
         return_type: &Option<TypeSpec>,
     ) -> FunctionValue<'ctx> {
         let ret_type = match return_type {
@@ -222,7 +222,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         };
 
         let mut param_types = Vec::new();
-        for (param_name, type_spec) in params {
+        for (param_name, type_spec, _is_mut) in params {
             if param_name == "self" {
                 if let Some(struct_name) = &self.current_struct_context
                     && let Some((st, _)) = self.struct_defs.get(struct_name)
@@ -265,7 +265,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.module.add_function(name, fn_type, None)
     }
 
-    fn compile_fn_body(&mut self, name: &str, params: &[(String, TypeSpec)], body: &[Statement]) {
+    fn compile_fn_body(&mut self, name: &str, params: &[(String, TypeSpec, bool)], body: &[Statement]) {
         let function = self.module.get_function(name).unwrap();
         self.current_fn = Some(function);
 
@@ -275,7 +275,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.variables.clear();
 
         for (i, arg) in function.get_param_iter().enumerate() {
-            let (param_name, param_spec) = &params[i];
+            let (param_name, param_spec, _is_mut) = &params[i];
             let arg_type = if param_name == "self" {
                 if let Some(struct_name) = &self.current_struct_context {
                     self.struct_defs

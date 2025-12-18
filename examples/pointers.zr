@@ -1,10 +1,7 @@
 fn main() i32 {
     var x: i32 = 42;
 
-    // Take address of x
     var ptr: *i32 = &x;
-
-    // Dereference to read
     var y: i32 = *ptr;
 
     return y;

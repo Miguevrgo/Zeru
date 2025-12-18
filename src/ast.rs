@@ -45,7 +45,7 @@ pub enum StatementKind {
     Block(Vec<Statement>),
     Function {
         name: String,
-        params: Vec<(String, TypeSpec)>,
+        params: Vec<(String, TypeSpec, bool)>,
         return_type: Option<TypeSpec>,
         body: Vec<Statement>,
     },

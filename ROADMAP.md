@@ -28,14 +28,18 @@ Goal: Transition from a "calculator" to a true system language capable of intera
 
 ##### Syntax & Parser
 
-- [ ] Pointers: Add * (dereference) and & (address-of) tokens.
+- [x] Pointers: Add * (dereference) and & (address-of) tokens.
+- [x] Tuples: Support tuple types and expressions (i32, bool).
+- [ ] Mutable Parameters: Add `mut` keyword for function parameters.
+- [ ] Optional Types: Add `T?` syntax for nullable types with .is_none(), .unwrap(), .unwrap_or().
 - [ ] FFI (Foreign Function Interface): Add extern "C" support to link against C libraries.
-- [ ] Friendly errors messages
+- [x] Friendly errors messages (ariadne integration)
 
 ##### Semantic Analyzer (Sema)
 
-- [ ] Pointer Validation: Strict type checking for pointers (*i32 vs i32).
+- [x] Pointer Validation: Strict type checking for pointers (*i32 vs i32).
 - [ ] Proper Main: Allow fn main() void.
+- [ ] Optional Type Checking: Ensure .unwrap() calls are validated.
 
 ##### CodeGen & Runtime
 

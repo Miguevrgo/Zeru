@@ -350,7 +350,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_function_parameters(&mut self) -> Vec<(String, TypeSpec)> {
+    fn parse_function_parameters(&mut self) -> Vec<(String, TypeSpec, bool)> {
         let mut params = Vec::new();
         if self.peek_token_is(&Token::RParen) {
             self.next_token();
@@ -372,9 +372,16 @@ impl<'a> Parser<'a> {
         params
     }
 
-    fn parse_parameter(&mut self) -> (String, TypeSpec) {
+    fn parse_parameter(&mut self) -> (String, TypeSpec, bool) {
+        let is_mut = if self.cur_token_is(&Token::Var) {
+            self.next_token();
+            true
+        } else {
+            false
+        };
+
         if self.cur_token_is(&Token::SelfTok) {
-            return ("self".to_string(), TypeSpec::Named("self".to_string()));
+            return ("self".to_string(), TypeSpec::Named("self".to_string()), is_mut);
         }
 
         let name = match &self.current_token {
@@ -386,14 +393,14 @@ impl<'a> Parser<'a> {
         };
 
         if !self.expect_peek(&Token::Colon) {
-            return (name, TypeSpec::Named("Unknown".to_string()));
+            return (name, TypeSpec::Named("Unknown".to_string()), is_mut);
         }
         self.next_token();
 
         let type_spec = self
             .parse_type()
             .unwrap_or(TypeSpec::Named("Unknown".to_string()));
-        (name, type_spec)
+        (name, type_spec, is_mut)
     }
 
     fn parse_if_statement(&mut self) -> Option<Statement> {
