@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expression, ExpressionKind, Program, Statement, StatementKind, TypeSpec},
+    ast::{AsmOperand, Expression, ExpressionKind, Program, Statement, StatementKind, TypeSpec},
     errors::{Span, ZeruError},
     lexer::Lexer,
     token::Token,
@@ -46,17 +46,13 @@ impl<'a> Parser<'a> {
         let (tok, line, span) = self.lexer.next_token();
 
         if let Token::Illegal(ref msg) = tok {
-            self.errors.push(ZeruError::syntax(
-                format!("Illegal token: {}", msg),
-                span,
-                line,
-            ));
+            self.errors.push(ZeruError::syntax(msg, span, line));
             self.panic_mode = true;
         }
 
+        self.peek_token = tok;
         self.peek_line = line;
         self.peek_span = span;
-        self.peek_token = tok;
     }
 
     fn synchronize(&mut self) {
@@ -903,6 +899,7 @@ impl<'a> Parser<'a> {
                 ExpressionKind::Identifier("self".to_string()),
                 self.current_span,
             )),
+            Token::Asm => self.parse_asm_expression(),
             _ => {
                 self.error_current(
                     format!("Expected expression, found: {:?}", &self.current_token).as_str(),
@@ -1023,6 +1020,133 @@ impl<'a> Parser<'a> {
             },
             start_span.merge(end_span),
         ))
+    }
+
+    fn parse_asm_expression(&mut self) -> Option<Expression> {
+        let start_span = self.current_span;
+        let is_volatile = if self.peek_token_is(&Token::Volatile) {
+            self.next_token();
+            true
+        } else {
+            false
+        };
+
+        if !self.expect_peek(&Token::LParen) {
+            return None;
+        }
+
+        self.next_token();
+        let template = match &self.current_token {
+            Token::StringLit(s) => s.clone(),
+            _ => {
+                self.error_current("Expected assembly template string");
+                return None;
+            }
+        };
+
+        let mut outputs = Vec::new();
+        if self.peek_token_is(&Token::Colon) {
+            self.next_token();
+            outputs = self.parse_asm_operands()?;
+        }
+
+        let mut inputs = Vec::new();
+        if self.peek_token_is(&Token::Colon) {
+            self.next_token();
+            inputs = self.parse_asm_operands()?;
+        }
+
+        let mut clobbers = Vec::new();
+        if self.peek_token_is(&Token::Colon) {
+            self.next_token();
+            clobbers = self.parse_asm_clobbers()?;
+        }
+
+        if !self.expect_peek(&Token::RParen) {
+            return None;
+        }
+
+        let end_span = self.current_span;
+        Some(Expression::new(
+            ExpressionKind::InlineAsm {
+                template,
+                outputs,
+                inputs,
+                clobbers,
+                is_volatile,
+            },
+            start_span.merge(end_span),
+        ))
+    }
+
+    fn parse_asm_operands(&mut self) -> Option<Vec<AsmOperand>> {
+        let mut operands = Vec::new();
+
+        if self.peek_token_is(&Token::Colon) || self.peek_token_is(&Token::RParen) {
+            return Some(operands);
+        }
+
+        loop {
+            self.next_token();
+
+            let constraint = match &self.current_token {
+                Token::StringLit(s) => s.clone(),
+                _ => {
+                    self.error_current("Exprected constraint string in assembly operand");
+                    return None;
+                }
+            };
+
+            if !self.expect_peek(&Token::LParen) {
+                return None;
+            }
+            self.next_token();
+
+            let expr = self.parse_expression(Precedence::Lowest)?;
+
+            if !self.expect_peek(&Token::RParen) {
+                return None;
+            }
+            operands.push(AsmOperand { constraint, expr });
+
+            if self.peek_token_is(&Token::Comma) {
+                self.next_token();
+            } else {
+                break;
+            }
+        }
+
+        Some(operands)
+    }
+
+    fn parse_asm_clobbers(&mut self) -> Option<Vec<String>> {
+        let mut clobbers = Vec::new();
+
+        if self.peek_token_is(&Token::RParen) {
+            return Some(clobbers);
+        }
+
+        loop {
+            self.next_token();
+
+            let clobber = match &self.current_token {
+                Token::StringLit(s) => s.clone(),
+                _ => {
+                    self.error_current("Expected clobber string");
+                    return None;
+                }
+            };
+
+            clobbers.push(clobber);
+
+            if self.peek_token_is(&Token::Comma) {
+                self.next_token();
+            } else {
+                break;
+            }
+        }
+
+        Some(clobbers)
     }
 
     fn parse_prefix_expression(&mut self) -> Option<Expression> {

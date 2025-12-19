@@ -1,0 +1,17 @@
+fn syscall1(nr: i64, a1: i64) i64 {
+    var result: i64 = 0;
+    asm volatile (
+        "syscall"
+        : "={rax}" (result)
+        : "{rax}" (nr), "{rdi}" (a1)
+        : "rcx", "r11", "memory"
+    );
+    return result;
+}
+
+fn main() i32 {
+    var sys_exit: i64 = 60;
+    var status: i64 = 0;
+    syscall1(sys_exit, status);
+    return 0;
+}

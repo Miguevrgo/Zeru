@@ -84,6 +84,10 @@ pub enum Token {
     Enum,    // enum
     Arrow,   // =>
 
+    // Inline Assembly
+    Asm,      // asm
+    Volatile, // volatile
+
     // Special
     Eof,
     Illegal(String),

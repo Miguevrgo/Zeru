@@ -274,6 +274,8 @@ impl<'a> Lexer<'a> {
             "self" => Token::SelfTok,
             "true" => Token::True,
             "false" => Token::False,
+            "asm" => Token::Asm,
+            "volatile" => Token::Volatile,
             "None" => Token::None,
 
             _ => Token::Identifier(literal),

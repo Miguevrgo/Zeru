@@ -134,6 +134,19 @@ pub enum ExpressionKind {
     AddressOf(Box<Expression>),
     Dereference(Box<Expression>),
     Tuple(Vec<Expression>),
+    InlineAsm {
+        template: String,
+        outputs: Vec<AsmOperand>,
+        inputs: Vec<AsmOperand>,
+        clobbers: Vec<String>,
+        is_volatile: bool,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct AsmOperand {
+    pub constraint: String,
+    pub expr: Expression,
 }
 
 impl Statement {

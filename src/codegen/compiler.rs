@@ -11,7 +11,7 @@ use inkwell::{
 };
 
 use crate::{
-    ast::{Expression, ExpressionKind, Program, Statement, StatementKind, TypeSpec},
+    ast::{AsmOperand, Expression, ExpressionKind, Program, Statement, StatementKind, TypeSpec},
     codegen::SafetyMode,
     token::Token,
 };
@@ -1209,7 +1209,128 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     panic!("Codegen: None requires known optional type context");
                 }
             }
+            ExpressionKind::InlineAsm {
+                template,
+                outputs,
+                inputs,
+                clobbers,
+                is_volatile,
+            } => self.compile_inline_asm(
+                template,
+                outputs,
+                inputs,
+                clobbers,
+                *is_volatile,
+                expected_type,
+            ),
         }
+    }
+
+    fn compile_inline_asm(
+        &mut self,
+        template: &str,
+        outputs: &[AsmOperand],
+        inputs: &[AsmOperand],
+        clobbers: &[String],
+        is_volatile: bool,
+        expected_type: Option<BasicTypeEnum<'ctx>>,
+    ) -> BasicValueEnum<'ctx> {
+        let mut constraints = Vec::new();
+
+        for out in outputs {
+            constraints.push(out.constraint.clone());
+        }
+
+        for inp in inputs {
+            constraints.push(inp.constraint.clone());
+        }
+
+        for clob in clobbers {
+            constraints.push(format!("~{{{}}}", clob));
+        }
+
+        let constraint_str = constraints.join(",");
+        let mut input_values: Vec<BasicValueEnum<'ctx>> = Vec::new();
+        for inp in inputs {
+            let val = self.compile_expression(&inp.expr, None);
+            input_values.push(val);
+        }
+
+        let output_type = if outputs.is_empty() {
+            self.context.i64_type().into()
+        } else if outputs.len() == 1 {
+            expected_type.unwrap_or_else(|| self.context.i64_type().into())
+        } else {
+            let types: Vec<BasicTypeEnum<'ctx>> = outputs
+                .iter()
+                .map(|_| self.context.i64_type().into())
+                .collect();
+            self.context.struct_type(&types, false).into()
+        };
+
+        let input_types: Vec<BasicTypeEnum<'ctx>> =
+            input_values.iter().map(|v| v.get_type()).collect();
+
+        let asm_fn_type = match output_type {
+            BasicTypeEnum::IntType(t) => t.fn_type(
+                &input_types.iter().map(|t| (*t).into()).collect::<Vec<_>>(),
+                false,
+            ),
+            BasicTypeEnum::FloatType(t) => t.fn_type(
+                &input_types.iter().map(|t| (*t).into()).collect::<Vec<_>>(),
+                false,
+            ),
+            BasicTypeEnum::StructType(t) => t.fn_type(
+                &input_types.iter().map(|t| (*t).into()).collect::<Vec<_>>(),
+                false,
+            ),
+            _ => self.context.i64_type().fn_type(
+                &input_types.iter().map(|t| (*t).into()).collect::<Vec<_>>(),
+                false,
+            ),
+        };
+
+        let asm_val = self.module.get_context().create_inline_asm(
+            asm_fn_type,
+            template.to_string(),
+            constraint_str,
+            is_volatile,
+            false,
+            None,
+            false,
+        );
+
+        let args: Vec<BasicMetadataValueEnum<'ctx>> =
+            input_values.iter().map(|v| (*v).into()).collect();
+
+        let call_site = self
+            .builder
+            .build_indirect_call(asm_fn_type, asm_val, &args, "asm_result")
+            .unwrap();
+
+        let result = match call_site.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(value) => value,
+            inkwell::values::ValueKind::Instruction(_) => {
+                self.context.i64_type().const_int(0, false).into()
+            }
+        };
+
+        if !outputs.is_empty() {
+            for (i, out) in outputs.iter().enumerate() {
+                if let Some((ptr, _ty)) = self.compile_lvalue(&out.expr) {
+                    let val_to_store = if outputs.len() == 1 {
+                        result
+                    } else {
+                        self.builder
+                            .build_extract_value(result.into_struct_value(), i as u32, "asm_out")
+                            .unwrap()
+                    };
+                    self.builder.build_store(ptr, val_to_store).unwrap();
+                }
+            }
+        }
+
+        result
     }
 
     fn is_signed_integer(&self, expr: &Expression) -> Option<bool> {

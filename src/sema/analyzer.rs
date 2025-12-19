@@ -1156,6 +1156,32 @@ impl SemanticAnalyzer {
 
                 Type::Tuple(result_types)
             }
+            ExpressionKind::InlineAsm {
+                template: _,
+                outputs,
+                inputs,
+                clobbers: _,
+                is_volatile: _,
+            } => {
+                for operand in inputs {
+                    self.check_expression(&operand.expr, None);
+                }
+
+                for operand in outputs {
+                    let ty = self.check_expression(&operand.expr, None);
+                    if !matches!(operand.expr.kind, ExpressionKind::Identifier(_)) {
+                        self.error(
+                            "Inline assembly output must be a variable".to_string(),
+                            operand.expr.span,
+                        );
+                    }
+                    let _ = ty;
+                }
+                Type::Integer {
+                    signed: Signedness::Signed,
+                    width: IntWidth::W64,
+                }
+            }
         }
     }
 
