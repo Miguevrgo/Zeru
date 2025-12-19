@@ -44,9 +44,19 @@ impl<'a> Parser<'a> {
         self.current_span = self.peek_span;
         self.current_line = self.peek_line;
         let (tok, line, span) = self.lexer.next_token();
-        self.peek_token = tok;
+
+        if let Token::Illegal(ref msg) = tok {
+            self.errors.push(ZeruError::syntax(
+                format!("Illegal token: {}", msg),
+                span,
+                line,
+            ));
+            self.panic_mode = true;
+        }
+
         self.peek_line = line;
         self.peek_span = span;
+        self.peek_token = tok;
     }
 
     fn synchronize(&mut self) {
