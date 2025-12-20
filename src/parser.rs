@@ -1037,7 +1037,7 @@ impl<'a> Parser<'a> {
 
         self.next_token();
         let template = match &self.current_token {
-            Token::StringLit(s) => s.clone(),
+            Token::StringLit(s) => String::from_utf8(s.clone()).unwrap(),
             _ => {
                 self.error_current("Expected assembly template string");
                 return None;
@@ -1090,7 +1090,7 @@ impl<'a> Parser<'a> {
             self.next_token();
 
             let constraint = match &self.current_token {
-                Token::StringLit(s) => s.clone(),
+                Token::StringLit(s) => String::from_utf8(s.clone()).unwrap(),
                 _ => {
                     self.error_current("Exprected constraint string in assembly operand");
                     return None;
@@ -1130,7 +1130,7 @@ impl<'a> Parser<'a> {
             self.next_token();
 
             let clobber = match &self.current_token {
-                Token::StringLit(s) => s.clone(),
+                Token::StringLit(s) => String::from_utf8(s.clone()).unwrap(),
                 _ => {
                     self.error_current("Expected clobber string");
                     return None;

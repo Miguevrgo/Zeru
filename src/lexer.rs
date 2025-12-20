@@ -350,31 +350,34 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_string(&mut self) -> Token {
-        let mut string_lit = String::new();
+        let mut bytes = Vec::new();
 
         while let Some(&ch) = self.peek() {
             match ch {
                 '"' => {
                     self.advance();
-                    return Token::StringLit(string_lit);
+                    return Token::StringLit(bytes);
                 }
                 '\\' => {
                     self.advance();
 
                     match self.advance() {
-                        Some('n') => string_lit.push('\n'),
-                        Some('t') => string_lit.push('\t'),
-                        Some('r') => string_lit.push('\r'),
-                        Some('"') => string_lit.push('"'),
-                        Some('\\') => string_lit.push('\\'),
+                        Some('n') => bytes.push(b'\n'),
+                        Some('t') => bytes.push(b'\t'),
+                        Some('r') => bytes.push(b'\r'),
+                        Some('"') => bytes.push(b'"'),
+                        Some('\\') => bytes.push(b'\\'),
                         Some(c) => {
-                            string_lit.push('\\');
-                            string_lit.push(c);
+                            bytes.push(b'\\');
+                            bytes.push(c as u8);
                         }
                         None => return Token::Illegal("Unterminated string escape".to_string()),
                     }
                 }
-                _ => unsafe { string_lit.push(self.advance().unwrap_unchecked()) },
+                _ if !ch.is_ascii() => {
+                    return Token::Illegal("Non-ASCII character in string".to_string());
+                }
+                _ => bytes.push(self.advance().unwrap() as u8),
             }
         }
 

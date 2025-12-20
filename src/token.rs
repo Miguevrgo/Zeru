@@ -22,7 +22,7 @@ pub enum Token {
     Identifier(String),
     Int(i64),
     Float(f64),
-    StringLit(String),
+    StringLit(Vec<u8>),
 
     // Logic
     And,   // &&

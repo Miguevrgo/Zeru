@@ -22,6 +22,8 @@ pub struct Compiler<'a, 'ctx> {
     pub module: &'a Module<'ctx>,
 
     variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>, bool)>,
+    pointer_elem_types: HashMap<String, BasicTypeEnum<'ctx>>,
+    constants: HashMap<String, BasicValueEnum<'ctx>>,
     struct_defs: HashMap<String, (StructType<'ctx>, HashMap<String, u32>)>,
     enum_defs: HashMap<String, Vec<String>>,
     current_fn: Option<FunctionValue<'ctx>>,
@@ -44,6 +46,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             builder,
             module,
             variables: HashMap::new(),
+            pointer_elem_types: HashMap::new(),
+            constants: HashMap::new(),
             struct_defs: HashMap::new(),
             enum_defs: HashMap::new(),
             current_fn: None,
@@ -63,6 +67,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             if let StatementKind::Enum { name, variants } = &stmt.kind {
                 self.enum_defs.insert(name.clone(), variants.clone());
+            }
+        }
+
+        for stmt in &program.statements {
+            if let StatementKind::Var {
+                name,
+                is_const: true,
+                value,
+                type_annotation,
+            } = &stmt.kind
+            {
+                let const_val = self.compile_const_expr(value, type_annotation.as_ref());
+                self.constants.insert(name.clone(), const_val);
             }
         }
 
@@ -309,6 +326,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 false
             };
 
+            if let TypeSpec::Pointer(inner_spec) = param_spec
+                && let Some(elem_type) = self.get_llvm_type(inner_spec)
+            {
+                self.pointer_elem_types
+                    .insert(param_name.clone(), elem_type);
+            }
+
             self.variables
                 .insert(param_name.clone(), (alloca, arg_type, is_unsigned));
         }
@@ -359,6 +383,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 } else {
                     None
                 };
+
+                if let Some(TypeSpec::Pointer(inner_spec)) = type_annotation
+                    && let Some(elem_type) = self.get_llvm_type(inner_spec)
+                {
+                    self.pointer_elem_types.insert(name.clone(), elem_type);
+                }
+
                 let initial_val = self.compile_expression(value, target_type);
                 let final_type = target_type.unwrap_or_else(|| initial_val.get_type());
 
@@ -485,6 +516,49 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
             }
             _ => println!("Codegen: Unimplemented statement: {:?}", stmt.kind),
+        }
+    }
+
+    fn compile_const_expr(
+        &mut self,
+        expr: &Expression,
+        type_annotation: Option<&TypeSpec>,
+    ) -> BasicValueEnum<'ctx> {
+        match &expr.kind {
+            ExpressionKind::Int(val) => {
+                let int_type = match type_annotation {
+                    Some(ts) => match self.get_llvm_type(ts) {
+                        Some(BasicTypeEnum::IntType(t)) => t,
+                        _ => self.context.i32_type(),
+                    },
+                    None => self.context.i32_type(),
+                };
+                int_type.const_int(*val as u64, false).into()
+            }
+            ExpressionKind::Float(val) => {
+                let float_type = match type_annotation {
+                    Some(ts) => match self.get_llvm_type(ts) {
+                        Some(BasicTypeEnum::FloatType(t)) => t,
+                        _ => self.context.f32_type(),
+                    },
+                    None => self.context.f32_type(),
+                };
+                float_type.const_float(*val).into()
+            }
+            ExpressionKind::Boolean(val) => self
+                .context
+                .bool_type()
+                .const_int(*val as u64, false)
+                .into(),
+            ExpressionKind::StringLit(s) => {
+                let str_val = std::str::from_utf8(s).unwrap();
+                let string_val = self
+                    .builder
+                    .build_global_string_ptr(str_val, "str")
+                    .unwrap();
+                string_val.as_pointer_value().into()
+            }
+            _ => panic!("Codegen: Unsupported constant expression: {:?}", expr.kind),
         }
     }
 
@@ -623,9 +697,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 float_type.const_float(*val).into()
             }
-            ExpressionKind::Identifier(_)
-            | ExpressionKind::Get { .. }
-            | ExpressionKind::Index { .. } => {
+            ExpressionKind::Identifier(name) => {
+                if let Some(const_val) = self.constants.get(name) {
+                    return *const_val;
+                }
+
+                if let Some((ptr, ty, _)) = self.variables.get(name) {
+                    return self.builder.build_load(*ty, *ptr, "loadtmp").unwrap();
+                }
+
+                panic!("Codegen: Unknown identifier '{}'", name);
+            }
+            ExpressionKind::Get { .. } | ExpressionKind::Index { .. } => {
                 if let ExpressionKind::Get { object, name } = &expr.kind
                     && let ExpressionKind::Identifier(enum_name) = &object.kind
                     && let Some(variants) = self.enum_defs.get(enum_name)
@@ -773,8 +856,31 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 };
 
                 let mut compiled_args: Vec<BasicMetadataValueEnum> = implicit_args;
-                for arg in arguments {
-                    compiled_args.push(self.compile_expression(arg, None).into());
+                let param_types: Vec<_> = fn_val.get_type().get_param_types();
+                let param_offset = compiled_args.len();
+
+                for (i, arg) in arguments.iter().enumerate() {
+                    let expected: Option<BasicTypeEnum> =
+                        param_types.get(i + param_offset).and_then(|t| match t {
+                            inkwell::types::BasicMetadataTypeEnum::ArrayType(t) => {
+                                Some((*t).into())
+                            }
+                            inkwell::types::BasicMetadataTypeEnum::FloatType(t) => {
+                                Some((*t).into())
+                            }
+                            inkwell::types::BasicMetadataTypeEnum::IntType(t) => Some((*t).into()),
+                            inkwell::types::BasicMetadataTypeEnum::PointerType(t) => {
+                                Some((*t).into())
+                            }
+                            inkwell::types::BasicMetadataTypeEnum::StructType(t) => {
+                                Some((*t).into())
+                            }
+                            inkwell::types::BasicMetadataTypeEnum::VectorType(t) => {
+                                Some((*t).into())
+                            }
+                            _ => None,
+                        });
+                    compiled_args.push(self.compile_expression(arg, expected).into());
                 }
 
                 let call_site = self
@@ -964,6 +1070,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                             _ => panic!("Op float not implemented"),
                         }
                     }
+                    (BasicValueEnum::PointerValue(ptr), BasicValueEnum::IntValue(offset)) => {
+                        let off = match operator {
+                            Token::Plus => offset,
+                            Token::Minus => self.builder.build_int_neg(offset, "neg").unwrap(),
+                            _ => panic!("Only +/- supported for pointer arithmetic"),
+                        };
+                        unsafe {
+                            self.builder
+                                .build_gep(self.context.i8_type(), ptr, &[off], "ptr")
+                                .unwrap()
+                                .into()
+                        }
+                    }
                     _ => panic!("Type mismatch in binary operation"),
                 }
             }
@@ -972,8 +1091,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .bool_type()
                 .const_int(*val as u64, false)
                 .into(),
+
             ExpressionKind::StringLit(s) => {
-                let string_val = self.builder.build_global_string_ptr(s, "str").unwrap();
+                let str_val = std::str::from_utf8(s).unwrap();
+                let string_val = self
+                    .builder
+                    .build_global_string_ptr(str_val, "str")
+                    .unwrap();
                 string_val.as_pointer_value().into()
             }
             ExpressionKind::Prefix { operator, right } => {
@@ -998,62 +1122,70 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     _ => panic!("Codegen: Unimplemented prefix operator: {operator:?}"),
                 }
             }
+
             ExpressionKind::Cast { left, target } => {
                 let src_val = self.compile_expression(left, None);
 
-                if let ExpressionKind::Identifier(type_name) = &target.kind {
-                    let target_type = self
-                        .get_llvm_type(&TypeSpec::Named(type_name.clone()))
-                        .expect("Cast to void not allowed");
+                let target_typespec = Self::expr_to_typespec(target);
+                let target_type = self
+                    .get_llvm_type(&target_typespec)
+                    .expect("Cast to void not allowed");
 
-                    match (src_val, target_type) {
-                        (BasicValueEnum::IntValue(v), BasicTypeEnum::IntType(t)) => {
-                            let src_bits = v.get_type().get_bit_width();
-                            let dst_bits = t.get_bit_width();
-                            if src_bits == dst_bits {
-                                v.into()
-                            } else if src_bits < dst_bits {
-                                self.builder
-                                    .build_int_z_extend(v, t, "zexttmp")
-                                    .unwrap()
-                                    .into()
-                            } else {
-                                self.builder
-                                    .build_int_truncate(v, t, "trunctmp")
-                                    .unwrap()
-                                    .into()
-                            }
+                match (src_val, target_type) {
+                    (BasicValueEnum::IntValue(v), BasicTypeEnum::IntType(t)) => {
+                        let src_bits = v.get_type().get_bit_width();
+                        let dst_bits = t.get_bit_width();
+                        if src_bits == dst_bits {
+                            v.into()
+                        } else if src_bits < dst_bits {
+                            self.builder
+                                .build_int_z_extend(v, t, "zexttmp")
+                                .unwrap()
+                                .into()
+                        } else {
+                            self.builder
+                                .build_int_truncate(v, t, "trunctmp")
+                                .unwrap()
+                                .into()
                         }
-                        (BasicValueEnum::FloatValue(v), BasicTypeEnum::IntType(t)) => self
-                            .builder
-                            .build_float_to_signed_int(v, t, "fptosi")
-                            .unwrap()
-                            .into(),
-                        (BasicValueEnum::IntValue(v), BasicTypeEnum::FloatType(t)) => self
-                            .builder
-                            .build_signed_int_to_float(v, t, "sitofp")
-                            .unwrap()
-                            .into(),
-                        (BasicValueEnum::FloatValue(v), BasicTypeEnum::FloatType(t)) => {
-                            if v.get_type() == t {
-                                v.into()
-                            } else {
-                                let src_is_f32 = v.get_type() == self.context.f32_type();
-                                let dst_is_f32 = t == self.context.f32_type();
-                                if src_is_f32 && !dst_is_f32 {
-                                    self.builder.build_float_ext(v, t, "fext").unwrap().into()
-                                } else {
-                                    self.builder
-                                        .build_float_trunc(v, t, "ftrunc")
-                                        .unwrap()
-                                        .into()
-                                }
-                            }
-                        }
-                        _ => panic!("Codegen: Unsupported cast combination"),
                     }
-                } else {
-                    panic!("Codegen: Cast target must be a type name");
+                    (BasicValueEnum::FloatValue(v), BasicTypeEnum::IntType(t)) => self
+                        .builder
+                        .build_float_to_signed_int(v, t, "fptosi")
+                        .unwrap()
+                        .into(),
+                    (BasicValueEnum::IntValue(v), BasicTypeEnum::FloatType(t)) => self
+                        .builder
+                        .build_signed_int_to_float(v, t, "sitofp")
+                        .unwrap()
+                        .into(),
+                    (BasicValueEnum::FloatValue(v), BasicTypeEnum::FloatType(t)) => {
+                        if v.get_type() == t {
+                            v.into()
+                        } else {
+                            let src_is_f32 = v.get_type() == self.context.f32_type();
+                            let dst_is_f32 = t == self.context.f32_type();
+                            if src_is_f32 && !dst_is_f32 {
+                                self.builder.build_float_ext(v, t, "fext").unwrap().into()
+                            } else {
+                                self.builder
+                                    .build_float_trunc(v, t, "ftrunc")
+                                    .unwrap()
+                                    .into()
+                            }
+                        }
+                    }
+                    (BasicValueEnum::PointerValue(v), BasicTypeEnum::IntType(t)) => self
+                        .builder
+                        .build_ptr_to_int(v, t, "ptrtoint")
+                        .unwrap()
+                        .into(),
+                    (BasicValueEnum::IntValue(v), BasicTypeEnum::PointerType(t)) => self
+                        .builder
+                        .build_int_to_ptr(v, t, "inttoptr")
+                        .unwrap()
+                        .into(),
+                    _ => panic!("Codegen: Unsupported cast combination"),
                 }
             }
             ExpressionKind::AddressOf(inner) => {
@@ -1063,18 +1195,28 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     panic!("Codegen: Cannot take address of non-lvalue expression");
                 }
             }
+
             ExpressionKind::Dereference(inner) => {
+                let elem_type = if let ExpressionKind::Identifier(name) = &inner.kind {
+                    self.pointer_elem_types.get(name).copied()
+                } else {
+                    None
+                };
+
                 let ptr_val = self.compile_expression(inner, None);
 
                 if let BasicValueEnum::PointerValue(ptr) = ptr_val {
                     self.emit_null_check(ptr, "null pointer dereference");
 
-                    let load_type = expected_type.unwrap_or_else(|| self.context.i64_type().into());
+                    let load_type = expected_type
+                        .or(elem_type)
+                        .unwrap_or_else(|| self.context.i64_type().into());
                     self.builder.build_load(load_type, ptr, "deref").unwrap()
                 } else {
                     panic!("Codegen: Cannot dereference non-pointer value");
                 }
             }
+
             ExpressionKind::Tuple(elements) => {
                 let mut field_types: Vec<BasicTypeEnum<'ctx>> = Vec::with_capacity(elements.len());
                 let mut field_values: Vec<BasicValueEnum<'ctx>> =
@@ -1432,6 +1574,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 ),
             },
             _ => panic!("Codegen: Type mismatch in compound assignment"),
+        }
+    }
+
+    fn expr_to_typespec(expr: &Expression) -> TypeSpec {
+        match &expr.kind {
+            ExpressionKind::Identifier(name) => TypeSpec::Named(name.clone()),
+            ExpressionKind::Dereference(inner) => {
+                TypeSpec::Pointer(Box::new(Self::expr_to_typespec(inner)))
+            }
+            _ => panic!(
+                "Codegen: Cannot convert expression to type: {:?}",
+                expr.kind
+            ),
         }
     }
 

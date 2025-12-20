@@ -82,7 +82,7 @@ pub struct Expression {
 pub enum ExpressionKind {
     Int(i64),
     Float(f64),
-    StringLit(String),
+    StringLit(Vec<u8>),
     Boolean(bool),
     None,
 

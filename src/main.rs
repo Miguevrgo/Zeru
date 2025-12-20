@@ -79,13 +79,16 @@ fn compile_pipeline(
         println!("  Compiling {} [{}]...", filename, mode_str);
     }
 
-    let input = match fs::read_to_string(path) {
+    let user_code = match fs::read_to_string(path) {
         Ok(code) => code,
         Err(e) => {
             println!("❌ Error reading file: {}", e);
             return None;
         }
     };
+
+    let std_io = include_str!("../std/builtin.zr");
+    let input = format!("{}\n{}", std_io, user_code);
 
     let lexer = Lexer::new(&input);
     let mut parser = crate::parser::Parser::new(lexer);

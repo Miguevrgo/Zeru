@@ -370,13 +370,11 @@ impl SemanticAnalyzer {
             "f32" => Type::Float(FloatWidth::W32),
             "f64" => Type::Float(FloatWidth::W64),
             "bool" => Type::Bool,
-            "String" => Type::String,
             "void" => Type::Void,
             "self" => Type::Unknown,
             _ => {
                 let mut candidates = vec![
                     "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f32", "f64", "bool",
-                    "String",
                 ];
                 for k in self.struct_defs.keys() {
                     candidates.push(k);
@@ -567,10 +565,6 @@ impl SemanticAnalyzer {
 
                 let item_type = match iterable_type {
                     Type::Array { elem_type, .. } => *elem_type,
-                    Type::String => Type::Integer {
-                        signed: Signedness::Unsigned,
-                        width: IntWidth::W8,
-                    },
                     Type::Unknown => Type::Unknown,
                     _ => {
                         self.error(
@@ -641,7 +635,10 @@ impl SemanticAnalyzer {
                 Type::Float(FloatWidth::W32)
             }
             ExpressionKind::Boolean(_) => Type::Bool,
-            ExpressionKind::StringLit(_) => Type::String,
+            ExpressionKind::StringLit(_) => Type::Pointer(Box::new(Type::Integer {
+                signed: Signedness::Unsigned,
+                width: IntWidth::W8,
+            })),
             ExpressionKind::None => {
                 if let Some(Type::Optional(inner)) = expected_type {
                     Type::Optional(inner.clone())
@@ -784,6 +781,16 @@ impl SemanticAnalyzer {
 
                 if l_ty == Type::Unknown || r_ty == Type::Unknown {
                     return Type::Unknown;
+                }
+
+                if let Type::Pointer(_) = &l_ty
+                    && matches!(
+                        operator,
+                        crate::token::Token::Plus | crate::token::Token::Minus
+                    )
+                    && matches!(r_ty, Type::Integer { .. })
+                {
+                    return l_ty;
                 }
 
                 if !l_ty.accepts(&r_ty) {
@@ -1036,10 +1043,6 @@ impl SemanticAnalyzer {
 
                 match left_type {
                     Type::Array { elem_type, .. } => *elem_type,
-                    Type::String => Type::Integer {
-                        signed: Signedness::Unsigned,
-                        width: IntWidth::W8,
-                    },
                     Type::Unknown => Type::Unknown,
                     _ => {
                         self.error(

@@ -27,7 +27,6 @@ pub enum Type {
     },
     Float(FloatWidth),
     Bool,
-    String,
     Void,
 
     Struct {
@@ -106,7 +105,6 @@ impl std::fmt::Display for Type {
                 }
             ),
             Type::Bool => write!(f, "bool"),
-            Type::String => write!(f, "String"),
             Type::Void => write!(f, "void"),
             Type::Struct { name, .. } => write!(f, "{}", name),
             Type::Enum { name, .. } => write!(f, "{}", name),

@@ -1,0 +1,97 @@
+// Zeru Standard Library - Linux x86_64 System Calls
+// This module provides low-level syscall wrappers using inline assembly.
+// It also provides I/O operations as importing is not yet supported
+//
+// x86_64 Linux syscall convention:
+// - rax: syscall number
+// - rdi, rsi, rdx, r10, r8, r9: arguments 1-6
+// - rax: return value
+// - rcx, r11: clobbered by syscall
+//
+// Usage:
+//   print("Hello");          println("Hello");
+//   eprint("Error");         eprintln("Error");
+//   exit(0);
+//
+// Future: println("Hello {}", name);
+
+
+// Syscall numbers (Linux x86_64)
+const SYS_WRITE: i64 = 1;
+const SYS_EXIT: i64 = 60;
+
+const stdin: i32 = 0;
+const stdout: i32 = 1;
+const stderr: i32 = 2;
+
+fn syscall1(nr: i64, arg1: i64) i64 {
+    var result: i64 = 0;
+    asm volatile (
+        "syscall"
+        : "={rax}" (result)
+        : "{rax}" (nr), "{rdi}" (arg1)
+        : "rcx", "r11", "memory"
+    );
+    return result;
+}
+
+fn syscall2(nr: i64, arg1: i64, arg2: i64) i64 {
+    var result: i64 = 0;
+    asm volatile (
+        "syscall"
+        : "={rax}" (result)
+        : "{rax}" (nr), "{rdi}" (arg1), "{rsi}" (arg2)
+        : "rcx", "r11", "memory"
+    );
+    return result;
+}
+
+fn syscall3(nr: i64, arg1: i64, arg2: i64, arg3: i64) i64 {
+    var result: i64 = 0;
+    asm volatile (
+        "syscall"
+        : "={rax}" (result)
+        :   "{rax}" (nr),
+            "{rdi}" (arg1),
+            "{rsi}" (arg2),
+            "{rdx}" (arg3)
+        : "rcx", "r11", "memory"
+    );
+    return result;
+}
+
+fn strlen(s: *u8) usize {
+    var len: usize = 0;
+    var ptr: *u8 = s;
+    while *ptr != 0 {
+        len += 1;
+        ptr = ptr + 1;
+    }
+    return len;
+}
+
+fn write(fd: i32, buf: *u8, count: usize) i64 {
+    return syscall3(SYS_WRITE, fd as i64, buf as i64, count as i64);
+}
+
+fn exit(code: i32) {
+    syscall1(SYS_EXIT, code as i64);
+}
+
+fn print(s: *u8) {
+    write(stdout, s, strlen(s));
+}
+
+fn println(s: *u8) {
+    write(stdout, s, strlen(s));
+    write(stdout, "\n", 1);
+}
+
+fn eprint(s: *u8) {
+    write(stderr, s, strlen(s));
+}
+
+fn eprintln(s: *u8) {
+    write(stderr, s, strlen(s));
+    write(stderr, "\n", 1);
+}

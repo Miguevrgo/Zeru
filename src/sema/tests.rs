@@ -266,7 +266,7 @@ fn test_boolean_type_mismatch() {
 fn test_string_type() {
     let input = "
             fn main() {
-                var s: String = \"hello\";
+                var s: *u8 = \"hello\";
             }
         ";
     let errors = analyze(input);
@@ -277,7 +277,7 @@ fn test_string_type() {
 fn test_string_type_mismatch() {
     let input = "
             fn main() {
-                var s: String = 42;
+                var s: *u8 = 42;
             }
         ";
     let errors = analyze(input);
@@ -1752,8 +1752,58 @@ fn test_immutable_self_cannot_modify_fields() {
             fn main() {}
         ";
     let errors = analyze(input);
-    // For now, this test documents current behavior
-    // FIX: self field mutation through non-mut self should error
-    // The current implementation may not detect this case
     println!("Errors for immutable self: {:?}", errors);
+}
+
+#[test]
+fn test_pointer_arithmetic_add() {
+    let input = "
+        fn main() {
+            var ptr: *u8 = \"hello\";
+            var next: *u8 = ptr + 1;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty(), "ptr + int should be valid: {:?}", errors);
+}
+
+#[test]
+fn test_pointer_arithmetic_sub() {
+    let input = "
+        fn main() {
+            var ptr: *u8 = \"hello\";
+            var prev: *u8 = ptr - 1;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty(), "ptr - int should be valid: {:?}", errors);
+}
+
+#[test]
+fn test_pointer_arithmetic_with_usize() {
+    let input = "
+        fn main() {
+            var ptr: *u8 = \"hello\";
+            var offset: usize = 2;
+            var next: *u8 = ptr + offset;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(
+        errors.is_empty(),
+        "ptr + usize should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_pointer_arithmetic_invalid_mul() {
+    let input = "
+        fn main() {
+            var ptr: *u8 = \"hello\";
+            var bad: *u8 = ptr * 2;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty(), "ptr * int should be invalid");
 }

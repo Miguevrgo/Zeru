@@ -606,3 +606,29 @@ fn test_tuple_with_different_types() {
         "Mixed-type tuple should compile correctly"
     );
 }
+
+#[test]
+fn test_pointer_arithmetic_add() {
+    let input = "
+        fn main() {
+            var ptr: *u8 = \"test\";
+            var next: *u8 = ptr + 1;
+        }
+    ";
+    assert_ir_contains(input, &["getelementptr"]);
+}
+
+#[test]
+fn test_pointer_arithmetic_sub() {
+    let input = "
+        fn main() {
+            var ptr: *u8 = \"test\";
+            var prev: *u8 = ptr - 1;
+        }
+    ";
+    let ir = compile_to_ir(input).unwrap();
+    assert!(
+        ir.contains("getelementptr"),
+        "Should use GEP for pointer sub"
+    );
+}
