@@ -350,10 +350,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 type_annotation,
                 ..
             } => {
-                let is_unsigned = type_annotation
-                    .as_ref()
-                    .map(|spec| Self::is_unsigned_type(spec))
-                    .unwrap_or(false);
+                let is_unsigned = type_annotation.as_ref().is_some_and(Self::is_unsigned_type);
+
                 let target_type = if let Some(spec) = type_annotation {
                     match self.get_llvm_type(spec) {
                         Some(ty) => Some(ty),
