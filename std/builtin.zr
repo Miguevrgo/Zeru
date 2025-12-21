@@ -8,21 +8,18 @@
 // - rax: return value
 // - rcx, r11: clobbered by syscall
 //
-// Usage:
-//   print("Hello");          println("Hello");
-//   eprint("Error");         eprintln("Error");
-//   exit(0);
-//
-// Future: println("Hello {}", name);
+// print(), println(), eprint(), eprintln() are compiler built-ins
+// that use implicit OutStream buffers (4KB each for stdout/stderr).
+// println/eprintln automatically flush after writing.
 
 
-// Syscall numbers (Linux x86_64)
+const SYS_READ: i64 = 0;
 const SYS_WRITE: i64 = 1;
 const SYS_EXIT: i64 = 60;
 
-const stdin: i32 = 0;
-const stdout: i32 = 1;
-const stderr: i32 = 2;
+const STDIN: i32 = 0;
+const STDOUT: i32 = 1;
+const STDERR: i32 = 2;
 
 fn syscall1(nr: i64, arg1: i64) i64 {
     var result: i64 = 0;
@@ -60,6 +57,65 @@ fn syscall3(nr: i64, arg1: i64, arg2: i64, arg3: i64) i64 {
     return result;
 }
 
+struct OutStream {
+    fd: i32,
+    buffer: Array<u8, 4096>,
+    index: usize,
+
+    fn flush(var self) i64 {
+        if self.index == 0 {
+            return 0;
+        }
+
+        var buf_ptr: *u8 = &self.buffer[0];
+        var amount_written: i64 = syscall3(SYS_WRITE, self.fd as i64, buf_ptr as i64, self.index as i64);
+        self.index = 0;
+
+        if amount_written < 0 {
+            return -1;
+        }
+        return amount_written;
+    }
+
+    fn write_bytes(var self, bytes: *u8, count: usize) i64 {
+        var src_index: usize = 0;
+        var remaining: usize = count;
+
+        while remaining > 0 {
+            var space_left: usize = 4096 - self.index;
+            var to_copy: usize = remaining;
+
+            if space_left < remaining {
+                to_copy = space_left;
+            }
+
+            var copy_idx: usize = 0;
+            while copy_idx < to_copy {
+                var src_ptr: *u8 = bytes + src_index + copy_idx;
+                self.buffer[self.index + copy_idx] = *src_ptr;
+                copy_idx += 1;
+            }
+
+            self.index += to_copy;
+            src_index += to_copy;
+            remaining -= to_copy;
+
+            if self.index == 4096 {
+                var flush_result: i64 = self.flush();
+                if flush_result < 0 {
+                    return flush_result;
+                }
+            }
+        }
+
+        return count as i64;
+    }
+
+    fn write_str(var self, s: *u8) i64 {
+        return self.write_bytes(s, strlen(s));
+    }
+}
+
 fn strlen(s: *u8) usize {
     var len: usize = 0;
     var ptr: *u8 = s;
@@ -70,28 +126,23 @@ fn strlen(s: *u8) usize {
     return len;
 }
 
-fn write(fd: i32, buf: *u8, count: usize) i64 {
-    return syscall3(SYS_WRITE, fd as i64, buf as i64, count as i64);
+fn memcpy_ptr(dest: *u8, src: *u8, n: usize) {
+    var i: usize = 0;
+    while i < n {
+        var dest_ptr: *u8 = dest + i;
+        var src_ptr: *u8 = src + i;
+        *dest_ptr = *src_ptr;
+        i += 1;
+    }
+}
+
+fn read_direct(fd: i32, buf: *u8, count: usize) i64 {
+    return syscall3(SYS_READ, fd as i64, buf as i64, count as i64);
 }
 
 fn exit(code: i32) {
     syscall1(SYS_EXIT, code as i64);
 }
 
-fn print(s: *u8) {
-    write(stdout, s, strlen(s));
-}
 
-fn println(s: *u8) {
-    write(stdout, s, strlen(s));
-    write(stdout, "\n", 1);
-}
 
-fn eprint(s: *u8) {
-    write(stderr, s, strlen(s));
-}
-
-fn eprintln(s: *u8) {
-    write(stderr, s, strlen(s));
-    write(stderr, "\n", 1);
-}

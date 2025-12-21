@@ -32,6 +32,9 @@ pub struct Compiler<'a, 'ctx> {
     loop_stack: Vec<LoopContext<'ctx>>,
     safety_mode: SafetyMode,
     panic_fn: Option<FunctionValue<'ctx>>,
+
+    stdout_stream: Option<PointerValue<'ctx>>,
+    stderr_stream: Option<PointerValue<'ctx>>,
 }
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
@@ -55,6 +58,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             loop_stack: Vec::new(),
             safety_mode,
             panic_fn: None,
+            stdout_stream: None,
+            stderr_stream: None,
         }
     }
 
@@ -90,6 +95,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.current_struct_context = None;
             }
         }
+
+        self.init_builtin_streams();
 
         for stmt in &program.statements {
             if let StatementKind::Function {
@@ -244,18 +251,28 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         };
 
         let mut param_types = Vec::new();
-        for (param_name, type_spec, _is_mut) in params {
+        for (param_name, type_spec, is_mut) in params {
             if param_name == "self" {
                 if let Some(struct_name) = &self.current_struct_context
                     && let Some((st, _)) = self.struct_defs.get(struct_name)
                 {
-                    param_types.push(st.as_basic_type_enum().into());
+                    if *is_mut {
+                        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+                        param_types.push(ptr_type.into());
+                    } else {
+                        param_types.push(st.as_basic_type_enum().into());
+                    }
                     continue;
                 }
                 if let Some((struct_name, _)) = name.split_once("::")
                     && let Some((st, _)) = self.struct_defs.get(struct_name)
                 {
-                    param_types.push(st.as_basic_type_enum().into());
+                    if *is_mut {
+                        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+                        param_types.push(ptr_type.into());
+                    } else {
+                        param_types.push(st.as_basic_type_enum().into());
+                    }
                     continue;
                 }
                 panic!(
@@ -294,20 +311,48 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.variables.clear();
 
         for (i, arg) in function.get_param_iter().enumerate() {
-            let (param_name, param_spec, _is_mut) = &params[i];
-            let arg_type = if param_name == "self" {
-                if let Some(struct_name) = &self.current_struct_context {
-                    self.struct_defs
+            let (param_name, param_spec, is_mut) = &params[i];
+
+            if param_name == "self" {
+                if *is_mut {
+                    if let Some(struct_name) = &self.current_struct_context {
+                        let struct_type = self
+                            .struct_defs
+                            .get(struct_name)
+                            .unwrap()
+                            .0
+                            .as_basic_type_enum();
+                        let ptr_type = self
+                            .context
+                            .ptr_type(inkwell::AddressSpace::default())
+                            .as_basic_type_enum();
+                        let alloca = self.create_entry_block_alloca(function, param_name, ptr_type);
+                        self.builder.build_store(alloca, arg).unwrap();
+                        self.variables
+                            .insert(param_name.clone(), (alloca, ptr_type, false));
+
+                        self.pointer_elem_types
+                            .insert(param_name.clone(), struct_type);
+                        continue;
+                    }
+                } else if let Some(struct_name) = &self.current_struct_context {
+                    let struct_type = self
+                        .struct_defs
                         .get(struct_name)
                         .unwrap()
                         .0
-                        .as_basic_type_enum()
-                } else {
-                    panic!("self in non-struct context body");
+                        .as_basic_type_enum();
+                    let alloca = self.create_entry_block_alloca(function, param_name, struct_type);
+                    self.builder.build_store(alloca, arg).unwrap();
+                    self.variables
+                        .insert(param_name.clone(), (alloca, struct_type, false));
+                    continue;
                 }
-            } else {
-                self.get_llvm_type(param_spec).expect("Invalid param type")
-            };
+
+                panic!("self in non-struct context body");
+            }
+
+            let arg_type = self.get_llvm_type(param_spec).expect("Invalid param type");
 
             let alloca = self.create_entry_block_alloca(function, param_name, arg_type);
             self.builder.build_store(alloca, arg).unwrap();
@@ -545,7 +590,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) -> Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)> {
         match &expr.kind {
             ExpressionKind::Identifier(name) => {
-                self.variables.get(name).map(|(ptr, ty, _)| (*ptr, *ty))
+                if let Some((ptr, ty, _)) = self.variables.get(name) {
+                    if name == "self" && matches!(ty, BasicTypeEnum::PointerType(_)) {
+                        let ptr_val = self.builder.build_load(*ty, *ptr, "self_ptr").unwrap();
+                        if let BasicValueEnum::PointerValue(actual_ptr) = ptr_val
+                            && let Some(elem_type) = self.pointer_elem_types.get(name)
+                        {
+                            return Some((actual_ptr, *elem_type));
+                        }
+
+                        return None;
+                    }
+                    return Some((*ptr, *ty));
+                }
+                None
             }
             ExpressionKind::Get { object, name } => {
                 let (ptr, val_type) = self.compile_lvalue(object)?;
@@ -811,21 +869,83 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     name: method_name,
                 } = &function.kind
                 {
-                    let obj_val = self.compile_expression(object, None);
-                    let struct_name = match obj_val.get_type() {
-                        BasicTypeEnum::StructType(st) => {
-                            st.get_name().unwrap().to_str().unwrap().to_string()
-                        }
-                        _ => panic!("Method call on non-struct"),
+                    let struct_name_result = if let ExpressionKind::Identifier(var_name) =
+                        &object.kind
+                    {
+                        self.variables.get(var_name).and_then(|(_, ty, _)| {
+                            if let BasicTypeEnum::StructType(st) = ty {
+                                Some(st.get_name().unwrap().to_str().unwrap().to_string())
+                            } else if let BasicTypeEnum::PointerType(_) = ty {
+                                self.pointer_elem_types.get(var_name).and_then(|elem_ty| {
+                                    if let BasicTypeEnum::StructType(st) = elem_ty {
+                                        Some(st.get_name().unwrap().to_str().unwrap().to_string())
+                                    } else {
+                                        None
+                                    }
+                                })
+                            } else {
+                                None
+                            }
+                        })
+                    } else {
+                        None
                     };
+
+                    let struct_name = if let Some(name) = struct_name_result {
+                        name
+                    } else {
+                        let obj_val = self.compile_expression(object, None);
+                        match obj_val.get_type() {
+                            BasicTypeEnum::StructType(st) => {
+                                st.get_name().unwrap().to_str().unwrap().to_string()
+                            }
+                            _ => panic!("Method call on non-struct"),
+                        }
+                    };
+
                     let mangled = format!("{}::{}", struct_name, method_name);
                     let func = self
                         .module
                         .get_function(&mangled)
                         .expect("Method not found");
-                    let args: Vec<BasicMetadataValueEnum> = vec![obj_val.into()];
+
+                    let param_types = func.get_type().get_param_types();
+                    let first_param_is_ptr = param_types
+                        .first()
+                        .map(|t| matches!(t, inkwell::types::BasicMetadataTypeEnum::PointerType(_)))
+                        .unwrap_or(false);
+
+                    let args: Vec<BasicMetadataValueEnum> = if first_param_is_ptr {
+                        if let ExpressionKind::Identifier(var_name) = &object.kind {
+                            if let Some((ptr, _, _)) = self.variables.get(var_name) {
+                                if self.pointer_elem_types.contains_key(var_name) {
+                                    let ptr_type =
+                                        self.context.ptr_type(inkwell::AddressSpace::default());
+                                    let loaded_ptr = self
+                                        .builder
+                                        .build_load(ptr_type, *ptr, "self_loaded")
+                                        .unwrap();
+                                    vec![loaded_ptr.into()]
+                                } else {
+                                    vec![(*ptr).into()]
+                                }
+                            } else {
+                                panic!("Cannot get pointer to object for method call");
+                            }
+                        } else {
+                            panic!("var self method requires identifier object");
+                        }
+                    } else {
+                        let obj_val = self.compile_expression(object, None);
+                        vec![obj_val.into()]
+                    };
+
                     (func, args)
                 } else if let ExpressionKind::Identifier(name) = &function.kind {
+                    if matches!(name.as_str(), "print" | "println" | "eprint" | "eprintln") {
+                        return self.compile_builtin_print(name, arguments);
+                    }
+
                     let func = self.module.get_function(name).expect("Function not found");
                     (func, Vec::new())
                 } else {
@@ -1655,6 +1775,170 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
 
         panic!("Codegen: Unknown type {name}");
+    }
+
+    fn init_builtin_streams(&mut self) {
+        let (outstream_type, field_indices) =
+            if let Some((st, indices)) = self.struct_defs.get("OutStream") {
+                (*st, indices.clone())
+            } else {
+                return;
+            };
+
+        let fd_index = *field_indices.get("fd").expect("OutStream missing fd field");
+        let index_index = *field_indices
+            .get("index")
+            .expect("OutStream missing index field");
+
+        let stdout_global = self.module.add_global(
+            outstream_type,
+            Some(inkwell::AddressSpace::default()),
+            "__stdout_stream",
+        );
+        let stderr_global = self.module.add_global(
+            outstream_type,
+            Some(inkwell::AddressSpace::default()),
+            "__stderr_stream",
+        );
+
+        stdout_global.set_initializer(&outstream_type.const_zero());
+        stderr_global.set_initializer(&outstream_type.const_zero());
+
+        let void_type = self.context.void_type();
+        let init_fn_type = void_type.fn_type(&[], false);
+        let init_fn = self
+            .module
+            .add_function("__init_builtin_streams", init_fn_type, None);
+
+        let entry_block = self.context.append_basic_block(init_fn, "entry");
+        self.builder.position_at_end(entry_block);
+
+        let stdout_ptr = stdout_global.as_pointer_value();
+        let fd_ptr = self
+            .builder
+            .build_struct_gep(outstream_type, stdout_ptr, fd_index, "stdout_fd_ptr")
+            .expect("Failed to GEP stdout fd");
+        self.builder
+            .build_store(fd_ptr, self.context.i32_type().const_int(1, false))
+            .unwrap();
+        let index_ptr = self
+            .builder
+            .build_struct_gep(outstream_type, stdout_ptr, index_index, "stdout_index_ptr")
+            .expect("Failed to GEP stdout index");
+        self.builder
+            .build_store(index_ptr, self.context.i64_type().const_zero())
+            .unwrap();
+
+        let stderr_ptr = stderr_global.as_pointer_value();
+        let fd_ptr_err = self
+            .builder
+            .build_struct_gep(outstream_type, stderr_ptr, fd_index, "stderr_fd_ptr")
+            .expect("Failed to GEP stderr fd");
+        self.builder
+            .build_store(fd_ptr_err, self.context.i32_type().const_int(2, false))
+            .unwrap();
+        let index_ptr_err = self
+            .builder
+            .build_struct_gep(outstream_type, stderr_ptr, index_index, "stderr_index_ptr")
+            .expect("Failed to GEP stderr index");
+        self.builder
+            .build_store(index_ptr_err, self.context.i64_type().const_zero())
+            .unwrap();
+
+        self.builder.build_return(None).unwrap();
+
+        self.stdout_stream = Some(stdout_ptr);
+        self.stderr_stream = Some(stderr_ptr);
+
+        let ctor_struct_type = self.context.struct_type(
+            &[
+                self.context.i32_type().into(),
+                self.context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .into(),
+                self.context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .into(),
+            ],
+            false,
+        );
+
+        let ctor_element = ctor_struct_type.const_named_struct(&[
+            self.context.i32_type().const_int(65535, false).into(),
+            init_fn.as_global_value().as_pointer_value().into(),
+            self.context
+                .ptr_type(inkwell::AddressSpace::default())
+                .const_null()
+                .into(),
+        ]);
+
+        let ctors_array: inkwell::values::ArrayValue =
+            ctor_struct_type.const_array(&[ctor_element]);
+        let global_ctors = self.module.add_global(
+            ctors_array.get_type(),
+            Some(inkwell::AddressSpace::default()),
+            "llvm.global_ctors",
+        );
+        global_ctors.set_linkage(inkwell::module::Linkage::Appending);
+        global_ctors.set_initializer(&ctors_array);
+    }
+
+    fn compile_builtin_print(
+        &mut self,
+        name: &str,
+        arguments: &[Expression],
+    ) -> BasicValueEnum<'ctx> {
+        if arguments.len() != 1 {
+            panic!("{}() expects exactly 1 argument", name);
+        }
+
+        let stream_ptr = match name {
+            "print" | "println" => self.stdout_stream.expect("stdout_stream not initialized"),
+            "eprint" | "eprintln" => self.stderr_stream.expect("stderr_stream not initialized"),
+            _ => unreachable!(),
+        };
+
+        let string_arg = self.compile_expression(
+            &arguments[0],
+            Some(
+                self.context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .into(),
+            ),
+        );
+
+        let write_str_fn = self
+            .module
+            .get_function("OutStream::write_str")
+            .expect("OutStream::write_str not found");
+
+        self.builder
+            .build_call(write_str_fn, &[stream_ptr.into(), string_arg.into()], "")
+            .unwrap();
+
+        if name == "println" || name == "eprintln" {
+            let newline = self
+                .builder
+                .build_global_string_ptr("\n", "newline")
+                .unwrap();
+            self.builder
+                .build_call(
+                    write_str_fn,
+                    &[stream_ptr.into(), newline.as_pointer_value().into()],
+                    "",
+                )
+                .unwrap();
+
+            let flush_fn = self
+                .module
+                .get_function("OutStream::flush")
+                .expect("OutStream::flush not found");
+            self.builder
+                .build_call(flush_fn, &[stream_ptr.into()], "")
+                .unwrap();
+        }
+
+        self.context.i32_type().const_int(0, false).into()
     }
 }
 

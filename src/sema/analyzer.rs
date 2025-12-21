@@ -21,9 +21,21 @@ pub struct SemanticAnalyzer {
 
 impl SemanticAnalyzer {
     pub fn new() -> Self {
+        let mut symbols = SymbolTable::new();
+
+        let ptr_u8 = Type::Pointer(Box::new(Type::Integer {
+            signed: Signedness::Unsigned,
+            width: IntWidth::W8,
+        }));
+
+        symbols.insert_fn("print".to_string(), vec![ptr_u8.clone()], Type::Void);
+        symbols.insert_fn("println".to_string(), vec![ptr_u8.clone()], Type::Void);
+        symbols.insert_fn("eprint".to_string(), vec![ptr_u8.clone()], Type::Void);
+        symbols.insert_fn("eprintln".to_string(), vec![ptr_u8.clone()], Type::Void);
+
         Self {
             errors: Vec::new(),
-            symbols: SymbolTable::new(),
+            symbols,
             struct_defs: HashMap::new(),
             enum_defs: HashMap::new(),
             current_fn_return_type: None,
