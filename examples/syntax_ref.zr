@@ -91,7 +91,7 @@ fn main() {
         [0.0, 1.0]
     ];
 
-    var players = Vector<String>::new();
+    var players = Vector<str>::new();
     players.push("Player1");
 
     var vec_a = Vector3::new(0.0, 10.0, 0.0);
@@ -127,7 +127,7 @@ fn main() {
     var arith_shift = signed_val >> 1;
     var logic_shift = unsigned_val >> 1;
 
-    const filename: String = "config.ini";
+    const filename: str = "config.ini";
     if filename.ends_with(".ini") {
         var content = os::read_file(filename);
     }

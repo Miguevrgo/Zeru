@@ -80,6 +80,15 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn operator_or_assign(&mut self, simple: Token, compound: Token) -> Token {
+        if self.peek() == Some(&'=') {
+            self.advance();
+            compound
+        } else {
+            simple
+        }
+    }
+
     pub fn next_token(&mut self) -> (Token, usize, Span) {
         self.skip_whitespace();
 
@@ -103,54 +112,13 @@ impl<'a> Lexer<'a> {
                     Token::Assign
                 }
             }
-            '!' => {
-                if self.peek() == Some(&'=') {
-                    self.advance();
-                    Token::NotEq
-                } else {
-                    Token::Bang
-                }
-            }
-            '+' => {
-                if self.peek() == Some(&'=') {
-                    self.advance();
-                    Token::PlusEq
-                } else {
-                    Token::Plus
-                }
-            }
-            '-' => {
-                if self.peek() == Some(&'=') {
-                    self.advance();
-                    Token::MinusEq
-                } else {
-                    Token::Minus
-                }
-            }
-            '*' => {
-                if self.peek() == Some(&'=') {
-                    self.advance();
-                    Token::StarEq
-                } else {
-                    Token::Star
-                }
-            }
-            '/' => {
-                if self.peek() == Some(&'=') {
-                    self.advance();
-                    Token::SlashEq
-                } else {
-                    Token::Slash
-                }
-            }
-            '%' => {
-                if self.peek() == Some(&'=') {
-                    self.advance();
-                    Token::ModEq
-                } else {
-                    Token::Mod
-                }
-            }
+            '!' => self.operator_or_assign(Token::Bang, Token::NotEq),
+            '+' => self.operator_or_assign(Token::Plus, Token::PlusEq),
+            '-' => self.operator_or_assign(Token::Minus, Token::MinusEq),
+            '*' => self.operator_or_assign(Token::Star, Token::StarEq),
+            '/' => self.operator_or_assign(Token::Slash, Token::SlashEq),
+            '%' => self.operator_or_assign(Token::Mod, Token::ModEq),
+            '^' => self.operator_or_assign(Token::BitXor, Token::BitXorEq),
             '&' => {
                 if self.peek() == Some(&'=') {
                     self.advance();
@@ -171,14 +139,6 @@ impl<'a> Lexer<'a> {
                     Token::Or
                 } else {
                     Token::BitOr
-                }
-            }
-            '^' => {
-                if self.peek() == Some(&'=') {
-                    self.advance();
-                    Token::BitXorEq
-                } else {
-                    Token::BitXor
                 }
             }
             '<' => {
@@ -269,6 +229,7 @@ impl<'a> Lexer<'a> {
             "as" => Token::As,
             "struct" => Token::Struct,
             "enum" => Token::Enum,
+            "str" => Token::Str,
             "match" => Token::Match,
             "default" => Token::Default,
             "self" => Token::SelfTok,
@@ -282,54 +243,37 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_number(&mut self, ch: char) -> Token {
-        let mut literal = String::from(ch);
-        let mut dot = false;
+    fn read_digits(&mut self, predicate: fn(char) -> bool) -> String {
+        let mut digits = String::new();
+        while let Some(&ch) = self.peek() {
+            if predicate(ch) {
+                digits.push(self.advance().unwrap());
+            } else {
+                break;
+            }
+        }
+        digits
+    }
 
+    fn read_number(&mut self, ch: char) -> Token {
         if ch == '0'
             && let Some(&ch) = self.peek()
         {
-            match ch {
-                'x' => {
-                    literal.clear();
-                    self.advance().unwrap();
-                    while let Some(&n_ch) = self.peek() {
-                        if n_ch.is_ascii_hexdigit() {
-                            literal.push(self.advance().unwrap());
-                        } else {
-                            break;
-                        }
-                    }
-                    return Token::Int(i64::from_str_radix(&literal, 16).unwrap_or(0));
-                }
-                'b' => {
-                    literal.clear();
-                    self.advance().unwrap();
-                    while let Some(&n_ch) = self.peek() {
-                        if n_ch == '0' || n_ch == '1' {
-                            literal.push(self.advance().unwrap());
-                        } else {
-                            break;
-                        }
-                    }
-
-                    return Token::Int(i64::from_str_radix(&literal, 2).unwrap_or(0));
-                }
-                'o' => {
-                    literal.clear();
-                    self.advance().unwrap();
-                    while let Some(&n_ch) = self.peek() {
-                        if n_ch as u8 >= b'0' && n_ch as u8 <= b'7' {
-                            literal.push(self.advance().unwrap());
-                        } else {
-                            break;
-                        }
-                    }
-                    return Token::Int(i64::from_str_radix(&literal, 8).unwrap_or(0));
-                }
-                _ => {}
+            let (radix, predicate): (u32, fn(char) -> bool) = match ch {
+                'x' => (16, |c| c.is_ascii_hexdigit()),
+                'b' => (2, |c| c == '0' || c == '1'),
+                'o' => (8, |c| matches!(c, '0'..='7')),
+                _ => (0, |_| false),
+            };
+            if radix != 0 {
+                self.advance();
+                let digits = self.read_digits(predicate);
+                return Token::Int(i64::from_str_radix(&digits, radix).unwrap_or(0));
             }
         }
+
+        let mut literal = String::from(ch);
+        let mut dot = false;
 
         while let Some(&ch) = self.peek() {
             if ch.is_ascii_digit() {

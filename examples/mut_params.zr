@@ -14,9 +14,9 @@ fn process(var counter: i32, limit: i32) i32 {
     return counter;
 }
 
-fn main() i32 {
+fn main() {
     var a = increment(5);
     var b = double(10);
     var c = process(0, 10);
-    return a + b + c;
+    exit(a + b + c);
 }

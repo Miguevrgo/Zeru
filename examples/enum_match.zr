@@ -13,7 +13,7 @@ fn status_code(s: Status) i32 {
     };
 }
 
-fn main() i32 {
+fn main() {
     var connected = Status::Connected;
     var disconnected = Status::Disconnected;
     var error = Status::Error;
@@ -22,5 +22,5 @@ fn main() i32 {
     var b = status_code(disconnected);
     var c = status_code(error);
 
-    return a + b + c;
+    exit(a + b + c);
 }

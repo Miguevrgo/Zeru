@@ -62,12 +62,6 @@ fn test_empty_main() {
 }
 
 #[test]
-fn test_main_returns_i32() {
-    let input = "fn main() i32 { return 42; }";
-    assert_ir_contains(input, &["define i32 @main()", "ret i32 42"]);
-}
-
-#[test]
 fn test_function_with_params() {
     let input = "
             fn add(a: i32, b: i32) i32 {
@@ -494,10 +488,10 @@ fn test_pointer_address_of() {
 #[test]
 fn test_pointer_dereference_read() {
     let input = "
-        fn main() i32 {
+        fn main() {
             var x: i32 = 42;
             var ptr: *i32 = &x;
-            return *ptr;
+            var val: i32 = *ptr;
         }
     ";
     assert_ir_contains(input, &["load ptr", "load i32"]);
@@ -506,11 +500,10 @@ fn test_pointer_dereference_read() {
 #[test]
 fn test_pointer_dereference_write() {
     let input = "
-        fn main() i32 {
+        fn main() {
             var x: i32 = 42;
             var ptr: *i32 = &x;
             *ptr = 100;
-            return x;
         }
     ";
     assert_compiles(input);
@@ -519,10 +512,10 @@ fn test_pointer_dereference_write() {
 #[test]
 fn test_debug_mode_emits_null_checks() {
     let input = "
-        fn main() i32 {
+        fn main() {
             var x: i32 = 42;
             var ptr: *i32 = &x;
-            return *ptr;
+            var val: i32 = *ptr;
         }
     ";
     let ir = compile_to_ir_with_mode(input, SafetyMode::Debug).unwrap();
@@ -543,10 +536,10 @@ fn test_debug_mode_emits_null_checks() {
 #[test]
 fn test_release_safe_emits_null_checks() {
     let input = "
-        fn main() i32 {
+        fn main() {
             var x: i32 = 42;
             var ptr: *i32 = &x;
-            return *ptr;
+            var val: i32 = *ptr;
         }
     ";
     let ir = compile_to_ir_with_mode(input, SafetyMode::ReleaseSafe).unwrap();
@@ -563,10 +556,10 @@ fn test_release_safe_emits_null_checks() {
 #[test]
 fn test_release_fast_no_null_checks() {
     let input = "
-        fn main() i32 {
+        fn main() {
             var x: i32 = 42;
             var ptr: *i32 = &x;
-            return *ptr;
+            var val: i32 = *ptr;
         }
     ";
     let ir = compile_to_ir_with_mode(input, SafetyMode::ReleaseFast).unwrap();
@@ -580,9 +573,8 @@ fn test_release_fast_no_null_checks() {
 #[test]
 fn test_tuple_basic_codegen() {
     let input = "
-        fn main() i32 {
+        fn main() {
             var t: (i32, i32) = (10, 20);
-            return 0;
         }
     ";
     let ir = compile_to_ir(input).unwrap();
@@ -595,9 +587,8 @@ fn test_tuple_basic_codegen() {
 #[test]
 fn test_tuple_with_different_types() {
     let input = "
-        fn main() i32 {
+        fn main() {
             var t: (i32, bool, f64) = (42, true, 3.14);
-            return 0;
         }
     ";
     let ir = compile_to_ir(input).unwrap();

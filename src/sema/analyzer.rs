@@ -150,22 +150,10 @@ impl SemanticAnalyzer {
             if let Some(rt_spec) = return_type {
                 let ret_ty = self.resolve_spec(rt_spec);
                 if ret_ty != Type::Void {
-                    match ret_ty {
-                        // FIX: Returning integer will only be allowed while there is not
-                        // exit() function. (Because it is easier to debug that way)
-                        Type::Void => {}
-                        Type::Integer {
-                            width: IntWidth::W32,
-                            signed: Signedness::Signed,
-                        } => {}
-                        _ => self.error(
-                            format!(
-                                "Function 'main' must return void or i32. Found {:?}.",
-                                ret_ty
-                            ),
-                            Span::default(),
-                        ),
-                    }
+                    self.error(
+                        format!("Function 'main' must return void. Found {ret_ty:?}"),
+                        Span::default(),
+                    );
                 }
             }
         }
@@ -326,85 +314,62 @@ impl SemanticAnalyzer {
             return ty.clone();
         }
 
-        match name {
-            "i8" => Type::Integer {
-                signed: Signedness::Signed,
-                width: IntWidth::W8,
-            },
-            "u8" => Type::Integer {
-                signed: Signedness::Unsigned,
-                width: IntWidth::W8,
-            },
-            "i16" => Type::Integer {
-                signed: Signedness::Signed,
-                width: IntWidth::W16,
-            },
-            "u16" => Type::Integer {
-                signed: Signedness::Unsigned,
-                width: IntWidth::W16,
-            },
-            "i32" => Type::Integer {
-                signed: Signedness::Signed,
-                width: IntWidth::W32,
-            },
-            "u32" => Type::Integer {
-                signed: Signedness::Unsigned,
-                width: IntWidth::W32,
-            },
-            "i64" => Type::Integer {
-                signed: Signedness::Signed,
-                width: IntWidth::W64,
-            },
-            "u64" => Type::Integer {
-                signed: Signedness::Unsigned,
-                width: IntWidth::W64,
-            },
-            "isize" => Type::Integer {
-                signed: Signedness::Signed,
-                width: IntWidth::WSize,
-            },
-            "usize" => Type::Integer {
-                signed: Signedness::Unsigned,
-                width: IntWidth::WSize,
-            },
-            "f32" => Type::Float(FloatWidth::W32),
-            "f64" => Type::Float(FloatWidth::W64),
-            "bool" => Type::Bool,
-            "void" => Type::Void,
-            "self" => Type::Unknown,
-            _ => {
-                let mut candidates = vec![
-                    "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f32", "f64", "bool",
-                ];
-                for k in self.struct_defs.keys() {
-                    candidates.push(k);
-                }
-                for k in self.enum_defs.keys() {
-                    candidates.push(k);
-                }
-
-                let mut best_match = "";
-                let mut min_dist = usize::MAX;
-
-                for candidate in candidates {
-                    let dist = Self::levenshtein_distance(name, candidate);
-                    if dist < min_dist {
-                        min_dist = dist;
-                        best_match = candidate;
-                    }
-                }
-
-                if min_dist <= 2 && !best_match.is_empty() {
-                    self.error(
-                        format!("Unknown type '{}'. Did you mean '{}'?", name, best_match),
-                        Span::default(),
-                    );
-                } else {
-                    self.error(format!("Unknown type '{}'", name), Span::default());
-                }
-                Type::Unknown
+        static PRIMITIVES: &[(&str, Signedness, IntWidth)] = &[
+            ("i8", Signedness::Signed, IntWidth::W8),
+            ("u8", Signedness::Unsigned, IntWidth::W8),
+            ("i16", Signedness::Signed, IntWidth::W16),
+            ("u16", Signedness::Unsigned, IntWidth::W16),
+            ("i32", Signedness::Signed, IntWidth::W32),
+            ("u32", Signedness::Unsigned, IntWidth::W32),
+            ("i64", Signedness::Signed, IntWidth::W64),
+            ("u64", Signedness::Unsigned, IntWidth::W64),
+            ("isize", Signedness::Signed, IntWidth::WSize),
+            ("usize", Signedness::Unsigned, IntWidth::WSize),
+        ];
+        for (type_name, signed, width) in PRIMITIVES {
+            if name == *type_name {
+                return Type::Integer {
+                    signed: *signed,
+                    width: *width,
+                };
             }
         }
+
+        match name {
+            "f32" => return Type::Float(FloatWidth::W32),
+            "f64" => return Type::Float(FloatWidth::W64),
+            "bool" => return Type::Bool,
+            "void" => return Type::Void,
+            "self" => return Type::Unknown,
+            _ => {}
+        }
+
+        let candidates: Vec<&str> = PRIMITIVES
+            .iter()
+            .map(|(n, _, _)| *n)
+            .chain(["f32", "f64", "bool"].iter().copied())
+            .chain(self.struct_defs.keys().map(|s| s.as_str()))
+            .chain(self.enum_defs.keys().map(|s| s.as_str()))
+            .collect();
+
+        if let Some(suggestion) = self.find_closest_match(name, &candidates) {
+            self.error(
+                format!("Unknown type '{}'. Did you mean '{}'?", name, suggestion),
+                Span::default(),
+            );
+        } else {
+            self.error(format!("Unknown type '{}'", name), Span::default());
+        }
+        Type::Unknown
+    }
+
+    fn find_closest_match<'a>(&self, name: &str, candidates: &[&'a str]) -> Option<&'a str> {
+        candidates
+            .iter()
+            .map(|c| (*c, Self::levenshtein_distance(name, c)))
+            .filter(|(_, dist)| *dist <= 2)
+            .min_by_key(|(_, dist)| *dist)
+            .map(|(name, _)| name)
     }
 
     fn check_statement(&mut self, stmt: &Statement) {
@@ -727,6 +692,21 @@ impl SemanticAnalyzer {
                     } else {
                         None
                     }
+                } else if let ExpressionKind::Get { object, .. } = &target.kind
+                    && let ExpressionKind::Identifier(obj_name) = &object.kind
+                    && obj_name == "self"
+                    && let Some(super::symbol_table::Symbol::Var { is_const, .. }) =
+                        self.symbols.lookup("self")
+                {
+                    if *is_const {
+                        self.error(
+                            "Cannot modify field of immutable 'self'. Declare 'self' as mutable."
+                                .to_string(),
+                            expr.span,
+                        );
+                    }
+
+                    Some(self.check_expression(target, None))
                 } else {
                     Some(self.check_expression(target, None))
                 };

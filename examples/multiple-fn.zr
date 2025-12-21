@@ -11,4 +11,5 @@ fn main() {
     fizz();
 
     var returned_val = a % 2;
+    exit(returned_val as i32);
 }

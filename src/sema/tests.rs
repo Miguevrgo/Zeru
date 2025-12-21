@@ -604,7 +604,7 @@ fn test_method_call() {
     let input = "
             struct Counter {
                 val: i32,
-                fn increment(self) { self.val = self.val + 1; }
+                fn increment(var self) { self.val = self.val + 1; }
             }
             fn main() {
                 var c = Counter { val: 0 };
@@ -636,7 +636,7 @@ fn test_method_with_parameters() {
     let input = "
             struct Calculator {
                 result: i32,
-                fn add(self, x: i32) { self.result = self.result + x; }
+                fn add(var self, x: i32) { self.result = self.result + x; }
             }
             fn main() {
                 var calc = Calculator { result: 0 };
@@ -645,6 +645,23 @@ fn test_method_with_parameters() {
         ";
     let errors = analyze(input);
     assert!(errors.is_empty());
+}
+
+#[test]
+fn test_immutable_self_field_modification() {
+    let input = "
+            struct Counter {
+                val: i32,
+                fn try_increment(self) { self.val = self.val + 1; }
+            }
+            fn main() {
+                var c = Counter { val: 0 };
+                c.try_increment();
+            }
+        ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty());
+    assert!(errors[0].contains("immutable"));
 }
 
 #[test]
@@ -1806,4 +1823,252 @@ fn test_pointer_arithmetic_invalid_mul() {
     ";
     let errors = analyze(input);
     assert!(!errors.is_empty(), "ptr * int should be invalid");
+}
+
+#[test]
+fn test_str_type_alias() {
+    let input = "
+        fn main() {
+            var s: str = \"hello\";
+        }
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty(), "str type should be valid: {:?}", errors);
+}
+
+#[test]
+fn test_str_type_equals_pointer_u8() {
+    let input = "
+        fn main() {
+            var s1: str = \"hello\";
+            var s2: *u8 = s1;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(
+        errors.is_empty(),
+        "str should be assignable to *u8: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_str_function_parameter() {
+    let input = "
+        fn print_str(s: str) {
+            // Just type check
+        }
+        fn main() {
+            print_str(\"hello\");
+        }
+    ";
+    let errors = analyze(input);
+    assert!(
+        errors.is_empty(),
+        "str as function param should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_str_return_type() {
+    let input = "
+        fn get_greeting() str {
+            return \"hello\";
+        }
+        fn main() {
+            var s: str = get_greeting();
+        }
+    ";
+    let errors = analyze(input);
+    assert!(
+        errors.is_empty(),
+        "str as return type should work: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_logical_and_short_circuit() {
+    let input = "
+        fn main() {
+            var a = true;
+            var b = false;
+            var result = a && b;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_logical_or_short_circuit() {
+    let input = "
+        fn main() {
+            var a = true;
+            var b = false;
+            var result = a || b;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_deeply_nested_expressions() {
+    let input = "
+        fn main() {
+            var x: i32 = ((((1 + 2) * 3) - 4) / 5);
+        }
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_break_outside_loop_error() {
+    let input = "
+        fn main() {
+            break;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty());
+    assert!(errors[0].contains("loop"));
+}
+
+#[test]
+fn test_continue_outside_loop_error() {
+    let input = "
+        fn main() {
+            continue;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty());
+    assert!(errors[0].contains("loop"));
+}
+
+#[test]
+fn test_return_outside_function_error() {
+    let input = "
+        fn main() {
+            // Valid return inside function
+            return;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn test_duplicate_struct_definition() {
+    let input = "
+        struct Foo { x: i32 }
+        struct Foo { y: i32 }
+        fn main() {}
+    ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty());
+    assert!(errors[0].contains("already defined"));
+}
+
+#[test]
+fn test_duplicate_enum_definition() {
+    let input = "
+        enum Color { Red, Green }
+        enum Color { Blue, Yellow }
+        fn main() {}
+    ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty());
+    assert!(errors[0].contains("already defined"));
+}
+
+#[test]
+fn test_duplicate_function_definition() {
+    let input = "
+        fn foo() {}
+        fn foo() {}
+        fn main() {}
+    ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty());
+    assert!(errors[0].contains("already defined"));
+}
+
+#[test]
+fn test_optional_type_basic() {
+    let input = "
+        fn main() {
+            var x: i32? = 42;
+            var y: i32? = None;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty(), "Optional type should work: {:?}", errors);
+}
+
+#[test]
+fn test_optional_none_requires_context() {
+    let input = "
+        fn main() {
+            var x = None;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty());
+}
+
+#[test]
+fn test_empty_array() {
+    let input = "
+        fn main() {
+            var arr: Array<i32, 3> = [0; 3];
+        }
+    ";
+    let errors = analyze(input);
+    assert!(
+        errors.is_empty(),
+        "Array initialization should be valid: {:?}",
+        errors
+    );
+}
+
+#[test]
+fn test_main_with_invalid_return_type() {
+    let input = "
+        fn main() f32 {
+            return 3.14;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty(), "main should only return void or i32");
+}
+
+#[test]
+fn test_main_with_i32_return_rejected() {
+    let input = "
+        fn main() i32 {
+            return 0;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(
+        !errors.is_empty(),
+        "main with i32 return should be rejected"
+    );
+    assert!(errors[0].contains("must return void"));
+}
+
+#[test]
+fn test_type_suggestion_typo() {
+    let input = "
+        fn main() {
+            var x: i3 = 10;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty());
+    assert!(errors[0].contains("Did you mean") || errors[0].contains("Unknown type"));
 }

@@ -271,14 +271,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
         }
 
-        //FIX: Support for i32 return in main will be eliminated as soon as there
-        // is an implementation for exit | change src/analyzer@register_function
-        if name == "main" && ret_type.is_none() {
-            let i32_type = self.context.i32_type();
-            let fn_type = i32_type.fn_type(&param_types, false);
-            return self.module.add_function(name, fn_type, None);
-        }
-
         let fn_type = match ret_type {
             Some(basic_ty) => basic_ty.fn_type(&param_types, false),
             None => self.context.void_type().fn_type(&param_types, false),
@@ -320,11 +312,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             let alloca = self.create_entry_block_alloca(function, param_name, arg_type);
             self.builder.build_store(alloca, arg).unwrap();
 
-            let is_unsigned = if let TypeSpec::Named(t_name) = param_spec {
-                t_name.starts_with('u')
-            } else {
-                false
-            };
+            let is_unsigned = Self::is_unsigned_type(param_spec);
 
             if let TypeSpec::Pointer(inner_spec) = param_spec
                 && let Some(elem_type) = self.get_llvm_type(inner_spec)
@@ -348,10 +336,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
             if ret_opt.is_none() {
                 self.builder.build_return(None).unwrap();
-            } else if name == "main" {
-                // FIX: Delete support for this
-                let zero = self.context.i32_type().const_int(0, false);
-                self.builder.build_return(Some(&zero)).unwrap();
             } else {
                 self.builder.build_unreachable().unwrap();
             }
@@ -366,15 +350,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 type_annotation,
                 ..
             } => {
-                // NOTE: We are using a bool in HashMap + a string + an starts_with just to know if
-                // the type is unsigned or not, also it only works for simple type, is this the
-                // right way?
-                let is_unsigned = if let Some(TypeSpec::Named(t_name)) = type_annotation {
-                    t_name.starts_with('u')
-                } else {
-                    false
-                };
-
+                let is_unsigned = type_annotation
+                    .as_ref()
+                    .map(|spec| Self::is_unsigned_type(spec))
+                    .unwrap_or(false);
                 let target_type = if let Some(spec) = type_annotation {
                     match self.get_llvm_type(spec) {
                         Some(ty) => Some(ty),
@@ -1484,8 +1463,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     None
                 }
             }
-            //TODO: Binary operations should be handled?
             _ => None,
+        }
+    }
+
+    fn is_unsigned_type(spec: &TypeSpec) -> bool {
+        match spec {
+            TypeSpec::Named(name) => {
+                matches!(name.as_str(), "u8" | "u16" | "u32" | "u64" | "usize")
+            }
+            TypeSpec::Pointer(inner) => Self::is_unsigned_type(inner),
+            TypeSpec::Tuple(_) | TypeSpec::Optional(_) => false,
+            TypeSpec::Generic { args, .. } => {
+                args.first().map(Self::is_unsigned_type).unwrap_or(false)
+            }
+            TypeSpec::IntLiteral(_) => false,
         }
     }
 
@@ -1592,46 +1584,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     fn get_llvm_type(&self, spec: &TypeSpec) -> Option<BasicTypeEnum<'ctx>> {
         match spec {
-            TypeSpec::Named(name) => match name.as_str() {
-                "i8" | "u8" => Some(self.context.i8_type().into()),
-                "i16" | "u16" => Some(self.context.i16_type().into()),
-                "i32" | "u32" => Some(self.context.i32_type().into()),
-                "i64" | "u64" => Some(self.context.i64_type().into()),
-                "isize" | "usize" => Some(self.context.i64_type().into()),
-                "f32" => Some(self.context.f32_type().into()),
-                "f64" => Some(self.context.f64_type().into()),
-                "bool" => Some(self.context.bool_type().into()),
-                "void" => None,
-                "self" => {
-                    if let Some(struct_name) = &self.current_struct_context {
-                        if let Some((struct_ty, _)) = self.struct_defs.get(struct_name) {
-                            Some(struct_ty.as_basic_type_enum())
-                        } else {
-                            panic!("Self used in unknown struct: {}", struct_name);
-                        }
-                    } else {
-                        panic!("Self used outside struct context");
-                    }
-                }
-                _ => {
-                    if let Some((struct_ty, _)) = self.struct_defs.get(name) {
-                        Some(struct_ty.as_basic_type_enum())
-                    } else if self.enum_defs.contains_key(name) {
-                        Some(self.context.i32_type().into())
-                    } else {
-                        panic!("Codegen: Unknown type {name}");
-                    }
-                }
-            },
+            TypeSpec::Named(name) => self.get_named_llvm_type(name),
             TypeSpec::Generic { name, args } => {
                 if name == "Array" && args.len() == 2 {
                     let elem_type = self.get_llvm_type(&args[0])?;
-                    let len = if let TypeSpec::IntLiteral(val) = args[1] {
-                        val as u32
-                    } else {
-                        panic!("Array length must be an integer type");
+                    let len = match &args[1] {
+                        TypeSpec::IntLiteral(val) => *val as u32,
+                        _ => panic!("Array length must be an integer literal"),
                     };
-
                     return Some(elem_type.array_type(len).into());
                 }
                 panic!("Codegen: Unknown generic type {name}");
@@ -1640,18 +1600,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 panic!("Codegen: Unexpected integer literal in type position")
             }
             TypeSpec::Tuple(types) => {
-                let field_types: Vec<BasicTypeEnum<'ctx>> =
+                let field_types: Vec<_> =
                     types.iter().filter_map(|t| self.get_llvm_type(t)).collect();
                 Some(self.context.struct_type(&field_types, false).into())
             }
-            TypeSpec::Pointer(inner) => {
-                let _inner_type = self.get_llvm_type(inner);
-                Some(
-                    self.context
-                        .ptr_type(inkwell::AddressSpace::default())
-                        .into(),
-                )
-            }
+            TypeSpec::Pointer(_) => Some(
+                self.context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .into(),
+            ),
             TypeSpec::Optional(inner) => {
                 let inner_type = self.get_llvm_type(inner)?;
                 let tag_type = self.context.bool_type().into();
@@ -1662,6 +1619,44 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 )
             }
         }
+    }
+
+    fn get_named_llvm_type(&self, name: &str) -> Option<BasicTypeEnum<'ctx>> {
+        let int_type = match name {
+            "i8" | "u8" => Some(self.context.i8_type()),
+            "i16" | "u16" => Some(self.context.i16_type()),
+            "i32" | "u32" => Some(self.context.i32_type()),
+            "i64" | "u64" | "isize" | "usize" => Some(self.context.i64_type()),
+            _ => None,
+        };
+        if let Some(ty) = int_type {
+            return Some(ty.into());
+        }
+
+        match name {
+            "f32" => return Some(self.context.f32_type().into()),
+            "f64" => return Some(self.context.f64_type().into()),
+            "bool" => return Some(self.context.bool_type().into()),
+            "void" => return None,
+            "self" => {
+                return self
+                    .current_struct_context
+                    .as_ref()
+                    .and_then(|struct_name| self.struct_defs.get(struct_name))
+                    .map(|(st, _)| st.as_basic_type_enum())
+                    .or_else(|| panic!("Self used outside struct context"));
+            }
+            _ => {}
+        }
+
+        if let Some((struct_ty, _)) = self.struct_defs.get(name) {
+            return Some(struct_ty.as_basic_type_enum());
+        }
+        if self.enum_defs.contains_key(name) {
+            return Some(self.context.i32_type().into());
+        }
+
+        panic!("Codegen: Unknown type {name}");
     }
 }
 

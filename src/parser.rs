@@ -208,6 +208,11 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type(&mut self) -> Option<TypeSpec> {
+        if self.current_token == Token::Str {
+            return Some(TypeSpec::Pointer(Box::new(TypeSpec::Named(
+                "u8".to_string(),
+            ))));
+        }
         if self.current_token == Token::Star {
             self.next_token();
             let inner = self.parse_type()?;
