@@ -28,6 +28,7 @@ pub enum Type {
     Float(FloatWidth),
     Bool,
     Void,
+    Never, // noreturn type - for functions like __exit that never return
 
     Struct {
         name: String,
@@ -55,6 +56,8 @@ impl Type {
         match (self, other) {
             (t1, t2) if t1 == t2 => true,
             (Type::Unknown, _) | (_, Type::Unknown) => true,
+            // Never type is compatible with anything (it never returns, so any type is fine)
+            (_, Type::Never) => true,
             (Type::Struct { name: n1, .. }, Type::Struct { name: n2, .. }) => n1 == n2,
             (Type::Enum { name: n1, .. }, Type::Enum { name: n2, .. }) => n1 == n2,
             (Type::Pointer(e1), Type::Pointer(e2)) => e1.accepts(e2),
@@ -106,6 +109,7 @@ impl std::fmt::Display for Type {
             ),
             Type::Bool => write!(f, "bool"),
             Type::Void => write!(f, "void"),
+            Type::Never => write!(f, "!"),
             Type::Struct { name, .. } => write!(f, "{}", name),
             Type::Enum { name, .. } => write!(f, "{}", name),
             Type::Array { elem_type, len } => write!(f, "[{}; {}]", elem_type, len),

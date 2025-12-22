@@ -1,6 +1,5 @@
 // Zeru Standard Library - Linux x86_64 System Calls
 // This module provides low-level syscall wrappers using inline assembly.
-// It also provides I/O operations as importing is not yet supported
 //
 // x86_64 Linux syscall convention:
 // - rax: syscall number
@@ -8,9 +7,12 @@
 // - rax: return value
 // - rcx, r11: clobbered by syscall
 //
-// print(), println(), eprint(), eprintln() are compiler built-ins
-// that use implicit OutStream buffers (4KB each for stdout/stderr).
-// println/eprintln automatically flush after writing.
+// Compiler intrinsics (implemented in codegen, no special-casing needed):
+//   __stdout() -> *OutStream   - returns pointer to internal stdout buffer
+//   __stderr() -> *OutStream   - returns pointer to internal stderr buffer
+//   __exit(code: i32)          - flushes streams and exits (noreturn)
+//
+// All other I/O functions (print, println, etc.) are pure Zeru using these intrinsics.
 
 
 const SYS_READ: i64 = 0;
@@ -138,5 +140,33 @@ fn memcpy_ptr(dest: *u8, src: *u8, n: usize) {
 
 fn read_direct(fd: i32, buf: *u8, count: usize) i64 {
     return syscall3(SYS_READ, fd as i64, buf as i64, count as i64);
+}
+
+// ============================================================================
+// Public I/O API - Pure Zeru using compiler intrinsics
+// ============================================================================
+
+fn print(s: *u8) {
+    __stdout().write_str(s);
+}
+
+fn println(s: *u8) {
+    __stdout().write_str(s);
+    __stdout().write_str("\n");
+    __stdout().flush();
+}
+
+fn eprint(s: *u8) {
+    __stderr().write_str(s);
+}
+
+fn eprintln(s: *u8) {
+    __stderr().write_str(s);
+    __stderr().write_str("\n");
+    __stderr().flush();
+}
+
+fn exit(code: i32) {
+    __exit(code);
 }
 

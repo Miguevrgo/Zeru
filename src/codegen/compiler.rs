@@ -950,12 +950,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                     (func, args)
                 } else if let ExpressionKind::Identifier(name) = &function.kind {
-                    if matches!(name.as_str(), "print" | "println" | "eprint" | "eprintln") {
-                        return self.compile_builtin_print(name, arguments);
-                    }
-
-                    if name == "exit" {
-                        return self.compile_builtin_exit(arguments);
+                    // Check for compiler intrinsics
+                    if let Some(result) = self.try_compile_intrinsic(name, arguments) {
+                        return result;
                     }
 
                     let func = self.module.get_function(name).expect("Function not found");
@@ -1959,121 +1956,70 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         global_dtors.set_initializer(&dtors_array);
     }
 
-    fn compile_builtin_print(
+    /// Try to compile a compiler intrinsic. Returns Some(value) if it's an intrinsic, None otherwise.
+    /// Intrinsics are minimal compiler-provided functions that cannot be written in Zeru.
+    fn try_compile_intrinsic(
         &mut self,
         name: &str,
         arguments: &[Expression],
-    ) -> BasicValueEnum<'ctx> {
-        if arguments.len() != 1 {
-            panic!("{}() expects exactly 1 argument", name);
-        }
-
-        let stream_ptr = match name {
-            "print" | "println" => {
-                if let Some(ptr) = self.stdout_stream {
-                    ptr
-                } else {
-                    return self.context.i32_type().const_int(0, false).into();
+    ) -> Option<BasicValueEnum<'ctx>> {
+        match name {
+            "__stdout" => {
+                if !arguments.is_empty() {
+                    panic!("__stdout() takes no arguments");
                 }
+                Some(self.stdout_stream.expect("stdout not initialized").into())
             }
-            "eprint" | "eprintln" => {
-                if let Some(ptr) = self.stderr_stream {
-                    ptr
-                } else {
-                    return self.context.i32_type().const_int(0, false).into();
+            "__stderr" => {
+                if !arguments.is_empty() {
+                    panic!("__stderr() takes no arguments");
                 }
+                Some(self.stderr_stream.expect("stderr not initialized").into())
             }
-            _ => unreachable!(),
-        };
+            "__exit" => {
+                if arguments.len() != 1 {
+                    panic!("__exit() expects exactly 1 argument");
+                }
 
-        let string_arg = self.compile_expression(
-            &arguments[0],
-            Some(
-                self.context
-                    .ptr_type(inkwell::AddressSpace::default())
-                    .into(),
-            ),
-        );
+                // Flush streams before exit
+                if let Some(stdout_ptr) = self.stdout_stream {
+                    if let Some(flush_fn) = self.module.get_function("OutStream::flush") {
+                        self.builder
+                            .build_call(flush_fn, &[stdout_ptr.into()], "")
+                            .unwrap();
+                    }
+                }
+                if let Some(stderr_ptr) = self.stderr_stream {
+                    if let Some(flush_fn) = self.module.get_function("OutStream::flush") {
+                        self.builder
+                            .build_call(flush_fn, &[stderr_ptr.into()], "")
+                            .unwrap();
+                    }
+                }
 
-        let write_str_fn = self
-            .module
-            .get_function("OutStream::write_str")
-            .expect("OutStream::write_str not found");
+                let exit_code = self
+                    .compile_expression(&arguments[0], Some(self.context.i32_type().into()))
+                    .into_int_value();
 
-        self.builder
-            .build_call(write_str_fn, &[stream_ptr.into(), string_arg.into()], "")
-            .unwrap();
+                let syscall1_fn = self
+                    .module
+                    .get_function("syscall1")
+                    .expect("syscall1 not found");
+                let sys_exit = self.context.i64_type().const_int(60, false);
+                let exit_code_i64 = self
+                    .builder
+                    .build_int_s_extend(exit_code, self.context.i64_type(), "exit_code_i64")
+                    .unwrap();
 
-        if name == "println" || name == "eprintln" {
-            let newline = self
-                .builder
-                .build_global_string_ptr("\n", "newline")
-                .unwrap();
-            self.builder
-                .build_call(
-                    write_str_fn,
-                    &[stream_ptr.into(), newline.as_pointer_value().into()],
-                    "",
-                )
-                .unwrap();
+                self.builder
+                    .build_call(syscall1_fn, &[sys_exit.into(), exit_code_i64.into()], "")
+                    .unwrap();
 
-            let flush_fn = self
-                .module
-                .get_function("OutStream::flush")
-                .expect("OutStream::flush not found");
-            self.builder
-                .build_call(flush_fn, &[stream_ptr.into()], "")
-                .unwrap();
+                self.builder.build_unreachable().unwrap();
+                Some(self.context.i32_type().const_int(0, false).into())
+            }
+            _ => None, // Not an intrinsic
         }
-
-        self.context.i32_type().const_int(0, false).into()
-    }
-
-    fn compile_builtin_exit(&mut self, arguments: &[Expression]) -> BasicValueEnum<'ctx> {
-        if arguments.len() != 1 {
-            panic!("exit() expects exactly 1 argument");
-        }
-
-        if let Some(stdout_ptr) = self.stdout_stream {
-            let flush_fn = self
-                .module
-                .get_function("OutStream::flush")
-                .expect("OutStream::flush not found");
-            self.builder
-                .build_call(flush_fn, &[stdout_ptr.into()], "")
-                .unwrap();
-        }
-
-        if let Some(stderr_ptr) = self.stderr_stream {
-            let flush_fn = self
-                .module
-                .get_function("OutStream::flush")
-                .expect("OutStream::flush not found");
-            self.builder
-                .build_call(flush_fn, &[stderr_ptr.into()], "")
-                .unwrap();
-        }
-
-        let exit_code = self
-            .compile_expression(&arguments[0], Some(self.context.i32_type().into()))
-            .into_int_value();
-
-        let syscall1_fn = self
-            .module
-            .get_function("syscall1")
-            .expect("syscall1 not found");
-        let sys_exit = self.context.i64_type().const_int(60, false);
-        let exit_code_i64 = self
-            .builder
-            .build_int_s_extend(exit_code, self.context.i64_type(), "exit_code_i64")
-            .unwrap();
-
-        self.builder
-            .build_call(syscall1_fn, &[sys_exit.into(), exit_code_i64.into()], "")
-            .unwrap();
-
-        self.builder.build_unreachable().unwrap();
-        self.context.i32_type().const_int(0, false).into()
     }
 }
 
