@@ -161,6 +161,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.current_struct_context = None;
             }
         }
+
+        self.create_builtin_cleanup();
     }
 
     fn get_or_create_panic_fn(&mut self) -> FunctionValue<'ctx> {
@@ -212,7 +214,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_global_string_ptr(error_msg, "panic_msg")
             .unwrap();
 
-        // TODO: For now, just call abort.
         let abort_fn = self.get_or_create_panic_fn();
         self.builder.build_call(abort_fn, &[], "").unwrap();
         self.builder.build_unreachable().unwrap();
@@ -245,9 +246,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         params: &[(String, TypeSpec, bool)],
         return_type: &Option<TypeSpec>,
     ) -> FunctionValue<'ctx> {
-        let ret_type = match return_type {
-            Some(spec) => self.get_llvm_type(spec),
-            None => None,
+        let ret_type = if name == "main" && return_type.is_none() {
+            Some(self.context.i32_type().as_basic_type_enum())
+        } else {
+            match return_type {
+                Some(spec) => self.get_llvm_type(spec),
+                None => None,
+            }
         };
 
         let mut param_types = Vec::new();
@@ -381,6 +386,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
             if ret_opt.is_none() {
                 self.builder.build_return(None).unwrap();
+            } else if name == "main" {
+                let zero = self.context.i32_type().const_zero();
+                self.builder.build_return(Some(&zero)).unwrap();
             } else {
                 self.builder.build_unreachable().unwrap();
             }
@@ -944,6 +952,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 } else if let ExpressionKind::Identifier(name) = &function.kind {
                     if matches!(name.as_str(), "print" | "println" | "eprint" | "eprintln") {
                         return self.compile_builtin_print(name, arguments);
+                    }
+
+                    if name == "exit" {
+                        return self.compile_builtin_exit(arguments);
                     }
 
                     let func = self.module.get_function(name).expect("Function not found");
@@ -1883,6 +1895,70 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         global_ctors.set_initializer(&ctors_array);
     }
 
+    fn create_builtin_cleanup(&mut self) {
+        let stdout_ptr = if let Some(ptr) = self.stdout_stream {
+            ptr
+        } else {
+            return;
+        };
+        let stderr_ptr = self.stderr_stream.expect("stderr_stream not initialized");
+
+        let void_type = self.context.void_type();
+        let dtor_fn_type = void_type.fn_type(&[], false);
+        let dtor_fn = self
+            .module
+            .add_function("__cleanup_builtin_streams", dtor_fn_type, None);
+
+        let dtor_entry = self.context.append_basic_block(dtor_fn, "entry");
+        self.builder.position_at_end(dtor_entry);
+
+        let flush_fn = self
+            .module
+            .get_function("OutStream::flush")
+            .expect("OutStream::flush not found");
+        self.builder
+            .build_call(flush_fn, &[stdout_ptr.into()], "")
+            .unwrap();
+
+        self.builder
+            .build_call(flush_fn, &[stderr_ptr.into()], "")
+            .unwrap();
+
+        self.builder.build_return(None).unwrap();
+
+        let ctor_struct_type = self.context.struct_type(
+            &[
+                self.context.i32_type().into(),
+                self.context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .into(),
+                self.context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .into(),
+            ],
+            false,
+        );
+
+        let dtor_element = ctor_struct_type.const_named_struct(&[
+            self.context.i32_type().const_int(65535, false).into(),
+            dtor_fn.as_global_value().as_pointer_value().into(),
+            self.context
+                .ptr_type(inkwell::AddressSpace::default())
+                .const_null()
+                .into(),
+        ]);
+
+        let dtors_array: inkwell::values::ArrayValue =
+            ctor_struct_type.const_array(&[dtor_element]);
+        let global_dtors = self.module.add_global(
+            dtors_array.get_type(),
+            Some(inkwell::AddressSpace::default()),
+            "llvm.global_dtors",
+        );
+        global_dtors.set_linkage(inkwell::module::Linkage::Appending);
+        global_dtors.set_initializer(&dtors_array);
+    }
+
     fn compile_builtin_print(
         &mut self,
         name: &str,
@@ -1893,8 +1969,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
 
         let stream_ptr = match name {
-            "print" | "println" => self.stdout_stream.expect("stdout_stream not initialized"),
-            "eprint" | "eprintln" => self.stderr_stream.expect("stderr_stream not initialized"),
+            "print" | "println" => {
+                if let Some(ptr) = self.stdout_stream {
+                    ptr
+                } else {
+                    return self.context.i32_type().const_int(0, false).into();
+                }
+            }
+            "eprint" | "eprintln" => {
+                if let Some(ptr) = self.stderr_stream {
+                    ptr
+                } else {
+                    return self.context.i32_type().const_int(0, false).into();
+                }
+            }
             _ => unreachable!(),
         };
 
@@ -1938,6 +2026,53 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .unwrap();
         }
 
+        self.context.i32_type().const_int(0, false).into()
+    }
+
+    fn compile_builtin_exit(&mut self, arguments: &[Expression]) -> BasicValueEnum<'ctx> {
+        if arguments.len() != 1 {
+            panic!("exit() expects exactly 1 argument");
+        }
+
+        if let Some(stdout_ptr) = self.stdout_stream {
+            let flush_fn = self
+                .module
+                .get_function("OutStream::flush")
+                .expect("OutStream::flush not found");
+            self.builder
+                .build_call(flush_fn, &[stdout_ptr.into()], "")
+                .unwrap();
+        }
+
+        if let Some(stderr_ptr) = self.stderr_stream {
+            let flush_fn = self
+                .module
+                .get_function("OutStream::flush")
+                .expect("OutStream::flush not found");
+            self.builder
+                .build_call(flush_fn, &[stderr_ptr.into()], "")
+                .unwrap();
+        }
+
+        let exit_code = self
+            .compile_expression(&arguments[0], Some(self.context.i32_type().into()))
+            .into_int_value();
+
+        let syscall1_fn = self
+            .module
+            .get_function("syscall1")
+            .expect("syscall1 not found");
+        let sys_exit = self.context.i64_type().const_int(60, false);
+        let exit_code_i64 = self
+            .builder
+            .build_int_s_extend(exit_code, self.context.i64_type(), "exit_code_i64")
+            .unwrap();
+
+        self.builder
+            .build_call(syscall1_fn, &[sys_exit.into(), exit_code_i64.into()], "")
+            .unwrap();
+
+        self.builder.build_unreachable().unwrap();
         self.context.i32_type().const_int(0, false).into()
     }
 }

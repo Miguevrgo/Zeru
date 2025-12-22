@@ -140,9 +140,3 @@ fn read_direct(fd: i32, buf: *u8, count: usize) i64 {
     return syscall3(SYS_READ, fd as i64, buf as i64, count as i64);
 }
 
-fn exit(code: i32) {
-    syscall1(SYS_EXIT, code as i64);
-}
-
-
-

@@ -32,6 +32,14 @@ impl SemanticAnalyzer {
         symbols.insert_fn("println".to_string(), vec![ptr_u8.clone()], Type::Void);
         symbols.insert_fn("eprint".to_string(), vec![ptr_u8.clone()], Type::Void);
         symbols.insert_fn("eprintln".to_string(), vec![ptr_u8.clone()], Type::Void);
+        symbols.insert_fn(
+            "exit".to_string(),
+            vec![Type::Integer {
+                signed: Signedness::Signed,
+                width: IntWidth::W32,
+            }],
+            Type::Void,
+        );
 
         Self {
             errors: Vec::new(),

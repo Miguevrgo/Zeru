@@ -3,9 +3,8 @@ fn main() {
     println("This is using implicit buffered I/O.");
 
     var i: i32 = 1;
-    while i <= 10000 {
+    while i <= 100000 {
         print("0xDEADBEEF");
         i += 1;
     }
-    exit(0);
 }
