@@ -23,22 +23,22 @@ impl SemanticAnalyzer {
     pub fn new() -> Self {
         let mut symbols = SymbolTable::new();
 
-        // Compiler intrinsics only - print/println/exit are now pure Zeru in std/builtin.zr
-        // OutStream pointer type for __stdout()/__stderr()
-        let ptr_outstream = Type::Pointer(Box::new(Type::Struct {
-            name: "OutStream".to_string(),
-            fields: vec![], // Will be resolved when OutStream is parsed
+        let ptr_u8 = Type::Pointer(Box::new(Type::Integer {
+            signed: Signedness::Unsigned,
+            width: IntWidth::W8,
         }));
 
-        symbols.insert_fn("__stdout".to_string(), vec![], ptr_outstream.clone());
-        symbols.insert_fn("__stderr".to_string(), vec![], ptr_outstream);
+        symbols.insert_fn("print".to_string(), vec![ptr_u8.clone()], Type::Void);
+        symbols.insert_fn("println".to_string(), vec![ptr_u8.clone()], Type::Void);
+        symbols.insert_fn("eprint".to_string(), vec![ptr_u8.clone()], Type::Void);
+        symbols.insert_fn("eprintln".to_string(), vec![ptr_u8.clone()], Type::Void);
         symbols.insert_fn(
-            "__exit".to_string(),
+            "exit".to_string(),
             vec![Type::Integer {
                 signed: Signedness::Signed,
                 width: IntWidth::W32,
             }],
-            Type::Never, // noreturn
+            Type::Never,
         );
 
         Self {

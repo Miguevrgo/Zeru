@@ -950,8 +950,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                     (func, args)
                 } else if let ExpressionKind::Identifier(name) = &function.kind {
-                    // Check for compiler intrinsics
-                    if let Some(result) = self.try_compile_intrinsic(name, arguments) {
+                    if let Some(result) = self.try_compile_builtin(name, arguments) {
                         return result;
                     }
 
@@ -1956,69 +1955,104 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         global_dtors.set_initializer(&dtors_array);
     }
 
-    /// Try to compile a compiler intrinsic. Returns Some(value) if it's an intrinsic, None otherwise.
-    /// Intrinsics are minimal compiler-provided functions that cannot be written in Zeru.
-    fn try_compile_intrinsic(
+    fn try_compile_builtin(
         &mut self,
         name: &str,
         arguments: &[Expression],
     ) -> Option<BasicValueEnum<'ctx>> {
         match name {
-            "__stdout" => {
-                if !arguments.is_empty() {
-                    panic!("__stdout() takes no arguments");
-                }
-                Some(self.stdout_stream.expect("stdout not initialized").into())
-            }
-            "__stderr" => {
-                if !arguments.is_empty() {
-                    panic!("__stderr() takes no arguments");
-                }
-                Some(self.stderr_stream.expect("stderr not initialized").into())
-            }
-            "__exit" => {
+            "print" | "println" | "eprint" | "eprintln" => {
                 if arguments.len() != 1 {
-                    panic!("__exit() expects exactly 1 argument");
+                    panic!("{}() expects exactly 1 argument", name);
                 }
 
-                // Flush streams before exit
-                if let Some(stdout_ptr) = self.stdout_stream {
+                let stream_ptr = match name {
+                    "print" | "println" => self.stdout_stream?,
+                    _ => self.stderr_stream?,
+                };
+
+                let string_arg = self.compile_expression(
+                    &arguments[0],
+                    Some(
+                        self.context
+                            .ptr_type(inkwell::AddressSpace::default())
+                            .into(),
+                    ),
+                );
+
+                let write_str_fn = self.module.get_function("OutStream::write_str")?;
+                self.builder
+                    .build_call(write_str_fn, &[stream_ptr.into(), string_arg.into()], "")
+                    .unwrap();
+
+                if name == "println" || name == "eprintln" {
+                    let newline = self.builder.build_global_string_ptr("\n", "nl").unwrap();
+                    self.builder
+                        .build_call(
+                            write_str_fn,
+                            &[stream_ptr.into(), newline.as_pointer_value().into()],
+                            "",
+                        )
+                        .unwrap();
+
                     if let Some(flush_fn) = self.module.get_function("OutStream::flush") {
                         self.builder
-                            .build_call(flush_fn, &[stdout_ptr.into()], "")
+                            .build_call(flush_fn, &[stream_ptr.into()], "")
                             .unwrap();
                     }
                 }
-                if let Some(stderr_ptr) = self.stderr_stream {
-                    if let Some(flush_fn) = self.module.get_function("OutStream::flush") {
-                        self.builder
-                            .build_call(flush_fn, &[stderr_ptr.into()], "")
-                            .unwrap();
-                    }
+
+                Some(self.context.i32_type().const_zero().into())
+            }
+            "exit" => {
+                if arguments.len() != 1 {
+                    panic!("exit() expects exactly 1 argument");
                 }
 
-                let exit_code = self
+                if let (Some(stdout), Some(flush)) = (
+                    self.stdout_stream,
+                    self.module.get_function("OutStream::flush"),
+                ) {
+                    self.builder
+                        .build_call(flush, &[stdout.into()], "")
+                        .unwrap();
+                }
+                if let (Some(stderr), Some(flush)) = (
+                    self.stderr_stream,
+                    self.module.get_function("OutStream::flush"),
+                ) {
+                    self.builder
+                        .build_call(flush, &[stderr.into()], "")
+                        .unwrap();
+                }
+
+                let code = self
                     .compile_expression(&arguments[0], Some(self.context.i32_type().into()))
                     .into_int_value();
-
-                let syscall1_fn = self
+                let syscall1 = self
                     .module
                     .get_function("syscall1")
                     .expect("syscall1 not found");
-                let sys_exit = self.context.i64_type().const_int(60, false);
-                let exit_code_i64 = self
+                let code64 = self
                     .builder
-                    .build_int_s_extend(exit_code, self.context.i64_type(), "exit_code_i64")
+                    .build_int_s_extend(code, self.context.i64_type(), "")
                     .unwrap();
 
                 self.builder
-                    .build_call(syscall1_fn, &[sys_exit.into(), exit_code_i64.into()], "")
+                    .build_call(
+                        syscall1,
+                        &[
+                            self.context.i64_type().const_int(60, false).into(),
+                            code64.into(),
+                        ],
+                        "",
+                    )
                     .unwrap();
-
                 self.builder.build_unreachable().unwrap();
-                Some(self.context.i32_type().const_int(0, false).into())
+
+                Some(self.context.i32_type().const_zero().into())
             }
-            _ => None, // Not an intrinsic
+            _ => None,
         }
     }
 }
