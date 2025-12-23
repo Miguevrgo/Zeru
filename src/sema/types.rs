@@ -19,6 +19,11 @@ pub enum Signedness {
     Unsigned,
 }
 
+/// Represents all possible types in the Zeru type system.
+///
+/// Zeru's type system includes primitives (integers, floats, bool),
+/// aggregate types (structs, tuples, arrays), pointers, and special
+/// types like Optional for nullable values.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     Integer {
@@ -47,10 +52,21 @@ pub enum Type {
     Pointer(Box<Type>),
     Tuple(Vec<Type>),
     Optional(Box<Type>),
-    Unknown,
+    Unknown, // Used during type inference when type cannot be determined
 }
 
 impl Type {
+    /// Checks if this type can accept a value of another type.
+    ///
+    /// This is used for type compatibility checking during semantic analysis.
+    /// It's more permissive than strict equality to handle cases like:
+    /// - Optional types accepting their inner type
+    /// - Unknown types (used during inference)
+    ///
+    /// # Examples
+    /// - `i32?.accepts(&i32)` → true (optional accepts inner type)
+    /// - `*i32.accepts(&*i32)` → true (same pointer types)
+    /// - `i32.accepts(&i64)` → false (different widths)
     pub fn accepts(&self, other: &Type) -> bool {
         match (self, other) {
             (t1, t2) if t1 == t2 => true,

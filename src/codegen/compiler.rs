@@ -16,6 +16,15 @@ use crate::{
     token::Token,
 };
 
+/// LLVM IR code generator for Zeru.
+///
+/// This compiler takes a semantically-validated AST and generates LLVM IR.
+/// It manages LLVM contexts, types, functions, and generates optimized code
+/// based on the selected safety mode (Debug, ReleaseSafe, or ReleaseFast).
+///
+/// # Lifetimes
+/// * `'a` - Lifetime of the LLVM builder
+/// * `'ctx` - Lifetime of the LLVM context (must outlive the builder)
 pub struct Compiler<'a, 'ctx> {
     pub context: &'ctx Context,
     pub builder: &'a Builder<'ctx>,

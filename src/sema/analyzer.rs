@@ -8,6 +8,14 @@ use crate::{
 };
 use std::collections::HashMap;
 
+/// Performs semantic analysis on the AST to catch type errors and semantic issues
+/// before code generation. This includes type checking, symbol resolution, and
+/// validation of control flow (break/continue, return statements, etc.).
+///
+/// The analyzer works in multiple passes:
+/// 1. Scan and register all type definitions (structs, enums)
+/// 2. Scan and register all function signatures
+/// 3. Analyze function bodies and validate types/semantics
 pub struct SemanticAnalyzer {
     pub errors: Vec<ZeruError>,
 
@@ -244,13 +252,18 @@ impl SemanticAnalyzer {
         }
     }
 
+    /// Validates the body of a function, including parameter and return type checking.
+    /// Sets up the function scope and verifies all statements within the function.
     fn check_function_body(
         &mut self,
         name: String,
         params: &[(String, TypeSpec, bool)],
         body: &[Statement],
     ) {
-        let function_symbol = self.symbols.lookup(&name).unwrap().clone();
+        let Some(function_symbol) = self.symbols.lookup(&name).cloned() else {
+            // This should not happen if scan_functions worked correctly
+            return;
+        };
 
         if let super::symbol_table::Symbol::Function {
             ret_type,
@@ -275,6 +288,9 @@ impl SemanticAnalyzer {
         }
     }
 
+    /// Resolves a TypeSpec from the AST into a concrete Type.
+    /// This handles named types (structs, enums), pointers, tuples, optionals, etc.
+    /// Returns Type::Unknown if the type cannot be resolved.
     fn resolve_spec(&mut self, spec: &TypeSpec) -> Type {
         match spec {
             TypeSpec::Named(name) => self.resolve_named_type(name),
@@ -588,6 +604,17 @@ impl SemanticAnalyzer {
         }
     }
 
+    /// Type-checks an expression and returns its inferred type.
+    ///
+    /// This is the core type-checking function that recursively validates
+    /// expressions and ensures type safety throughout the program.
+    ///
+    /// # Arguments
+    /// * `expr` - The expression to type-check  
+    /// * `expected_type` - Optional hint for expected type (from context like assignment)
+    ///
+    /// # Returns
+    /// The inferred type, or `Type::Unknown` if type checking fails
     fn check_expression(&mut self, expr: &Expression, expected_type: Option<&Type>) -> Type {
         match &expr.kind {
             ExpressionKind::Int(val) => {
@@ -650,7 +677,8 @@ impl SemanticAnalyzer {
                         let variant_name = parts[1];
                         if let Some(Type::Enum { variants, .. }) = self.enum_defs.get(enum_name) {
                             if variants.contains(&variant_name.to_string()) {
-                                return self.enum_defs.get(enum_name).unwrap().clone();
+                                // Safe: we just checked the key exists
+                                return self.enum_defs.get(enum_name).cloned().unwrap();
                             } else {
                                 self.error(
                                     format!(

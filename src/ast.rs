@@ -1,6 +1,10 @@
 use crate::errors::Span;
 use crate::token::Token;
 
+/// Type specification from the AST (before semantic analysis).
+///
+/// These are raw type annotations from the source code that will be
+/// resolved into concrete `Type` values during semantic analysis.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeSpec {
     Named(String),
@@ -11,6 +15,10 @@ pub enum TypeSpec {
     Optional(Box<TypeSpec>),
 }
 
+/// Root node of the Abstract Syntax Tree.
+///
+/// A program consists of a sequence of top-level statements
+/// (functions, structs, enums, global variables, etc.)
 #[derive(Debug)]
 pub struct Program {
     pub statements: Vec<Statement>,
