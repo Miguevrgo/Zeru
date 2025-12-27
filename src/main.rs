@@ -60,7 +60,7 @@ fn compile_pipeline(
     quiet: bool,
 ) -> Option<PathBuf> {
     if path.extension().and_then(|s| s.to_str()) != Some("zr") {
-        println!("⚠️ Warning: Zeru extension is .zr");
+        eprintln!("⚠️ Warning: Zeru extension is .zr");
     }
 
     let filename = path.file_stem().unwrap().to_str().unwrap();
@@ -82,7 +82,7 @@ fn compile_pipeline(
     let user_code = match fs::read_to_string(path) {
         Ok(code) => code,
         Err(e) => {
-            println!("❌ Error reading file: {}", e);
+            eprintln!("❌ Error reading file: {}", e);
             return None;
         }
     };
@@ -117,12 +117,12 @@ fn compile_pipeline(
     compiler.compile_program(&program);
 
     if let Err(e) = module.verify() {
-        println!("❌ LLVM Verify Error: {}", e.to_string());
+        eprintln!("❌ LLVM Verify Error: {}", e.to_string());
         return None;
     }
 
     if let Err(e) = module.print_to_file(&ir_path) {
-        println!("❌ Failed to write LLVM IR: {}", e);
+        eprintln!("❌ Failed to write LLVM IR: {}", e);
         return None;
     }
 
@@ -161,7 +161,7 @@ fn compile_pipeline(
             Some(exe_path)
         }
         _ => {
-            println!("❌ Linking failed. Ensure 'clang' is installed.");
+            eprintln!("❌ Linking failed. Ensure 'clang' is installed.");
             None
         }
     }
