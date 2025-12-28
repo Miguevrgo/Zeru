@@ -189,7 +189,9 @@ fn main() {
             } else {
                 SafetyMode::Debug
             };
-            compile_pipeline(file, safety_mode, *emit_ir, false);
+            if compile_pipeline(file, safety_mode, *emit_ir, false).is_none() {
+                std::process::exit(1);
+            };
         }
         Commands::Run {
             file,
