@@ -2,8 +2,8 @@ import std.math
 
 fn main() {
     println("Testing imports from std.math")
-    let a: i32 = -5;
-    if math::abs(a) == 5 {
+    const num: i32 = -5;
+    if abs(num) == 5 {
         print("Correct");
     } else {
         eprint("Incorrect");
