@@ -72,12 +72,7 @@ pub enum StatementKind {
         then_branch: Box<Statement>,
         else_branch: Option<Box<Statement>>,
     },
-    Import {
-        #[allow(dead_code)]
-        // TODO: Version 1.0.0 module system
-        path: String,
-        symbols: Vec<String>,
-    },
+    Import,
 }
 
 #[derive(Debug, Clone)]

@@ -586,20 +586,6 @@ impl SemanticAnalyzer {
                 self.symbols.exit_scope();
                 self.in_loop = prev_loop;
             }
-
-            StatementKind::Import { path: _, symbols } => {
-                for sym in symbols {
-                    if !self.struct_defs.contains_key(sym) && !self.enum_defs.contains_key(sym) {
-                        self.struct_defs.insert(
-                            sym.clone(),
-                            Type::Struct {
-                                name: sym.clone(),
-                                fields: vec![],
-                            },
-                        );
-                    }
-                }
-            }
             _ => {}
         }
     }

@@ -7,6 +7,7 @@ mod sema;
 mod token;
 
 use inkwell::context::Context;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -16,6 +17,7 @@ use crate::codegen::compiler::Compiler;
 use crate::errors::report_errors;
 use crate::lexer::Lexer;
 use crate::sema::analyzer::SemanticAnalyzer;
+use crate::token::Token;
 
 use clap::{Parser, Subcommand};
 
@@ -53,6 +55,91 @@ enum Commands {
     Clean,
 }
 
+fn resolve_std_import(import_path: &str) -> Option<PathBuf> {
+    let parts: Vec<&str> = import_path.split('.').collect();
+    if parts.is_empty() || parts[0] != "std" {
+        return None;
+    }
+
+    if parts.len() == 1 {
+        return Some(PathBuf::from("std/builtin.zr"));
+    }
+
+    let module_name = parts[1..].join("/");
+    Some(PathBuf::from(format!("std/{module_name}.zr")))
+}
+
+/// Extracts import paths from code efficiently by scanning only the top of the file.
+/// Since imports must appear at the beginning of the file, we stop as soon as we
+/// encounter a non-import token.
+fn extract_imports(code: &str) -> Vec<String> {
+    let mut lexer = Lexer::new(code);
+    let mut imports = Vec::new();
+
+    loop {
+        let (token, _, _) = lexer.next_token();
+
+        match token {
+            Token::Import => {
+                let mut path_parts = Vec::new();
+
+                if let (Token::Identifier(name), _, _) = lexer.next_token() {
+                    path_parts.push(name);
+                } else {
+                    break;
+                }
+
+                loop {
+                    let (next, _, _) = lexer.next_token();
+                    if next == Token::Dot {
+                        if let (Token::Identifier(name), _, _) = lexer.next_token() {
+                            path_parts.push(name);
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                if !path_parts.is_empty() {
+                    imports.push(path_parts.join("."));
+                }
+            }
+            Token::Eof => break,
+            _ => break,
+        }
+    }
+
+    imports
+}
+
+fn load_std_modules(imports: &[String], loaded: &mut HashSet<String>) -> String {
+    let mut code = String::new();
+
+    for import_path in imports {
+        if loaded.contains(import_path) {
+            continue;
+        }
+
+        if let Some(file_path) = resolve_std_import(import_path)
+            && file_path.exists()
+            && let Ok(content) = fs::read_to_string(&file_path)
+        {
+            loaded.insert(import_path.clone());
+
+            let nested_imports = extract_imports(&content);
+            let nested_code = load_std_modules(&nested_imports, loaded);
+
+            code.push_str(&nested_code);
+            code.push_str(&content);
+            code.push('\n');
+        }
+    }
+
+    code
+}
+
 fn compile_pipeline(
     path: &Path,
     safety_mode: SafetyMode,
@@ -87,8 +174,13 @@ fn compile_pipeline(
         }
     };
 
-    let std_io = include_str!("../std/builtin.zr");
-    let input = format!("{}\n{}", std_io, user_code);
+    let std_builtin = include_str!("../std/builtin.zr");
+    let user_imports = extract_imports(&user_code);
+    let mut loaded_modules = HashSet::new();
+    loaded_modules.insert("std.builtin".to_string());
+
+    let additional_std = load_std_modules(&user_imports, &mut loaded_modules);
+    let input = format!("{}\n{}\n{}", std_builtin, additional_std, user_code);
 
     let lexer = Lexer::new(&input);
     let mut parser = crate::parser::Parser::new(lexer);

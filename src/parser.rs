@@ -754,25 +754,13 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        let mut path = match &self.current_token {
-            Token::Identifier(n) => n.clone(),
-            _ => unreachable!(),
-        };
-
         while self.peek_token_is(&Token::Dot) {
             self.next_token();
-            path.push('.');
 
             if !self.expect_peek_identifier() {
                 return None;
             }
-
-            if let Token::Identifier(n) = &self.current_token {
-                path.push_str(n);
-            }
         }
-
-        let mut symbols = Vec::new();
 
         if self.peek_token_is(&Token::DoubleColon) {
             self.next_token();
@@ -783,9 +771,7 @@ impl<'a> Parser<'a> {
 
             while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
                 self.next_token();
-                if let Token::Identifier(sym) = &self.current_token {
-                    symbols.push(sym.clone());
-                } else {
+                if !matches!(&self.current_token, Token::Identifier(_)) {
                     self.error_current("Expected symbol name in import");
                     return None;
                 }
@@ -809,7 +795,7 @@ impl<'a> Parser<'a> {
 
         let end_span = self.current_span;
         Some(Statement::new(
-            StatementKind::Import { path, symbols },
+            StatementKind::Import,
             start_span.merge(end_span),
         ))
     }
@@ -1995,28 +1981,9 @@ mod tests {
         let program = parse_input(input);
         assert_eq!(program.statements.len(), 3);
 
-        if let StatementKind::Import { path, symbols } = &program.statements[0].kind {
-            assert_eq!(path, "std.os");
-            assert!(symbols.is_empty());
-        } else {
-            panic!("Expected import std.os");
-        }
-
-        if let StatementKind::Import { path, symbols } = &program.statements[1].kind {
-            assert_eq!(path, "std.math");
-            assert!(symbols.is_empty());
-        } else {
-            panic!("Expected import std.math");
-        }
-
-        if let StatementKind::Import { path, symbols } = &program.statements[2].kind {
-            assert_eq!(path, "std.collections");
-            assert_eq!(symbols.len(), 2);
-            assert_eq!(symbols[0], "Array");
-            assert_eq!(symbols[1], "HashMap");
-        } else {
-            panic!("Expected import std.collections");
-        }
+        assert!(matches!(&program.statements[0].kind, StatementKind::Import));
+        assert!(matches!(&program.statements[1].kind, StatementKind::Import));
+        assert!(matches!(&program.statements[2].kind, StatementKind::Import));
     }
 
     #[test]
