@@ -46,11 +46,6 @@ Goal: Transition from a "calculator" to a true system language capable of intera
 - [ ] LibC Linking: Enable calls to malloc, free, exit, and printf || Enable calls not depending on libc.
 - [x] Exit Code Fix: Remove the explicit i32 return requirement for main; the runtime will handle exit(0).
 
-##### Tooling
-
-- [ ] Basic syntax highlighting and file icons (.zr with emoji support ⚡).
-- [ ] LSP Initial: Basic Language Server Protocol scaffolding.
-
 ##### Module System
 
 - [x] Module imports: `import std.math` -> access via `math::func()`
@@ -60,6 +55,11 @@ Goal: Transition from a "calculator" to a true system language capable of intera
 ## Version 0.3.0: "The Abstraction Layer"
 
 Goal: Introduce high-level abstractions with zero runtime cost, moving closer to Rust/C++ capabilities.
+
+##### Tooling
+
+- [ ] Basic syntax highlighting and file icons (.zr with emoji support ⚡).
+- [ ] LSP Initial: Basic Language Server Protocol scaffolding.
 
 ##### Generics (Templates)
 

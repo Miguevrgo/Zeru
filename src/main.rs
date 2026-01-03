@@ -7,7 +7,7 @@ mod sema;
 mod token;
 
 use inkwell::context::Context;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -53,6 +53,21 @@ enum Commands {
         release_fast: bool,
     },
     Clean,
+    Install,
+}
+
+fn get_zeru_home() -> PathBuf {
+    if let Ok(home) = std::env::var("ZERU_HOME") {
+        return PathBuf::from(home);
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        return PathBuf::from(home).join(".zeru");
+    }
+    PathBuf::from("/usr/local/lib/zeru")
+}
+
+fn get_std_path() -> PathBuf {
+    get_zeru_home().join("std")
 }
 
 fn resolve_std_import(import_path: &str) -> Option<PathBuf> {
@@ -61,18 +76,50 @@ fn resolve_std_import(import_path: &str) -> Option<PathBuf> {
         return None;
     }
 
-    if parts.len() == 1 {
-        return Some(PathBuf::from("std/builtin.zr"));
+    let module_file = if parts.len() == 1 {
+        "builtin.zr".to_string()
+    } else {
+        format!("{}.zr", parts[1..].join("/"))
+    };
+
+    let search_paths = [
+        PathBuf::from("std"),
+        get_std_path(),
+        PathBuf::from("/usr/local/lib/zeru/std"),
+    ];
+
+    for base in &search_paths {
+        let full_path = base.join(&module_file);
+        if full_path.exists() {
+            return Some(full_path);
+        }
     }
 
-    let module_name = parts[1..].join("/");
-    Some(PathBuf::from(format!("std/{module_name}.zr")))
+    None
 }
 
-/// Extracts import paths from code efficiently by scanning only the top of the file.
-/// Since imports must appear at the beginning of the file, we stop as soon as we
-/// encounter a non-import token.
-fn extract_imports(code: &str) -> Vec<String> {
+fn load_builtin_std() -> String {
+    let search_paths = [
+        PathBuf::from("std/builtin.zr"),
+        get_std_path().join("builtin.zr"),
+        PathBuf::from("/usr/local/lib/zeru/std/builtin.zr"),
+    ];
+
+    for path in &search_paths {
+        if let Ok(content) = fs::read_to_string(path) {
+            return content;
+        }
+    }
+
+    include_str!("../std/builtin.zr").to_string()
+}
+
+struct ImportInfo {
+    path: String,
+    symbols: Option<Vec<String>>,
+}
+
+fn extract_imports(code: &str) -> Vec<ImportInfo> {
     let mut lexer = Lexer::new(code);
     let mut imports = Vec::new();
 
@@ -86,7 +133,7 @@ fn extract_imports(code: &str) -> Vec<String> {
                 if let (Token::Identifier(name), _, _) = lexer.next_token() {
                     path_parts.push(name);
                 } else {
-                    break;
+                    continue;
                 }
 
                 loop {
@@ -97,47 +144,274 @@ fn extract_imports(code: &str) -> Vec<String> {
                         } else {
                             break;
                         }
+                    } else if next == Token::DoubleColon {
+                        let (brace, _, _) = lexer.next_token();
+                        if brace != Token::LBrace {
+                            break;
+                        }
+                        let mut symbols = Vec::new();
+                        loop {
+                            let (sym_tok, _, _) = lexer.next_token();
+                            if let Token::Identifier(sym) = sym_tok {
+                                symbols.push(sym);
+                            } else if sym_tok == Token::RBrace {
+                                break;
+                            }
+                            let (comma_or_brace, _, _) = lexer.next_token();
+                            if comma_or_brace == Token::RBrace {
+                                break;
+                            }
+                        }
+                        if !path_parts.is_empty() {
+                            imports.push(ImportInfo {
+                                path: path_parts.join("."),
+                                symbols: Some(symbols),
+                            });
+                        }
+                        break;
                     } else {
+                        if !path_parts.is_empty() {
+                            imports.push(ImportInfo {
+                                path: path_parts.join("."),
+                                symbols: None,
+                            });
+                        }
                         break;
                     }
                 }
-
-                if !path_parts.is_empty() {
-                    imports.push(path_parts.join("."));
-                }
             }
             Token::Eof => break,
-            _ => break,
+            _ => continue,
         }
     }
 
     imports
 }
 
-fn load_std_modules(imports: &[String], loaded: &mut HashSet<String>) -> String {
+fn get_module_short_name(import_path: &str) -> String {
+    import_path.split('.').next_back().unwrap_or("").to_string()
+}
+
+fn prefix_definitions(content: &str, prefix: &str) -> String {
+    let mut result = String::new();
+    let mut chars = content.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == 'f' && chars.peek() == Some(&'n') {
+            let mut word = String::from(c);
+            while let Some(&next) = chars.peek() {
+                if next.is_alphabetic() || next == '_' {
+                    word.push(chars.next().unwrap());
+                } else {
+                    break;
+                }
+            }
+            if word == "fn" {
+                result.push_str("fn ");
+                while let Some(&ws) = chars.peek() {
+                    if ws.is_whitespace() {
+                        result.push(chars.next().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                let mut name = String::new();
+                while let Some(&nc) = chars.peek() {
+                    if nc.is_alphanumeric() || nc == '_' {
+                        name.push(chars.next().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                if !name.is_empty() {
+                    result.push_str(prefix);
+                    result.push_str("__");
+                }
+                result.push_str(&name);
+            } else {
+                result.push_str(&word);
+            }
+        } else if c == 's' && chars.peek() == Some(&'t') {
+            let mut word = String::from(c);
+            while let Some(&next) = chars.peek() {
+                if next.is_alphabetic() || next == '_' {
+                    word.push(chars.next().unwrap());
+                } else {
+                    break;
+                }
+            }
+            if word == "struct" {
+                result.push_str("struct ");
+                while let Some(&ws) = chars.peek() {
+                    if ws.is_whitespace() {
+                        result.push(chars.next().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                let mut name = String::new();
+                while let Some(&nc) = chars.peek() {
+                    if nc.is_alphanumeric() || nc == '_' {
+                        name.push(chars.next().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                if !name.is_empty() {
+                    result.push_str(prefix);
+                    result.push_str("__");
+                }
+                result.push_str(&name);
+            } else {
+                result.push_str(&word);
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+fn load_std_modules(
+    imports: &[ImportInfo],
+    loaded: &mut HashSet<String>,
+    direct_symbols: &mut HashMap<String, String>,
+    module_prefixes: &mut HashSet<String>,
+) -> String {
     let mut code = String::new();
 
-    for import_path in imports {
-        if loaded.contains(import_path) {
+    for import in imports {
+        if loaded.contains(&import.path) {
+            if let Some(ref symbols) = import.symbols {
+                let short_name = get_module_short_name(&import.path);
+                for sym in symbols {
+                    direct_symbols.insert(sym.clone(), format!("{}__{}", short_name, sym));
+                }
+            } else {
+                let short_name = get_module_short_name(&import.path);
+                module_prefixes.insert(short_name);
+            }
             continue;
         }
 
-        if let Some(file_path) = resolve_std_import(import_path)
+        if let Some(file_path) = resolve_std_import(&import.path)
             && file_path.exists()
             && let Ok(content) = fs::read_to_string(&file_path)
         {
-            loaded.insert(import_path.clone());
+            loaded.insert(import.path.clone());
+            let short_name = get_module_short_name(&import.path);
 
             let nested_imports = extract_imports(&content);
-            let nested_code = load_std_modules(&nested_imports, loaded);
-
+            let nested_code =
+                load_std_modules(&nested_imports, loaded, direct_symbols, module_prefixes);
             code.push_str(&nested_code);
-            code.push_str(&content);
+
+            let prefixed = prefix_definitions(&content, &short_name);
+            code.push_str(&prefixed);
             code.push('\n');
+
+            if let Some(ref symbols) = import.symbols {
+                for sym in symbols {
+                    direct_symbols.insert(sym.clone(), format!("{}__{}", short_name, sym));
+                }
+            } else {
+                module_prefixes.insert(short_name);
+            }
         }
     }
 
     code
+}
+
+/// Resolve symbols in code based on import style:
+/// - For selective imports: symbol() -> prefixed__symbol()
+/// - For module imports: module::symbol() -> prefixed__symbol()
+fn resolve_direct_symbols(
+    code: &str,
+    direct_symbols: &HashMap<String, String>,
+    module_prefixes: &HashSet<String>,
+) -> String {
+    if direct_symbols.is_empty() && module_prefixes.is_empty() {
+        return code.to_string();
+    }
+    let mut result = String::new();
+    let mut chars = code.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c.is_alphabetic() || c == '_' {
+            let mut ident = String::from(c);
+            while let Some(&next) = chars.peek() {
+                if next.is_alphanumeric() || next == '_' {
+                    ident.push(chars.next().unwrap());
+                } else {
+                    break;
+                }
+            }
+
+            let mut peek_chars = chars.clone();
+            while let Some(&ws) = peek_chars.peek() {
+                if ws.is_whitespace() {
+                    peek_chars.next();
+                } else {
+                    break;
+                }
+            }
+
+            if peek_chars.peek() == Some(&':') {
+                peek_chars.next();
+                if peek_chars.peek() == Some(&':') {
+                    peek_chars.next();
+
+                    // Skip whitespace after ::
+                    while let Some(&ws) = peek_chars.peek() {
+                        if ws.is_whitespace() {
+                            peek_chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+
+                    let mut symbol_name = String::new();
+                    while let Some(&nc) = peek_chars.peek() {
+                        if nc.is_alphanumeric() || nc == '_' {
+                            symbol_name.push(peek_chars.next().unwrap());
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if module_prefixes.contains(&ident) && !symbol_name.is_empty() {
+                        result.push_str(&format!("{}__{}", ident, symbol_name));
+                        // Advance the main iterator past the :: and symbol
+                        while chars.peek().is_some() && chars.peek() != peek_chars.peek() {
+                            chars.next();
+                        }
+                        continue;
+                    }
+                }
+            }
+
+            if let Some(qualified) = direct_symbols.get(&ident) {
+                let mut peek_chars2 = chars.clone();
+                while let Some(&ws) = peek_chars2.peek() {
+                    if ws.is_whitespace() {
+                        peek_chars2.next();
+                    } else {
+                        break;
+                    }
+                }
+                if peek_chars2.peek() == Some(&'(') {
+                    result.push_str(qualified);
+                    continue;
+                }
+            }
+
+            result.push_str(&ident);
+        } else {
+            result.push(c);
+        }
+    }
+    result
 }
 
 fn compile_pipeline(
@@ -174,13 +448,25 @@ fn compile_pipeline(
         }
     };
 
-    let std_builtin = include_str!("../std/builtin.zr");
+    let std_builtin = load_builtin_std();
     let user_imports = extract_imports(&user_code);
     let mut loaded_modules = HashSet::new();
     loaded_modules.insert("std.builtin".to_string());
+    let mut direct_symbols: HashMap<String, String> = HashMap::new();
+    let mut module_prefixes: HashSet<String> = HashSet::new();
 
-    let additional_std = load_std_modules(&user_imports, &mut loaded_modules);
-    let input = format!("{}\n{}\n{}", std_builtin, additional_std, user_code);
+    let additional_std = load_std_modules(
+        &user_imports,
+        &mut loaded_modules,
+        &mut direct_symbols,
+        &mut module_prefixes,
+    );
+
+    let user_code_resolved = resolve_direct_symbols(&user_code, &direct_symbols, &module_prefixes);
+    let input = format!(
+        "{}\n{}\n{}",
+        std_builtin, additional_std, user_code_resolved
+    );
 
     let lexer = Lexer::new(&input);
     let mut parser = crate::parser::Parser::new(lexer);
@@ -316,5 +602,60 @@ fn main() {
                 println!("✅ Build directory cleaned");
             }
         }
+        Commands::Install => {
+            install_zeru();
+        }
     }
+}
+
+fn install_zeru() {
+    let zeru_home = get_zeru_home();
+    let std_dest = zeru_home.join("std");
+    let bin_dest = zeru_home.join("bin");
+
+    println!("Installing Zeru to {}...", zeru_home.display());
+
+    if let Err(e) = fs::create_dir_all(&std_dest) {
+        eprintln!("❌ Failed to create std directory: {}", e);
+        std::process::exit(1);
+    }
+    if let Err(e) = fs::create_dir_all(&bin_dest) {
+        eprintln!("❌ Failed to create bin directory: {}", e);
+        std::process::exit(1);
+    }
+
+    let std_files = ["builtin.zr", "math.zr"];
+    let src_std = PathBuf::from("std");
+
+    for file in &std_files {
+        let src = src_std.join(file);
+        let dest = std_dest.join(file);
+        if src.exists() {
+            if let Err(e) = fs::copy(&src, &dest) {
+                eprintln!("❌ Failed to copy {}: {}", file, e);
+            } else {
+                println!("  Installed std/{}", file);
+            }
+        }
+    }
+
+    let current_exe = std::env::current_exe().expect("Failed to get current executable path");
+    let bin_path = bin_dest.join("zeru");
+    if let Err(e) = fs::copy(&current_exe, &bin_path) {
+        eprintln!("❌ Failed to copy binary: {}", e);
+        std::process::exit(1);
+    }
+    println!("  Installed zeru binary");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&bin_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&bin_path, perms).ok();
+    }
+
+    println!("\n✅ Zeru installed successfully!");
+    println!("\nAdd the following to your shell profile (.bashrc, .zshrc, etc.):");
+    println!("  export PATH=\"{}:$PATH\"", bin_dest.display());
 }
