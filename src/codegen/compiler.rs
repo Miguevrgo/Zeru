@@ -1617,6 +1617,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 args.first().map(Self::is_unsigned_type).unwrap_or(false)
             }
             TypeSpec::IntLiteral(_) => false,
+            TypeSpec::Slice(_) => false,
         }
     }
 
@@ -1733,6 +1734,25 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     };
                     return Some(elem_type.array_type(len).into());
                 }
+                if name == "Result" && args.len() == 2 {
+                    let ok_type = self
+                        .get_llvm_type(&args[0])
+                        .unwrap_or(self.context.i8_type().into());
+                    let err_type = self
+                        .get_llvm_type(&args[1])
+                        .unwrap_or(self.context.i8_type().into());
+                    let tag_type = self.context.bool_type().into();
+                    let data_type = if self.type_size(ok_type) >= self.type_size(err_type) {
+                        ok_type
+                    } else {
+                        err_type
+                    };
+                    return Some(
+                        self.context
+                            .struct_type(&[tag_type, data_type], false)
+                            .into(),
+                    );
+                }
                 panic!("Codegen: Unknown generic type {name}");
             }
             TypeSpec::IntLiteral(_) => {
@@ -1757,6 +1777,38 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .into(),
                 )
             }
+            TypeSpec::Slice(_) => {
+                let ptr_type = self
+                    .context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .into();
+                let len_type = self.context.i64_type().into();
+                Some(
+                    self.context
+                        .struct_type(&[ptr_type, len_type], false)
+                        .into(),
+                )
+            }
+        }
+    }
+
+    fn type_size(&self, ty: BasicTypeEnum<'ctx>) -> u64 {
+        match ty {
+            BasicTypeEnum::IntType(t) => t.get_bit_width() as u64,
+            BasicTypeEnum::FloatType(t) => {
+                if t == self.context.f32_type() {
+                    32
+                } else {
+                    64
+                }
+            }
+            BasicTypeEnum::PointerType(_) => 64,
+            BasicTypeEnum::ArrayType(t) => t.len() as u64 * self.type_size(t.get_element_type()),
+            BasicTypeEnum::StructType(t) => {
+                t.get_field_types().iter().map(|f| self.type_size(*f)).sum()
+            }
+            BasicTypeEnum::VectorType(t) => t.get_size() as u64,
+            BasicTypeEnum::ScalableVectorType(_) => 64,
         }
     }
 

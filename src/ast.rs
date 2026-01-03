@@ -13,24 +13,25 @@ pub enum TypeSpec {
     Tuple(Vec<TypeSpec>),
     Pointer(Box<TypeSpec>),
     Optional(Box<TypeSpec>),
+    Slice(Box<TypeSpec>),
 }
 
 /// Root node of the Abstract Syntax Tree.
 ///
 /// A program consists of a sequence of top-level statements
 /// (functions, structs, enums, global variables, etc.)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Program {
     pub statements: Vec<Statement>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Statement {
     pub kind: StatementKind,
     pub span: Span,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StatementKind {
     Var {
         name: String,
@@ -72,7 +73,10 @@ pub enum StatementKind {
         then_branch: Box<Statement>,
         else_branch: Option<Box<Statement>>,
     },
-    Import,
+    Import {
+        path: Vec<String>,
+        symbols: Option<Vec<String>>,
+    },
 }
 
 #[derive(Debug, Clone)]

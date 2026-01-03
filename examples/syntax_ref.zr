@@ -93,6 +93,9 @@ fn main() {
 
     var players = Vector<str>::new();
     players.push("Player1");
+ 
+    const num: i32 = -5;
+    var abs_val: i32 = math::abs(num);
 
     var vec_a = Vector3::new(0.0, 10.0, 0.0);
     var vec_b = Vector3 { x: 5.0, y: 5.0, z: 0.0 };

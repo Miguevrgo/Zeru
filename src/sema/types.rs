@@ -52,6 +52,13 @@ pub enum Type {
     Pointer(Box<Type>),
     Tuple(Vec<Type>),
     Optional(Box<Type>),
+    Result {
+        ok_type: Box<Type>,
+        err_type: Box<Type>,
+    },
+    Slice {
+        elem_type: Box<Type>,
+    },
     Unknown, // Used during type inference when type cannot be determined
 }
 
@@ -76,6 +83,17 @@ impl Type {
             (Type::Pointer(e1), Type::Pointer(e2)) => e1.accepts(e2),
             (Type::Optional(e1), Type::Optional(e2)) => e1.accepts(e2),
             (Type::Optional(inner), other) => inner.accepts(other),
+            (
+                Type::Result {
+                    ok_type: o1,
+                    err_type: e1,
+                },
+                Type::Result {
+                    ok_type: o2,
+                    err_type: e2,
+                },
+            ) => o1.accepts(o2) && e1.accepts(e2),
+            (Type::Slice { elem_type: e1 }, Type::Slice { elem_type: e2 }) => e1.accepts(e2),
             (Type::Tuple(t1), Type::Tuple(t2)) => {
                 t1.len() == t2.len() && t1.iter().zip(t2.iter()).all(|(a, b)| a.accepts(b))
             }
@@ -127,6 +145,8 @@ impl std::fmt::Display for Type {
             Type::Array { elem_type, len } => write!(f, "[{}; {}]", elem_type, len),
             Type::Pointer(elem_type) => write!(f, "*{}", elem_type),
             Type::Optional(elem_type) => write!(f, "{}?", elem_type),
+            Type::Result { ok_type, err_type } => write!(f, "Result<{}, {}>", ok_type, err_type),
+            Type::Slice { elem_type } => write!(f, "&[{}]", elem_type),
             Type::Tuple(types) => {
                 write!(f, "(")?;
                 for (i, t) in types.iter().enumerate() {

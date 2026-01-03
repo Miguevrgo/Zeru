@@ -313,6 +313,15 @@ impl SemanticAnalyzer {
                         len,
                     };
                 }
+                // Result<T, E> type
+                if name == "Result" && args.len() == 2 {
+                    let ok_type = self.resolve_spec(&args[0]);
+                    let err_type = self.resolve_spec(&args[1]);
+                    return Type::Result {
+                        ok_type: Box::new(ok_type),
+                        err_type: Box::new(err_type),
+                    };
+                }
                 self.error(
                     format!("Unknown generic type or invalid args: {}", name),
                     Span::default(),
@@ -337,6 +346,12 @@ impl SemanticAnalyzer {
             TypeSpec::Optional(inner) => {
                 let elem_type = self.resolve_spec(inner);
                 Type::Optional(Box::new(elem_type))
+            }
+            TypeSpec::Slice(inner) => {
+                let elem_type = self.resolve_spec(inner);
+                Type::Slice {
+                    elem_type: Box::new(elem_type),
+                }
             }
         }
     }

@@ -39,18 +39,23 @@ Goal: Transition from a "calculator" to a true system language capable of intera
 ##### Semantic Analyzer (Sema)
 
 - [x] Pointer Validation: Strict type checking for pointers (*i32 vs i32).
-- [ ] Proper Main: Allow fn main() void.
 - [x] Optional Type Checking: Basic optional type checking (T? accepts T and None).
 
 ##### CodeGen & Runtime
 
 - [ ] LibC Linking: Enable calls to malloc, free, exit, and printf || Enable calls not depending on libc.
-- [ ] Exit Code Fix: Remove the explicit i32 return requirement for main; the runtime will handle exit(0).
+- [x] Exit Code Fix: Remove the explicit i32 return requirement for main; the runtime will handle exit(0).
 
 ##### Tooling
 
 - [ ] Basic syntax highlighting and file icons (.zr with emoji support ⚡).
 - [ ] LSP Initial: Basic Language Server Protocol scaffolding.
+
+##### Module System
+
+- [x] Module imports: `import std.math` -> access via `math::func()`
+- [x] Selective imports: `import std.math::{abs}` -> direct `abs()` access
+- [ ] Nested modules: Support for `mod` keyword
 
 ## Version 0.3.0: "The Abstraction Layer"
 
@@ -64,12 +69,16 @@ Goal: Introduce high-level abstractions with zero runtime cost, moving closer to
 
 ##### Memory & Safety
 
+- [x] Allocator trait API: Safe allocation interface (std/mem.zr)
+- [ ] GlobalAlloc implementation with libc
+- [ ] Arena allocator
 - [ ] Consider possible solutions for easy/secure/fast language (debug|release-safe|release-fast)
 - [ ] Generational References / Borrow Checker / Arenas ??
 
 ##### Standard Library (STL) - Phase 1
 
-- [ ] Option & Result: Implement tagged unions (enum with data) for error handling.
+- [x] Option<T>: Nullable types with ? syntax
+- [x] Result<T, E>: Tagged union for error handling
 - [ ] Vec<T>: Implement dynamic arrays using malloc/realloc.
 
 ## Version 1.0.0: "Production Ready"
@@ -78,6 +87,6 @@ Goal: A safe, fast language with a complete developer ecosystem.
 
 ##### Ecosytem
 
-- [ ] Module System: robust import system for external libraries and multi-file projects.
+- [x] Module System: robust import system for external libraries and multi-file projects.
 - [ ] Full LSP: Autocomplete, "Go to Definition", and error diagnostics in the editor.
 - [ ] Complete STL: Functional iterators (map, filter, reduce) and advanced math libraries.

@@ -209,14 +209,27 @@ impl<'a> Parser<'a> {
 
     fn parse_type(&mut self) -> Option<TypeSpec> {
         if self.current_token == Token::Str {
-            return Some(TypeSpec::Pointer(Box::new(TypeSpec::Named(
-                "u8".to_string(),
-            ))));
+            return Some(TypeSpec::Slice(Box::new(TypeSpec::Named("u8".to_string()))));
         }
         if self.current_token == Token::Star {
             self.next_token();
             let inner = self.parse_type()?;
             return Some(TypeSpec::Pointer(Box::new(inner)));
+        }
+
+        if self.current_token == Token::BitAnd {
+            self.next_token();
+            if self.current_token == Token::LBracket {
+                self.next_token();
+                let elem_type = self.parse_type()?;
+                if !self.expect_peek(&Token::RBracket) {
+                    return None;
+                }
+                return Some(TypeSpec::Slice(Box::new(elem_type)));
+            } else {
+                self.error_current("Expected '[' after '&' for slice type");
+                return None;
+            }
         }
 
         if self.current_token == Token::LParen {
@@ -750,8 +763,14 @@ impl<'a> Parser<'a> {
     fn parse_import_statement(&mut self) -> Option<Statement> {
         let start_span = self.current_span;
 
+        let mut path = Vec::new();
+
         if !self.expect_peek_identifier() {
             return None;
+        }
+
+        if let Token::Identifier(name) = &self.current_token {
+            path.push(name.clone())
         }
 
         while self.peek_token_is(&Token::Dot) {
@@ -760,21 +779,32 @@ impl<'a> Parser<'a> {
             if !self.expect_peek_identifier() {
                 return None;
             }
+
+            if let Token::Identifier(name) = &self.current_token {
+                path.push(name.clone());
+            }
         }
 
-        if self.peek_token_is(&Token::DoubleColon) {
+        let symbols = if self.peek_token_is(&Token::DoubleColon) {
             self.next_token();
 
             if !self.expect_peek(&Token::LBrace) {
                 return None;
             }
 
+            let mut items = Vec::new();
+
             while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
                 self.next_token();
-                if !matches!(&self.current_token, Token::Identifier(_)) {
+
+                let name = if let Token::Identifier(n) = &self.current_token {
+                    n.clone()
+                } else {
                     self.error_current("Expected symbol name in import");
                     return None;
-                }
+                };
+
+                items.push(name);
 
                 if self.peek_token_is(&Token::RBrace) {
                     break;
@@ -787,7 +817,11 @@ impl<'a> Parser<'a> {
             if !self.expect_peek(&Token::RBrace) {
                 return None;
             }
-        }
+
+            Some(items)
+        } else {
+            None
+        };
 
         if self.peek_token_is(&Token::Semicolon) {
             self.next_token();
@@ -795,7 +829,7 @@ impl<'a> Parser<'a> {
 
         let end_span = self.current_span;
         Some(Statement::new(
-            StatementKind::Import,
+            StatementKind::Import { path, symbols },
             start_span.merge(end_span),
         ))
     }
@@ -1981,9 +2015,18 @@ mod tests {
         let program = parse_input(input);
         assert_eq!(program.statements.len(), 3);
 
-        assert!(matches!(&program.statements[0].kind, StatementKind::Import));
-        assert!(matches!(&program.statements[1].kind, StatementKind::Import));
-        assert!(matches!(&program.statements[2].kind, StatementKind::Import));
+        assert!(matches!(
+            &program.statements[0].kind,
+            StatementKind::Import { .. }
+        ));
+        assert!(matches!(
+            &program.statements[1].kind,
+            StatementKind::Import { .. }
+        ));
+        assert!(matches!(
+            &program.statements[2].kind,
+            StatementKind::Import { .. }
+        ));
     }
 
     #[test]

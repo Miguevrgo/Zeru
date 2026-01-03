@@ -83,7 +83,7 @@ pub enum Token {
     Default, // default
     Enum,    // enum
     Arrow,   // =>
-    Str,     // str (alias for *u8)
+    Str,     // str type keyword
 
     // Inline Assembly
     Asm,      // asm
