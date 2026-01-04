@@ -1,0 +1,13 @@
+import std.math::{abs, PI}
+
+fn main() {
+    println("Testing imports from std.math")
+    const num: i32 = -5;
+    if abs(num) == 5 {
+        print("Correct");
+        const arr = PI;
+    } else {
+        eprint("Incorrect");
+        exit(1);
+    }
+}

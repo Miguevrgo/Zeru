@@ -426,18 +426,8 @@ fn resolve_direct_symbols(
             }
 
             if let Some(qualified) = direct_symbols.get(&ident) {
-                let mut peek_chars2 = chars.clone();
-                while let Some(&ws) = peek_chars2.peek() {
-                    if ws.is_whitespace() {
-                        peek_chars2.next();
-                    } else {
-                        break;
-                    }
-                }
-                if peek_chars2.peek() == Some(&'(') {
-                    result.push_str(qualified);
-                    continue;
-                }
+                result.push_str(qualified);
+                continue;
             }
 
             result.push_str(&ident);
