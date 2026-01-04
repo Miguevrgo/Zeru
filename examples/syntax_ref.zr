@@ -77,6 +77,30 @@ fn calculate_fibonacci(n: i32) i32 {
     return calculate_fibonacci(n - 1) + calculate_fibonacci(n - 2);
 }
 
+/// ======
+/// Traits
+/// ======
+
+trait Drawable {
+    fn draw(self);
+}
+
+struct Player {
+    x: f32, y: f32,
+
+    fn draw(self) {
+        // ...
+    }
+}
+
+fn render_scene(item: Drawable) {
+    item.draw();
+}
+
+// inside main or any function
+// var p = Player::new(0.0, 0.0);
+// render_scene(p); // Would work automatically
+
 fn main() {
     var counter: i32 = 10;
     var inferred = 20;

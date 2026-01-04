@@ -1,7 +1,365 @@
+// Zeru Standard Library - Math Module
+//
+// Since Zeru doesn't have traits yet, numeric functions use type suffixes:
+// - No suffix: i32 (default)
+// - _i64: i64
+// - _f32: f32
+// - _f64: f64
+// - _u32: u32
+// - _u64: u64
+
+// ============================================================================
+// Mathematical Constants
+// ============================================================================
+
+const PI: f64 = 3.14159265358979323846;
+const PI_F32: f32 = 3.14159265;
+const E: f64 = 2.71828182845904523536;
+const E_F32: f32 = 2.71828182;
+const TAU: f64 = 6.28318530717958647692;
+const TAU_F32: f32 = 6.28318530;
+
+// ============================================================================
+// Absolute Value Functions
+// ============================================================================
+
 fn abs(num: i32) i32 {
     if num < 0 {
         return -num;
-    } else {
-        return num;
     }
+    return num;
+}
+
+fn abs_i64(num: i64) i64 {
+    if num < 0 {
+        return -num;
+    }
+    return num;
+}
+
+fn abs_f32(num: f32) f32 {
+    if num < 0.0 {
+        return -num;
+    }
+    return num;
+}
+
+fn abs_f64(num: f64) f64 {
+    if num < 0.0 {
+        return -num;
+    }
+    return num;
+}
+
+// ============================================================================
+// Min/Max Functions
+// ============================================================================
+
+fn min(a: i32, b: i32) i32 {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+fn max(a: i32, b: i32) i32 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+fn min_i64(a: i64, b: i64) i64 {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+fn max_i64(a: i64, b: i64) i64 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+fn min_u32(a: u32, b: u32) u32 {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+fn max_u32(a: u32, b: u32) u32 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+fn min_u64(a: u64, b: u64) u64 {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+fn max_u64(a: u64, b: u64) u64 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+fn min_f32(a: f32, b: f32) f32 {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+fn max_f32(a: f32, b: f32) f32 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+fn min_f64(a: f64, b: f64) f64 {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+fn max_f64(a: f64, b: f64) f64 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+// ============================================================================
+// Clamp Functions
+// ============================================================================
+
+fn clamp(val: i32, lo: i32, hi: i32) i32 {
+    if val < lo {
+        return lo;
+    }
+    if val > hi {
+        return hi;
+    }
+    return val;
+}
+
+fn clamp_i64(val: i64, lo: i64, hi: i64) i64 {
+    if val < lo {
+        return lo;
+    }
+    if val > hi {
+        return hi;
+    }
+    return val;
+}
+
+fn clamp_f32(val: f32, lo: f32, hi: f32) f32 {
+    if val < lo {
+        return lo;
+    }
+    if val > hi {
+        return hi;
+    }
+    return val;
+}
+
+fn clamp_f64(val: f64, lo: f64, hi: f64) f64 {
+    if val < lo {
+        return lo;
+    }
+    if val > hi {
+        return hi;
+    }
+    return val;
+}
+
+// ============================================================================
+// Integer Division and Modulo (Euclidean)
+// ============================================================================
+
+fn div_euclid(a: i32, b: i32) i32 {
+    var q: i32 = a / b;
+    var r: i32 = a % b;
+    if r < 0 {
+        if b > 0 {
+            return q - 1;
+        } else {
+            return q + 1;
+        }
+    }
+    return q;
+}
+
+fn mod_euclid(a: i32, b: i32) i32 {
+    var r: i32 = a % b;
+    if r < 0 {
+        if b > 0 {
+            return r + b;
+        } else {
+            return r - b;
+        }
+    }
+    return r;
+}
+
+fn div_euclid_i64(a: i64, b: i64) i64 {
+    var q: i64 = a / b;
+    var r: i64 = a % b;
+    if r < 0 {
+        if b > 0 {
+            return q - 1;
+        } else {
+            return q + 1;
+        }
+    }
+    return q;
+}
+
+fn mod_euclid_i64(a: i64, b: i64) i64 {
+    var r: i64 = a % b;
+    if r < 0 {
+        if b > 0 {
+            return r + b;
+        } else {
+            return r - b;
+        }
+    }
+    return r;
+}
+
+// ============================================================================
+// Power Functions (Integer exponents)
+// ============================================================================
+
+fn pow(base: i32, exp: u32) i32 {
+    var result: i32 = 1;
+    var b: i32 = base;
+    var e: u32 = exp;
+    while e > 0 {
+        if (e % 2) == 1 {
+            result = result * b;
+        }
+        b = b * b;
+        e = e / 2;
+    }
+    return result;
+}
+
+fn pow_i64(base: i64, exp: u32) i64 {
+    var result: i64 = 1;
+    var b: i64 = base;
+    var e: u32 = exp;
+    while e > 0 {
+        if (e % 2) == 1 {
+            result = result * b;
+        }
+        b = b * b;
+        e = e / 2;
+    }
+    return result;
+}
+
+fn pow_f32(base: f32, exp: i32) f32 {
+    if exp == 0 {
+        return 1.0;
+    }
+    var result: f32 = 1.0;
+    var b: f32 = base;
+    var e: i32 = exp;
+    if e < 0 {
+        b = 1.0 / b;
+        e = -e;
+    }
+    while e > 0 {
+        if (e % 2) == 1 {
+            result = result * b;
+        }
+        b = b * b;
+        e = e / 2;
+    }
+    return result;
+}
+
+fn pow_f64(base: f64, exp: i32) f64 {
+    if exp == 0 {
+        return 1.0;
+    }
+    var result: f64 = 1.0;
+    var b: f64 = base;
+    var e: i32 = exp;
+    if e < 0 {
+        b = 1.0 / b;
+        e = -e;
+    }
+    while e > 0 {
+        if (e % 2) == 1 {
+            result = result * b;
+        }
+        b = b * b;
+        e = e / 2;
+    }
+    return result;
+}
+
+// ============================================================================
+// Is Power of Two
+// ============================================================================
+
+fn is_power_of_two(n: u32) bool {
+    return n != 0 && (n & (n - 1)) == 0;
+}
+
+fn is_power_of_two_u64(n: u64) bool {
+    return n != 0 && (n & (n - 1)) == 0;
+}
+
+// ============================================================================
+// Saturating Arithmetic (no overflow)
+// ============================================================================
+
+fn saturating_add(a: i32, b: i32) i32 {
+    var result: i64 = (a as i64) + (b as i64);
+    if result > 2147483647 {
+        return 2147483647;
+    }
+    if result < -2147483648 {
+        return -2147483648;
+    }
+    return result as i32;
+}
+
+fn saturating_sub(a: i32, b: i32) i32 {
+    var result: i64 = (a as i64) - (b as i64);
+    if result > 2147483647 {
+        return 2147483647;
+    }
+    if result < -2147483648 {
+        return -2147483648;
+    }
+    return result as i32;
+}
+
+fn saturating_add_u32(a: u32, b: u32) u32 {
+    var result: u64 = (a as u64) + (b as u64);
+    if result > 4294967295 {
+        return 4294967295;
+    }
+    return result as u32;
+}
+
+fn saturating_sub_u32(a: u32, b: u32) u32 {
+    if b > a {
+        return 0;
+    }
+    return a - b;
 }

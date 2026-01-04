@@ -1037,6 +1037,90 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     panic!("Codegen: Invalid :: expression");
                 }
 
+                if *operator == Token::And || *operator == Token::Or {
+                    let bool_type = self.context.bool_type();
+                    let current_fn = self
+                        .builder
+                        .get_insert_block()
+                        .unwrap()
+                        .get_parent()
+                        .unwrap();
+
+                    let lhs = self.compile_expression(left, Some(bool_type.into()));
+                    let lhs_bool = match lhs {
+                        BasicValueEnum::IntValue(v) => {
+                            if v.get_type().get_bit_width() == 1 {
+                                v
+                            } else {
+                                self.builder
+                                    .build_int_compare(
+                                        IntPredicate::NE,
+                                        v,
+                                        v.get_type().const_zero(),
+                                        "tobool",
+                                    )
+                                    .unwrap()
+                            }
+                        }
+                        _ => panic!("&& and || require boolean/integer operands"),
+                    };
+
+                    let entry_block = self.builder.get_insert_block().unwrap();
+                    let rhs_block = self.context.append_basic_block(current_fn, "rhs_eval");
+                    let merge_block = self.context.append_basic_block(current_fn, "merge");
+
+                    if *operator == Token::And {
+                        self.builder
+                            .build_conditional_branch(lhs_bool, rhs_block, merge_block)
+                            .unwrap();
+                    } else {
+                        self.builder
+                            .build_conditional_branch(lhs_bool, merge_block, rhs_block)
+                            .unwrap();
+                    }
+
+                    self.builder.position_at_end(rhs_block);
+                    let rhs = self.compile_expression(right, Some(bool_type.into()));
+                    let rhs_bool = match rhs {
+                        BasicValueEnum::IntValue(v) => {
+                            if v.get_type().get_bit_width() == 1 {
+                                v
+                            } else {
+                                self.builder
+                                    .build_int_compare(
+                                        IntPredicate::NE,
+                                        v,
+                                        v.get_type().const_zero(),
+                                        "tobool",
+                                    )
+                                    .unwrap()
+                            }
+                        }
+                        _ => panic!("&& and || require boolean/integer operands"),
+                    };
+                    let rhs_end_block = self.builder.get_insert_block().unwrap();
+                    self.builder
+                        .build_unconditional_branch(merge_block)
+                        .unwrap();
+
+                    self.builder.position_at_end(merge_block);
+                    let phi = self.builder.build_phi(bool_type, "result").unwrap();
+
+                    if *operator == Token::And {
+                        phi.add_incoming(&[
+                            (&bool_type.const_zero(), entry_block),
+                            (&rhs_bool, rhs_end_block),
+                        ]);
+                    } else {
+                        phi.add_incoming(&[
+                            (&bool_type.const_all_ones(), entry_block),
+                            (&rhs_bool, rhs_end_block),
+                        ]);
+                    }
+
+                    return phi.as_basic_value();
+                }
+
                 let is_comparison = matches!(
                     operator,
                     Token::Eq | Token::NotEq | Token::Lt | Token::Leq | Token::Gt | Token::Geq

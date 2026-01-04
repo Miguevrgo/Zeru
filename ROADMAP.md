@@ -65,7 +65,7 @@ Goal: Introduce high-level abstractions with zero runtime cost, moving closer to
 
 - [ ] Generic Structs: Support struct Box<T> { value: T }.
 - [ ] Generic Functions: Support fn id<T>(x: T) T.
-- [ ] Monomorphization: Compiler generates specialized code for each type used (like C++ templates).
+- [ ] Traits: As describe in syntax_ref: fn draw(d: Drawable)
 
 ##### Memory & Safety
 

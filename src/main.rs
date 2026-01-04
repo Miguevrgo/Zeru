@@ -265,6 +265,40 @@ fn prefix_definitions(content: &str, prefix: &str) -> String {
             } else {
                 result.push_str(&word);
             }
+        } else if c == 'c' && chars.peek() == Some(&'o') {
+            let mut word = String::from(c);
+            while let Some(&next) = chars.peek() {
+                if next.is_alphabetic() || next == '_' {
+                    word.push(chars.next().unwrap());
+                } else {
+                    break;
+                }
+            }
+            if word == "const" {
+                result.push_str("const ");
+                while let Some(&ws) = chars.peek() {
+                    if ws.is_whitespace() {
+                        result.push(chars.next().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                let mut name = String::new();
+                while let Some(&nc) = chars.peek() {
+                    if nc.is_alphanumeric() || nc == '_' {
+                        name.push(chars.next().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                if !name.is_empty() {
+                    result.push_str(prefix);
+                    result.push_str("__");
+                }
+                result.push_str(&name);
+            } else {
+                result.push_str(&word);
+            }
         } else {
             result.push(c);
         }
