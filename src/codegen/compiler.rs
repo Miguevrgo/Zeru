@@ -450,6 +450,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             TypeSpec::Optional(inner) => {
                 TypeSpec::Optional(Box::new(self.substitute_type_spec(inner, subs)))
             }
+            TypeSpec::Result(inner) => {
+                TypeSpec::Result(Box::new(self.substitute_type_spec(inner, subs)))
+            }
             TypeSpec::Generic { name, args } => TypeSpec::Generic {
                 name: name.clone(),
                 args: args
@@ -487,6 +490,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 format!("tuple_{}", inner.join("_"))
             }
             TypeSpec::Optional(inner) => format!("opt_{}", self.type_spec_to_mangled(inner)),
+            TypeSpec::Result(inner) => format!("res_{}", self.type_spec_to_mangled(inner)),
             TypeSpec::Generic { name, args } => {
                 let inner: Vec<_> = args.iter().map(|a| self.type_spec_to_mangled(a)).collect();
                 format!("{}_{}", name, inner.join("_"))
@@ -935,11 +939,32 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .into(),
             ExpressionKind::StringLit(s) => {
                 let str_val = std::str::from_utf8(s).unwrap();
-                let string_val = self
+                let global_str = self
                     .builder
                     .build_global_string_ptr(str_val, "str")
                     .unwrap();
-                string_val.as_pointer_value().into()
+                let str_ptr = global_str.as_pointer_value();
+                let str_len = self.context.i64_type().const_int(s.len() as u64, false);
+
+                let ptr_type = self
+                    .context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .into();
+                let len_type = self.context.i64_type().into();
+                let str_type = self.context.struct_type(&[ptr_type, len_type], false);
+
+                let mut str_slice = str_type.get_undef();
+                str_slice = self
+                    .builder
+                    .build_insert_value(str_slice, str_ptr, 0, "str_ptr")
+                    .unwrap()
+                    .into_struct_value();
+                str_slice = self
+                    .builder
+                    .build_insert_value(str_slice, str_len, 1, "str_len")
+                    .unwrap()
+                    .into_struct_value();
+                str_slice.into()
             }
             _ => panic!("Codegen: Unsupported constant expression: {:?}", expr.kind),
         }
@@ -1230,6 +1255,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     name: method_name,
                 } = &function.kind
                 {
+                    let obj_val = self.compile_expression(object, None);
+                    if let BasicValueEnum::StructValue(slice_struct) = obj_val {
+                        let struct_type = slice_struct.get_type();
+                        if struct_type.count_fields() == 2 && method_name == "len" {
+                            let len = self
+                                .builder
+                                .build_extract_value(slice_struct, 1, "slice_len")
+                                .unwrap();
+                            return len;
+                        }
+                    }
+
                     let struct_name_result = if let ExpressionKind::Identifier(var_name) =
                         &object.kind
                     {
@@ -1309,6 +1346,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                     if name == "exit" {
                         return self.compile_builtin_exit(arguments);
+                    }
+
+                    if name == "Ok" {
+                        return self.compile_ok_constructor(arguments, expected_type);
+                    }
+
+                    if name == "Err" {
+                        return self.compile_err_constructor(arguments, expected_type);
                     }
 
                     if self.generic_functions.contains_key(name) {
@@ -1645,11 +1690,32 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
             ExpressionKind::StringLit(s) => {
                 let str_val = std::str::from_utf8(s).unwrap();
-                let string_val = self
+                let global_str = self
                     .builder
                     .build_global_string_ptr(str_val, "str")
                     .unwrap();
-                string_val.as_pointer_value().into()
+                let str_ptr = global_str.as_pointer_value();
+                let str_len = self.context.i64_type().const_int(s.len() as u64, false);
+
+                let ptr_type = self
+                    .context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .into();
+                let len_type = self.context.i64_type().into();
+                let str_type = self.context.struct_type(&[ptr_type, len_type], false);
+
+                let mut str_slice = str_type.get_undef();
+                str_slice = self
+                    .builder
+                    .build_insert_value(str_slice, str_ptr, 0, "str_ptr")
+                    .unwrap()
+                    .into_struct_value();
+                str_slice = self
+                    .builder
+                    .build_insert_value(str_slice, str_len, 1, "str_len")
+                    .unwrap()
+                    .into_struct_value();
+                str_slice.into()
             }
             ExpressionKind::Prefix { operator, right } => {
                 let operand = self.compile_expression(right, expected_type);
@@ -2045,7 +2111,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 matches!(name.as_str(), "u8" | "u16" | "u32" | "u64" | "usize")
             }
             TypeSpec::Pointer(inner) => Self::is_unsigned_type(inner),
-            TypeSpec::Tuple(_) | TypeSpec::Optional(_) => false,
+            TypeSpec::Tuple(_) | TypeSpec::Optional(_) | TypeSpec::Result(_) => false,
             TypeSpec::Generic { args, .. } => {
                 args.first().map(Self::is_unsigned_type).unwrap_or(false)
             }
@@ -2207,6 +2273,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Some(
                     self.context
                         .struct_type(&[tag_type, inner_type], false)
+                        .into(),
+                )
+            }
+            TypeSpec::Result(inner) => {
+                let inner_type = self.get_llvm_type(inner)?;
+                let tag_type = self.context.bool_type().into();
+                let error_code_type = self.context.i32_type().into();
+                Some(
+                    self.context
+                        .struct_type(&[tag_type, inner_type, error_code_type], false)
                         .into(),
                 )
             }
@@ -2480,14 +2556,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             _ => unreachable!(),
         };
 
-        let string_arg = self.compile_expression(
-            &arguments[0],
-            Some(
-                self.context
-                    .ptr_type(inkwell::AddressSpace::default())
-                    .into(),
-            ),
-        );
+        let string_arg = self.compile_expression(&arguments[0], None);
+
+        let str_ptr = if let BasicValueEnum::StructValue(str_slice) = string_arg {
+            self.builder
+                .build_extract_value(str_slice, 0, "str_ptr")
+                .unwrap()
+        } else if let BasicValueEnum::PointerValue(ptr) = string_arg {
+            ptr.into()
+        } else {
+            panic!("Expected str slice or pointer for print");
+        };
 
         let write_str_fn = self
             .module
@@ -2495,7 +2574,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .expect("OutStream::write_str not found");
 
         self.builder
-            .build_call(write_str_fn, &[stream_ptr.into(), string_arg.into()], "")
+            .build_call(write_str_fn, &[stream_ptr.into(), str_ptr.into()], "")
             .unwrap();
 
         if name == "println" || name == "eprintln" {
@@ -2568,6 +2647,103 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         self.builder.build_unreachable().unwrap();
         self.context.i32_type().const_int(0, false).into()
+    }
+
+    fn compile_ok_constructor(
+        &mut self,
+        arguments: &[Expression],
+        expected_type: Option<BasicTypeEnum<'ctx>>,
+    ) -> BasicValueEnum<'ctx> {
+        if arguments.len() != 1 {
+            panic!("Ok() expects exactly 1 argument");
+        }
+
+        let result_type = if let Some(BasicTypeEnum::StructType(st)) = expected_type {
+            st
+        } else {
+            let inner_val = self.compile_expression(&arguments[0], None);
+            let inner_type = inner_val.get_type();
+            let tag_type = self.context.bool_type().into();
+            let error_code_type = self.context.i32_type().into();
+            self.context
+                .struct_type(&[tag_type, inner_type, error_code_type], false)
+        };
+
+        let inner_type = result_type.get_field_type_at_index(1).unwrap();
+        let inner_val = self.compile_expression(&arguments[0], Some(inner_type));
+
+        let is_ok = self.context.bool_type().const_int(1, false); // true = Ok
+        let zero_error = self.context.i32_type().const_int(0, false);
+
+        let mut result_val = result_type.get_undef();
+        result_val = self
+            .builder
+            .build_insert_value(result_val, is_ok, 0, "res_tag")
+            .unwrap()
+            .into_struct_value();
+        result_val = self
+            .builder
+            .build_insert_value(result_val, inner_val, 1, "res_val")
+            .unwrap()
+            .into_struct_value();
+        result_val = self
+            .builder
+            .build_insert_value(result_val, zero_error, 2, "res_err")
+            .unwrap()
+            .into_struct_value();
+
+        result_val.into()
+    }
+
+    fn compile_err_constructor(
+        &mut self,
+        arguments: &[Expression],
+        expected_type: Option<BasicTypeEnum<'ctx>>,
+    ) -> BasicValueEnum<'ctx> {
+        if arguments.len() != 1 {
+            panic!("Err() expects exactly 1 argument (error code)");
+        }
+
+        let result_type = if let Some(BasicTypeEnum::StructType(st)) = expected_type {
+            st
+        } else {
+            panic!("Err() requires known Result type context");
+        };
+
+        let error_code = self
+            .compile_expression(&arguments[0], Some(self.context.i32_type().into()))
+            .into_int_value();
+
+        let is_ok = self.context.bool_type().const_int(0, false); // false = Err
+        let inner_type = result_type.get_field_type_at_index(1).unwrap();
+        let zero_val: BasicValueEnum = match inner_type {
+            BasicTypeEnum::IntType(t) => t.const_int(0, false).into(),
+            BasicTypeEnum::FloatType(t) => t.const_float(0.0).into(),
+            BasicTypeEnum::PointerType(t) => t.const_null().into(),
+            BasicTypeEnum::StructType(t) => t.get_undef().into(),
+            BasicTypeEnum::ArrayType(t) => t.get_undef().into(),
+            BasicTypeEnum::VectorType(t) => t.get_undef().into(),
+            BasicTypeEnum::ScalableVectorType(t) => t.get_undef().into(),
+        };
+
+        let mut result_val = result_type.get_undef();
+        result_val = self
+            .builder
+            .build_insert_value(result_val, is_ok, 0, "res_tag")
+            .unwrap()
+            .into_struct_value();
+        result_val = self
+            .builder
+            .build_insert_value(result_val, zero_val, 1, "res_val")
+            .unwrap()
+            .into_struct_value();
+        result_val = self
+            .builder
+            .build_insert_value(result_val, error_code, 2, "res_err")
+            .unwrap()
+            .into_struct_value();
+
+        result_val.into()
     }
 }
 

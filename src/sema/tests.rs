@@ -266,7 +266,7 @@ fn test_boolean_type_mismatch() {
 fn test_string_type() {
     let input = "
             fn main() {
-                var s: *u8 = \"hello\";
+                var s: str = \"hello\";
             }
         ";
     let errors = analyze(input);
@@ -1775,8 +1775,12 @@ fn test_immutable_self_cannot_modify_fields() {
 #[test]
 fn test_pointer_arithmetic_add() {
     let input = "
+        fn get_ptr() *u8 {
+            var x: u8 = 0;
+            return &x;
+        }
         fn main() {
-            var ptr: *u8 = \"hello\";
+            var ptr: *u8 = get_ptr();
             var next: *u8 = ptr + 1;
         }
     ";
@@ -1787,8 +1791,12 @@ fn test_pointer_arithmetic_add() {
 #[test]
 fn test_pointer_arithmetic_sub() {
     let input = "
+        fn get_ptr() *u8 {
+            var x: u8 = 0;
+            return &x;
+        }
         fn main() {
-            var ptr: *u8 = \"hello\";
+            var ptr: *u8 = get_ptr();
             var prev: *u8 = ptr - 1;
         }
     ";
@@ -1799,8 +1807,12 @@ fn test_pointer_arithmetic_sub() {
 #[test]
 fn test_pointer_arithmetic_with_usize() {
     let input = "
+        fn get_ptr() *u8 {
+            var x: u8 = 0;
+            return &x;
+        }
         fn main() {
-            var ptr: *u8 = \"hello\";
+            var ptr: *u8 = get_ptr();
             var offset: usize = 2;
             var next: *u8 = ptr + offset;
         }

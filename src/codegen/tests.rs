@@ -602,7 +602,8 @@ fn test_tuple_with_different_types() {
 fn test_pointer_arithmetic_add() {
     let input = "
         fn main() {
-            var ptr: *u8 = \"test\";
+            var x: u8 = 0;
+            var ptr: *u8 = &x;
             var next: *u8 = ptr + 1;
         }
     ";
@@ -613,7 +614,8 @@ fn test_pointer_arithmetic_add() {
 fn test_pointer_arithmetic_sub() {
     let input = "
         fn main() {
-            var ptr: *u8 = \"test\";
+            var x: u8 = 0;
+            var ptr: *u8 = &x;
             var prev: *u8 = ptr - 1;
         }
     ";
@@ -731,6 +733,71 @@ fn test_for_in_with_continue() {
                     continue;
                 }
             }
+        }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_result_type_ok() {
+    let input = "
+        fn get_value() i32! {
+            return Ok(42);
+        }
+        fn main() {
+            var result: i32! = get_value();
+        }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_result_type_err() {
+    let input = "
+        fn get_value() i32! {
+            return Err(1);
+        }
+        fn main() {
+            var result: i32! = get_value();
+        }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_result_type_conditional() {
+    let input = "
+        fn divide(a: i32, b: i32) i32! {
+            if b == 0 {
+                return Err(1);
+            }
+            return Ok(a / b);
+        }
+        fn main() {
+            var r1: i32! = divide(10, 2);
+            var r2: i32! = divide(10, 0);
+        }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_str_type() {
+    let input = "
+        fn main() {
+            var s: str = \"hello\";
+            println(s);
+        }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_str_len() {
+    let input = "
+        fn main() {
+            var s: str = \"hello\";
+            var len: usize = s.len();
         }
     ";
     assert_compiles(input);

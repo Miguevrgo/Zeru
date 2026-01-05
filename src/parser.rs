@@ -319,6 +319,11 @@ impl<'a> Parser<'a> {
             return Some(TypeSpec::Optional(Box::new(base_type)));
         }
 
+        if self.peek_token_is(&Token::Bang) {
+            self.next_token();
+            return Some(TypeSpec::Result(Box::new(base_type)));
+        }
+
         Some(base_type)
     }
 
@@ -623,9 +628,8 @@ impl<'a> Parser<'a> {
             _ => unreachable!(),
         };
 
-        // Parse optional type parameters <T, U, ...>
         let type_params = if self.peek_token_is(&Token::Lt) {
-            self.next_token(); // consume <
+            self.next_token();
             self.parse_type_parameters()
         } else {
             Vec::new()

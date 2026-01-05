@@ -21,7 +21,8 @@ pub enum TypeSpec {
     IntLiteral(i64),
     Tuple(Vec<TypeSpec>),
     Pointer(Box<TypeSpec>),
-    Optional(Box<TypeSpec>),
+    Optional(Box<TypeSpec>), // T?
+    Result(Box<TypeSpec>),   // T!
     Slice(Box<TypeSpec>),
 }
 

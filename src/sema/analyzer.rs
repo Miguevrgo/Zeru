@@ -27,15 +27,17 @@ impl SemanticAnalyzer {
     pub fn new() -> Self {
         let mut symbols = SymbolTable::new();
 
-        let ptr_u8 = Type::Pointer(Box::new(Type::Integer {
-            signed: Signedness::Unsigned,
-            width: IntWidth::W8,
-        }));
+        let str_type = Type::Slice {
+            elem_type: Box::new(Type::Integer {
+                signed: Signedness::Unsigned,
+                width: IntWidth::W8,
+            }),
+        };
 
-        symbols.insert_fn("print".to_string(), vec![ptr_u8.clone()], Type::Void);
-        symbols.insert_fn("println".to_string(), vec![ptr_u8.clone()], Type::Void);
-        symbols.insert_fn("eprint".to_string(), vec![ptr_u8.clone()], Type::Void);
-        symbols.insert_fn("eprintln".to_string(), vec![ptr_u8.clone()], Type::Void);
+        symbols.insert_fn("print".to_string(), vec![str_type.clone()], Type::Void);
+        symbols.insert_fn("println".to_string(), vec![str_type.clone()], Type::Void);
+        symbols.insert_fn("eprint".to_string(), vec![str_type.clone()], Type::Void);
+        symbols.insert_fn("eprintln".to_string(), vec![str_type], Type::Void);
         symbols.insert_fn(
             "exit".to_string(),
             vec![Type::Integer {
@@ -344,7 +346,6 @@ impl SemanticAnalyzer {
                         len,
                     };
                 }
-                // Result<T, E> type
                 if name == "Result" && args.len() == 2 {
                     let ok_type = self.resolve_spec(&args[0]);
                     let err_type = self.resolve_spec(&args[1]);
@@ -377,6 +378,22 @@ impl SemanticAnalyzer {
             TypeSpec::Optional(inner) => {
                 let elem_type = self.resolve_spec(inner);
                 Type::Optional(Box::new(elem_type))
+            }
+            TypeSpec::Result(inner) => {
+                let ok_type = self.resolve_spec(inner);
+                Type::Result {
+                    ok_type: Box::new(ok_type),
+                    err_type: Box::new(Type::Struct {
+                        name: "Error".to_string(),
+                        fields: vec![(
+                            "code".to_string(),
+                            Type::Integer {
+                                signed: crate::sema::types::Signedness::Signed,
+                                width: crate::sema::types::IntWidth::W32,
+                            },
+                        )],
+                    }),
+                }
             }
             TypeSpec::Slice(inner) => {
                 let elem_type = self.resolve_spec(inner);
@@ -683,10 +700,12 @@ impl SemanticAnalyzer {
                 Type::Float(FloatWidth::W32)
             }
             ExpressionKind::Boolean(_) => Type::Bool,
-            ExpressionKind::StringLit(_) => Type::Pointer(Box::new(Type::Integer {
-                signed: Signedness::Unsigned,
-                width: IntWidth::W8,
-            })),
+            ExpressionKind::StringLit(_) => Type::Slice {
+                elem_type: Box::new(Type::Integer {
+                    signed: Signedness::Unsigned,
+                    width: IntWidth::W8,
+                }),
+            },
             ExpressionKind::None => {
                 if let Some(Type::Optional(inner)) = expected_type {
                     Type::Optional(inner.clone())
@@ -879,6 +898,66 @@ impl SemanticAnalyzer {
                 arguments,
             } => {
                 if let ExpressionKind::Identifier(name) = &function.kind {
+                    if name == "Ok" {
+                        if arguments.len() != 1 {
+                            self.error("Ok() takes exactly one argument".into(), expr.span);
+                            return Type::Unknown;
+                        }
+                        let inner_type = self.check_expression(&arguments[0], None);
+                        return Type::Result {
+                            ok_type: Box::new(inner_type),
+                            err_type: Box::new(Type::Struct {
+                                name: "Error".to_string(),
+                                fields: vec![(
+                                    "code".to_string(),
+                                    Type::Integer {
+                                        signed: Signedness::Signed,
+                                        width: IntWidth::W32,
+                                    },
+                                )],
+                            }),
+                        };
+                    }
+
+                    if name == "Err" {
+                        if arguments.len() != 1 {
+                            self.error(
+                                "Err() takes exactly one argument (error code)".into(),
+                                expr.span,
+                            );
+                            return Type::Unknown;
+                        }
+                        let code_type = self.check_expression(
+                            &arguments[0],
+                            Some(&Type::Integer {
+                                signed: Signedness::Signed,
+                                width: IntWidth::W32,
+                            }),
+                        );
+                        if !matches!(code_type, Type::Integer { .. }) {
+                            self.error("Err() code must be an integer".into(), expr.span);
+                        }
+                        if let Some(Type::Result { ok_type, err_type }) = expected_type {
+                            return Type::Result {
+                                ok_type: ok_type.clone(),
+                                err_type: err_type.clone(),
+                            };
+                        }
+                        return Type::Result {
+                            ok_type: Box::new(Type::Unknown),
+                            err_type: Box::new(Type::Struct {
+                                name: "Error".to_string(),
+                                fields: vec![(
+                                    "code".to_string(),
+                                    Type::Integer {
+                                        signed: Signedness::Signed,
+                                        width: IntWidth::W32,
+                                    },
+                                )],
+                            }),
+                        };
+                    }
+
                     return self.check_call(name, arguments, None, expr.span);
                 }
 
@@ -888,6 +967,17 @@ impl SemanticAnalyzer {
                 } = &function.kind
                 {
                     let obj_type = self.check_expression(object, None);
+
+                    if let Type::Slice { .. } = &obj_type {
+                        if method_name == "len" && arguments.is_empty() {
+                            return Type::Integer {
+                                signed: Signedness::Unsigned,
+                                width: IntWidth::WSize,
+                            };
+                        }
+                        self.error(format!("Slice has no method '{}'", method_name), expr.span);
+                        return Type::Unknown;
+                    }
 
                     let struct_name = match &obj_type {
                         Type::Struct { name, .. } => name.clone(),
