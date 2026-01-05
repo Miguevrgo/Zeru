@@ -2085,7 +2085,11 @@ fn test_generic_function_identity() {
         fn main() {}
     ";
     let errors = analyze(input);
-    assert!(errors.is_empty(), "Generic identity function should be valid: {:?}", errors);
+    assert!(
+        errors.is_empty(),
+        "Generic identity function should be valid: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2097,7 +2101,11 @@ fn test_generic_function_multiple_params() {
         fn main() {}
     ";
     let errors = analyze(input);
-    assert!(errors.is_empty(), "Generic function with multiple type params should be valid: {:?}", errors);
+    assert!(
+        errors.is_empty(),
+        "Generic function with multiple type params should be valid: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2112,7 +2120,11 @@ fn test_generic_function_with_bound() {
         fn main() {}
     ";
     let errors = analyze(input);
-    assert!(errors.is_empty(), "Generic function with trait bound should be valid: {:?}", errors);
+    assert!(
+        errors.is_empty(),
+        "Generic function with trait bound should be valid: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2125,7 +2137,11 @@ fn test_trait_definition() {
         fn main() {}
     ";
     let errors = analyze(input);
-    assert!(errors.is_empty(), "Trait definition should be valid: {:?}", errors);
+    assert!(
+        errors.is_empty(),
+        "Trait definition should be valid: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -2150,5 +2166,9 @@ fn test_generic_type_param_in_body() {
         fn main() {}
     ";
     let errors = analyze(input);
-    assert!(errors.is_empty(), "Using T inside function body should work: {:?}", errors);
+    assert!(
+        errors.is_empty(),
+        "Using T inside function body should work: {:?}",
+        errors
+    );
 }

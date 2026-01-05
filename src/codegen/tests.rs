@@ -653,9 +653,18 @@ fn test_generic_function_multiple_types() {
         }
     ";
     let ir = compile_to_ir(input).unwrap();
-    assert!(ir.contains("identity__i32_"), "Should have i32 specialization");
-    assert!(ir.contains("identity__f64_"), "Should have f64 specialization");
-    assert!(ir.contains("identity__bool_"), "Should have bool specialization");
+    assert!(
+        ir.contains("identity__i32_"),
+        "Should have i32 specialization"
+    );
+    assert!(
+        ir.contains("identity__f64_"),
+        "Should have f64 specialization"
+    );
+    assert!(
+        ir.contains("identity__bool_"),
+        "Should have bool specialization"
+    );
 }
 
 #[test]
@@ -669,5 +678,8 @@ fn test_generic_function_two_params() {
         }
     ";
     let ir = compile_to_ir(input).unwrap();
-    assert!(ir.contains("first__i32_f64_"), "Should generate monomorphized function with both types");
+    assert!(
+        ir.contains("first__i32_f64_"),
+        "Should generate monomorphized function with both types"
+    );
 }
