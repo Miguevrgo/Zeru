@@ -59,7 +59,9 @@ pub enum Type {
     Slice {
         elem_type: Box<Type>,
     },
-    Unknown, // Used during type inference when type cannot be determined
+    #[allow(clippy::enum_variant_names)]
+    ParamType(String),
+    Unknown,
 }
 
 impl Type {
@@ -78,6 +80,7 @@ impl Type {
         match (self, other) {
             (t1, t2) if t1 == t2 => true,
             (Type::Unknown, _) | (_, Type::Unknown) => true,
+            (Type::ParamType(_), _) | (_, Type::ParamType(_)) => true,
             (Type::Struct { name: n1, .. }, Type::Struct { name: n2, .. }) => n1 == n2,
             (Type::Enum { name: n1, .. }, Type::Enum { name: n2, .. }) => n1 == n2,
             (Type::Pointer(e1), Type::Pointer(e2)) => e1.accepts(e2),
@@ -157,6 +160,7 @@ impl std::fmt::Display for Type {
                 }
                 write!(f, ")")
             }
+            Type::ParamType(name) => write!(f, "{}", name),
             Type::Unknown => write!(f, "<unknown>"),
         }
     }

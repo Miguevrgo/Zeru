@@ -2076,3 +2076,79 @@ fn test_type_suggestion_typo() {
     assert!(!errors.is_empty());
     assert!(errors[0].contains("Did you mean") || errors[0].contains("Unknown type"));
 }
+#[test]
+fn test_generic_function_identity() {
+    let input = "
+        fn identity<T>(x: T) T {
+            return x;
+        }
+        fn main() {}
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty(), "Generic identity function should be valid: {:?}", errors);
+}
+
+#[test]
+fn test_generic_function_multiple_params() {
+    let input = "
+        fn swap<T, U>(a: T, b: U) T {
+            return a;
+        }
+        fn main() {}
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty(), "Generic function with multiple type params should be valid: {:?}", errors);
+}
+
+#[test]
+fn test_generic_function_with_bound() {
+    let input = "
+        trait Printable {
+            fn print(self);
+        }
+        fn show<T: Printable>(x: T) T {
+            return x;
+        }
+        fn main() {}
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty(), "Generic function with trait bound should be valid: {:?}", errors);
+}
+
+#[test]
+fn test_trait_definition() {
+    let input = "
+        trait Drawable {
+            fn draw(self);
+            fn area(self) f64;
+        }
+        fn main() {}
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty(), "Trait definition should be valid: {:?}", errors);
+}
+
+#[test]
+fn test_duplicate_trait_error() {
+    let input = "
+        trait Foo {}
+        trait Foo {}
+        fn main() {}
+    ";
+    let errors = analyze(input);
+    assert!(!errors.is_empty(), "Duplicate trait should error");
+    assert!(errors[0].contains("already defined"));
+}
+
+#[test]
+fn test_generic_type_param_in_body() {
+    let input = "
+        fn first<T>(x: T, y: T) T {
+            var result: T = x;
+            return result;
+        }
+        fn main() {}
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty(), "Using T inside function body should work: {:?}", errors);
+}

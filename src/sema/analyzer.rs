@@ -8,21 +8,17 @@ use crate::{
 };
 use std::collections::HashMap;
 
-/// Performs semantic analysis on the AST to catch type errors and semantic issues
-/// before code generation. This includes type checking, symbol resolution, and
-/// validation of control flow (break/continue, return statements, etc.).
-///
-/// The analyzer works in multiple passes:
-/// 1. Scan and register all type definitions (structs, enums)
-/// 2. Scan and register all function signatures
-/// 3. Analyze function bodies and validate types/semantics
+type TraitMethod = (String, Vec<Type>, Option<Type>);
+
 pub struct SemanticAnalyzer {
     pub errors: Vec<ZeruError>,
 
     symbols: SymbolTable,
     struct_defs: HashMap<String, Type>,
     enum_defs: HashMap<String, Type>,
+    trait_defs: HashMap<String, Vec<TraitMethod>>,
     current_fn_return_type: Option<Type>,
+    current_type_params: Vec<String>,
 
     in_loop: bool,
 }
@@ -54,7 +50,9 @@ impl SemanticAnalyzer {
             symbols,
             struct_defs: HashMap::new(),
             enum_defs: HashMap::new(),
+            trait_defs: HashMap::new(),
             current_fn_return_type: None,
+            current_type_params: Vec::new(),
             in_loop: false,
         }
     }
@@ -93,6 +91,24 @@ impl SemanticAnalyzer {
                     };
                     self.enum_defs.insert(name.clone(), enum_type);
                 }
+                StatementKind::Trait { name, methods } => {
+                    if self.trait_defs.contains_key(name) {
+                        self.error(format!("Trait '{name}' is already defined"), stmt.span);
+                        continue;
+                    }
+
+                    let mut trait_methods = Vec::new();
+                    for method in methods {
+                        let param_types: Vec<Type> = method
+                            .params
+                            .iter()
+                            .map(|(_, ty, _)| self.resolve_spec(ty))
+                            .collect();
+                        let ret_type = method.return_type.as_ref().map(|t| self.resolve_spec(t));
+                        trait_methods.push((method.name.clone(), param_types, ret_type));
+                    }
+                    self.trait_defs.insert(name.clone(), trait_methods);
+                }
                 _ => {}
             }
         }
@@ -119,9 +135,10 @@ impl SemanticAnalyzer {
                     name,
                     params,
                     return_type,
+                    type_params,
                     ..
                 } => {
-                    self.register_function(name.clone(), params, return_type, None);
+                    self.register_function(name.clone(), params, return_type, None, type_params);
                 }
 
                 StatementKind::Struct {
@@ -134,6 +151,7 @@ impl SemanticAnalyzer {
                             name: method_name,
                             params,
                             return_type,
+                            type_params,
                             ..
                         } = &method.kind
                         {
@@ -143,6 +161,7 @@ impl SemanticAnalyzer {
                                 params,
                                 return_type,
                                 Some(struct_name),
+                                type_params,
                             );
                         }
                     }
@@ -158,6 +177,7 @@ impl SemanticAnalyzer {
         params: &Vec<(String, TypeSpec, bool)>,
         return_type: &Option<TypeSpec>,
         associated_struct: Option<&str>,
+        type_params: &[crate::ast::TypeParameter],
     ) {
         if self.symbols.lookup_current_scope(&name).is_some() {
             self.error(
@@ -185,6 +205,9 @@ impl SemanticAnalyzer {
                 }
             }
         }
+
+        let prev_type_params = std::mem::take(&mut self.current_type_params);
+        self.current_type_params = type_params.iter().map(|tp| tp.name.clone()).collect();
 
         let mut param_types = Vec::new();
         for (param_name, type_spec, _is_mut) in params {
@@ -217,6 +240,8 @@ impl SemanticAnalyzer {
             Type::Void
         };
 
+        self.current_type_params = prev_type_params;
+
         self.symbols.insert_fn(name.clone(), param_types, ret_ty);
     }
 
@@ -224,9 +249,13 @@ impl SemanticAnalyzer {
         for stmt in stmts {
             match &stmt.kind {
                 StatementKind::Function {
-                    name, params, body, ..
+                    name,
+                    params,
+                    body,
+                    type_params,
+                    ..
                 } => {
-                    self.check_function_body(name.clone(), params, body);
+                    self.check_function_body(name.clone(), params, body, type_params);
                 }
                 StatementKind::Struct {
                     name: struct_name,
@@ -238,11 +267,12 @@ impl SemanticAnalyzer {
                             name: method_name,
                             params,
                             body,
+                            type_params,
                             ..
                         } = &method.kind
                         {
                             let full_name = format!("{struct_name}::{method_name}");
-                            self.check_function_body(full_name, params, body);
+                            self.check_function_body(full_name, params, body, type_params);
                         }
                     }
                 }
@@ -252,16 +282,14 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// Validates the body of a function, including parameter and return type checking.
-    /// Sets up the function scope and verifies all statements within the function.
     fn check_function_body(
         &mut self,
         name: String,
         params: &[(String, TypeSpec, bool)],
         body: &[Statement],
+        type_params: &[crate::ast::TypeParameter],
     ) {
         let Some(function_symbol) = self.symbols.lookup(&name).cloned() else {
-            // This should not happen if scan_functions worked correctly
             return;
         };
 
@@ -271,6 +299,8 @@ impl SemanticAnalyzer {
         } = function_symbol
         {
             let prev_ret = self.current_fn_return_type.replace(ret_type);
+            let prev_type_params = std::mem::take(&mut self.current_type_params);
+            self.current_type_params = type_params.iter().map(|tp| tp.name.clone()).collect();
             self.symbols.enter_scope();
 
             for (i, (param_name, _, is_mut)) in params.iter().enumerate() {
@@ -284,6 +314,7 @@ impl SemanticAnalyzer {
             }
 
             self.symbols.exit_scope();
+            self.current_type_params = prev_type_params;
             self.current_fn_return_type = prev_ret;
         }
     }
@@ -357,6 +388,10 @@ impl SemanticAnalyzer {
     }
 
     fn resolve_named_type(&mut self, name: &str) -> Type {
+        if self.current_type_params.contains(&name.to_string()) {
+            return Type::ParamType(name.to_string());
+        }
+
         if let Some(ty) = self.struct_defs.get(name) {
             return ty.clone();
         }

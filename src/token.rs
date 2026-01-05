@@ -84,6 +84,7 @@ pub enum Token {
     Enum,    // enum
     Arrow,   // =>
     Str,     // str type keyword
+    Trait,   // trait keyword
 
     // Inline Assembly
     Asm,      // asm

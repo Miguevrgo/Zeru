@@ -44,6 +44,18 @@ pub struct Compiler<'a, 'ctx> {
 
     stdout_stream: Option<PointerValue<'ctx>>,
     stderr_stream: Option<PointerValue<'ctx>>,
+
+    generic_functions: HashMap<String, GenericFunctionDef>,
+    monomorphized: HashMap<String, FunctionValue<'ctx>>,
+    current_type_substitutions: HashMap<String, TypeSpec>,
+}
+
+#[derive(Clone)]
+struct GenericFunctionDef {
+    type_params: Vec<crate::ast::TypeParameter>,
+    params: Vec<(String, TypeSpec, bool)>,
+    return_type: Option<TypeSpec>,
+    body: Vec<Statement>,
 }
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
@@ -69,12 +81,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             panic_fn: None,
             stdout_stream: None,
             stderr_stream: None,
+            generic_functions: HashMap::new(),
+            monomorphized: HashMap::new(),
+            current_type_substitutions: HashMap::new(),
         }
     }
 
     pub fn compile_program(&mut self, program: &Program) {
         for stmt in &program.statements {
-            if let StatementKind::Struct { name, .. } = &stmt.kind {
+            if let StatementKind::Struct {
+                name, type_params, ..
+            } = &stmt.kind
+                && type_params.is_empty()
+            {
                 let struct_type = self.context.opaque_struct_type(name);
                 self.struct_defs
                     .insert(name.clone(), (struct_type, HashMap::new()));
@@ -98,10 +117,40 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
 
         for stmt in &program.statements {
-            if let StatementKind::Struct { name, fields, .. } = &stmt.kind {
+            if let StatementKind::Struct {
+                name,
+                fields,
+                type_params,
+                ..
+            } = &stmt.kind
+                && type_params.is_empty()
+            {
                 self.current_struct_context = Some(name.clone());
                 self.compile_struct_body(name, fields);
                 self.current_struct_context = None;
+            }
+        }
+
+        for stmt in &program.statements {
+            if let StatementKind::Function {
+                name,
+                type_params,
+                params,
+                return_type,
+                body,
+                ..
+            } = &stmt.kind
+                && !type_params.is_empty()
+            {
+                self.generic_functions.insert(
+                    name.clone(),
+                    GenericFunctionDef {
+                        type_params: type_params.clone(),
+                        params: params.clone(),
+                        return_type: return_type.clone(),
+                        body: body.clone(),
+                    },
+                );
             }
         }
 
@@ -112,8 +161,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 name,
                 params,
                 return_type,
+                type_params,
                 ..
             } = &stmt.kind
+                && type_params.is_empty()
             {
                 self.compile_fn_prototype(name, params, return_type);
             }
@@ -129,8 +180,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         name: method_name,
                         params,
                         return_type,
+                        type_params,
                         ..
                     } = &method.kind
+                        && type_params.is_empty()
                     {
                         let mangled_name = format!("{}::{}", struct_name, method_name);
                         self.compile_fn_prototype(&mangled_name, params, return_type);
@@ -142,8 +195,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         for stmt in &program.statements {
             if let StatementKind::Function {
-                name, params, body, ..
+                name,
+                params,
+                body,
+                type_params,
+                ..
             } = &stmt.kind
+                && type_params.is_empty()
             {
                 self.compile_fn_body(name, params, body);
             }
@@ -160,8 +218,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         name: method_name,
                         params,
                         body,
+                        type_params,
                         ..
                     } = &method.kind
+                        && type_params.is_empty()
                     {
                         let mangled_name = format!("{}::{}", struct_name, method_name);
                         self.compile_fn_body(&mangled_name, params, body);
@@ -246,6 +306,193 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         if let Some((struct_type, indices)) = self.struct_defs.get_mut(name) {
             struct_type.set_body(&field_types, false);
             *indices = field_indices;
+        }
+    }
+
+    fn monomorphize_call(&mut self, name: &str, arguments: &[Expression]) -> FunctionValue<'ctx> {
+        let generic_def = self.generic_functions.get(name).cloned().unwrap();
+
+        let mut type_substitutions: HashMap<String, TypeSpec> = HashMap::new();
+        for (i, (_, param_type, _)) in generic_def.params.iter().enumerate() {
+            if let TypeSpec::Named(type_param_name) = param_type
+                && generic_def
+                    .type_params
+                    .iter()
+                    .any(|tp| &tp.name == type_param_name)
+                && let Some(arg) = arguments.get(i)
+            {
+                let inferred = self.infer_type_from_expression(arg);
+                type_substitutions.insert(type_param_name.clone(), inferred);
+            }
+        }
+
+        let mangled_name =
+            self.mangle_generic_name(name, &type_substitutions, &generic_def.type_params);
+
+        if let Some(func) = self.monomorphized.get(&mangled_name) {
+            return *func;
+        }
+
+        if let Some(func) = self.module.get_function(&mangled_name) {
+            return func;
+        }
+
+        let substituted_params: Vec<(String, TypeSpec, bool)> = generic_def
+            .params
+            .iter()
+            .map(|(name, ty, is_mut)| {
+                (
+                    name.clone(),
+                    self.substitute_type_spec(ty, &type_substitutions),
+                    *is_mut,
+                )
+            })
+            .collect();
+
+        let substituted_return = generic_def
+            .return_type
+            .as_ref()
+            .map(|ty| self.substitute_type_spec(ty, &type_substitutions));
+
+        let func =
+            self.compile_fn_prototype(&mangled_name, &substituted_params, &substituted_return);
+        self.monomorphized.insert(mangled_name.clone(), func);
+
+        let saved_block = self.builder.get_insert_block();
+        let saved_fn = self.current_fn;
+        let saved_vars = std::mem::take(&mut self.variables);
+        let saved_ptr_elems = std::mem::take(&mut self.pointer_elem_types);
+        let saved_subs = std::mem::take(&mut self.current_type_substitutions);
+
+        self.current_type_substitutions = type_substitutions;
+        self.compile_fn_body(&mangled_name, &substituted_params, &generic_def.body);
+
+        self.variables = saved_vars;
+        self.pointer_elem_types = saved_ptr_elems;
+        self.current_type_substitutions = saved_subs;
+        self.current_fn = saved_fn;
+        if let Some(block) = saved_block {
+            self.builder.position_at_end(block);
+        }
+
+        func
+    }
+
+    fn infer_type_from_expression(&self, expr: &Expression) -> TypeSpec {
+        match &expr.kind {
+            ExpressionKind::Int(_) => TypeSpec::Named("i32".to_string()),
+            ExpressionKind::Float(_) => TypeSpec::Named("f64".to_string()),
+            ExpressionKind::Boolean(_) => TypeSpec::Named("bool".to_string()),
+            ExpressionKind::StringLit(_) => TypeSpec::Named("str".to_string()),
+            ExpressionKind::Identifier(name) => {
+                if let Some((_, ty, _)) = self.variables.get(name) {
+                    self.llvm_type_to_type_spec(*ty)
+                } else if let Some(val) = self.constants.get(name) {
+                    self.llvm_type_to_type_spec(val.get_type())
+                } else {
+                    TypeSpec::Named("i32".to_string())
+                }
+            }
+            _ => TypeSpec::Named("i32".to_string()),
+        }
+    }
+
+    fn llvm_type_to_type_spec(&self, ty: BasicTypeEnum<'ctx>) -> TypeSpec {
+        match ty {
+            BasicTypeEnum::IntType(int_ty) => {
+                let width = int_ty.get_bit_width();
+                let name = match width {
+                    1 => "bool",
+                    8 => "i8",
+                    16 => "i16",
+                    32 => "i32",
+                    64 => "i64",
+                    _ => "i32",
+                };
+                TypeSpec::Named(name.to_string())
+            }
+            BasicTypeEnum::FloatType(float_ty) => {
+                let name = if float_ty == self.context.f32_type() {
+                    "f32"
+                } else {
+                    "f64"
+                };
+                TypeSpec::Named(name.to_string())
+            }
+            BasicTypeEnum::PointerType(_) => {
+                TypeSpec::Pointer(Box::new(TypeSpec::Named("u8".to_string())))
+            }
+            BasicTypeEnum::StructType(st) => {
+                TypeSpec::Named(st.get_name().unwrap().to_str().unwrap().to_string())
+            }
+            _ => TypeSpec::Named("i32".to_string()),
+        }
+    }
+
+    fn substitute_type_spec(&self, ty: &TypeSpec, subs: &HashMap<String, TypeSpec>) -> TypeSpec {
+        match ty {
+            TypeSpec::Named(name) => {
+                if let Some(replacement) = subs.get(name) {
+                    replacement.clone()
+                } else {
+                    ty.clone()
+                }
+            }
+            TypeSpec::Pointer(inner) => {
+                TypeSpec::Pointer(Box::new(self.substitute_type_spec(inner, subs)))
+            }
+            TypeSpec::Tuple(elems) => TypeSpec::Tuple(
+                elems
+                    .iter()
+                    .map(|e| self.substitute_type_spec(e, subs))
+                    .collect(),
+            ),
+            TypeSpec::Optional(inner) => {
+                TypeSpec::Optional(Box::new(self.substitute_type_spec(inner, subs)))
+            }
+            TypeSpec::Generic { name, args } => TypeSpec::Generic {
+                name: name.clone(),
+                args: args
+                    .iter()
+                    .map(|a| self.substitute_type_spec(a, subs))
+                    .collect(),
+            },
+            TypeSpec::IntLiteral(_) | TypeSpec::Slice(_) => ty.clone(),
+        }
+    }
+
+    fn mangle_generic_name(
+        &self,
+        base_name: &str,
+        subs: &HashMap<String, TypeSpec>,
+        type_params: &[crate::ast::TypeParameter],
+    ) -> String {
+        let mut mangled = base_name.to_string();
+        mangled.push_str("__");
+        for tp in type_params {
+            if let Some(concrete) = subs.get(&tp.name) {
+                mangled.push_str(&self.type_spec_to_mangled(concrete));
+                mangled.push('_');
+            }
+        }
+        mangled
+    }
+
+    fn type_spec_to_mangled(&self, ty: &TypeSpec) -> String {
+        match ty {
+            TypeSpec::Named(name) => name.clone(),
+            TypeSpec::Pointer(inner) => format!("ptr_{}", self.type_spec_to_mangled(inner)),
+            TypeSpec::Tuple(elems) => {
+                let inner: Vec<_> = elems.iter().map(|e| self.type_spec_to_mangled(e)).collect();
+                format!("tuple_{}", inner.join("_"))
+            }
+            TypeSpec::Optional(inner) => format!("opt_{}", self.type_spec_to_mangled(inner)),
+            TypeSpec::Generic { name, args } => {
+                let inner: Vec<_> = args.iter().map(|a| self.type_spec_to_mangled(a)).collect();
+                format!("{}_{}", name, inner.join("_"))
+            }
+            TypeSpec::IntLiteral(n) => format!("lit{}", n),
+            TypeSpec::Slice(inner) => format!("slice_{}", self.type_spec_to_mangled(inner)),
         }
     }
 
@@ -967,8 +1214,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         return self.compile_builtin_exit(arguments);
                     }
 
-                    let func = self.module.get_function(name).expect("Function not found");
-                    (func, Vec::new())
+                    if self.generic_functions.contains_key(name) {
+                        let func = self.monomorphize_call(name, arguments);
+                        (func, Vec::new())
+                    } else {
+                        let func = self.module.get_function(name).expect("Function not found");
+                        (func, Vec::new())
+                    }
                 } else {
                     panic!("Indirect calls not implemented");
                 };

@@ -229,6 +229,7 @@ impl<'a> Lexer<'a> {
             "as" => Token::As,
             "struct" => Token::Struct,
             "enum" => Token::Enum,
+            "trait" => Token::Trait,
             "str" => Token::Str,
             "match" => Token::Match,
             "default" => Token::Default,

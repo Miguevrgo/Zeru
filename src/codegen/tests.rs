@@ -623,3 +623,51 @@ fn test_pointer_arithmetic_sub() {
         "Should use GEP for pointer sub"
     );
 }
+#[test]
+fn test_generic_function_identity() {
+    let input = "
+        fn identity<T>(x: T) T {
+            return x;
+        }
+        fn main() {
+            var a: i32 = identity(42);
+        }
+    ";
+    let ir = compile_to_ir(input).unwrap();
+    assert!(
+        ir.contains("identity__i32_"),
+        "Should generate monomorphized i32 identity function"
+    );
+}
+
+#[test]
+fn test_generic_function_multiple_types() {
+    let input = "
+        fn identity<T>(x: T) T {
+            return x;
+        }
+        fn main() {
+            var a: i32 = identity(42);
+            var b: f64 = identity(3.14);
+            var c: bool = identity(true);
+        }
+    ";
+    let ir = compile_to_ir(input).unwrap();
+    assert!(ir.contains("identity__i32_"), "Should have i32 specialization");
+    assert!(ir.contains("identity__f64_"), "Should have f64 specialization");
+    assert!(ir.contains("identity__bool_"), "Should have bool specialization");
+}
+
+#[test]
+fn test_generic_function_two_params() {
+    let input = "
+        fn first<T, U>(a: T, b: U) T {
+            return a;
+        }
+        fn main() {
+            var x: i32 = first(10, 3.14);
+        }
+    ";
+    let ir = compile_to_ir(input).unwrap();
+    assert!(ir.contains("first__i32_f64_"), "Should generate monomorphized function with both types");
+}

@@ -1,10 +1,19 @@
 use crate::errors::Span;
 use crate::token::Token;
 
-/// Type specification from the AST (before semantic analysis).
-///
-/// These are raw type annotations from the source code that will be
-/// resolved into concrete `Type` values during semantic analysis.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeParameter {
+    pub name: String,
+    pub bound: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraitMethod {
+    pub name: String,
+    pub params: Vec<(String, TypeSpec, bool)>,
+    pub return_type: Option<TypeSpec>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeSpec {
     Named(String),
@@ -16,10 +25,6 @@ pub enum TypeSpec {
     Slice(Box<TypeSpec>),
 }
 
-/// Root node of the Abstract Syntax Tree.
-///
-/// A program consists of a sequence of top-level statements
-/// (functions, structs, enums, global variables, etc.)
 #[derive(Debug, Clone)]
 pub struct Program {
     pub statements: Vec<Statement>,
@@ -55,12 +60,14 @@ pub enum StatementKind {
     Block(Vec<Statement>),
     Function {
         name: String,
+        type_params: Vec<TypeParameter>,
         params: Vec<(String, TypeSpec, bool)>,
         return_type: Option<TypeSpec>,
         body: Vec<Statement>,
     },
     Struct {
         name: String,
+        type_params: Vec<TypeParameter>,
         fields: Vec<(String, TypeSpec)>,
         methods: Vec<Statement>,
     },
@@ -68,13 +75,16 @@ pub enum StatementKind {
         name: String,
         variants: Vec<String>,
     },
+    Trait {
+        name: String,
+        methods: Vec<TraitMethod>,
+    },
     If {
         condition: Expression,
         then_branch: Box<Statement>,
         else_branch: Option<Box<Statement>>,
     },
     #[allow(dead_code)]
-    //TODO:
     Import {
         path: Vec<String>,
         symbols: Option<Vec<String>>,

@@ -33,7 +33,6 @@ Goal: Transition from a "calculator" to a true system language capable of intera
 - [x] Mutable Parameters: Add `var` keyword for function parameters.
 - [x] Optional Types: Add `T?` syntax for nullable types.
 - [x] Enum Match Codegen: Generate code for match expressions with enum variants.
-- [ ] FFI (Foreign Function Interface): Add extern "C" support to link against C libraries.
 - [x] Friendly errors messages (ariadne integration)
 
 ##### Semantic Analyzer (Sema)
@@ -43,14 +42,13 @@ Goal: Transition from a "calculator" to a true system language capable of intera
 
 ##### CodeGen & Runtime
 
-- [ ] LibC Linking: Enable calls to malloc, free, exit, and printf || Enable calls not depending on libc.
+- [x] Freestanding Runtime: Direct syscalls via inline assembly (no libc dependency)
 - [x] Exit Code Fix: Remove the explicit i32 return requirement for main; the runtime will handle exit(0).
 
 ##### Module System
 
 - [x] Module imports: `import std.math` -> access via `math::func()`
 - [x] Selective imports: `import std.math::{abs}` -> direct `abs()` access
-- [ ] Nested modules: Support for `mod` keyword
 
 ## Version 0.3.0: "The Abstraction Layer"
 
@@ -63,9 +61,9 @@ Goal: Introduce high-level abstractions with zero runtime cost, moving closer to
 
 ##### Generics (Templates)
 
-- [ ] Generic Structs: Support struct Box<T> { value: T }.
-- [ ] Generic Functions: Support fn id<T>(x: T) T.
-- [ ] Traits: As describe in syntax_ref: fn draw(d: Drawable)
+- [x] Generic Structs: Support struct Box<T> { value: T }.
+- [x] Generic Functions: Support fn id<T>(x: T) T.
+- [x] Traits: Duck typing with trait definitions
 
 ##### Memory & Safety
 

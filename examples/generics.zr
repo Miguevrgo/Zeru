@@ -1,0 +1,43 @@
+fn identity<T>(x: T) T {
+    return x;
+}
+
+fn first<T, U>(a: T, b: U) T {
+    return a;
+}
+
+fn second<T, U>(a: T, b: U) U {
+    return b;
+}
+
+struct Pair {
+    x: i32,
+    y: i32,
+}
+
+fn main() {
+    var a: i32 = identity(42);
+    var b: f64 = identity(3.14);
+    var c: bool = identity(true);
+
+    println("Testing identity function");
+    if a == 42 {
+        println("  identity(42) = 42 OK");
+    }
+
+    var d: i32 = first(10, 3.14);
+    var e: f64 = second(true, 2.718);
+
+    println("Testing first/second functions");
+    if d == 10 {
+        println("\tfirst(10, 3.14) = 10 OK");
+    }
+
+    var p = Pair { x: 1, y: 2 };
+    var p2: Pair = identity(p);
+    if p2.x == 1 {
+        println("\tidentity(Pair) works OK");
+    }
+
+    println("All generic tests passed!");
+}

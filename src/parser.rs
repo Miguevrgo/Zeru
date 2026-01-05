@@ -1,5 +1,8 @@
 use crate::{
-    ast::{AsmOperand, Expression, ExpressionKind, Program, Statement, StatementKind, TypeSpec},
+    ast::{
+        AsmOperand, Expression, ExpressionKind, Program, Statement, StatementKind, TypeParameter,
+        TypeSpec,
+    },
     errors::{Span, ZeruError},
     lexer::Lexer,
     token::Token,
@@ -92,6 +95,7 @@ impl<'a> Parser<'a> {
                 Token::Fn => self.parse_function_statement(),
                 Token::Struct => self.parse_struct_statement(),
                 Token::Enum => self.parse_enum_statement(),
+                Token::Trait => self.parse_trait_statement(),
                 Token::Import => self.parse_import_statement(),
                 Token::Semicolon => {
                     self.next_token();
@@ -351,6 +355,13 @@ impl<'a> Parser<'a> {
             _ => unreachable!(),
         };
 
+        let type_params = if self.peek_token_is(&Token::Lt) {
+            self.next_token();
+            self.parse_type_parameters()
+        } else {
+            Vec::new()
+        };
+
         if !self.expect_peek(&Token::LParen) {
             return None;
         }
@@ -373,12 +384,61 @@ impl<'a> Parser<'a> {
         Some(Statement::new(
             StatementKind::Function {
                 name,
+                type_params,
                 params,
                 return_type,
                 body,
             },
             start_span.merge(end_span),
         ))
+    }
+
+    fn parse_type_parameters(&mut self) -> Vec<TypeParameter> {
+        let mut params = Vec::new();
+
+        loop {
+            self.next_token();
+
+            if self.current_token == Token::Gt {
+                break;
+            }
+
+            let name = match &self.current_token {
+                Token::Identifier(n) => n.clone(),
+                _ => {
+                    self.error_current("Expected type parameter name");
+                    break;
+                }
+            };
+
+            let bound = if self.peek_token_is(&Token::Colon) {
+                self.next_token();
+                self.next_token();
+                match &self.current_token {
+                    Token::Identifier(b) => Some(b.clone()),
+                    _ => {
+                        self.error_current("Expected trait bound name");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            params.push(TypeParameter { name, bound });
+
+            if self.peek_token_is(&Token::Comma) {
+                self.next_token();
+            } else if self.peek_token_is(&Token::Gt) {
+                self.next_token();
+                break;
+            } else {
+                self.error_peek("Expected ',' or '>' in type parameters");
+                break;
+            }
+        }
+
+        params
     }
 
     fn parse_function_parameters(&mut self) -> Vec<(String, TypeSpec, bool)> {
@@ -563,6 +623,14 @@ impl<'a> Parser<'a> {
             _ => unreachable!(),
         };
 
+        // Parse optional type parameters <T, U, ...>
+        let type_params = if self.peek_token_is(&Token::Lt) {
+            self.next_token(); // consume <
+            self.parse_type_parameters()
+        } else {
+            Vec::new()
+        };
+
         if !self.expect_peek(&Token::LBrace) {
             return None;
         }
@@ -658,6 +726,7 @@ impl<'a> Parser<'a> {
         Some(Statement::new(
             StatementKind::Struct {
                 name,
+                type_params,
                 fields,
                 methods,
             },
@@ -706,6 +775,75 @@ impl<'a> Parser<'a> {
         let end_span = self.current_span;
         Some(Statement::new(
             StatementKind::Enum { name, variants },
+            start_span.merge(end_span),
+        ))
+    }
+
+    fn parse_trait_statement(&mut self) -> Option<Statement> {
+        use crate::ast::TraitMethod;
+        let start_span = self.current_span;
+
+        if !self.expect_peek_identifier() {
+            return None;
+        }
+        let name = match &self.current_token {
+            Token::Identifier(n) => n.clone(),
+            _ => unreachable!(),
+        };
+
+        if !self.expect_peek(&Token::LBrace) {
+            return None;
+        }
+
+        let mut methods = Vec::new();
+
+        while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
+            if !self.expect_peek(&Token::Fn) {
+                self.error_current("Expected 'fn' in trait definition");
+                return None;
+            }
+
+            if !self.expect_peek_identifier() {
+                return None;
+            }
+            let method_name = match &self.current_token {
+                Token::Identifier(n) => n.clone(),
+                _ => unreachable!(),
+            };
+
+            if !self.expect_peek(&Token::LParen) {
+                return None;
+            }
+
+            let params = self.parse_function_parameters();
+            let mut return_type = None;
+
+            if !self.peek_token_is(&Token::Semicolon)
+                && !self.peek_token_is(&Token::RBrace)
+                && !self.peek_token_is(&Token::Fn)
+            {
+                self.next_token();
+                return_type = self.parse_type();
+            }
+
+            if self.peek_token_is(&Token::Semicolon) {
+                self.next_token();
+            }
+
+            methods.push(TraitMethod {
+                name: method_name,
+                params,
+                return_type,
+            });
+        }
+
+        if !self.expect_peek(&Token::RBrace) {
+            return None;
+        }
+
+        let end_span = self.current_span;
+        Some(Statement::new(
+            StatementKind::Trait { name, methods },
             start_span.merge(end_span),
         ))
     }
@@ -2069,6 +2207,7 @@ mod tests {
             name,
             fields,
             methods,
+            ..
         } = &program.statements[1].kind
         {
             assert_eq!(name, "Player");
@@ -2261,6 +2400,120 @@ mod tests {
                 _ => panic!("Expected integer literal from grouped expression"),
             },
             _ => panic!("Expected Var statement"),
+        }
+    }
+
+    #[test]
+    fn test_generic_function() {
+        let input = "fn identity<T>(x: T) T { return x; }";
+        let program = parse_input(input);
+
+        if let StatementKind::Function {
+            name,
+            type_params,
+            params,
+            return_type,
+            ..
+        } = &program.statements[0].kind
+        {
+            assert_eq!(name, "identity");
+            assert_eq!(type_params.len(), 1);
+            assert_eq!(type_params[0].name, "T");
+            assert!(type_params[0].bound.is_none());
+            assert_eq!(params.len(), 1);
+            assert_eq!(params[0].0, "x");
+            assert!(return_type.is_some());
+        } else {
+            panic!("Expected Function");
+        }
+    }
+
+    #[test]
+    fn test_generic_function_with_bound() {
+        let input = "fn sort<T: Comparable>(arr: *T) { }";
+        let program = parse_input(input);
+
+        if let StatementKind::Function {
+            name, type_params, ..
+        } = &program.statements[0].kind
+        {
+            assert_eq!(name, "sort");
+            assert_eq!(type_params.len(), 1);
+            assert_eq!(type_params[0].name, "T");
+            assert_eq!(type_params[0].bound, Some("Comparable".to_string()));
+        } else {
+            panic!("Expected Function");
+        }
+    }
+
+    #[test]
+    fn test_generic_function_multiple_params() {
+        let input = "fn map<T, U>(x: T) U { }";
+        let program = parse_input(input);
+
+        if let StatementKind::Function { type_params, .. } = &program.statements[0].kind {
+            assert_eq!(type_params.len(), 2);
+            assert_eq!(type_params[0].name, "T");
+            assert_eq!(type_params[1].name, "U");
+        } else {
+            panic!("Expected Function");
+        }
+    }
+
+    #[test]
+    fn test_generic_struct() {
+        let input = "struct Box<T> { value: T, }";
+        let program = parse_input(input);
+
+        if let StatementKind::Struct {
+            name,
+            type_params,
+            fields,
+            ..
+        } = &program.statements[0].kind
+        {
+            assert_eq!(name, "Box");
+            assert_eq!(type_params.len(), 1);
+            assert_eq!(type_params[0].name, "T");
+            assert_eq!(fields.len(), 1);
+            assert_eq!(fields[0].0, "value");
+        } else {
+            panic!("Expected Struct");
+        }
+    }
+
+    #[test]
+    fn test_trait_definition() {
+        let input = r#"
+            trait Drawable {
+                fn draw(self);
+                fn get_name(self) *u8;
+            }
+        "#;
+        let program = parse_input(input);
+
+        if let StatementKind::Trait { name, methods } = &program.statements[0].kind {
+            assert_eq!(name, "Drawable");
+            assert_eq!(methods.len(), 2);
+            assert_eq!(methods[0].name, "draw");
+            assert!(methods[0].return_type.is_none());
+            assert_eq!(methods[1].name, "get_name");
+            assert!(methods[1].return_type.is_some());
+        } else {
+            panic!("Expected Trait");
+        }
+    }
+
+    #[test]
+    fn test_trait_empty() {
+        let input = "trait Marker { }";
+        let program = parse_input(input);
+
+        if let StatementKind::Trait { name, methods } = &program.statements[0].kind {
+            assert_eq!(name, "Marker");
+            assert_eq!(methods.len(), 0);
+        } else {
+            panic!("Expected Trait");
         }
     }
 }
