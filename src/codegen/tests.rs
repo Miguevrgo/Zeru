@@ -683,3 +683,55 @@ fn test_generic_function_two_params() {
         "Should generate monomorphized function with both types"
     );
 }
+
+#[test]
+fn test_for_in_array() {
+    let input = "
+        fn main() {
+            var arr: Array<i32, 3> = [1, 2, 3];
+            var sum: i32 = 0;
+            for item in arr {
+                sum = sum + item;
+            }
+        }
+    ";
+    let ir = compile_to_ir(input).unwrap();
+    assert!(ir.contains("for_cond"), "Should have loop condition block");
+    assert!(ir.contains("for_body"), "Should have loop body block");
+    assert!(ir.contains("for_incr"), "Should have loop increment block");
+    assert!(ir.contains("after_for"), "Should have after-loop block");
+    assert!(
+        ir.contains("add i64") || ir.contains("add nsw i64"),
+        "Should increment the index"
+    );
+}
+
+#[test]
+fn test_for_in_with_break() {
+    let input = "
+        fn main() {
+            var arr: Array<i32, 5> = [1, 2, 3, 4, 5];
+            for item in arr {
+                if item == 3 {
+                    break;
+                }
+            }
+        }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_for_in_with_continue() {
+    let input = "
+        fn main() {
+            var arr: Array<i32, 5> = [1, 2, 3, 4, 5];
+            for item in arr {
+                if item == 2 {
+                    continue;
+                }
+            }
+        }
+    ";
+    assert_compiles(input);
+}

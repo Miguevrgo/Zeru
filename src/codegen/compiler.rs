@@ -801,6 +801,103 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .unwrap();
                 }
             }
+
+            StatementKind::ForIn {
+                variable,
+                iterable,
+                body,
+            } => {
+                let parent_fn = self.current_fn.unwrap();
+
+                let (arr_ptr, arr_type) = match self.compile_lvalue(iterable) {
+                    Some((ptr, BasicTypeEnum::ArrayType(arr_ty))) => (ptr, arr_ty),
+                    _ => {
+                        println!("Codegen: ForIn requires an array type");
+                        return;
+                    }
+                };
+
+                let array_len = arr_type.len() as u64;
+                let elem_type = arr_type.get_element_type();
+                let i64_type = self.context.i64_type();
+
+                let index_ptr = self.builder.build_alloca(i64_type, "for_index").unwrap();
+                self.builder
+                    .build_store(index_ptr, i64_type.const_zero())
+                    .unwrap();
+
+                let elem_ptr = self.builder.build_alloca(elem_type, variable).unwrap();
+                self.variables
+                    .insert(variable.clone(), (elem_ptr, elem_type, false));
+
+                let loop_cond_bb = self.context.append_basic_block(parent_fn, "for_cond");
+                let loop_body_bb = self.context.append_basic_block(parent_fn, "for_body");
+                let after_loop_bb = self.context.append_basic_block(parent_fn, "after_for");
+
+                self.builder
+                    .build_unconditional_branch(loop_cond_bb)
+                    .unwrap();
+
+                self.builder.position_at_end(loop_cond_bb);
+                let index_val = self
+                    .builder
+                    .build_load(i64_type, index_ptr, "index")
+                    .unwrap()
+                    .into_int_value();
+                let len_val = i64_type.const_int(array_len, false);
+                let cond = self
+                    .builder
+                    .build_int_compare(IntPredicate::ULT, index_val, len_val, "for_cond")
+                    .unwrap();
+                self.builder
+                    .build_conditional_branch(cond, loop_body_bb, after_loop_bb)
+                    .unwrap();
+
+                self.builder.position_at_end(loop_body_bb);
+
+                let zero = i64_type.const_zero();
+                let elem_gep = unsafe {
+                    self.builder
+                        .build_in_bounds_gep(arr_type, arr_ptr, &[zero, index_val], "elem_gep")
+                        .unwrap()
+                };
+                let elem_val = self
+                    .builder
+                    .build_load(elem_type, elem_gep, "elem_val")
+                    .unwrap();
+                self.builder.build_store(elem_ptr, elem_val).unwrap();
+
+                let loop_incr_bb = self.context.append_basic_block(parent_fn, "for_incr");
+                self.loop_stack.push(LoopContext {
+                    continue_block: loop_incr_bb,
+                    break_block: after_loop_bb,
+                });
+
+                self.compile_statement(body);
+                self.loop_stack.pop();
+
+                let current_bb = self.builder.get_insert_block().unwrap();
+                if current_bb.get_terminator().is_none() {
+                    self.builder
+                        .build_unconditional_branch(loop_incr_bb)
+                        .unwrap();
+                }
+
+                self.builder.position_at_end(loop_incr_bb);
+                let next_index = self
+                    .builder
+                    .build_int_add(index_val, i64_type.const_int(1, false), "next_index")
+                    .unwrap();
+                self.builder.build_store(index_ptr, next_index).unwrap();
+                self.builder
+                    .build_unconditional_branch(loop_cond_bb)
+                    .unwrap();
+
+                self.builder.position_at_end(after_loop_bb);
+
+                self.variables.remove(variable);
+            }
+
             _ => println!("Codegen: Unimplemented statement: {:?}", stmt.kind),
         }
     }
