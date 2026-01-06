@@ -81,6 +81,20 @@ Zeru is a personal project, and a challenge, meaning there are surely better way
 
 To collaborate, you can fork the project, create a branch for the feature/improvement/bug fix, and open a Pull Request. Additionally, you can send me an email at <miguevrgo@gmail.com>.
 
+## 🎨 Editor Support
+
+### Syntax Highlighting (Tree-sitter)
+
+For syntax highlighting in Neovim, Helix, and other tree-sitter compatible editors:
+
+👉 **[tree-sitter-zeru](https://github.com/Miguevrgo/tree-sitter-zeru)**
+
+```bash
+git clone https://github.com/Miguevrgo/tree-sitter-zeru
+cd tree-sitter-zeru
+./install.sh neovim   # or: ./install.sh helix
+```
+
 ## 📄 License
 
 Distributed under the MIT License. See LICENSE for more information.

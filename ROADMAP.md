@@ -57,7 +57,7 @@ Goal: Introduce high-level abstractions with zero runtime cost, moving closer to
 ##### Tooling
 
 - [ ] Raw strings support
-- [ ] Basic syntax highlighting and file icons (.zr with emoji support ⚡).
+- [x] Basic syntax highlighting and file icons (.zr with emoji support ⚡).
 - [ ] LSP Initial: Basic Language Server Protocol scaffolding.
 
 ##### Generics (Templates)
