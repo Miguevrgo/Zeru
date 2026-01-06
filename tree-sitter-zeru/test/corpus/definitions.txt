@@ -1,0 +1,391 @@
+================================================================================
+Function definition
+================================================================================
+
+fn main() {
+    return 0;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    (parameter_list)
+    (block
+      (return_statement
+        (integer_literal)))))
+
+================================================================================
+Function with parameters and return type
+================================================================================
+
+fn add(a: i32, b: i32) i32 {
+    return a + b;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    (parameter_list
+      (parameter
+        name: (identifier)
+        type: (primitive_type))
+      (parameter
+        name: (identifier)
+        type: (primitive_type)))
+    return_type: (primitive_type)
+    (block
+      (return_statement
+        (binary_expression
+          (identifier)
+          (identifier))))))
+
+================================================================================
+Generic function
+================================================================================
+
+fn identity<T>(x: T) T {
+    return x;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    (type_parameters
+      (identifier))
+    (parameter_list
+      (parameter
+        name: (identifier)
+        type: (identifier)))
+    return_type: (identifier)
+    (block
+      (return_statement
+        (identifier)))))
+
+================================================================================
+Struct definition
+================================================================================
+
+struct Point {
+    x: f32,
+    y: f32,
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_definition
+    name: (identifier)
+    (struct_field
+      name: (identifier)
+      type: (primitive_type))
+    (struct_field
+      name: (identifier)
+      type: (primitive_type))))
+
+================================================================================
+Struct with method
+================================================================================
+
+struct Vector {
+    x: f32,
+
+    fn length(self) f32 {
+        return self.x;
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_definition
+    name: (identifier)
+    (struct_field
+      name: (identifier)
+      type: (primitive_type))
+    (function_definition
+      name: (identifier)
+      (parameter_list
+        (parameter))
+      return_type: (primitive_type)
+      (block
+        (return_statement
+          (field_access
+            object: (identifier)
+            field: (identifier)))))))
+
+================================================================================
+Enum definition
+================================================================================
+
+enum Status {
+    Ok,
+    Error(i32),
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (enum_definition
+    name: (identifier)
+    (enum_variant
+      name: (identifier))
+    (enum_variant
+      name: (identifier)
+      (primitive_type))))
+
+================================================================================
+Import statements
+================================================================================
+
+import std.math
+import std.io::{read, write}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (import_statement
+    (module_path
+      (identifier)
+      (identifier)))
+  (import_statement
+    (module_path
+      (identifier)
+      (identifier))
+    (identifier)
+    (identifier)))
+
+================================================================================
+Variable declarations
+================================================================================
+
+fn test() {
+    var x: i32 = 10;
+    var y = 20;
+    const PI: f64 = 3.14;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    (parameter_list)
+    (block
+      (variable_declaration
+        name: (identifier)
+        type: (primitive_type)
+        value: (integer_literal))
+      (variable_declaration
+        name: (identifier)
+        value: (integer_literal))
+      (const_declaration
+        name: (identifier)
+        type: (primitive_type)
+        value: (float_literal)))))
+
+================================================================================
+If statement
+================================================================================
+
+fn test() {
+    if x > 0 {
+        return 1;
+    } else if x < 0 {
+        return -1;
+    } else {
+        return 0;
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    (parameter_list)
+    (block
+      (if_statement
+        condition: (binary_expression
+          (identifier)
+          (integer_literal))
+        consequence: (block
+          (return_statement
+            (integer_literal)))
+        (else_if_clause
+          condition: (binary_expression
+            (identifier)
+            (integer_literal))
+          consequence: (block
+            (return_statement
+              (unary_expression
+                (integer_literal)))))
+        (else_clause
+          body: (block
+            (return_statement
+              (integer_literal))))))))
+
+================================================================================
+While loop
+================================================================================
+
+fn test() {
+    while i < 10 {
+        i += 1;
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    (parameter_list)
+    (block
+      (while_statement
+        condition: (binary_expression
+          (identifier)
+          (integer_literal))
+        body: (block
+          (assignment_statement
+            target: (identifier)
+            value: (integer_literal)))))))
+
+================================================================================
+For-in loop
+================================================================================
+
+fn test() {
+    for item in array {
+        print(item);
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    (parameter_list)
+    (block
+      (for_in_statement
+        element: (identifier)
+        iterable: (identifier)
+        body: (block
+          (expression_statement
+            (call_expression
+              function: (identifier)
+              (argument_list
+                (identifier)))))))))
+
+================================================================================
+Match expression
+================================================================================
+
+fn test() {
+    var result = match status {
+        Status::Ok => 1,
+        Status::Error(code) => code,
+        default => 0,
+    };
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    (parameter_list)
+    (block
+      (variable_declaration
+        name: (identifier)
+        value: (match_expression
+          value: (identifier)
+          (match_arm
+            pattern: (match_pattern
+              (scoped_identifier
+                (identifier)
+                (identifier)))
+            value: (integer_literal))
+          (match_arm
+            pattern: (match_pattern
+              (scoped_identifier
+                (identifier)
+                (identifier))
+              (identifier))
+            value: (identifier))
+          (match_arm
+            pattern: (match_pattern)
+            value: (integer_literal)))))))
+
+================================================================================
+Pointers
+================================================================================
+
+fn test() {
+    var x: i32 = 10;
+    var ptr: *i32 = &x;
+    var val = *ptr;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    (parameter_list)
+    (block
+      (variable_declaration
+        name: (identifier)
+        type: (primitive_type)
+        value: (integer_literal))
+      (variable_declaration
+        name: (identifier)
+        type: (pointer_type
+          (primitive_type))
+        value: (ref_expression
+          (identifier)))
+      (variable_declaration
+        name: (identifier)
+        value: (deref_expression
+          (identifier))))))
+
+================================================================================
+Optional and Result types
+================================================================================
+
+fn find() i32? {
+    return None;
+}
+
+fn read() i32! {
+    return Ok(42);
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    (parameter_list)
+    return_type: (optional_type
+      (primitive_type))
+    (block
+      (return_statement
+        (none_literal))))
+  (function_definition
+    name: (identifier)
+    (parameter_list)
+    return_type: (result_type
+      (primitive_type))
+    (block
+      (return_statement
+        (call_expression
+          function: (identifier)
+          (argument_list
+            (integer_literal)))))))
