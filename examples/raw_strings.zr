@@ -1,0 +1,35 @@
+// Raw Strings Example - Using backtick syntax
+
+fn main() {
+    // Regular string with escapes
+    var escaped = "C:\\Users\\name\\file.txt";
+    print(escaped);
+    print("\n");
+
+    // Raw string - no escaping needed!
+    var raw_path = `C: \Users\name\file.txt`;
+    print(raw_path);
+    print("\n");
+
+    // JSON without escaping quotes
+    var json = ` {"name": "Zeru", "version": "0.3.0"}`;
+    print(json);
+    print("\n");
+
+    // Regex patterns are much cleaner
+    var regex = `\d + \.\d + \s * [a - zA - Z] + `;
+    print(regex);
+    print("\n");
+
+    // Multiline raw strings
+    var multiline = `Line 1
+    Line 2 with "quotes" and \backslashes
+    Line 3`;
+    print(multiline);
+    print("\n");
+
+    // SQL queries are readable
+    var query = `SELECT * FROM users WHERE name = "John" AND age > 18`;
+    print(query);
+    print("\n");
+}

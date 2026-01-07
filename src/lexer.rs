@@ -193,6 +193,7 @@ impl<'a> Lexer<'a> {
             '?' => Token::Question,
 
             '"' => self.read_string(),
+            '`' => self.read_raw_string(),
 
             'a'..='z' | 'A'..='Z' | '_' => self.read_identifier(ch),
             '0'..='9' => self.read_number(ch),
@@ -327,5 +328,113 @@ impl<'a> Lexer<'a> {
         }
 
         Token::Illegal("Unterminated String".to_string())
+    }
+
+    fn read_raw_string(&mut self) -> Token {
+        let mut bytes = Vec::new();
+
+        while let Some(&ch) = self.peek() {
+            match ch {
+                '`' => {
+                    self.advance();
+                    return Token::StringLit(bytes);
+                }
+                _ if !ch.is_ascii() => {
+                    return Token::Illegal("Non-ASCII character in raw string".to_string());
+                }
+                _ => bytes.push(self.advance().unwrap() as u8),
+            }
+        }
+
+        Token::Illegal("Unterminated raw string".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_raw_string_simple() {
+        let mut lexer = Lexer::new("`hello world`");
+        let (token, _, _) = lexer.next_token();
+        match token {
+            Token::StringLit(bytes) => {
+                assert_eq!(String::from_utf8(bytes).unwrap(), "hello world");
+            }
+            _ => panic!("Expected StringLit"),
+        }
+    }
+
+    #[test]
+    fn test_raw_string_with_backslashes() {
+        let mut lexer = Lexer::new("`C:\\Users\\file.txt`");
+        let (token, _, _) = lexer.next_token();
+        match token {
+            Token::StringLit(bytes) => {
+                assert_eq!(String::from_utf8(bytes).unwrap(), "C:\\Users\\file.txt");
+            }
+            _ => panic!("Expected StringLit"),
+        }
+    }
+
+    #[test]
+    fn test_raw_string_with_quotes() {
+        let mut lexer = Lexer::new("`{\"name\": \"value\"}`");
+        let (token, _, _) = lexer.next_token();
+        match token {
+            Token::StringLit(bytes) => {
+                assert_eq!(String::from_utf8(bytes).unwrap(), "{\"name\": \"value\"}");
+            }
+            _ => panic!("Expected StringLit"),
+        }
+    }
+
+    #[test]
+    fn test_raw_string_with_special_chars() {
+        let mut lexer = Lexer::new("`\\d+\\.\\d+`");
+        let (token, _, _) = lexer.next_token();
+        match token {
+            Token::StringLit(bytes) => {
+                assert_eq!(String::from_utf8(bytes).unwrap(), "\\d+\\.\\d+");
+            }
+            _ => panic!("Expected StringLit"),
+        }
+    }
+
+    #[test]
+    fn test_raw_string_multiline() {
+        let mut lexer = Lexer::new("`Line 1\nLine 2\nLine 3`");
+        let (token, _, _) = lexer.next_token();
+        match token {
+            Token::StringLit(bytes) => {
+                assert_eq!(String::from_utf8(bytes).unwrap(), "Line 1\nLine 2\nLine 3");
+            }
+            _ => panic!("Expected StringLit"),
+        }
+    }
+
+    #[test]
+    fn test_raw_string_empty() {
+        let mut lexer = Lexer::new("``");
+        let (token, _, _) = lexer.next_token();
+        match token {
+            Token::StringLit(bytes) => {
+                assert_eq!(String::from_utf8(bytes).unwrap(), "");
+            }
+            _ => panic!("Expected StringLit"),
+        }
+    }
+
+    #[test]
+    fn test_raw_string_unterminated() {
+        let mut lexer = Lexer::new("`unterminated");
+        let (token, _, _) = lexer.next_token();
+        match token {
+            Token::Illegal(msg) => {
+                assert_eq!(msg, "Unterminated raw string");
+            }
+            _ => panic!("Expected Illegal token for unterminated string"),
+        }
     }
 }

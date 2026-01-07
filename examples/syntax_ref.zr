@@ -148,6 +148,9 @@ fn main() {
         }
     }
 
+    // Raw strings are delimited with `
+    var regex = `\d + \.\d + \s * [a - zA - Z] + `;
+
     var signed_val: i32 = -8;
     var unsigned_val: u32 = 8;
 

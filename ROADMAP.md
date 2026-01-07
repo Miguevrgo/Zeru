@@ -56,7 +56,7 @@ Goal: Introduce high-level abstractions with zero runtime cost, moving closer to
 
 ##### Tooling
 
-- [ ] Raw strings support
+- [x] Raw strings support (backtick syntax: `` `raw string` ``)
 - [x] Basic syntax highlighting and file icons (.zr with emoji support ⚡).
 - [ ] LSP Initial: Basic Language Server Protocol scaffolding.
 
