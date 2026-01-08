@@ -223,6 +223,7 @@ impl<'a> Parser<'a> {
 
         if self.current_token == Token::BitAnd {
             self.next_token();
+
             if self.current_token == Token::LBracket {
                 self.next_token();
                 let elem_type = self.parse_type()?;
@@ -230,10 +231,16 @@ impl<'a> Parser<'a> {
                     return None;
                 }
                 return Some(TypeSpec::Slice(Box::new(elem_type)));
-            } else {
-                self.error_current("Expected '[' after '&' for slice type");
-                return None;
             }
+
+            if self.current_token == Token::Var {
+                self.next_token();
+                let inner = self.parse_type()?;
+                return Some(TypeSpec::RefMut(Box::new(inner)));
+            }
+
+            let inner = self.parse_type()?;
+            return Some(TypeSpec::Ref(Box::new(inner)));
         }
 
         if self.current_token == Token::LParen {
@@ -1060,7 +1067,7 @@ impl<'a> Parser<'a> {
             Token::LParen => self.parse_grouped_expression(),
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
             Token::Star => self.parse_dereference_expression(),
-            Token::BitAnd => self.parse_address_of_expression(),
+            Token::BitAnd => self.parse_borrow_expression(),
             Token::Match => self.parse_match_expression(),
             Token::SelfTok => Some(Expression::new(
                 ExpressionKind::Identifier("self".to_string()),
@@ -1334,17 +1341,27 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_address_of_expression(&mut self) -> Option<Expression> {
+    fn parse_borrow_expression(&mut self) -> Option<Expression> {
         let start_span = self.current_span;
         self.next_token();
+
+        let is_mutable = if self.current_token == Token::Var {
+            self.next_token();
+            true
+        } else {
+            false
+        };
 
         let expr = self.parse_expression(Precedence::Prefix)?;
         let end_span = self.current_span;
 
-        Some(Expression::new(
-            ExpressionKind::AddressOf(Box::new(expr)),
-            start_span.merge(end_span),
-        ))
+        let kind = if is_mutable {
+            ExpressionKind::BorrowRefMut(Box::new(expr))
+        } else {
+            ExpressionKind::BorrowRef(Box::new(expr))
+        };
+
+        Some(Expression::new(kind, start_span.merge(end_span)))
     }
 
     fn parse_dereference_expression(&mut self) -> Option<Expression> {

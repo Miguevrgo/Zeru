@@ -66,19 +66,28 @@ Goal: Introduce high-level abstractions with zero runtime cost, moving closer to
 - [x] Generic Functions: Support fn id<T>(x: T) T.
 - [x] Traits: Duck typing with trait definitions
 
-##### Memory & Safety
+##### Memory & Safety (See docs/DESIGN_MEMORY.md)
 
-- [x] Allocator trait API: Safe allocation interface (std/mem.zr)
-- [ ] GlobalAlloc implementation with libc
-- [ ] Arena allocator
-- [ ] Consider possible solutions for easy/secure/fast language (debug|release-safe|release-fast)
-- [ ] Generational References / Borrow Checker / Arenas ??
+- [x] Allocator trait API: Safe allocation interface
+- [x] Memory model design: Move semantics + Generational References
+- [x] Move semantics: Compile-time ownership tracking with `.copy()` method
+- [x] Reference types: `&T` (immutable) and `&var T` (mutable) with safe borrow checking
+- [x] Generational allocation: gen_alloc, gen_dealloc, gen_realloc with headers
+- [x] Heap allocation: mmap/brk syscalls (no libc) in std/mem.zr
+- [x] RAII scaffolding: Scope tracking for automatic cleanup
+- [ ] Generational references: Full runtime dangling detection
+- [ ] Custom drop methods: Struct destructors
+- [ ] Compile modes: debug | release-safe | release-fast flags
+- [ ] Arena allocator (optional explicit allocator)
 
 ##### Standard Library (STL) - Phase 1
 
 - [x] Option<T>: Nullable types with ? syntax
 - [x] Result<T, E>: Tagged union for error handling
-- [ ] Vec<T>: Implement dynamic arrays using malloc/realloc.
+- [x] Vec<T>: Built-in dynamic array type (representation + static methods)
+- [ ] Vec<T> methods: push, pop, insert, remove, get, etc.
+- [ ] Iterator protocol: fn iter() and fn iter_mut()
+- [ ] Slice type: &[T] for borrowed array views
 
 ## Version 1.0.0: "Production Ready"
 

@@ -346,6 +346,12 @@ impl SemanticAnalyzer {
                         len,
                     };
                 }
+                if name == "Vec" && args.len() == 1 {
+                    let elem_type = self.resolve_spec(&args[0]);
+                    return Type::Vec {
+                        elem_type: Box::new(elem_type),
+                    };
+                }
                 if name == "Result" && args.len() == 2 {
                     let ok_type = self.resolve_spec(&args[0]);
                     let err_type = self.resolve_spec(&args[1]);
@@ -400,6 +406,14 @@ impl SemanticAnalyzer {
                 Type::Slice {
                     elem_type: Box::new(elem_type),
                 }
+            }
+            TypeSpec::Ref(inner) => {
+                let elem_type = self.resolve_spec(inner);
+                Type::Ref(Box::new(elem_type))
+            }
+            TypeSpec::RefMut(inner) => {
+                let elem_type = self.resolve_spec(inner);
+                Type::RefMut(Box::new(elem_type))
             }
         }
     }
@@ -529,8 +543,15 @@ impl SemanticAnalyzer {
                             name
                         ), stmt.span);
                     }
-                    value_type
+                    value_type.clone()
                 };
+
+                // If initializing from an identifier with move semantics, mark source as moved
+                if final_type.has_move_semantics()
+                    && let ExpressionKind::Identifier(source_name) = &value.kind
+                {
+                    self.symbols.mark_moved(source_name);
+                }
 
                 self.symbols.insert_var(name.clone(), final_type, *is_const);
             }
@@ -539,7 +560,14 @@ impl SemanticAnalyzer {
                 let expected = self.current_fn_return_type.clone();
 
                 let expr_type = if let Some(expr) = opt_expr {
-                    self.check_expression(expr, expected.as_ref())
+                    let ty = self.check_expression(expr, expected.as_ref());
+
+                    if ty.has_move_semantics()
+                        && let ExpressionKind::Identifier(var_name) = &expr.kind
+                    {
+                        self.symbols.mark_moved(var_name);
+                    }
+                    ty
                 } else {
                     Type::Void
                 };
@@ -732,7 +760,6 @@ impl SemanticAnalyzer {
                         let variant_name = parts[1];
                         if let Some(Type::Enum { variants, .. }) = self.enum_defs.get(enum_name) {
                             if variants.contains(&variant_name.to_string()) {
-                                // Safe: we just checked the key exists
                                 return self.enum_defs.get(enum_name).cloned().unwrap();
                             } else {
                                 self.error(
@@ -748,9 +775,21 @@ impl SemanticAnalyzer {
                     }
                 }
 
-                if let Some(symbol) = self.symbols.lookup(name) {
+                if let Some(symbol) = self.symbols.lookup(name).cloned() {
                     match symbol {
-                        super::symbol_table::Symbol::Var { ty, .. } => ty.clone(),
+                        super::symbol_table::Symbol::Var { ty, is_moved, .. } => {
+                            if is_moved {
+                                self.error(
+                                    format!(
+                                        "Use of moved value '{}'. Value was previously moved and is no longer valid.",
+                                        name
+                                    ),
+                                    expr.span,
+                                );
+                                return Type::Unknown;
+                            }
+                            ty
+                        }
                         _ => {
                             self.error(
                                 format!("'{name}' is a function, not a variable"),
@@ -782,9 +821,21 @@ impl SemanticAnalyzer {
                 value,
             } => {
                 let target_type = if let ExpressionKind::Identifier(name) = &target.kind {
-                    if let Some(super::symbol_table::Symbol::Var { is_const, ty }) =
-                        self.symbols.lookup(name).cloned()
+                    if let Some(super::symbol_table::Symbol::Var {
+                        is_const,
+                        ty,
+                        is_moved,
+                    }) = self.symbols.lookup(name).cloned()
                     {
+                        if is_moved {
+                            self.error(
+                                format!(
+                                    "Cannot assign to moved variable '{}'. Value was previously moved.",
+                                    name
+                                ),
+                                expr.span,
+                            );
+                        }
                         if is_const {
                             self.error(
                                 format!("Cannot reassign constant variable '{}'.", name),
@@ -965,8 +1016,51 @@ impl SemanticAnalyzer {
                     object,
                     name: method_name,
                 } = &function.kind
+                    && let ExpressionKind::Identifier(type_name) = &object.kind
+                    && type_name == "Vec"
+                {
+                    let elem_type = if let Some(Type::Vec { elem_type }) = expected_type {
+                        elem_type.as_ref().clone()
+                    } else {
+                        self.error(
+                            "Cannot infer Vec element type. Please add a type annotation.".into(),
+                            expr.span,
+                        );
+                        Type::Unknown
+                    };
+
+                    return self.check_vec_method(method_name, &elem_type, arguments, expr.span);
+                }
+
+                if let ExpressionKind::Get {
+                    object,
+                    name: method_name,
+                } = &function.kind
                 {
                     let obj_type = self.check_expression(object, None);
+
+                    if method_name == "copy" && arguments.is_empty() {
+                        if !obj_type.has_move_semantics() {
+                            self.error(
+                                format!(
+                                    "Method 'copy' is not needed for type {} (it's already Copy)",
+                                    obj_type
+                                ),
+                                expr.span,
+                            );
+                        }
+                        return obj_type;
+                    }
+
+                    if let Type::Vec { elem_type } = &obj_type {
+                        return self.check_vec_method(method_name, elem_type, arguments, expr.span);
+                    }
+
+                    if let Type::Ref(inner) | Type::RefMut(inner) = &obj_type
+                        && let Type::Vec { elem_type } = inner.as_ref()
+                    {
+                        return self.check_vec_method(method_name, elem_type, arguments, expr.span);
+                    }
 
                     if let Type::Slice { .. } = &obj_type {
                         if method_name == "len" && arguments.is_empty() {
@@ -1265,18 +1359,96 @@ impl SemanticAnalyzer {
 
                 Type::Pointer(Box::new(inner_type))
             }
+            ExpressionKind::BorrowRef(inner) => {
+                let inner_type = self.check_expression(inner, None);
+
+                match &inner.kind {
+                    ExpressionKind::Identifier(name) => {
+                        let is_moved =
+                            if let Some(super::symbol_table::Symbol::Var { is_moved, .. }) =
+                                self.symbols.lookup(name)
+                            {
+                                *is_moved
+                            } else {
+                                false
+                            };
+
+                        if is_moved {
+                            self.error(
+                                format!("Cannot borrow '{}': value was moved", name),
+                                expr.span,
+                            );
+                        }
+                    }
+                    ExpressionKind::Get { .. }
+                    | ExpressionKind::Index { .. }
+                    | ExpressionKind::Dereference(_) => {}
+                    _ => {
+                        self.error(
+                            "Cannot create reference to a temporary value".into(),
+                            expr.span,
+                        );
+                    }
+                }
+
+                Type::Ref(Box::new(inner_type))
+            }
+            ExpressionKind::BorrowRefMut(inner) => {
+                let inner_type = self.check_expression(inner, None);
+
+                match &inner.kind {
+                    ExpressionKind::Identifier(name) => {
+                        let (is_moved, is_const) = if let Some(super::symbol_table::Symbol::Var {
+                            is_const,
+                            is_moved,
+                            ..
+                        }) = self.symbols.lookup(name)
+                        {
+                            (*is_moved, *is_const)
+                        } else {
+                            (false, false)
+                        };
+
+                        if is_moved {
+                            self.error(
+                                format!("Cannot borrow '{}': value was moved", name),
+                                expr.span,
+                            );
+                        }
+                        if is_const {
+                            self.error(
+                                format!(
+                                    "Cannot create mutable reference to immutable variable '{}'",
+                                    name
+                                ),
+                                expr.span,
+                            );
+                        }
+                    }
+                    ExpressionKind::Get { .. }
+                    | ExpressionKind::Index { .. }
+                    | ExpressionKind::Dereference(_) => {}
+                    _ => {
+                        self.error(
+                            "Cannot create mutable reference to a temporary value".into(),
+                            expr.span,
+                        );
+                    }
+                }
+
+                Type::RefMut(Box::new(inner_type))
+            }
             ExpressionKind::Dereference(inner) => {
                 let inner_type = self.check_expression(inner, None);
 
                 match inner_type {
                     Type::Pointer(elem_type) => *elem_type,
+                    Type::Ref(elem_type) => *elem_type,
+                    Type::RefMut(elem_type) => *elem_type,
                     Type::Unknown => Type::Unknown,
                     _ => {
                         self.error(
-                            format!(
-                                "Cannot dereference non-pointer type {:?}",
-                                inner_type.to_string()
-                            ),
+                            format!("Cannot dereference type {:?}", inner_type.to_string()),
                             expr.span,
                         );
                         Type::Unknown
@@ -1342,6 +1514,127 @@ impl SemanticAnalyzer {
         }
     }
 
+    /// Type-check Vec<T> built-in methods
+    fn check_vec_method(
+        &mut self,
+        method_name: &str,
+        elem_type: &Type,
+        arguments: &[Expression],
+        span: Span,
+    ) -> Type {
+        let usize_type = Type::Integer {
+            signed: Signedness::Unsigned,
+            width: IntWidth::WSize,
+        };
+
+        match method_name {
+            // fn new() Vec<T>
+            "new" => {
+                if !arguments.is_empty() {
+                    self.error("Vec::new() takes no arguments".into(), span);
+                }
+                Type::Vec {
+                    elem_type: Box::new(elem_type.clone()),
+                }
+            }
+            // fn with_capacity(cap: usize) Vec<T>
+            "with_capacity" => {
+                if arguments.len() != 1 {
+                    self.error(
+                        "Vec::with_capacity() takes exactly one argument".into(),
+                        span,
+                    );
+                } else {
+                    let arg_type = self.check_expression(&arguments[0], Some(&usize_type));
+                    if !usize_type.accepts(&arg_type) {
+                        self.error("Vec::with_capacity() argument must be usize".into(), span);
+                    }
+                }
+                Type::Vec {
+                    elem_type: Box::new(elem_type.clone()),
+                }
+            }
+            // fn push(self: &var Vec<T>, item: T)
+            "push" => {
+                if arguments.len() != 1 {
+                    self.error("Vec::push() takes exactly one argument".into(), span);
+                } else {
+                    let arg_type = self.check_expression(&arguments[0], Some(elem_type));
+                    if !elem_type.accepts(&arg_type) {
+                        self.error(
+                            format!(
+                                "Vec::push() argument type mismatch. Expected {}, got {}",
+                                elem_type, arg_type
+                            ),
+                            span,
+                        );
+                    }
+                }
+                Type::Void
+            }
+            // fn pop(self: &var Vec<T>) T?
+            "pop" => {
+                if !arguments.is_empty() {
+                    self.error("Vec::pop() takes no arguments".into(), span);
+                }
+                Type::Optional(Box::new(elem_type.clone()))
+            }
+            // fn len(self: &Vec<T>) usize
+            "len" => {
+                if !arguments.is_empty() {
+                    self.error("Vec::len() takes no arguments".into(), span);
+                }
+                usize_type
+            }
+            // fn capacity(self: &Vec<T>) usize
+            "capacity" => {
+                if !arguments.is_empty() {
+                    self.error("Vec::capacity() takes no arguments".into(), span);
+                }
+                usize_type
+            }
+            // fn is_empty(self: &Vec<T>) bool
+            "is_empty" => {
+                if !arguments.is_empty() {
+                    self.error("Vec::is_empty() takes no arguments".into(), span);
+                }
+                Type::Bool
+            }
+            // fn get(self: &Vec<T>, idx: usize) T?
+            "get" => {
+                if arguments.len() != 1 {
+                    self.error("Vec::get() takes exactly one argument".into(), span);
+                } else {
+                    let arg_type = self.check_expression(&arguments[0], Some(&usize_type));
+                    if !usize_type.accepts(&arg_type) {
+                        self.error("Vec::get() index must be usize".into(), span);
+                    }
+                }
+                Type::Optional(Box::new(elem_type.clone()))
+            }
+            // fn clear(self: &var Vec<T>)
+            "clear" => {
+                if !arguments.is_empty() {
+                    self.error("Vec::clear() takes no arguments".into(), span);
+                }
+                Type::Void
+            }
+            // fn copy(self: &Vec<T>) Vec<T>
+            "copy" => {
+                if !arguments.is_empty() {
+                    self.error("Vec::copy() takes no arguments".into(), span);
+                }
+                Type::Vec {
+                    elem_type: Box::new(elem_type.clone()),
+                }
+            }
+            _ => {
+                self.error(format!("Vec<T> has no method '{}'", method_name), span);
+                Type::Unknown
+            }
+        }
+    }
+
     fn check_call(
         &mut self,
         name: &str,
@@ -1381,9 +1674,20 @@ impl SemanticAnalyzer {
                 );
             } else {
                 for (i, expr) in args.iter().enumerate() {
-                    let arg_type = self.check_expression(expr, Some(&expected_args[i]));
-                    if !expected_args[i].accepts(&arg_type) {
+                    let expected = &expected_args[i];
+                    let arg_type = self.check_expression(expr, Some(expected));
+
+                    if !expected.accepts(&arg_type) {
                         self.error(format!("Argument {} type mismatch.", i + 1), expr.span);
+                    }
+
+                    // If argument is passed by value (not reference) and has move semantics,
+                    // mark the source variable as moved
+                    if !matches!(expected, Type::Ref(_) | Type::RefMut(_))
+                        && arg_type.has_move_semantics()
+                        && let ExpressionKind::Identifier(var_name) = &expr.kind
+                    {
+                        self.symbols.mark_moved(var_name);
                     }
                 }
             }

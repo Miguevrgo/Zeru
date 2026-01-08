@@ -1,0 +1,33 @@
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+// Takes ownership of the Point (move)
+fn consume_point(p: Point) {
+    println("Consumed point");
+}
+
+// Takes pointer for now (references need more work)
+fn peek_point(p: *Point) {
+    println("Peeking at point");
+}
+
+fn main() {
+    // Create a Point (owns it)
+    var point = Point { x: 10, y: 20 };
+
+    // Primitives are always Copy (no move semantics)
+    var x: i32 = 42;
+    var y: i32 = x;  // This is a copy, x still valid
+    var z: i32 = x;  // x still valid
+
+    // Struct has move semantics - this moves point
+    var point2 = point;
+
+    // Uncommenting the next line would cause a compile error:
+    // "Use of moved value 'point'"
+    // var point3 = point;  // ERROR: point was moved!
+
+    println("Move semantics example complete");
+}

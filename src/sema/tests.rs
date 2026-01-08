@@ -1614,7 +1614,7 @@ fn test_dereference_non_pointer_error() {
         ";
     let errors = analyze(input);
     assert!(!errors.is_empty());
-    assert!(errors[0].contains("Cannot dereference non-pointer"));
+    assert!(errors[0].contains("Cannot dereference type"));
 }
 
 #[test]
@@ -1626,7 +1626,7 @@ fn test_address_of_temporary_error() {
         ";
     let errors = analyze(input);
     assert!(!errors.is_empty());
-    assert!(errors[0].contains("Cannot take address of a temporary"));
+    assert!(errors[0].contains("Cannot create reference to a temporary value"));
 }
 
 #[test]

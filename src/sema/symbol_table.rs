@@ -4,8 +4,15 @@ use super::types::Type;
 
 #[derive(Clone)]
 pub enum Symbol {
-    Var { ty: Type, is_const: bool },
-    Function { params: Vec<Type>, ret_type: Type },
+    Var {
+        ty: Type,
+        is_const: bool,
+        is_moved: bool,
+    },
+    Function {
+        params: Vec<Type>,
+        ret_type: Type,
+    },
 }
 
 pub struct SymbolTable {
@@ -33,7 +40,14 @@ impl SymbolTable {
 
     pub fn insert_var(&mut self, name: String, ty: Type, is_const: bool) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name, Symbol::Var { ty, is_const });
+            scope.insert(
+                name,
+                Symbol::Var {
+                    ty,
+                    is_const,
+                    is_moved: false,
+                },
+            );
         }
     }
 
@@ -43,6 +57,16 @@ impl SymbolTable {
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(name, Symbol::Function { params, ret_type });
         }
+    }
+
+    pub fn mark_moved(&mut self, name: &str) -> bool {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(Symbol::Var { is_moved, .. }) = scope.get_mut(name) {
+                *is_moved = true;
+                return true;
+            }
+        }
+        false
     }
 
     pub fn get_all_scopes(&self) -> &Vec<HashMap<String, Symbol>> {

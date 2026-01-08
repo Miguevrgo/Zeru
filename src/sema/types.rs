@@ -59,12 +59,41 @@ pub enum Type {
     Slice {
         elem_type: Box<Type>,
     },
+
+    Vec {
+        elem_type: Box<Type>,
+    },
+
+    Ref(Box<Type>),
+
+    RefMut(Box<Type>),
+
     #[allow(clippy::enum_variant_names)]
     ParamType(String),
     Unknown,
 }
 
 impl Type {
+    pub fn has_move_semantics(&self) -> bool {
+        match self {
+            Type::Integer { .. } | Type::Float(_) | Type::Bool | Type::Void => false,
+            Type::Vec { .. } => true,
+            Type::Struct { .. } => true,
+            Type::Enum { .. } => false,
+            //TODO: Maybe consider size
+            Type::Array { elem_type, .. } => elem_type.has_move_semantics(),
+            Type::Pointer(_) => false,
+            Type::Ref(_) | Type::RefMut(_) => false,
+            Type::Tuple(types) => types.iter().any(|t| t.has_move_semantics()),
+            Type::Optional(inner) => inner.has_move_semantics(),
+            Type::Result { ok_type, err_type } => {
+                ok_type.has_move_semantics() || err_type.has_move_semantics()
+            }
+            Type::Slice { .. } => false,
+            Type::ParamType(_) | Type::Unknown => true,
+        }
+    }
+
     /// Checks if this type can accept a value of another type.
     ///
     /// This is used for type compatibility checking during semantic analysis.
@@ -97,6 +126,13 @@ impl Type {
                 },
             ) => o1.accepts(o2) && e1.accepts(e2),
             (Type::Slice { elem_type: e1 }, Type::Slice { elem_type: e2 }) => e1.accepts(e2),
+            (Type::Vec { elem_type: e1 }, Type::Vec { elem_type: e2 }) => e1.accepts(e2),
+            (Type::Ref(e1), Type::Ref(e2)) => e1.accepts(e2),
+            (Type::RefMut(e1), Type::RefMut(e2)) => e1.accepts(e2),
+            (Type::Ref(e1), Type::RefMut(e2)) => e1.accepts(e2),
+            (Type::Pointer(e1), Type::Ref(e2)) | (Type::Pointer(e1), Type::RefMut(e2)) => {
+                e1.accepts(e2)
+            }
             (Type::Tuple(t1), Type::Tuple(t2)) => {
                 t1.len() == t2.len() && t1.iter().zip(t2.iter()).all(|(a, b)| a.accepts(b))
             }
@@ -150,6 +186,9 @@ impl std::fmt::Display for Type {
             Type::Optional(elem_type) => write!(f, "{}?", elem_type),
             Type::Result { ok_type, err_type } => write!(f, "Result<{}, {}>", ok_type, err_type),
             Type::Slice { elem_type } => write!(f, "&[{}]", elem_type),
+            Type::Vec { elem_type } => write!(f, "Vec<{}>", elem_type),
+            Type::Ref(elem_type) => write!(f, "&{}", elem_type),
+            Type::RefMut(elem_type) => write!(f, "&var {}", elem_type),
             Type::Tuple(types) => {
                 write!(f, "(")?;
                 for (i, t) in types.iter().enumerate() {

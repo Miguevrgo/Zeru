@@ -24,6 +24,8 @@ pub enum TypeSpec {
     Optional(Box<TypeSpec>), // T?
     Result(Box<TypeSpec>),   // T!
     Slice(Box<TypeSpec>),
+    Ref(Box<TypeSpec>),    // &T - immutable reference
+    RefMut(Box<TypeSpec>), // &var T - mutable reference
 }
 
 #[derive(Debug, Clone)]
@@ -151,7 +153,10 @@ pub enum ExpressionKind {
         value: Box<Expression>,
         arms: Vec<(Expression, Expression)>,
     },
+    #[allow(dead_code)]
     AddressOf(Box<Expression>),
+    BorrowRef(Box<Expression>),
+    BorrowRefMut(Box<Expression>),
     Dereference(Box<Expression>),
     Tuple(Vec<Expression>),
     InlineAsm {

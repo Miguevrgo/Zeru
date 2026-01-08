@@ -48,6 +48,8 @@ pub struct Compiler<'a, 'ctx> {
     generic_functions: HashMap<String, GenericFunctionDef>,
     monomorphized: HashMap<String, FunctionValue<'ctx>>,
     current_type_substitutions: HashMap<String, TypeSpec>,
+
+    scope_stack: Vec<Vec<String>>,
 }
 
 #[derive(Clone)]
@@ -84,6 +86,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             generic_functions: HashMap::new(),
             monomorphized: HashMap::new(),
             current_type_substitutions: HashMap::new(),
+            scope_stack: vec![Vec::new()], // Global scope
         }
     }
 
@@ -461,6 +464,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .collect(),
             },
             TypeSpec::IntLiteral(_) | TypeSpec::Slice(_) => ty.clone(),
+            TypeSpec::Ref(inner) => TypeSpec::Ref(Box::new(self.substitute_type_spec(inner, subs))),
+            TypeSpec::RefMut(inner) => {
+                TypeSpec::RefMut(Box::new(self.substitute_type_spec(inner, subs)))
+            }
         }
     }
 
@@ -497,6 +504,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             TypeSpec::IntLiteral(n) => format!("lit{}", n),
             TypeSpec::Slice(inner) => format!("slice_{}", self.type_spec_to_mangled(inner)),
+            TypeSpec::Ref(inner) => format!("ref_{}", self.type_spec_to_mangled(inner)),
+            TypeSpec::RefMut(inner) => format!("refmut_{}", self.type_spec_to_mangled(inner)),
         }
     }
 
@@ -689,6 +698,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder.build_store(alloca, initial_val).unwrap();
                 self.variables
                     .insert(name.clone(), (alloca, final_type, is_unsigned));
+
+                if let Some(scope) = self.scope_stack.last_mut() {
+                    scope.push(name.clone());
+                }
             }
             StatementKind::Return(opt_expr) => {
                 if let Some(expr) = opt_expr {
@@ -696,16 +709,29 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     let val = self.compile_expression(expr, ret_hint);
                     self.builder.build_return(Some(&val)).unwrap();
                 } else {
-                    self.builder.build_return(None).unwrap();
+                    let is_main = self
+                        .current_fn
+                        .map(|f| f.get_name().to_str().unwrap_or("") == "main")
+                        .unwrap_or(false);
+                    if is_main {
+                        let zero = self.context.i32_type().const_zero();
+                        self.builder.build_return(Some(&zero)).unwrap();
+                    } else {
+                        self.builder.build_return(None).unwrap();
+                    }
                 }
             }
             StatementKind::Expression(expr) => {
                 self.compile_expression(expr, None);
             }
             StatementKind::Block(stmts) => {
+                self.scope_stack.push(Vec::new());
+
                 for statement in stmts {
                     self.compile_statement(statement);
                 }
+
+                self.scope_stack.pop();
             }
             StatementKind::If {
                 condition,
@@ -1255,13 +1281,34 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     name: method_name,
                 } = &function.kind
                 {
+                    if method_name == "copy" && arguments.is_empty() {
+                        return self.compile_expression(object, expected_type);
+                    }
+
+                    if let ExpressionKind::Identifier(type_name) = &object.kind
+                        && type_name == "Vec"
+                    {
+                        return self.compile_vec_static_method(
+                            method_name,
+                            arguments,
+                            expected_type,
+                        );
+                    }
+
                     let obj_val = self.compile_expression(object, None);
-                    if let BasicValueEnum::StructValue(slice_struct) = obj_val {
-                        let struct_type = slice_struct.get_type();
+
+                    if let BasicValueEnum::StructValue(vec_struct) = obj_val {
+                        let struct_type = vec_struct.get_type();
+                        if struct_type.count_fields() == 3
+                            && let Some(result) =
+                                self.compile_vec_method(method_name, vec_struct, arguments, object)
+                        {
+                            return result;
+                        }
                         if struct_type.count_fields() == 2 && method_name == "len" {
                             let len = self
                                 .builder
-                                .build_extract_value(slice_struct, 1, "slice_len")
+                                .build_extract_value(vec_struct, 1, "slice_len")
                                 .unwrap();
                             return len;
                         }
@@ -1813,6 +1860,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
             }
 
+            ExpressionKind::BorrowRef(inner) | ExpressionKind::BorrowRefMut(inner) => {
+                if let Some((ptr, _ty)) = self.compile_lvalue(inner) {
+                    ptr.into()
+                } else {
+                    panic!("Codegen: Cannot create reference to non-lvalue expression");
+                }
+            }
+
             ExpressionKind::Dereference(inner) => {
                 let elem_type = if let ExpressionKind::Identifier(name) = &inner.kind {
                     self.pointer_elem_types.get(name).copied()
@@ -2092,6 +2147,148 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         result
     }
 
+    fn compile_vec_static_method(
+        &mut self,
+        method_name: &str,
+        arguments: &[Expression],
+        _expected_type: Option<BasicTypeEnum<'ctx>>,
+    ) -> BasicValueEnum<'ctx> {
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let usize_type = self.context.i64_type();
+        let vec_type = self.context.struct_type(
+            &[ptr_type.into(), usize_type.into(), usize_type.into()],
+            false,
+        );
+
+        match method_name {
+            "new" => {
+                let null_ptr = ptr_type.const_null();
+                let zero = usize_type.const_int(0, false);
+
+                let mut vec_val = vec_type.get_undef();
+                vec_val = self
+                    .builder
+                    .build_insert_value(vec_val, null_ptr, 0, "vec_ptr")
+                    .unwrap()
+                    .into_struct_value();
+                vec_val = self
+                    .builder
+                    .build_insert_value(vec_val, zero, 1, "vec_len")
+                    .unwrap()
+                    .into_struct_value();
+                vec_val = self
+                    .builder
+                    .build_insert_value(vec_val, zero, 2, "vec_cap")
+                    .unwrap()
+                    .into_struct_value();
+
+                vec_val.into()
+            }
+            "with_capacity" => {
+                // Vec::with_capacity(cap) - allocate memory upfront
+                let cap_val = if !arguments.is_empty() {
+                    self.compile_expression(&arguments[0], Some(usize_type.into()))
+                        .into_int_value()
+                } else {
+                    usize_type.const_int(0, false)
+                };
+
+                let elem_size: u64 = 8;
+
+                let elem_size_val = usize_type.const_int(elem_size, false);
+                let alloc_size = self
+                    .builder
+                    .build_int_mul(cap_val, elem_size_val, "alloc_size")
+                    .unwrap();
+
+                let alloc_fn = self.module.get_function("mem::gen_alloc").or_else(|| {
+                    let fn_type = ptr_type.fn_type(&[usize_type.into()], false);
+                    Some(self.module.add_function(
+                        "mem::gen_alloc",
+                        fn_type,
+                        Some(inkwell::module::Linkage::External),
+                    ))
+                });
+
+                let ptr_val = if let Some(alloc_fn) = alloc_fn {
+                    match self
+                        .builder
+                        .build_call(alloc_fn, &[alloc_size.into()], "vec_alloc")
+                        .unwrap()
+                        .try_as_basic_value()
+                    {
+                        inkwell::values::ValueKind::Basic(v) => v.into_pointer_value(),
+                        _ => ptr_type.const_null(),
+                    }
+                } else {
+                    ptr_type.const_null()
+                };
+
+                let zero = usize_type.const_int(0, false);
+                let mut vec_val = vec_type.get_undef();
+                vec_val = self
+                    .builder
+                    .build_insert_value(vec_val, ptr_val, 0, "vec_ptr")
+                    .unwrap()
+                    .into_struct_value();
+                vec_val = self
+                    .builder
+                    .build_insert_value(vec_val, zero, 1, "vec_len")
+                    .unwrap()
+                    .into_struct_value();
+                vec_val = self
+                    .builder
+                    .build_insert_value(vec_val, cap_val, 2, "vec_cap")
+                    .unwrap()
+                    .into_struct_value();
+
+                vec_val.into()
+            }
+            _ => panic!("Codegen: Unknown Vec static method '{}'", method_name),
+        }
+    }
+
+    fn compile_vec_method(
+        &mut self,
+        method_name: &str,
+        vec_struct: inkwell::values::StructValue<'ctx>,
+        _arguments: &[Expression],
+        _object: &Expression,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        let usize_type = self.context.i64_type();
+
+        match method_name {
+            "len" => {
+                let len = self
+                    .builder
+                    .build_extract_value(vec_struct, 1, "vec_len")
+                    .unwrap();
+                Some(len)
+            }
+            "capacity" => {
+                let cap = self
+                    .builder
+                    .build_extract_value(vec_struct, 2, "vec_cap")
+                    .unwrap();
+                Some(cap)
+            }
+            "is_empty" => {
+                let len = self
+                    .builder
+                    .build_extract_value(vec_struct, 1, "vec_len")
+                    .unwrap()
+                    .into_int_value();
+                let zero = usize_type.const_int(0, false);
+                let is_empty = self
+                    .builder
+                    .build_int_compare(IntPredicate::EQ, len, zero, "is_empty")
+                    .unwrap();
+                Some(is_empty.into())
+            }
+            _ => None,
+        }
+    }
+
     fn is_signed_integer(&self, expr: &Expression) -> Option<bool> {
         match &expr.kind {
             ExpressionKind::Identifier(name) => {
@@ -2117,6 +2314,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             TypeSpec::IntLiteral(_) => false,
             TypeSpec::Slice(_) => false,
+            TypeSpec::Ref(inner) | TypeSpec::RefMut(inner) => Self::is_unsigned_type(inner),
         }
     }
 
@@ -2233,6 +2431,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     };
                     return Some(elem_type.array_type(len).into());
                 }
+                // Vec<T> is represented as a struct { ptr: *T, len: usize, cap: usize }
+                if name == "Vec" && args.len() == 1 {
+                    let ptr_type = self
+                        .context
+                        .ptr_type(inkwell::AddressSpace::default())
+                        .into();
+                    let usize_type = self.context.i64_type().into();
+                    return Some(
+                        self.context
+                            .struct_type(&[ptr_type, usize_type, usize_type], false)
+                            .into(),
+                    );
+                }
                 if name == "Result" && args.len() == 2 {
                     let ok_type = self
                         .get_llvm_type(&args[0])
@@ -2298,6 +2509,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .into(),
                 )
             }
+            // &T and &var T are represented as pointers (with gen-ref metadata at runtime)
+            // For now, they compile down to simple pointers. Generational reference
+            // checking will be added in a later phase.
+            TypeSpec::Ref(_) | TypeSpec::RefMut(_) => Some(
+                self.context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .into(),
+            ),
         }
     }
 
