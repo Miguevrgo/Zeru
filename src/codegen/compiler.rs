@@ -1295,6 +1295,25 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         );
                     }
 
+                    let is_mutating_vec_method = matches!(
+                        method_name.as_str(),
+                        "push" | "pop" | "clear" | "get" | "copy"
+                    );
+
+                    if is_mutating_vec_method
+                        && let ExpressionKind::Identifier(var_name) = &object.kind
+                        && let Some((ptr, ty, _)) = self.variables.get(var_name).cloned()
+                        && let BasicTypeEnum::StructType(st) = ty
+                        && st.count_fields() == 3
+                    {
+                        let elem_size: u64 = 8;
+                        if let Some(result) =
+                            self.compile_vec_method_mut(method_name, ptr, arguments, elem_size)
+                        {
+                            return result;
+                        }
+                    }
+
                     let obj_val = self.compile_expression(object, None);
 
                     if let BasicValueEnum::StructValue(vec_struct) = obj_val {
@@ -1724,6 +1743,53 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                                 .build_gep(self.context.i8_type(), ptr, &[off], "ptr")
                                 .unwrap()
                                 .into()
+                        }
+                    }
+                    (BasicValueEnum::PointerValue(l), BasicValueEnum::PointerValue(r)) => {
+                        // Pointer comparison - convert to int and compare
+                        let usize_type = self.context.i64_type();
+                        let l_int = self
+                            .builder
+                            .build_ptr_to_int(l, usize_type, "ptr_l")
+                            .unwrap();
+                        let r_int = self
+                            .builder
+                            .build_ptr_to_int(r, usize_type, "ptr_r")
+                            .unwrap();
+                        match operator {
+                            Token::Eq => self
+                                .builder
+                                .build_int_compare(IntPredicate::EQ, l_int, r_int, "ptr_eq")
+                                .unwrap()
+                                .into(),
+                            Token::NotEq => self
+                                .builder
+                                .build_int_compare(IntPredicate::NE, l_int, r_int, "ptr_ne")
+                                .unwrap()
+                                .into(),
+                            Token::Lt => self
+                                .builder
+                                .build_int_compare(IntPredicate::ULT, l_int, r_int, "ptr_lt")
+                                .unwrap()
+                                .into(),
+                            Token::Leq => self
+                                .builder
+                                .build_int_compare(IntPredicate::ULE, l_int, r_int, "ptr_le")
+                                .unwrap()
+                                .into(),
+                            Token::Gt => self
+                                .builder
+                                .build_int_compare(IntPredicate::UGT, l_int, r_int, "ptr_gt")
+                                .unwrap()
+                                .into(),
+                            Token::Geq => self
+                                .builder
+                                .build_int_compare(IntPredicate::UGE, l_int, r_int, "ptr_ge")
+                                .unwrap()
+                                .into(),
+                            _ => panic!(
+                                "Only comparison operators supported for pointer-pointer ops"
+                            ),
                         }
                     }
                     _ => panic!("Type mismatch in binary operation"),
@@ -2287,6 +2353,503 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             _ => None,
         }
+    }
+
+    fn compile_vec_method_mut(
+        &mut self,
+        method_name: &str,
+        vec_ptr: PointerValue<'ctx>,
+        arguments: &[Expression],
+        elem_size: u64,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let usize_type = self.context.i64_type();
+        let vec_type = self.context.struct_type(
+            &[ptr_type.into(), usize_type.into(), usize_type.into()],
+            false,
+        );
+
+        match method_name {
+            "push" => {
+                let item_val = self.compile_expression(&arguments[0], None);
+                let current_fn = self.current_fn.unwrap();
+
+                let ptr_field_ptr = self
+                    .builder
+                    .build_struct_gep(vec_type, vec_ptr, 0, "ptr_field")
+                    .unwrap();
+                let len_field_ptr = self
+                    .builder
+                    .build_struct_gep(vec_type, vec_ptr, 1, "len_field")
+                    .unwrap();
+                let cap_field_ptr = self
+                    .builder
+                    .build_struct_gep(vec_type, vec_ptr, 2, "cap_field")
+                    .unwrap();
+
+                let data_ptr = self
+                    .builder
+                    .build_load(ptr_type, ptr_field_ptr, "data_ptr")
+                    .unwrap()
+                    .into_pointer_value();
+                let len = self
+                    .builder
+                    .build_load(usize_type, len_field_ptr, "len")
+                    .unwrap()
+                    .into_int_value();
+                let cap = self
+                    .builder
+                    .build_load(usize_type, cap_field_ptr, "cap")
+                    .unwrap()
+                    .into_int_value();
+
+                let needs_grow = self
+                    .builder
+                    .build_int_compare(IntPredicate::UGE, len, cap, "needs_grow")
+                    .unwrap();
+
+                let grow_bb = self.context.append_basic_block(current_fn, "vec_grow");
+                let store_bb = self.context.append_basic_block(current_fn, "vec_store");
+
+                self.builder
+                    .build_conditional_branch(needs_grow, grow_bb, store_bb)
+                    .unwrap();
+
+                self.builder.position_at_end(grow_bb);
+
+                let zero = usize_type.const_int(0, false);
+                let four = usize_type.const_int(4, false);
+                let two = usize_type.const_int(2, false);
+                let cap_is_zero = self
+                    .builder
+                    .build_int_compare(IntPredicate::EQ, cap, zero, "cap_zero")
+                    .unwrap();
+                let doubled_cap = self.builder.build_int_mul(cap, two, "doubled").unwrap();
+                let new_cap = self
+                    .builder
+                    .build_select(cap_is_zero, four, doubled_cap, "new_cap")
+                    .unwrap()
+                    .into_int_value();
+
+                let elem_size_val = usize_type.const_int(elem_size, false);
+                let new_size = self
+                    .builder
+                    .build_int_mul(new_cap, elem_size_val, "new_size")
+                    .unwrap();
+
+                let realloc_fn = self.get_or_create_realloc_fn();
+                let old_size = self
+                    .builder
+                    .build_int_mul(cap, elem_size_val, "old_size")
+                    .unwrap();
+                let new_ptr = match self
+                    .builder
+                    .build_call(
+                        realloc_fn,
+                        &[data_ptr.into(), old_size.into(), new_size.into()],
+                        "new_ptr",
+                    )
+                    .unwrap()
+                    .try_as_basic_value()
+                {
+                    inkwell::values::ValueKind::Basic(v) => v.into_pointer_value(),
+                    _ => ptr_type.const_null(),
+                };
+
+                self.builder.build_store(ptr_field_ptr, new_ptr).unwrap();
+                self.builder.build_store(cap_field_ptr, new_cap).unwrap();
+
+                self.builder.build_unconditional_branch(store_bb).unwrap();
+
+                self.builder.position_at_end(store_bb);
+
+                let final_ptr = self
+                    .builder
+                    .build_load(ptr_type, ptr_field_ptr, "final_ptr")
+                    .unwrap()
+                    .into_pointer_value();
+                let final_len = self
+                    .builder
+                    .build_load(usize_type, len_field_ptr, "final_len")
+                    .unwrap()
+                    .into_int_value();
+
+                let offset = self
+                    .builder
+                    .build_int_mul(final_len, usize_type.const_int(elem_size, false), "offset")
+                    .unwrap();
+                let elem_ptr = unsafe {
+                    self.builder
+                        .build_gep(self.context.i8_type(), final_ptr, &[offset], "elem_ptr")
+                        .unwrap()
+                };
+
+                self.builder.build_store(elem_ptr, item_val).unwrap();
+
+                let new_len = self
+                    .builder
+                    .build_int_add(final_len, usize_type.const_int(1, false), "new_len")
+                    .unwrap();
+                self.builder.build_store(len_field_ptr, new_len).unwrap();
+
+                Some(self.context.i32_type().const_int(0, false).into())
+            }
+            "pop" => {
+                let current_fn = self.current_fn.unwrap();
+
+                let len_field_ptr = self
+                    .builder
+                    .build_struct_gep(vec_type, vec_ptr, 1, "len_field")
+                    .unwrap();
+                let ptr_field_ptr = self
+                    .builder
+                    .build_struct_gep(vec_type, vec_ptr, 0, "ptr_field")
+                    .unwrap();
+
+                let len = self
+                    .builder
+                    .build_load(usize_type, len_field_ptr, "len")
+                    .unwrap()
+                    .into_int_value();
+
+                let zero = usize_type.const_int(0, false);
+                let is_empty = self
+                    .builder
+                    .build_int_compare(IntPredicate::EQ, len, zero, "is_empty")
+                    .unwrap();
+
+                let empty_bb = self.context.append_basic_block(current_fn, "pop_empty");
+                let pop_bb = self.context.append_basic_block(current_fn, "pop_do");
+                let merge_bb = self.context.append_basic_block(current_fn, "pop_merge");
+
+                self.builder
+                    .build_conditional_branch(is_empty, empty_bb, pop_bb)
+                    .unwrap();
+
+                self.builder.position_at_end(empty_bb);
+                let elem_type = self.context.i64_type();
+                let opt_type = self
+                    .context
+                    .struct_type(&[self.context.bool_type().into(), elem_type.into()], false);
+                let none_val = {
+                    let mut v = opt_type.get_undef();
+                    v = self
+                        .builder
+                        .build_insert_value(
+                            v,
+                            self.context.bool_type().const_int(0, false),
+                            0,
+                            "none_tag",
+                        )
+                        .unwrap()
+                        .into_struct_value();
+                    v = self
+                        .builder
+                        .build_insert_value(v, elem_type.const_int(0, false), 1, "none_val")
+                        .unwrap()
+                        .into_struct_value();
+                    v
+                };
+                self.builder.build_unconditional_branch(merge_bb).unwrap();
+                let empty_end_bb = self.builder.get_insert_block().unwrap();
+
+                self.builder.position_at_end(pop_bb);
+                let new_len = self
+                    .builder
+                    .build_int_sub(len, usize_type.const_int(1, false), "new_len")
+                    .unwrap();
+                self.builder.build_store(len_field_ptr, new_len).unwrap();
+
+                let data_ptr = self
+                    .builder
+                    .build_load(ptr_type, ptr_field_ptr, "data_ptr")
+                    .unwrap()
+                    .into_pointer_value();
+                let offset = self
+                    .builder
+                    .build_int_mul(new_len, usize_type.const_int(elem_size, false), "offset")
+                    .unwrap();
+                let elem_ptr = unsafe {
+                    self.builder
+                        .build_gep(self.context.i8_type(), data_ptr, &[offset], "elem_ptr")
+                        .unwrap()
+                };
+                let elem_val = self
+                    .builder
+                    .build_load(elem_type, elem_ptr, "elem_val")
+                    .unwrap();
+
+                let some_val = {
+                    let mut v = opt_type.get_undef();
+                    v = self
+                        .builder
+                        .build_insert_value(
+                            v,
+                            self.context.bool_type().const_int(1, false),
+                            0,
+                            "some_tag",
+                        )
+                        .unwrap()
+                        .into_struct_value();
+                    v = self
+                        .builder
+                        .build_insert_value(v, elem_val, 1, "some_val")
+                        .unwrap()
+                        .into_struct_value();
+                    v
+                };
+                self.builder.build_unconditional_branch(merge_bb).unwrap();
+                let pop_end_bb = self.builder.get_insert_block().unwrap();
+
+                self.builder.position_at_end(merge_bb);
+                let phi = self.builder.build_phi(opt_type, "pop_result").unwrap();
+                phi.add_incoming(&[(&none_val, empty_end_bb), (&some_val, pop_end_bb)]);
+
+                Some(phi.as_basic_value())
+            }
+            "get" => {
+                let current_fn = self.current_fn.unwrap();
+                let idx = self
+                    .compile_expression(&arguments[0], Some(usize_type.into()))
+                    .into_int_value();
+
+                let len_field_ptr = self
+                    .builder
+                    .build_struct_gep(vec_type, vec_ptr, 1, "len_field")
+                    .unwrap();
+                let ptr_field_ptr = self
+                    .builder
+                    .build_struct_gep(vec_type, vec_ptr, 0, "ptr_field")
+                    .unwrap();
+
+                let len = self
+                    .builder
+                    .build_load(usize_type, len_field_ptr, "len")
+                    .unwrap()
+                    .into_int_value();
+
+                let in_bounds = self
+                    .builder
+                    .build_int_compare(IntPredicate::ULT, idx, len, "in_bounds")
+                    .unwrap();
+
+                let oob_bb = self.context.append_basic_block(current_fn, "get_oob");
+                let valid_bb = self.context.append_basic_block(current_fn, "get_valid");
+                let merge_bb = self.context.append_basic_block(current_fn, "get_merge");
+
+                self.builder
+                    .build_conditional_branch(in_bounds, valid_bb, oob_bb)
+                    .unwrap();
+
+                self.builder.position_at_end(oob_bb);
+                let elem_type = self.context.i64_type();
+                let opt_type = self
+                    .context
+                    .struct_type(&[self.context.bool_type().into(), elem_type.into()], false);
+                let none_val = {
+                    let mut v = opt_type.get_undef();
+                    v = self
+                        .builder
+                        .build_insert_value(
+                            v,
+                            self.context.bool_type().const_int(0, false),
+                            0,
+                            "none_tag",
+                        )
+                        .unwrap()
+                        .into_struct_value();
+                    v = self
+                        .builder
+                        .build_insert_value(v, elem_type.const_int(0, false), 1, "none_val")
+                        .unwrap()
+                        .into_struct_value();
+                    v
+                };
+                self.builder.build_unconditional_branch(merge_bb).unwrap();
+                let oob_end_bb = self.builder.get_insert_block().unwrap();
+
+                self.builder.position_at_end(valid_bb);
+                let data_ptr = self
+                    .builder
+                    .build_load(ptr_type, ptr_field_ptr, "data_ptr")
+                    .unwrap()
+                    .into_pointer_value();
+                let offset = self
+                    .builder
+                    .build_int_mul(idx, usize_type.const_int(elem_size, false), "offset")
+                    .unwrap();
+                let elem_ptr = unsafe {
+                    self.builder
+                        .build_gep(self.context.i8_type(), data_ptr, &[offset], "elem_ptr")
+                        .unwrap()
+                };
+                let elem_val = self
+                    .builder
+                    .build_load(elem_type, elem_ptr, "elem_val")
+                    .unwrap();
+
+                let some_val = {
+                    let mut v = opt_type.get_undef();
+                    v = self
+                        .builder
+                        .build_insert_value(
+                            v,
+                            self.context.bool_type().const_int(1, false),
+                            0,
+                            "some_tag",
+                        )
+                        .unwrap()
+                        .into_struct_value();
+                    v = self
+                        .builder
+                        .build_insert_value(v, elem_val, 1, "some_val")
+                        .unwrap()
+                        .into_struct_value();
+                    v
+                };
+                self.builder.build_unconditional_branch(merge_bb).unwrap();
+                let valid_end_bb = self.builder.get_insert_block().unwrap();
+
+                self.builder.position_at_end(merge_bb);
+                let phi = self.builder.build_phi(opt_type, "get_result").unwrap();
+                phi.add_incoming(&[(&none_val, oob_end_bb), (&some_val, valid_end_bb)]);
+
+                Some(phi.as_basic_value())
+            }
+            "clear" => {
+                let len_field_ptr = self
+                    .builder
+                    .build_struct_gep(vec_type, vec_ptr, 1, "len_field")
+                    .unwrap();
+                let zero = usize_type.const_int(0, false);
+                self.builder.build_store(len_field_ptr, zero).unwrap();
+                Some(self.context.i32_type().const_int(0, false).into())
+            }
+            "copy" => {
+                let ptr_field_ptr = self
+                    .builder
+                    .build_struct_gep(vec_type, vec_ptr, 0, "ptr_field")
+                    .unwrap();
+                let len_field_ptr = self
+                    .builder
+                    .build_struct_gep(vec_type, vec_ptr, 1, "len_field")
+                    .unwrap();
+                let cap_field_ptr = self
+                    .builder
+                    .build_struct_gep(vec_type, vec_ptr, 2, "cap_field")
+                    .unwrap();
+
+                let src_ptr = self
+                    .builder
+                    .build_load(ptr_type, ptr_field_ptr, "src_ptr")
+                    .unwrap()
+                    .into_pointer_value();
+                let len = self
+                    .builder
+                    .build_load(usize_type, len_field_ptr, "len")
+                    .unwrap()
+                    .into_int_value();
+                let _cap = self
+                    .builder
+                    .build_load(usize_type, cap_field_ptr, "cap")
+                    .unwrap()
+                    .into_int_value();
+
+                let elem_size_val = usize_type.const_int(elem_size, false);
+                let alloc_size = self
+                    .builder
+                    .build_int_mul(len, elem_size_val, "alloc_size")
+                    .unwrap();
+
+                let alloc_fn = self.get_or_create_alloc_fn();
+                let new_ptr = match self
+                    .builder
+                    .build_call(alloc_fn, &[alloc_size.into()], "new_ptr")
+                    .unwrap()
+                    .try_as_basic_value()
+                {
+                    inkwell::values::ValueKind::Basic(v) => v.into_pointer_value(),
+                    _ => ptr_type.const_null(),
+                };
+
+                let memcpy_fn = self.get_or_create_memcpy_fn();
+                self.builder
+                    .build_call(
+                        memcpy_fn,
+                        &[new_ptr.into(), src_ptr.into(), alloc_size.into()],
+                        "",
+                    )
+                    .unwrap();
+
+                let mut new_vec = vec_type.get_undef();
+                new_vec = self
+                    .builder
+                    .build_insert_value(new_vec, new_ptr, 0, "copy_ptr")
+                    .unwrap()
+                    .into_struct_value();
+                new_vec = self
+                    .builder
+                    .build_insert_value(new_vec, len, 1, "copy_len")
+                    .unwrap()
+                    .into_struct_value();
+                new_vec = self
+                    .builder
+                    .build_insert_value(new_vec, len, 2, "copy_cap")
+                    .unwrap()
+                    .into_struct_value();
+
+                Some(new_vec.into())
+            }
+            _ => None,
+        }
+    }
+
+    fn get_or_create_alloc_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(f) = self.module.get_function("__zeru_alloc") {
+            return f;
+        }
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let usize_type = self.context.i64_type();
+        let fn_type = ptr_type.fn_type(&[usize_type.into()], false);
+        self.module.add_function(
+            "__zeru_alloc",
+            fn_type,
+            Some(inkwell::module::Linkage::External),
+        )
+    }
+
+    fn get_or_create_realloc_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(f) = self.module.get_function("__zeru_realloc") {
+            return f;
+        }
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let usize_type = self.context.i64_type();
+        let fn_type = ptr_type.fn_type(
+            &[ptr_type.into(), usize_type.into(), usize_type.into()],
+            false,
+        );
+        self.module.add_function(
+            "__zeru_realloc",
+            fn_type,
+            Some(inkwell::module::Linkage::External),
+        )
+    }
+
+    fn get_or_create_memcpy_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(f) = self.module.get_function("__zeru_memcpy") {
+            return f;
+        }
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let usize_type = self.context.i64_type();
+        let fn_type = self.context.void_type().fn_type(
+            &[ptr_type.into(), ptr_type.into(), usize_type.into()],
+            false,
+        );
+        self.module.add_function(
+            "__zeru_memcpy",
+            fn_type,
+            Some(inkwell::module::Linkage::External),
+        )
     }
 
     fn is_signed_integer(&self, expr: &Expression) -> Option<bool> {

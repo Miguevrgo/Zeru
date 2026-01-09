@@ -1,0 +1,71 @@
+// Vec<T> integration test
+// Tests basic Vec operations: push, pop, len, clear, copy
+// Uses exit codes to verify behavior
+
+fn main() {
+    // Test Vec creation
+    var numbers: Vec<i64> = Vec.new();
+    
+    // Test len() on empty vec - should be 0
+    var len0: usize = numbers.len();
+    if len0 != 0 as usize {
+        exit(1);
+    }
+    
+    // Test push
+    numbers.push(10);
+    numbers.push(20);
+    numbers.push(30);
+    
+    // len should be 3
+    var len3: usize = numbers.len();
+    if len3 != 3 as usize {
+        exit(2);
+    }
+    
+    // Test pop - should reduce len to 2
+    var popped = numbers.pop();
+    var len2: usize = numbers.len();
+    if len2 != 2 as usize {
+        exit(3);
+    }
+    
+    // Test clear - len should become 0
+    numbers.clear();
+    var lenAfterClear: usize = numbers.len();
+    if lenAfterClear != 0 as usize {
+        exit(4);
+    }
+    
+    // Test copy
+    numbers.push(100);
+    numbers.push(200);
+    var copied = numbers.copy();
+    
+    // Both should have len 2
+    var numbersLen: usize = numbers.len();
+    var copiedLen: usize = copied.len();
+    if numbersLen != 2 as usize {
+        exit(5);
+    }
+    if copiedLen != 2 as usize {
+        exit(6);
+    }
+    
+    // Modify original
+    numbers.push(300);
+    
+    // Original should have len 3, copy should still have len 2
+    var finalLen: usize = numbers.len();
+    var copyFinalLen: usize = copied.len();
+    if finalLen != 3 as usize {
+        exit(7);
+    }
+    if copyFinalLen != 2 as usize {
+        exit(8);
+    }
+    
+    // All tests passed!
+    println("Vec tests passed!");
+    exit(0);
+}

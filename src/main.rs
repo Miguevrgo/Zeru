@@ -70,6 +70,25 @@ fn get_std_path() -> PathBuf {
     get_zeru_home().join("std")
 }
 
+/// Get the path to the std directory relative to the executable.
+/// This handles cases where the compiler is run from different directories.
+fn get_exe_relative_std_path() -> Option<PathBuf> {
+    let exe_path = std::env::current_exe().ok()?;
+    // The executable is typically at target/release/zeru or target/debug/zeru
+    // So we go up to find the project root and then look for std/
+    let mut path = exe_path.parent()?; // target/release or target/debug
+
+    // Try going up the directory tree to find std/
+    for _ in 0..4 {
+        let std_path = path.join("std");
+        if std_path.exists() && std_path.is_dir() {
+            return Some(std_path);
+        }
+        path = path.parent()?;
+    }
+    None
+}
+
 fn resolve_std_import(import_path: &str) -> Option<PathBuf> {
     let parts: Vec<&str> = import_path.split('.').collect();
     if parts.is_empty() || parts[0] != "std" {
@@ -82,11 +101,17 @@ fn resolve_std_import(import_path: &str) -> Option<PathBuf> {
         format!("{}.zr", parts[1..].join("/"))
     };
 
-    let search_paths = [
+    // Build search paths, including exe-relative path if available
+    let mut search_paths = vec![
         PathBuf::from("std"),
         get_std_path(),
         PathBuf::from("/usr/local/lib/zeru/std"),
     ];
+
+    // Add exe-relative std path (highest priority after cwd)
+    if let Some(exe_std) = get_exe_relative_std_path() {
+        search_paths.insert(1, exe_std);
+    }
 
     for base in &search_paths {
         let full_path = base.join(&module_file);
@@ -99,11 +124,17 @@ fn resolve_std_import(import_path: &str) -> Option<PathBuf> {
 }
 
 fn load_builtin_std() -> String {
-    let search_paths = [
+    // Build search paths, including exe-relative path if available
+    let mut search_paths = vec![
         PathBuf::from("std/builtin.zr"),
         get_std_path().join("builtin.zr"),
         PathBuf::from("/usr/local/lib/zeru/std/builtin.zr"),
     ];
+
+    // Add exe-relative std path (highest priority after cwd)
+    if let Some(exe_std) = get_exe_relative_std_path() {
+        search_paths.insert(1, exe_std.join("builtin.zr"));
+    }
 
     for path in &search_paths {
         if let Ok(content) = fs::read_to_string(path) {
