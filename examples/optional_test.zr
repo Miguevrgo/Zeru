@@ -1,4 +1,0 @@
-fn main() {
-    var maybe: i32? = 42;
-    var empty: i32? = None;
-}

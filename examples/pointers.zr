@@ -1,6 +1,0 @@
-fn main() {
-    var x: i32 = 42;
-
-    var ptr: *i32 = &x;
-    var y: i32 = *ptr;
-}

@@ -1,10 +1,37 @@
-import std.math
-import std.collections::{Hashmap, Hashset}
-import std.os
+// =============================================================================
+// Zeru Language Syntax Reference
+// =============================================================================
+// This file demonstrates all implemented Zeru language features.
+// This file should compile successfully.
+// =============================================================================
 
+// -----------------------------------------------------------------------------
+// Imports
+// -----------------------------------------------------------------------------
+// NOTE: Imports are parsed but std modules aren't fully implemented yet.
+// import std                       // Import entire std module
+// import std.math                  // Import specific submodule
+
+// -----------------------------------------------------------------------------
+// Constants
+// -----------------------------------------------------------------------------
 const MAX_RETRIES: u32 = 5;
 const PI: f64 = 3.14159265359;
+// const MESSAGE: str = "Hello";  // TODO: Global string constants not yet working
 
+// -----------------------------------------------------------------------------
+// Primitive Types
+// -----------------------------------------------------------------------------
+// Signed integers:   i8, i16, i32, i64
+// Unsigned integers: u8, u16, u32, u64, usize
+// Floating point:    f32, f64
+// Boolean:           bool
+// String:            str
+// Unit (void):       ()
+
+// -----------------------------------------------------------------------------
+// Enums
+// -----------------------------------------------------------------------------
 enum Status {
     Connected,
     Disconnected,
@@ -12,153 +39,336 @@ enum Status {
     Error
 }
 
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+// -----------------------------------------------------------------------------
+// Structs with Methods
+// -----------------------------------------------------------------------------
 struct Vector3 {
     x: f32,
     y: f32,
     z: f32,
 
-    fn new(x: f32, y: f32, z: f32) Vector3 {
-        return Vector3 { x: x, y: y, z: z };
+    // Immutable self method
+    fn length_squared(self) f32 {
+        return self.x * self.x + self.y * self.y + self.z * self.z;
     }
 
     fn distance_sq(self, other: Vector3) f32 {
         var dx = self.x - other.x;
         var dy = self.y - other.y;
         var dz = self.z - other.z;
-        return dx*dx + dy*dy + dz*dz;
+        return dx * dx + dy * dy + dz * dz;
     }
 
-    fn normalize(var self) {
-        var len = self.x*self.x + self.y*self.y + self.z*self.z;
-        self.x = self.x / len;
-        self.y = self.y / len;
-        self.z = self.z / len;
+    // Mutable self method (uses 'var self')
+    fn scale(var self, factor: f32) {
+        self.x = self.x * factor;
+        self.y = self.y * factor;
+        self.z = self.z * factor;
     }
 }
 
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+// -----------------------------------------------------------------------------
+// Functions
+// -----------------------------------------------------------------------------
+
+// Basic function with return type
+fn add(a: i32, b: i32) i32 {
+    return a + b;
+}
+
+// Void function (no return type)
+fn greet() {
+    println("Hello!");
+}
+
+// Mutable parameter (var keyword allows modification)
 fn increment(var value: i32) i32 {
-    value += 1;
+    value = value + 1;
     return value;
 }
 
-fn read_only(value: i32) i32 {
+// Immutable parameter (default - cannot be modified)
+fn double(value: i32) i32 {
     return value * 2;
 }
 
-fn find_index(arr: Array<i32, 4>, target: i32) i32? {
-    for i in 0..4 {
-        if arr[i] == target {
-            return i;
-        }
+// Recursive function
+fn fibonacci(n: i32) i32 {
+    if n <= 1 {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+// -----------------------------------------------------------------------------
+// Generic Functions
+// -----------------------------------------------------------------------------
+
+fn identity<T>(x: T) T {
+    return x;
+}
+
+fn first<T, U>(a: T, b: U) T {
+    return a;
+}
+
+fn second<T, U>(a: T, b: U) U {
+    return b;
+}
+
+// -----------------------------------------------------------------------------
+// Optional Types
+// -----------------------------------------------------------------------------
+
+fn find_positive(x: i32) i32? {
+    if x > 0 {
+        return x;
     }
     return None;
 }
 
-fn use_optional() {
-    var maybe: i32? = 42;
-    var empty: i32? = None;
-
-    if !maybe.is_none() {
-        var v = maybe.unwrap();
-    }
-    var safe = maybe.unwrap_or(0);
-    //TODO: Will be supported
-    // if const val = maybe {
-    //     println(val);
-    // }
-
-    var x: i32 = 10;
-    var safe_ptr: *i32 = &x;
-    var nullable_ptr: *i32? = None;
-}
-
-fn calculate_fibonacci(n: i32) i32 {
-    if n <= 1 { return n; }
-    return calculate_fibonacci(n - 1) + calculate_fibonacci(n - 2);
-}
-
-/// ======
-/// Traits
-/// ======
+// -----------------------------------------------------------------------------
+// Traits (definition only - impl not yet supported)
+// -----------------------------------------------------------------------------
 
 trait Drawable {
     fn draw(self);
 }
 
-struct Player {
-    x: f32, y: f32,
-
-    fn draw(self) {
-        // ...
-    }
+trait Printable {
+    fn to_string(self) str;
 }
 
-fn render_scene(item: Drawable) {
-    item.draw();
-}
-
-// inside main or any function
-// var p = Player::new(0.0, 0.0);
-// render_scene(p); // Would work automatically
+// -----------------------------------------------------------------------------
+// Main Function
+// -----------------------------------------------------------------------------
 
 fn main() {
-    var counter: i32 = 10;
-    var inferred = 20;
+    // Variable declarations
+    var counter: i32 = 10;          // Explicit type
+    var inferred = 20;              // Type inference
+    const immutable: i32 = 100;     // Constant (cannot reassign)
 
+    // Variable shadowing
     var raw_data: i32 = 500;
     var raw_data: f32 = (raw_data as f32) / 100.0;
 
-    const explicit_arr: Array<i32, 4> = [10, 20, 30, 40];
-    var zero_filled: Array<u8, 1024> = [0; 1024]; 
+    // -------------------------------------------------------------------------
+    // Arrays
+    // -------------------------------------------------------------------------
+    const numbers: Array<i32, 4> = [10, 20, 30, 40];
+    var zeros: Array<u8, 1024> = [0; 1024];         // Repeat syntax
     var matrix: Array<Array<f32, 2>, 2> = [
         [1.0, 0.0],
         [0.0, 1.0]
     ];
 
-    var players = Vector<str>::new();
-    players.push("Player1");
- 
-    const num: i32 = -5;
-    var abs_val: i32 = math::abs(num);
+    // Array access
+    var first_num = numbers[0];
+    var idx: usize = 2;
+    var element = numbers[idx];
 
-    var vec_a = Vector3::new(0.0, 10.0, 0.0);
+    // -------------------------------------------------------------------------
+    // Vec<T> - Dynamic Arrays
+    // -------------------------------------------------------------------------
+    var items: Vec<i64> = Vec.new();         // Create empty vec
+
+    items.push(100);                         // Add element
+    items.push(200);
+    var length: usize = items.len();         // Get length
+    var cap: usize = items.capacity();       // Get capacity
+    var is_empty: bool = items.is_empty();   // Check if empty
+
+    var popped = items.pop();                // Remove and return last
+    var vec_copy = items.copy();             // Deep copy
+    items.clear();                           // Remove all elements
+
+    // -------------------------------------------------------------------------
+    // Tuples
+    // -------------------------------------------------------------------------
+    var point: (i32, i32) = (10, 20);
+    var mixed = (42, true, 3.14);
+    var nested: ((i32, i32), bool) = ((1, 2), true);
+    var unit: () = ();
+    var single = (42,);                      // Single element tuple needs comma
+
+    // -------------------------------------------------------------------------
+    // Structs
+    // -------------------------------------------------------------------------
+    // NOTE: Static methods (Struct.method()) only work for built-in types (Vec)
+    // For user structs, use literal syntax or factory functions
+    var vec_a = Vector3 { x: 1.0, y: 2.0, z: 3.0 };
     var vec_b = Vector3 { x: 5.0, y: 5.0, z: 0.0 };
 
-    vec_a.normalize();
-    var dist = vec_a.distance_sq(vec_b);
+    vec_a.scale(2.0);                        // Mutating method
+    var dist = vec_a.distance_sq(vec_b);     // Method with param
+    var len_sq = vec_a.length_squared();     // Simple method
 
-    var connection_status = Status::Connected;
-    var message = match connection_status {
+    // Field access and modification
+    var p = Point { x: 10, y: 20 };
+    p.x = 50;
+
+    // -------------------------------------------------------------------------
+    // Enums and Match
+    // -------------------------------------------------------------------------
+    var status = Status::Connected;
+    var message = match status {
         Status::Connected => "Online",
         Status::Disconnected => "Offline",
-        Status::Error => "Fault",
-        default => "Unknown State"
+        Status::Connecting => "Please wait...",
+        Status::Error => "Something went wrong",
+        default => "Unknown"
     };
 
-    while counter > 0 {
-        counter -= 1;
-        if counter == 5 { continue; }
+    // -------------------------------------------------------------------------
+    // Control Flow
+    // -------------------------------------------------------------------------
+
+    // If/else
+    if counter > 5 {
+        counter = counter - 1;
+    } else if counter == 5 {
+        counter = 0;
+    } else {
+        counter = counter + 1;
     }
 
-    for value in explicit_arr {
-        if value % 2 == 0 {
-            print("Even number: {}", value);
-        } else {
-            println("Odd number: {}", value);
+    // While loop
+    while counter > 0 {
+        counter = counter - 1;
+        if counter == 3 {
+            continue;                        // Skip to next iteration
+        }
+        if counter == 1 {
+            break;                           // Exit loop
         }
     }
 
-    // Raw strings are delimited with `
-    var regex = `\d + \.\d + \s * [a - zA - Z] + `;
+    // For-in loop (over arrays)
+    for value in numbers {
+        var doubled = value * 2;
+    }
 
+    // -------------------------------------------------------------------------
+    // Operators
+    // -------------------------------------------------------------------------
+
+    // Arithmetic: + - * / %
+    var sum = 10 + 20;
+    var diff = 30 - 10;
+    var product = 5 * 4;
+    var quotient = 20 / 4;
+    var remainder = 17 % 5;
+
+    // Comparison: == != < <= > >=
+    var equal = (10 == 10);
+    var not_equal = (10 != 20);
+    var less = (5 < 10);
+
+    // Logical: && || !
+    var and_result = true && false;
+    var or_result = true || false;
+    var not_result = !true;
+
+    // Bitwise: & | ^ << >>
+    var bit_and: u32 = 0xFF00 & 0x0F0F;
+    var bit_or: u32 = 0xFF00 | 0x00FF;
+    var bit_xor: u32 = 0xFF00 ^ 0x0F0F;
+    var left_shift: u32 = 1 << 4;
+    var right_shift: u32 = 16 >> 2;
+
+    // Signed vs unsigned right shift
     var signed_val: i32 = -8;
     var unsigned_val: u32 = 8;
+    var arith_shift = signed_val >> 1;       // Arithmetic (sign-extending)
+    var logic_shift = unsigned_val >> 1;     // Logical (zero-filling)
 
-    var arith_shift = signed_val >> 1;
-    var logic_shift = unsigned_val >> 1;
+    // Compound assignment: += -= *= /= %= &= |= ^= <<= >>=
+    var x = 10;
+    x += 5;
+    x -= 3;
+    x *= 2;
 
-    const filename: str = "config.ini";
-    if filename.ends_with(".ini") {
-        var content = os::read_file(filename);
-    }
+    // Unary operators
+    var neg = -42;
+    var not_bool = !true;
+
+    // -------------------------------------------------------------------------
+    // Type Casting
+    // -------------------------------------------------------------------------
+    var int_val: i32 = 100;
+    var to_i64: i64 = int_val as i64;
+    var to_i8: i8 = int_val as i8;           // Truncation
+    var to_float: f64 = int_val as f64;
+
+    var float_val: f32 = 3.14;
+    var to_int: i32 = float_val as i32;      // Truncates decimal
+
+    // -------------------------------------------------------------------------
+    // Pointers
+    // -------------------------------------------------------------------------
+    var value: i32 = 42;
+    var ptr: *i32 = &value;                  // Address-of
+    var deref: i32 = *ptr;                   // Dereference
+
+    // Pointer arithmetic
+    var offset_ptr = ptr + 1 as usize;       // Pointer + offset
+
+    // -------------------------------------------------------------------------
+    // Raw Strings (backtick syntax)
+    // -------------------------------------------------------------------------
+    var raw_path = `C:\Users\name\file.txt`;
+    var regex = `\d+\.\d+\s*[a-zA-Z]+`;
+    var json = `{"name": "Zeru", "version": "0.2.0"}`;
+    var multiline = `Line 1
+Line 2 with "quotes"
+Line 3`;
+
+    // -------------------------------------------------------------------------
+    // I/O
+    // -------------------------------------------------------------------------
+    print("No newline");
+    println("With newline");
+    eprint("Error output");
+    eprintln("Error with newline");
+
+    // -------------------------------------------------------------------------
+    // Exit
+    // -------------------------------------------------------------------------
+    exit(0);
 }
+
+// =============================================================================
+// Features NOT YET Implemented (for reference)
+// =============================================================================
+//
+// - Static methods for user structs: Struct.new() syntax
+// - Optional methods: maybe.is_none(), maybe.unwrap(), maybe.unwrap_or()
+// - Optional pointers: *T? = None
+// - Range syntax: for i in 0..10 { }
+// - String interpolation: println("Value: {}", x)
+// - Selective imports: import std.math::{abs, PI}
+// - Trait implementations: impl Drawable for Player { }
+// - Trait bounds: fn draw<T: Drawable>(item: T)
+// - Vec.get() with bounds checking
+// - Result<T, E> type
+// - Closures/lambdas
+// - Pattern matching with destructuring
+// - Slices
+// - References (&T, &var T) - currently using pointers
+// - String methods (ends_with, starts_with, etc.)
+// - File I/O (std.os)
+// - Collections (HashMap, HashSet)
+//
+// =============================================================================

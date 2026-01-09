@@ -1,8 +1,0 @@
-fn main() {
-    var point: (i32, i32) = (10, 20);
-    var mixed = (42, true, 3.14);
-    var nested: ((i32, i32), bool) = ((1, 2), true);
-    var unit: () = ();
-
-    var single = (42,);
-}
