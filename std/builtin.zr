@@ -16,7 +16,7 @@
 const SYS_READ: i64 = 0;
 const SYS_WRITE: i64 = 1;
 const SYS_MMAP: i64 = 9;
-const SYS_MUNMAP: i64 = 11;
+const SYS_MREMAP: i64 = 25;
 const SYS_EXIT: i64 = 60;
 
 // mmap flags
@@ -24,6 +24,9 @@ const PROT_READ: i64 = 1;
 const PROT_WRITE: i64 = 2;
 const MAP_PRIVATE: i64 = 2;
 const MAP_ANONYMOUS: i64 = 32;
+
+// mremap flags
+const MREMAP_MAYMOVE: i64 = 1;
 
 const STDIN: i32 = 0;
 const STDOUT: i32 = 1;
@@ -60,6 +63,22 @@ fn syscall3(nr: i64, arg1: i64, arg2: i64, arg3: i64) i64 {
             "{rdi}" (arg1),
             "{rsi}" (arg2),
             "{rdx}" (arg3)
+        : "rcx", "r11", "memory"
+    );
+    return result;
+}
+
+fn syscall5(nr: i64, arg1: i64, arg2: i64, arg3: i64, arg4: i64, arg5: i64) i64 {
+    var result: i64 = 0;
+    asm volatile (
+        "syscall"
+        :   "={rax}" (result)
+        :   "{rax}" (nr),
+            "{rdi}" (arg1),
+            "{rsi}" (arg2),
+            "{rdx}" (arg3),
+            "{r10}" (arg4),
+            "{r8}" (arg5)
         : "rcx", "r11", "memory"
     );
     return result;
@@ -177,7 +196,7 @@ fn __zeru_alloc(size: usize) *u8 {
     var prot: i64 = PROT_READ + PROT_WRITE;
     var flags: i64 = MAP_PRIVATE + MAP_ANONYMOUS;
     var result: i64 = syscall6(SYS_MMAP, 0, size as i64, prot, flags, -1, 0);
-    
+
     // mmap returns -errno on failure (negative value)
     if result < 0 {
         return 0 as *u8;
@@ -188,24 +207,25 @@ fn __zeru_alloc(size: usize) *u8 {
 // Reallocate memory: allocate new_size, copy old data, free old memory.
 // Returns pointer to new memory, or null on failure.
 fn __zeru_realloc(old_ptr: *u8, old_size: usize, new_size: usize) *u8 {
-    // Allocate new memory
-    var new_ptr: *u8 = __zeru_alloc(new_size);
-    if new_ptr == (0 as *u8) {
+    if new_size == 0 {
+        syscall2(SYS_MUNMAP, old_ptr as i64, old_size as i64);
         return 0 as *u8;
     }
-    
-    // Copy old data to new location
-    var copy_size: usize = old_size;
-    if new_size < old_size {
-        copy_size = new_size;
+    // Reallocate memory
+    var new_ptr: *u8 = syscall5(
+        SYS_MREMAP,
+        old_ptr,
+        old_size,
+        new_size,
+        MREMAP_MAYMOVE,
+        0
+    );
+
+    // Check for failure
+    if new_ptr as i64 < 0 {
+        return 0 as *u8;
     }
-    __zeru_memcpy(new_ptr, old_ptr, copy_size);
-    
-    // Free old memory using munmap
-    if old_size > 0 {
-        syscall2(SYS_MUNMAP, old_ptr as i64, old_size as i64);
-    }
-    
+
     return new_ptr;
 }
 
