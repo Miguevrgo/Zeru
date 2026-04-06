@@ -483,15 +483,13 @@ fn compile_pipeline(
     let ir_path = build_dir.join(format!("{}.ll", filename));
     let exe_path = build_dir.join(filename);
 
-    let mode_str = match safety_mode {
-        SafetyMode::Debug => "DEBUG",
-        SafetyMode::ReleaseSafe => "RELEASE-SAFE",
-        SafetyMode::ReleaseFast => "RELEASE-FAST",
-    };
-
     if !quiet {
-        println!("   Compiling {} [{}]...", filename, mode_str);
+        eprintln!(
+            "  \x1b[38;2;152;195;121m Compiling \x1b[0mv{} ({filename})",
+            env!("CARGO_PKG_VERSION"),
+        );
     }
+    let start = std::time::Instant::now();
 
     let user_code = match fs::read_to_string(path) {
         Ok(code) => code,
@@ -579,7 +577,8 @@ fn compile_pipeline(
     match status {
         Ok(s) if s.success() => {
             if !quiet {
-                println!("✅ Build successful: {}", exe_path.display());
+                let end = start.elapsed().as_millis() as f64 / 1000.0;
+                eprintln!("  \x1b[38;2;152;195;121m✅Finished  \x1b[0m{safety_mode} in {end:.3}s",);
             }
             // In run mode (quiet=true) never keep IR unless explicitly requested.
             // In build mode (quiet=false) keep IR in Debug builds for inspection.
@@ -588,7 +587,10 @@ fn compile_pipeline(
             if !should_keep_ir {
                 let _ = fs::remove_file(ir_path);
             } else if !quiet {
-                println!("  IR preserved: {}", ir_path.display());
+                println!(
+                    "  \x1b[38;2;152;195;121m IR saved  \x1b[0m{}",
+                    ir_path.display()
+                );
             }
 
             Some(exe_path)
@@ -634,7 +636,7 @@ fn main() {
                 SafetyMode::Debug
             };
             eprintln!(
-                "  \x1b[38;2;152;195;121m Compiling \x1b[0m{} ({})",
+                "  \x1b[38;2;152;195;121m Compiling \x1b[0mv{} ({})",
                 env!("CARGO_PKG_VERSION"),
                 file.to_str().unwrap()
             );
@@ -653,7 +655,7 @@ fn main() {
 
                 let status = Command::new(&executable_path)
                     .status()
-                    .expect("Failed to run executable");
+                    .expect("[-] Error: Failed to run executable");
 
                 let exit_code = status.code().unwrap_or(1);
                 if exit_code != 0 {
@@ -683,11 +685,11 @@ fn install_zeru() {
     println!("Installing Zeru to {}...", zeru_home.display());
 
     if let Err(e) = fs::create_dir_all(&std_dest) {
-        eprintln!("❌ Failed to create std directory: {}", e);
+        eprintln!("❌ Failed to create std directory: {e}");
         std::process::exit(1);
     }
     if let Err(e) = fs::create_dir_all(&bin_dest) {
-        eprintln!("❌ Failed to create bin directory: {}", e);
+        eprintln!("❌ Failed to create bin directory: {e}");
         std::process::exit(1);
     }
 

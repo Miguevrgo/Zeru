@@ -9,6 +9,6 @@ keywords = ["compiler", "programming-language", "llvm"]
 categories = ["compilers", "development-tools"]
 
 [dependencies]
-clap = { version = "4.5.53", features = ["derive"] }
+clap = { version = "4.6", features = ["derive"] }
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm21-1"] }
-ariadne = "0.5"
+ariadne = "0.6.0"
