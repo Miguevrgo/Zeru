@@ -53,7 +53,6 @@ enum Commands {
         release_fast: bool,
     },
     Clean,
-    Install,
 }
 
 fn get_zeru_home() -> PathBuf {
@@ -671,60 +670,5 @@ fn main() {
                 println!("✅ Build directory cleaned");
             }
         }
-        Commands::Install => {
-            install_zeru();
-        }
     }
-}
-
-fn install_zeru() {
-    let zeru_home = get_zeru_home();
-    let std_dest = zeru_home.join("std");
-    let bin_dest = zeru_home.join("bin");
-
-    println!("Installing Zeru to {}...", zeru_home.display());
-
-    if let Err(e) = fs::create_dir_all(&std_dest) {
-        eprintln!("❌ Failed to create std directory: {e}");
-        std::process::exit(1);
-    }
-    if let Err(e) = fs::create_dir_all(&bin_dest) {
-        eprintln!("❌ Failed to create bin directory: {e}");
-        std::process::exit(1);
-    }
-
-    let std_files = ["builtin.zr", "math.zr"];
-    let src_std = PathBuf::from("std");
-
-    for file in &std_files {
-        let src = src_std.join(file);
-        let dest = std_dest.join(file);
-        if src.exists() {
-            if let Err(e) = fs::copy(&src, &dest) {
-                eprintln!("❌ Failed to copy {}: {}", file, e);
-            } else {
-                println!("  Installed std/{}", file);
-            }
-        }
-    }
-
-    let current_exe = std::env::current_exe().expect("Failed to get current executable path");
-    let bin_path = bin_dest.join("zeru");
-    if let Err(e) = fs::copy(&current_exe, &bin_path) {
-        eprintln!("❌ Failed to copy binary: {}", e);
-        std::process::exit(1);
-    }
-    println!("  Installed zeru binary");
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&bin_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&bin_path, perms).ok();
-    }
-
-    println!("\n✅ Zeru installed successfully!");
-    println!("\nAdd the following to your shell profile (.bashrc, .zshrc, etc.):");
-    println!("  export PATH=\"{}:$PATH\"", bin_dest.display());
 }
