@@ -60,33 +60,54 @@ fn get_zeru_home() -> PathBuf {
     if let Ok(home) = std::env::var("ZERU_HOME") {
         return PathBuf::from(home);
     }
+
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(bin_dir) = exe.parent()
+    {
+        let lib_home = bin_dir.join("../lib/zeru");
+        if lib_home.exists() {
+            return fs::canonicalize(&lib_home).unwrap_or(lib_home);
+        }
+    }
+
     if let Ok(home) = std::env::var("HOME") {
         return PathBuf::from(home).join(".zeru");
     }
     PathBuf::from("/usr/local/lib/zeru")
 }
 
-fn get_std_path() -> PathBuf {
-    get_zeru_home().join("std")
-}
-
-/// Get the path to the std directory relative to the executable.
-/// This handles cases where the compiler is run from different directories.
-fn get_exe_relative_std_path() -> Option<PathBuf> {
-    let exe_path = std::env::current_exe().ok()?;
-    // The executable is typically at target/release/zeru or target/debug/zeru
-    // So we go up to find the project root and then look for std/
-    let mut path = exe_path.parent()?; // target/release or target/debug
-
-    // Try going up the directory tree to find std/
-    for _ in 0..4 {
-        let std_path = path.join("std");
-        if std_path.exists() && std_path.is_dir() {
-            return Some(std_path);
+fn read_config_value(path: &Path, key: &str) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
         }
-        path = path.parent()?;
+        if let Some((k, v)) = line.split_once('=')
+            && k.trim() == key
+        {
+            return Some(v.trim().to_string());
+        }
     }
     None
+}
+
+fn get_std_path() -> PathBuf {
+    if let Ok(cwd) = std::env::current_dir() {
+        let config = cwd.join(".zeru");
+        if let Some(p) = read_config_value(&config, "std_path") {
+            return PathBuf::from(p);
+        }
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        let config = PathBuf::from(&home).join(".zeru").join("config");
+        if let Some(p) = read_config_value(&config, "std_path") {
+            return PathBuf::from(p);
+        }
+    }
+
+    get_zeru_home().join("std")
 }
 
 fn resolve_std_import(import_path: &str) -> Option<PathBuf> {
@@ -101,17 +122,7 @@ fn resolve_std_import(import_path: &str) -> Option<PathBuf> {
         format!("{}.zr", parts[1..].join("/"))
     };
 
-    // Build search paths, including exe-relative path if available
-    let mut search_paths = vec![
-        PathBuf::from("std"),
-        get_std_path(),
-        PathBuf::from("/usr/local/lib/zeru/std"),
-    ];
-
-    // Add exe-relative std path (highest priority after cwd)
-    if let Some(exe_std) = get_exe_relative_std_path() {
-        search_paths.insert(1, exe_std);
-    }
+    let search_paths = vec![PathBuf::from("std"), get_std_path()];
 
     for base in &search_paths {
         let full_path = base.join(&module_file);
@@ -124,24 +135,6 @@ fn resolve_std_import(import_path: &str) -> Option<PathBuf> {
 }
 
 fn load_builtin_std() -> String {
-    // Build search paths, including exe-relative path if available
-    let mut search_paths = vec![
-        PathBuf::from("std/builtin.zr"),
-        get_std_path().join("builtin.zr"),
-        PathBuf::from("/usr/local/lib/zeru/std/builtin.zr"),
-    ];
-
-    // Add exe-relative std path (highest priority after cwd)
-    if let Some(exe_std) = get_exe_relative_std_path() {
-        search_paths.insert(1, exe_std.join("builtin.zr"));
-    }
-
-    for path in &search_paths {
-        if let Ok(content) = fs::read_to_string(path) {
-            return content;
-        }
-    }
-
     include_str!("../std/builtin.zr").to_string()
 }
 
@@ -482,6 +475,11 @@ fn compile_pipeline(
     let filename = path.file_stem().unwrap().to_str().unwrap();
     let build_dir = Path::new("build");
 
+    if let Err(e) = fs::create_dir_all(build_dir) {
+        eprintln!("❌ Failed to create build directory: {}", e);
+        return None;
+    }
+
     let ir_path = build_dir.join(format!("{}.ll", filename));
     let exe_path = build_dir.join(filename);
 
@@ -492,7 +490,7 @@ fn compile_pipeline(
     };
 
     if !quiet {
-        println!("  Compiling {} [{}]...", filename, mode_str);
+        println!("   Compiling {} [{}]...", filename, mode_str);
     }
 
     let user_code = match fs::read_to_string(path) {
@@ -583,7 +581,9 @@ fn compile_pipeline(
             if !quiet {
                 println!("✅ Build successful: {}", exe_path.display());
             }
-            let should_keep_ir = force_emit_ir || safety_mode == SafetyMode::Debug;
+            // In run mode (quiet=true) never keep IR unless explicitly requested.
+            // In build mode (quiet=false) keep IR in Debug builds for inspection.
+            let should_keep_ir = force_emit_ir || (!quiet && safety_mode == SafetyMode::Debug);
 
             if !should_keep_ir {
                 let _ = fs::remove_file(ir_path);
@@ -602,11 +602,6 @@ fn compile_pipeline(
 
 fn main() {
     let cli = Cli::parse();
-
-    let build_dir = Path::new("build");
-    if !build_dir.exists() {
-        fs::create_dir(build_dir).expect("Failed to create build directory");
-    }
 
     match &cli.command {
         Commands::Build {
@@ -638,20 +633,37 @@ fn main() {
             } else {
                 SafetyMode::Debug
             };
-            if let Some(executable_path) = compile_pipeline(file, safety_mode, false, true) {
-                println!(" Running {}...\n", executable_path.display());
+            eprintln!(
+                "  \x1b[38;2;152;195;121m Compiling \x1b[0m{} ({})",
+                env!("CARGO_PKG_VERSION"),
+                file.to_str().unwrap()
+            );
+            let start = std::time::Instant::now();
+            if let Some(executable_path) = compile_pipeline(file, safety_mode.clone(), false, true)
+            {
+                let end = start.elapsed().as_millis() as f64 / 1000.0;
+                eprintln!(
+                    "  \x1b[38;2;152;195;121m✅Finished  \x1b[0m{} in {end:.3}s",
+                    safety_mode
+                );
+                eprintln!(
+                    "  \x1b[38;2;152;195;121m Running   \x1b[0m{}",
+                    executable_path.display()
+                );
 
                 let status = Command::new(&executable_path)
                     .status()
                     .expect("Failed to run executable");
 
-                if let Some(code) = status.code() {
-                    println!("\nProcess exited with code: {}", code);
+                let exit_code = status.code().unwrap_or(1);
+                if exit_code != 0 {
+                    eprintln!("\nProcess exited with code: {exit_code}");
+                    std::process::exit(exit_code);
                 }
             }
         }
         Commands::Clean => {
-            // It is guaranteed but lets keep it redundant for safety
+            let build_dir = Path::new("build");
             if build_dir.exists() {
                 fs::remove_dir_all(build_dir).expect("Failed to clean build directory");
                 println!("✅ Build directory cleaned");

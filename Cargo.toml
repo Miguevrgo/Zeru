@@ -3,7 +3,6 @@ name = "zeru"
 version = "0.2.0"
 edition = "2024"
 authors = ["Miguel Angel <miguevrgo@proton.me>"]
-description = "The Zeru Programming language Compiler"
 repository = "https://github.com/Miguevrgo/Zeru"
 license = "MIT"
 keywords = ["compiler", "programming-language", "llvm"]

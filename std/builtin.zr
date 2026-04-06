@@ -17,6 +17,7 @@ const SYS_READ: i64 = 0;
 const SYS_WRITE: i64 = 1;
 const SYS_MMAP: i64 = 9;
 const SYS_MREMAP: i64 = 25;
+const SYS_MUNMAP: i64 = 11;
 const SYS_EXIT: i64 = 60;
 
 // mmap flags
@@ -211,15 +212,18 @@ fn __zeru_realloc(old_ptr: *u8, old_size: usize, new_size: usize) *u8 {
         syscall2(SYS_MUNMAP, old_ptr as i64, old_size as i64);
         return 0 as *u8;
     }
+    if old_size == 0 {
+        return __zeru_alloc(new_size);
+    }
     // Reallocate memory
     var new_ptr: *u8 = syscall5(
         SYS_MREMAP,
-        old_ptr,
-        old_size,
-        new_size,
+        old_ptr as i64,
+        old_size as i64,
+        new_size as i64,
         MREMAP_MAYMOVE,
         0
-    );
+    ) as *u8;
 
     // Check for failure
     if new_ptr as i64 < 0 {
