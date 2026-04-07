@@ -100,8 +100,8 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
         Commands::Clean => {
             let build_dir = Path::new("build");
             if build_dir.exists() {
-                fs::remove_dir_all(build_dir).expect("Failed to clean build directory");
-                println!("✅ Build directory cleaned");
+                fs::remove_dir_all(build_dir)?;
+                println!("{GREEN_FG}✅ Build directory cleaned{RESET}");
             }
         }
     }

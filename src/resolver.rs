@@ -20,82 +20,30 @@ pub const GREEN_FG: &str = "\x1b[1;38;2;152;195;121m";
 pub const YELLOW_FG: &str = "\x1b[1;38;2;229;192;123m";
 pub const RESET: &str = "\x1b[0m";
 
-fn get_zeru_home() -> PathBuf {
-    if let Ok(home) = std::env::var("ZERU_HOME") {
-        return PathBuf::from(home);
-    }
-
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(bin_dir) = exe.parent()
-    {
-        let lib_home = bin_dir.join("../lib/zeru");
-        if lib_home.exists() {
-            return fs::canonicalize(&lib_home).unwrap_or(lib_home);
-        }
-    }
-
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".zeru");
-    }
-    PathBuf::from("/usr/local/lib/zeru")
-}
-
-fn read_config_value(path: &Path, key: &str) -> Option<String> {
-    let content = fs::read_to_string(path).ok()?;
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some((k, v)) = line.split_once('=')
-            && k.trim() == key
-        {
-            return Some(v.trim().to_string());
-        }
-    }
-    None
-}
-
 fn get_std_path() -> PathBuf {
-    if let Ok(cwd) = std::env::current_dir() {
-        let config = cwd.join(".zeru");
-        if let Some(p) = read_config_value(&config, "std_path") {
-            return PathBuf::from(p);
-        }
+    if let Ok(path) = std::env::var("ZERU_STD_PATH") {
+        return PathBuf::from(path);
     }
-
-    if let Ok(home) = std::env::var("HOME") {
-        let config = PathBuf::from(&home).join(".zeru").join("config");
-        if let Some(p) = read_config_value(&config, "std_path") {
-            return PathBuf::from(p);
-        }
+    if let Ok(home) = std::env::var("ZERU_HOME") {
+        return PathBuf::from(home).join("std");
     }
-
-    get_zeru_home().join("std")
+    PathBuf::from("std")
 }
 
 fn resolve_std_import(import_path: &str) -> Option<PathBuf> {
     let parts: Vec<&str> = import_path.split('.').collect();
-    if parts.is_empty() || parts[0] != "std" {
+    if parts.is_empty() || parts[0] != "std" || parts.len() == 1 {
         return None;
     }
 
-    let module_file = if parts.len() == 1 {
-        "builtin.zr".to_string()
+    let module_file = format!("{}.zr", parts[1..].join("/"));
+    let full_path = get_std_path().join(&module_file);
+
+    if full_path.exists() {
+        Some(full_path)
     } else {
-        format!("{}.zr", parts[1..].join("/"))
-    };
-
-    let search_paths = vec![PathBuf::from("std"), get_std_path()];
-
-    for base in &search_paths {
-        let full_path = base.join(&module_file);
-        if full_path.exists() {
-            return Some(full_path);
-        }
+        None
     }
-
-    None
 }
 
 fn load_builtin_std() -> String {
@@ -181,21 +129,22 @@ fn get_module_short_name(import_path: &str) -> String {
 }
 
 fn prefix_definitions(content: &str, prefix: &str) -> String {
-    let mut result = String::new();
+    let mut result = String::with_capacity(content.len() + 50);
     let mut chars = content.chars().peekable();
 
     while let Some(c) = chars.next() {
-        if c == 'f' && chars.peek() == Some(&'n') {
+        if c.is_alphabetic() || c == '_' {
             let mut word = String::from(c);
             while let Some(&next) = chars.peek() {
-                if next.is_alphabetic() || next == '_' {
+                if next.is_alphanumeric() || next == '_' {
                     word.push(chars.next().unwrap());
                 } else {
                     break;
                 }
             }
-            if word == "fn" {
-                result.push_str("fn ");
+            result.push_str(&word);
+
+            if word == "fn" || word == "struct" || word == "const" {
                 while let Some(&ws) = chars.peek() {
                     if ws.is_whitespace() {
                         result.push(chars.next().unwrap());
@@ -203,6 +152,7 @@ fn prefix_definitions(content: &str, prefix: &str) -> String {
                         break;
                     }
                 }
+
                 let mut name = String::new();
                 while let Some(&nc) = chars.peek() {
                     if nc.is_alphanumeric() || nc == '_' {
@@ -211,81 +161,12 @@ fn prefix_definitions(content: &str, prefix: &str) -> String {
                         break;
                     }
                 }
+
                 if !name.is_empty() {
                     result.push_str(prefix);
                     result.push_str("__");
+                    result.push_str(&name);
                 }
-                result.push_str(&name);
-            } else {
-                result.push_str(&word);
-            }
-        } else if c == 's' && chars.peek() == Some(&'t') {
-            let mut word = String::from(c);
-            while let Some(&next) = chars.peek() {
-                if next.is_alphabetic() || next == '_' {
-                    word.push(chars.next().unwrap());
-                } else {
-                    break;
-                }
-            }
-            if word == "struct" {
-                result.push_str("struct ");
-                while let Some(&ws) = chars.peek() {
-                    if ws.is_whitespace() {
-                        result.push(chars.next().unwrap());
-                    } else {
-                        break;
-                    }
-                }
-                let mut name = String::new();
-                while let Some(&nc) = chars.peek() {
-                    if nc.is_alphanumeric() || nc == '_' {
-                        name.push(chars.next().unwrap());
-                    } else {
-                        break;
-                    }
-                }
-                if !name.is_empty() {
-                    result.push_str(prefix);
-                    result.push_str("__");
-                }
-                result.push_str(&name);
-            } else {
-                result.push_str(&word);
-            }
-        } else if c == 'c' && chars.peek() == Some(&'o') {
-            let mut word = String::from(c);
-            while let Some(&next) = chars.peek() {
-                if next.is_alphabetic() || next == '_' {
-                    word.push(chars.next().unwrap());
-                } else {
-                    break;
-                }
-            }
-            if word == "const" {
-                result.push_str("const ");
-                while let Some(&ws) = chars.peek() {
-                    if ws.is_whitespace() {
-                        result.push(chars.next().unwrap());
-                    } else {
-                        break;
-                    }
-                }
-                let mut name = String::new();
-                while let Some(&nc) = chars.peek() {
-                    if nc.is_alphanumeric() || nc == '_' {
-                        name.push(chars.next().unwrap());
-                    } else {
-                        break;
-                    }
-                }
-                if !name.is_empty() {
-                    result.push_str(prefix);
-                    result.push_str("__");
-                }
-                result.push_str(&name);
-            } else {
-                result.push_str(&word);
             }
         } else {
             result.push(c);
@@ -356,7 +237,7 @@ fn resolve_direct_symbols(
     if direct_symbols.is_empty() && module_prefixes.is_empty() {
         return code.to_string();
     }
-    let mut result = String::new();
+    let mut result = String::with_capacity(code.len() + 50);
     let mut chars = code.chars().peekable();
 
     while let Some(c) = chars.next() {
@@ -371,54 +252,40 @@ fn resolve_direct_symbols(
             }
 
             let mut peek_chars = chars.clone();
-            while let Some(&ws) = peek_chars.peek() {
-                if ws.is_whitespace() {
-                    peek_chars.next();
-                } else {
-                    break;
-                }
-            }
+            let mut is_module_call = false;
 
-            if peek_chars.peek() == Some(&':') {
+            while peek_chars.peek().is_some_and(|ws| ws.is_whitespace()) {
                 peek_chars.next();
-                if peek_chars.peek() == Some(&':') {
+            }
+
+            if peek_chars.next() == Some(':') && peek_chars.next() == Some(':') {
+                while peek_chars.peek().is_some_and(|ws| ws.is_whitespace()) {
                     peek_chars.next();
+                }
 
-                    // Skip whitespace after ::
-                    while let Some(&ws) = peek_chars.peek() {
-                        if ws.is_whitespace() {
-                            peek_chars.next();
-                        } else {
-                            break;
-                        }
+                let mut sym = String::new();
+                while let Some(&nc) = peek_chars.peek() {
+                    if nc.is_alphanumeric() || nc == '_' {
+                        sym.push(peek_chars.next().unwrap());
+                    } else {
+                        break;
                     }
+                }
 
-                    let mut symbol_name = String::new();
-                    while let Some(&nc) = peek_chars.peek() {
-                        if nc.is_alphanumeric() || nc == '_' {
-                            symbol_name.push(peek_chars.next().unwrap());
-                        } else {
-                            break;
-                        }
-                    }
-
-                    if module_prefixes.contains(&ident) && !symbol_name.is_empty() {
-                        result.push_str(&format!("{}__{}", ident, symbol_name));
-                        // Advance the main iterator past the :: and symbol
-                        while chars.peek().is_some() && chars.peek() != peek_chars.peek() {
-                            chars.next();
-                        }
-                        continue;
-                    }
+                if module_prefixes.contains(&ident) && !sym.is_empty() {
+                    result.push_str(&format!("{}__{}", ident, sym));
+                    chars = peek_chars;
+                    is_module_call = true;
                 }
             }
 
-            if let Some(qualified) = direct_symbols.get(&ident) {
-                result.push_str(qualified);
-                continue;
+            if !is_module_call {
+                if let Some(qualified) = direct_symbols.get(&ident) {
+                    result.push_str(qualified);
+                } else {
+                    result.push_str(&ident);
+                }
             }
-
-            result.push_str(&ident);
         } else {
             result.push(c);
         }
@@ -479,7 +346,7 @@ pub fn compile_pipeline(
     let mut parser = Parser::new(lexer);
     let program = parser.parse_program();
 
-    let filepath_str = path.to_str().unwrap_or("unknown");
+    let filepath_str = path.to_str().unwrap();
 
     if !parser.errors.is_empty() {
         report_errors(&parser.errors, filepath_str, &input);
