@@ -7,15 +7,15 @@ mod resolver;
 mod sema;
 mod token;
 
+use crate::codegen::SafetyMode;
 use crate::resolver::{GREEN_FG, RED_FG, RESET, compile_pipeline};
 use clap::{Parser, Subcommand};
 use inkwell::support::LLVMString;
 use std::fs;
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use thiserror::Error;
-
-use crate::codegen::SafetyMode;
 
 #[derive(Parser)]
 #[command(name = "zeru")]
@@ -95,7 +95,12 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
                 "  {GREEN_FG} Running   {RESET}{}",
                 executable_path.display()
             );
-            Command::new(&executable_path).status()?;
+            let status = Command::new(&executable_path).status()?;
+            std::process::exit(
+                status
+                    .code()
+                    .unwrap_or_else(|| status.signal().map(|s| 128 + s).unwrap_or(1)),
+            );
         }
         Commands::Clean => {
             let build_dir = Path::new("build");
