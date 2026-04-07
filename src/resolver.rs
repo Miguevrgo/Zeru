@@ -1,0 +1,536 @@
+// NOTE: This file is meant to be removed once there is a proper handling
+// for modules in the compiler
+use inkwell::context::Context;
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use crate::CompileError;
+use crate::codegen::SafetyMode;
+use crate::codegen::compiler::Compiler;
+use crate::errors::report_errors;
+use crate::lexer::Lexer;
+use crate::parser::Parser;
+use crate::sema::analyzer::SemanticAnalyzer;
+use crate::token::Token;
+
+pub const RED_FG: &str = "\x1b[1;38;2;224;108;117m";
+pub const GREEN_FG: &str = "\x1b[1;38;2;152;195;121m";
+pub const YELLOW_FG: &str = "\x1b[1;38;2;229;192;123m";
+pub const RESET: &str = "\x1b[0m";
+
+fn get_zeru_home() -> PathBuf {
+    if let Ok(home) = std::env::var("ZERU_HOME") {
+        return PathBuf::from(home);
+    }
+
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(bin_dir) = exe.parent()
+    {
+        let lib_home = bin_dir.join("../lib/zeru");
+        if lib_home.exists() {
+            return fs::canonicalize(&lib_home).unwrap_or(lib_home);
+        }
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        return PathBuf::from(home).join(".zeru");
+    }
+    PathBuf::from("/usr/local/lib/zeru")
+}
+
+fn read_config_value(path: &Path, key: &str) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some((k, v)) = line.split_once('=')
+            && k.trim() == key
+        {
+            return Some(v.trim().to_string());
+        }
+    }
+    None
+}
+
+fn get_std_path() -> PathBuf {
+    if let Ok(cwd) = std::env::current_dir() {
+        let config = cwd.join(".zeru");
+        if let Some(p) = read_config_value(&config, "std_path") {
+            return PathBuf::from(p);
+        }
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        let config = PathBuf::from(&home).join(".zeru").join("config");
+        if let Some(p) = read_config_value(&config, "std_path") {
+            return PathBuf::from(p);
+        }
+    }
+
+    get_zeru_home().join("std")
+}
+
+fn resolve_std_import(import_path: &str) -> Option<PathBuf> {
+    let parts: Vec<&str> = import_path.split('.').collect();
+    if parts.is_empty() || parts[0] != "std" {
+        return None;
+    }
+
+    let module_file = if parts.len() == 1 {
+        "builtin.zr".to_string()
+    } else {
+        format!("{}.zr", parts[1..].join("/"))
+    };
+
+    let search_paths = vec![PathBuf::from("std"), get_std_path()];
+
+    for base in &search_paths {
+        let full_path = base.join(&module_file);
+        if full_path.exists() {
+            return Some(full_path);
+        }
+    }
+
+    None
+}
+
+fn load_builtin_std() -> String {
+    include_str!("../std/builtin.zr").to_string()
+}
+
+struct ImportInfo {
+    path: String,
+    symbols: Option<Vec<String>>,
+}
+
+fn extract_imports(code: &str) -> Vec<ImportInfo> {
+    let mut lexer = Lexer::new(code);
+    let mut imports = Vec::new();
+
+    loop {
+        let (token, _, _) = lexer.next_token();
+
+        match token {
+            Token::Import => {
+                let mut path_parts = Vec::new();
+
+                if let (Token::Identifier(name), _, _) = lexer.next_token() {
+                    path_parts.push(name);
+                } else {
+                    continue;
+                }
+
+                loop {
+                    let (next, _, _) = lexer.next_token();
+                    if next == Token::Dot {
+                        if let (Token::Identifier(name), _, _) = lexer.next_token() {
+                            path_parts.push(name);
+                        } else {
+                            break;
+                        }
+                    } else if next == Token::DoubleColon {
+                        let (brace, _, _) = lexer.next_token();
+                        if brace != Token::LBrace {
+                            break;
+                        }
+                        let mut symbols = Vec::new();
+                        loop {
+                            let (sym_tok, _, _) = lexer.next_token();
+                            if let Token::Identifier(sym) = sym_tok {
+                                symbols.push(sym);
+                            } else if sym_tok == Token::RBrace {
+                                break;
+                            }
+                            let (comma_or_brace, _, _) = lexer.next_token();
+                            if comma_or_brace == Token::RBrace {
+                                break;
+                            }
+                        }
+                        if !path_parts.is_empty() {
+                            imports.push(ImportInfo {
+                                path: path_parts.join("."),
+                                symbols: Some(symbols),
+                            });
+                        }
+                        break;
+                    } else {
+                        if !path_parts.is_empty() {
+                            imports.push(ImportInfo {
+                                path: path_parts.join("."),
+                                symbols: None,
+                            });
+                        }
+                        break;
+                    }
+                }
+            }
+            Token::Eof => break,
+            _ => continue,
+        }
+    }
+
+    imports
+}
+
+fn get_module_short_name(import_path: &str) -> String {
+    import_path.split('.').next_back().unwrap_or("").to_string()
+}
+
+fn prefix_definitions(content: &str, prefix: &str) -> String {
+    let mut result = String::new();
+    let mut chars = content.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == 'f' && chars.peek() == Some(&'n') {
+            let mut word = String::from(c);
+            while let Some(&next) = chars.peek() {
+                if next.is_alphabetic() || next == '_' {
+                    word.push(chars.next().unwrap());
+                } else {
+                    break;
+                }
+            }
+            if word == "fn" {
+                result.push_str("fn ");
+                while let Some(&ws) = chars.peek() {
+                    if ws.is_whitespace() {
+                        result.push(chars.next().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                let mut name = String::new();
+                while let Some(&nc) = chars.peek() {
+                    if nc.is_alphanumeric() || nc == '_' {
+                        name.push(chars.next().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                if !name.is_empty() {
+                    result.push_str(prefix);
+                    result.push_str("__");
+                }
+                result.push_str(&name);
+            } else {
+                result.push_str(&word);
+            }
+        } else if c == 's' && chars.peek() == Some(&'t') {
+            let mut word = String::from(c);
+            while let Some(&next) = chars.peek() {
+                if next.is_alphabetic() || next == '_' {
+                    word.push(chars.next().unwrap());
+                } else {
+                    break;
+                }
+            }
+            if word == "struct" {
+                result.push_str("struct ");
+                while let Some(&ws) = chars.peek() {
+                    if ws.is_whitespace() {
+                        result.push(chars.next().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                let mut name = String::new();
+                while let Some(&nc) = chars.peek() {
+                    if nc.is_alphanumeric() || nc == '_' {
+                        name.push(chars.next().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                if !name.is_empty() {
+                    result.push_str(prefix);
+                    result.push_str("__");
+                }
+                result.push_str(&name);
+            } else {
+                result.push_str(&word);
+            }
+        } else if c == 'c' && chars.peek() == Some(&'o') {
+            let mut word = String::from(c);
+            while let Some(&next) = chars.peek() {
+                if next.is_alphabetic() || next == '_' {
+                    word.push(chars.next().unwrap());
+                } else {
+                    break;
+                }
+            }
+            if word == "const" {
+                result.push_str("const ");
+                while let Some(&ws) = chars.peek() {
+                    if ws.is_whitespace() {
+                        result.push(chars.next().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                let mut name = String::new();
+                while let Some(&nc) = chars.peek() {
+                    if nc.is_alphanumeric() || nc == '_' {
+                        name.push(chars.next().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                if !name.is_empty() {
+                    result.push_str(prefix);
+                    result.push_str("__");
+                }
+                result.push_str(&name);
+            } else {
+                result.push_str(&word);
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+fn load_std_modules(
+    imports: &[ImportInfo],
+    loaded: &mut HashSet<String>,
+    direct_symbols: &mut HashMap<String, String>,
+    module_prefixes: &mut HashSet<String>,
+) -> String {
+    let mut code = String::new();
+
+    for import in imports {
+        if loaded.contains(&import.path) {
+            if let Some(ref symbols) = import.symbols {
+                let short_name = get_module_short_name(&import.path);
+                for sym in symbols {
+                    direct_symbols.insert(sym.clone(), format!("{}__{}", short_name, sym));
+                }
+            } else {
+                let short_name = get_module_short_name(&import.path);
+                module_prefixes.insert(short_name);
+            }
+            continue;
+        }
+
+        if let Some(file_path) = resolve_std_import(&import.path)
+            && file_path.exists()
+            && let Ok(content) = fs::read_to_string(&file_path)
+        {
+            loaded.insert(import.path.clone());
+            let short_name = get_module_short_name(&import.path);
+
+            let nested_imports = extract_imports(&content);
+            let nested_code =
+                load_std_modules(&nested_imports, loaded, direct_symbols, module_prefixes);
+            code.push_str(&nested_code);
+
+            let prefixed = prefix_definitions(&content, &short_name);
+            code.push_str(&prefixed);
+            code.push('\n');
+
+            if let Some(ref symbols) = import.symbols {
+                for sym in symbols {
+                    direct_symbols.insert(sym.clone(), format!("{}__{}", short_name, sym));
+                }
+            } else {
+                module_prefixes.insert(short_name);
+            }
+        }
+    }
+
+    code
+}
+
+/// Resolve symbols in code based on import style:
+/// - For selective imports: symbol() -> prefixed__symbol()
+/// - For module imports: module::symbol() -> prefixed__symbol()
+fn resolve_direct_symbols(
+    code: &str,
+    direct_symbols: &HashMap<String, String>,
+    module_prefixes: &HashSet<String>,
+) -> String {
+    if direct_symbols.is_empty() && module_prefixes.is_empty() {
+        return code.to_string();
+    }
+    let mut result = String::new();
+    let mut chars = code.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c.is_alphabetic() || c == '_' {
+            let mut ident = String::from(c);
+            while let Some(&next) = chars.peek() {
+                if next.is_alphanumeric() || next == '_' {
+                    ident.push(chars.next().unwrap());
+                } else {
+                    break;
+                }
+            }
+
+            let mut peek_chars = chars.clone();
+            while let Some(&ws) = peek_chars.peek() {
+                if ws.is_whitespace() {
+                    peek_chars.next();
+                } else {
+                    break;
+                }
+            }
+
+            if peek_chars.peek() == Some(&':') {
+                peek_chars.next();
+                if peek_chars.peek() == Some(&':') {
+                    peek_chars.next();
+
+                    // Skip whitespace after ::
+                    while let Some(&ws) = peek_chars.peek() {
+                        if ws.is_whitespace() {
+                            peek_chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+
+                    let mut symbol_name = String::new();
+                    while let Some(&nc) = peek_chars.peek() {
+                        if nc.is_alphanumeric() || nc == '_' {
+                            symbol_name.push(peek_chars.next().unwrap());
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if module_prefixes.contains(&ident) && !symbol_name.is_empty() {
+                        result.push_str(&format!("{}__{}", ident, symbol_name));
+                        // Advance the main iterator past the :: and symbol
+                        while chars.peek().is_some() && chars.peek() != peek_chars.peek() {
+                            chars.next();
+                        }
+                        continue;
+                    }
+                }
+            }
+
+            if let Some(qualified) = direct_symbols.get(&ident) {
+                result.push_str(qualified);
+                continue;
+            }
+
+            result.push_str(&ident);
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+//TODO: Convertir esto a que devuelva el error ese de abajo para saber que pasa en la compilacion
+//simplificar y tal todo, no se si lo conveniente es uqe el error sea un std::io::error y ale o convertilo y
+pub fn compile_pipeline(
+    path: &Path,
+    safety_mode: SafetyMode,
+    force_emit_ir: bool,
+) -> Result<PathBuf, CompileError> {
+    if path.extension().and_then(|s| s.to_str()) != Some("zr") {
+        eprintln!("{YELLOW_FG}⚠️Warning: Zeru extension is .zr{RESET}");
+    }
+
+    let filename = path
+        .file_stem()
+        .expect("TODO: When does this fail??")
+        .to_str()
+        .unwrap();
+    let build_dir = Path::new("build");
+
+    fs::create_dir_all(build_dir)?;
+
+    let ir_path = build_dir.join(format!("{filename}.ll"));
+    let exe_path = build_dir.join(filename);
+
+    eprintln!(
+        "  {GREEN_FG} Compiling {RESET}v{} ({})",
+        env!("CARGO_PKG_VERSION"),
+        path.to_str().unwrap(),
+    );
+    let start = std::time::Instant::now();
+
+    let user_code = fs::read_to_string(path)?;
+
+    let std_builtin = load_builtin_std();
+    let user_imports = extract_imports(&user_code);
+    let mut loaded_modules = HashSet::new();
+    loaded_modules.insert("std.builtin".to_string());
+    let mut direct_symbols: HashMap<String, String> = HashMap::new();
+    let mut module_prefixes: HashSet<String> = HashSet::new();
+
+    let additional_std = load_std_modules(
+        &user_imports,
+        &mut loaded_modules,
+        &mut direct_symbols,
+        &mut module_prefixes,
+    );
+
+    let user_code_resolved = resolve_direct_symbols(&user_code, &direct_symbols, &module_prefixes);
+    let input = format!("{std_builtin}\n{additional_std}\n{user_code_resolved}",);
+
+    let lexer = Lexer::new(&input);
+    let mut parser = Parser::new(lexer);
+    let program = parser.parse_program();
+
+    let filepath_str = path.to_str().unwrap_or("unknown");
+
+    if !parser.errors.is_empty() {
+        report_errors(&parser.errors, filepath_str, &input);
+        return Err(CompileError::Unknown);
+    }
+
+    let mut analyzer = SemanticAnalyzer::new();
+    analyzer.analyze(&program);
+
+    if !analyzer.errors.is_empty() {
+        report_errors(&analyzer.errors, filepath_str, &input);
+        return Err(CompileError::Unknown);
+    }
+
+    let context = Context::create();
+    let module = context.create_module(filename);
+    let builder = context.create_builder();
+
+    let mut compiler = Compiler::new(&context, &builder, &module, safety_mode.clone());
+    compiler.compile_program(&program);
+
+    module.verify()?;
+    module.print_to_file(&ir_path)?;
+
+    let (opt_level, debug_flag) = match &safety_mode {
+        SafetyMode::Debug => ("-O0", Some("-g")),
+        SafetyMode::ReleaseSafe => ("-O2", None),
+        SafetyMode::ReleaseFast => ("-O3", None),
+    };
+
+    let mut cmd = Command::new("clang");
+    cmd.arg(&ir_path)
+        .arg("-o")
+        .arg(&exe_path)
+        .arg(opt_level)
+        .arg("-Wno-override-module");
+
+    if let Some(flag) = debug_flag {
+        cmd.arg(flag);
+    }
+
+    let status = cmd.status()?;
+    if status.success() {
+        let end = start.elapsed().as_millis() as f64 / 1000.0;
+        eprintln!("  {GREEN_FG}✅Finished  {RESET}{safety_mode} in {end:.3}s",);
+
+        if !force_emit_ir {
+            let _ = fs::remove_file(ir_path);
+        } else {
+            println!("  {GREEN_FG} IR saved  {RESET}{}", ir_path.display());
+        }
+    }
+    Ok(exe_path)
+}
