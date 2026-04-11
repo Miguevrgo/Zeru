@@ -53,14 +53,11 @@ Currently, Zeru is in active development. To try it out, you need to build the c
 
 ### Building
 
-```bash
+```rust
 git clone git@github.com:Miguevrgo/Zeru.git
-cd zeru
+cd Zeru
 
 cargo build --release
-
-# [Optional] Add to PATH
-cp target/release/zeru /usr/local/bin/
 ```
 
 ## 💻 Usage
@@ -69,7 +66,7 @@ Create a file with `.zr` extension and program some code, you may find useful to
 
 Now you cand compile the and run it:
 
-```
+```sh
 zeru build file_name.zr
 ```
 
@@ -85,11 +82,11 @@ To collaborate, you can fork the project, create a branch for the feature/improv
 
 ### Syntax Highlighting (Tree-sitter)
 
-For syntax highlighting in Neovim, Helix, and other tree-sitter compatible editors:
+For syntax highlighting in Vim/Neovim, VSCode or Emacs checkout: 
 
-👉 **[tree-sitter-zeru](https://github.com/Miguevrgo/tree-sitter-zeru)**
+👉 **https://github.com/Miguevrgo/zeru-editors**
 
-```bash
+```shell
 git clone https://github.com/Miguevrgo/tree-sitter-zeru
 cd tree-sitter-zeru
 ./install.sh neovim   # or: ./install.sh helix
