@@ -212,7 +212,7 @@ def generate_struct(state: GeneratorState, with_methods: bool = True) -> List[st
                     lines.append(
                         f"        result = result {op} (self.{fname} as {ret_type});"
                     )
-                lines.append(f"        return result;")
+                lines.append("        return result;")
             else:
                 lines.append(f"        return {state.random_value(ret_type)};")
             lines.append("    }")

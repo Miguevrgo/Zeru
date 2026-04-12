@@ -39,9 +39,9 @@ fn process(data: Vec<i32>) {
 fn main() {
     var list: Vec<i32> = Vec::new();
     list.push(1);
-    
+ 
     process(list);       // MOVE: ownership transfers to process()
-    
+
     // list.push(2);     // COMPILE ERROR: list was moved
 }
 ```
@@ -89,7 +89,7 @@ fn sum(data: &Vec<i32>) i32 {
 
 fn main() {
     var list: Vec<i32> = [1, 2, 3];
-    
+
     var s = sum(&list);   // Borrow: list still valid
     list.push(4);         // OK: we still own it
 }
@@ -108,9 +108,9 @@ fn double_all(data: &var Vec<i32>) {
 
 fn main() {
     var list: Vec<i32> = [1, 2, 3];
-    
+
     double_all(&var list);  // Mutable borrow
-    
+
     print(list[0]);         // 2 (modified)
 }
 ```
@@ -134,11 +134,11 @@ References can become invalid if the underlying data is freed or reallocated:
 fn main() {
     var list: Vec<i32> = [1, 2, 3];
     var first: &i32 = &list[0];
-    
+
     list.push(4);  // Might reallocate internal buffer!
     list.push(5);
     list.push(6);
-    
+
     print(*first); // DANGER: first might point to freed memory
 }
 ```
@@ -189,7 +189,7 @@ fn deref(ref: &T) T {
 Generational reference checks are controlled by compile mode:
 
 | Mode | Gen-Ref Checks | Overhead |
-|------|----------------|----------|
+| ------ | ---------------- | ---------- |
 | `debug` | ✅ Enabled | ~10-15% |
 | `release-safe` | ✅ Enabled | ~5-10% |
 | `release-fast` | ❌ Disabled | 0% |
@@ -268,12 +268,12 @@ fn process() {
     var list: Vec<i32> = Vec::new();
     list.push(1);
     list.push(2);
-    
+ 
     if some_condition {
         var temp: Vec<i32> = Vec::new();
         temp.push(100);
     }  // temp freed here
-    
+
 }  // list freed here
 ```
 
@@ -295,7 +295,7 @@ Types can define a `drop` method for custom cleanup:
 ```zeru
 struct FileHandle {
     fd: i32,
-    
+
     fn drop(var self) {
         close(self.fd);
     }
@@ -368,23 +368,23 @@ fn main() {
     var numbers: Vec<i32> = Vec::new();
     var preallocated: Vec<i32> = Vec::with_capacity(100);
     var from_literal: Vec<i32> = [1, 2, 3, 4, 5];
-    
+ 
     // Mutation
     numbers.push(10);
     numbers.push(20);
     numbers.push(30);
-    
+
     var last = numbers.pop();  // i32? = Some(30)
-    
+ 
     // Access
     var first = numbers[0];           // 10
     var maybe = numbers.get(100);     // i32? = None
-    
+
     // Iteration
     for n in &numbers {
         print(n);
     }
-    
+
     // Passing to functions
     process(numbers);          // Move
     // numbers.push(1);        // ERROR: moved
@@ -402,7 +402,7 @@ fn process(data: Vec<i32>) {
 ## 7. Comparison with Other Languages
 
 | Feature | Zeru | Rust | Zig | Go | C++ |
-|---------|------|------|-----|-----|-----|
+| --------- | ------ | ------ | ----- | ----- | ----- |
 | Move semantics | ✅ Default | ✅ Default | ❌ Copy | ❌ Copy | Opt-in |
 | Borrow checker | ❌ No | ✅ Yes | ❌ No | ❌ No | ❌ No |
 | Lifetimes | ❌ No | ✅ Yes | ❌ No | ❌ No | ❌ No |

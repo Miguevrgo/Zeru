@@ -3,6 +3,7 @@ import os
 import subprocess
 import glob
 
+
 def check_examples():
     compiler_path = "../target/release/zeru"
     examples_dir = "./"
@@ -25,7 +26,7 @@ def check_examples():
                 [compiler_path, "build", file_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
             )
 
             if result.returncode == 0:
@@ -47,5 +48,6 @@ def check_examples():
         for name, error in failed:
             print(f"\n❌{name}:")
             print("\t\n".join(error.strip().splitlines()))
+
 
 check_examples()
