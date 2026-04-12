@@ -60,3 +60,23 @@ jobs:
           files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  upload-std:
+    name: Bundle & Upload std
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Bundle std library
+        run: |
+          mkdir -p dist
+          tar -czf dist/zeru-std.tar.gz std/
+
+      - name: Upload std to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/zeru-std.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

@@ -20,29 +20,27 @@ pub const GREEN_FG: &str = "\x1b[1;38;2;152;195;121m";
 pub const YELLOW_FG: &str = "\x1b[1;38;2;229;192;123m";
 pub const RESET: &str = "\x1b[0m";
 
-fn get_std_path() -> PathBuf {
+fn get_std_path() -> Result<PathBuf, CompileError> {
     if let Ok(path) = std::env::var("ZERU_STD_PATH") {
-        return PathBuf::from(path);
+        return Ok(PathBuf::from(path));
     }
-    if let Ok(home) = std::env::var("ZERU_HOME") {
-        return PathBuf::from(home).join("std");
-    }
-    PathBuf::from("std")
+    let home = std::env::var("HOME").map_err(|_| CompileError::StdNotFound)?;
+    Ok(PathBuf::from(home).join(".zeru").join("std"))
 }
 
-fn resolve_std_import(import_path: &str) -> Option<PathBuf> {
+fn resolve_std_import(import_path: &str) -> Result<Option<PathBuf>, CompileError> {
     let parts: Vec<&str> = import_path.split('.').collect();
     if parts.is_empty() || parts[0] != "std" || parts.len() == 1 {
-        return None;
+        return Ok(None);
     }
 
     let module_file = format!("{}.zr", parts[1..].join("/"));
-    let full_path = get_std_path().join(&module_file);
+    let full_path = get_std_path()?.join(&module_file);
 
     if full_path.exists() {
-        Some(full_path)
+        Ok(Some(full_path))
     } else {
-        None
+        Ok(None)
     }
 }
 
@@ -180,7 +178,7 @@ fn load_std_modules(
     loaded: &mut HashSet<String>,
     direct_symbols: &mut HashMap<String, String>,
     module_prefixes: &mut HashSet<String>,
-) -> String {
+) -> Result<String, CompileError> {
     let mut code = String::new();
 
     for import in imports {
@@ -197,7 +195,7 @@ fn load_std_modules(
             continue;
         }
 
-        if let Some(file_path) = resolve_std_import(&import.path)
+        if let Some(file_path) = resolve_std_import(&import.path)?
             && file_path.exists()
             && let Ok(content) = fs::read_to_string(&file_path)
         {
@@ -206,7 +204,7 @@ fn load_std_modules(
 
             let nested_imports = extract_imports(&content);
             let nested_code =
-                load_std_modules(&nested_imports, loaded, direct_symbols, module_prefixes);
+                load_std_modules(&nested_imports, loaded, direct_symbols, module_prefixes)?;
             code.push_str(&nested_code);
 
             let prefixed = prefix_definitions(&content, &short_name);
@@ -223,7 +221,7 @@ fn load_std_modules(
         }
     }
 
-    code
+    Ok(code)
 }
 
 /// Resolve symbols in code based on import style:
@@ -337,7 +335,7 @@ pub fn compile_pipeline(
         &mut loaded_modules,
         &mut direct_symbols,
         &mut module_prefixes,
-    );
+    )?;
 
     let user_code_resolved = resolve_direct_symbols(&user_code, &direct_symbols, &module_prefixes);
     let input = format!("{std_builtin}\n{additional_std}\n{user_code_resolved}",);

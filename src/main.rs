@@ -59,6 +59,8 @@ enum CompileError {
     Unknown,
     #[error("Not defined YET")]
     Llvm(#[from] LLVMString),
+    #[error("std library not found: install zeru or set ZERU_STD_PATH for local development")]
+    StdNotFound,
 }
 
 fn run_compiler(args: Cli) -> Result<(), CompileError> {
