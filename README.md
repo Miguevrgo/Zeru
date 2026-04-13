@@ -42,6 +42,14 @@ I would also like to note that **Zeru is not "The next language"** to reign over
 * **✨ Modern Syntax:** Clean, expressive, and explicit. No hidden control flow.
 * **🔧 Zero Cost Abstractions:** Pay only for what you use.
 
+## 📖 Documentation
+
+For detailed information on the language design, installation, syntax, and features, please read the **[Zeru Book](https://github.com/Miguevrgo/Zeru/tree/main/docs)**. You can build it locally by navigating to the `docs/` directory and running:
+
+```bash
+mdbook serve --open
+```
+
 ## 📦 Installation
 
 Currently, Zeru is in active development. To try it out, you need to build the compiler from source.
