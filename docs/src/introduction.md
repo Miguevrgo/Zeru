@@ -1,8 +1,4 @@
-# Introduction to Zeru
-
-<div align="center">
-  <img src="../../assets/Logo.svg" alt="Zeru Logo" width="200" >
-</div>
+![The Zeru Logo](./assets/Logo.svg)
 
 Zeru is a systems programming language designed to combine the **performance of C/Zig/Rust** with the **safety guarantees of Rust**, while keeping the **simplicity and readability of Go**.
 

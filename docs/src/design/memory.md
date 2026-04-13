@@ -30,7 +30,7 @@ This is inspired by Rust (moves), Vale (generational refs), and Zig (simplicity)
 
 Values are **moved** by default when passed to functions or assigned to new variables.
 
-```zeru
+```rust
 fn process(data: Vec<i32>) {
     // data is owned here
     data.push(100);
@@ -56,7 +56,7 @@ fn main() {
 
 When you need to retain the original value, use `.copy()`:
 
-```zeru
+```rust
 fn main() {
     var list: Vec<i32> = [1, 2, 3];
     
@@ -78,7 +78,7 @@ References allow temporary access without ownership transfer.
 
 #### Immutable Reference: `&T`
 
-```zeru
+```rust
 fn sum(data: &Vec<i32>) i32 {
     var total: i32 = 0;
     for item in data {
@@ -97,7 +97,7 @@ fn main() {
 
 #### Mutable Reference: `&var T`
 
-```zeru
+```rust
 fn double_all(data: &var Vec<i32>) {
     var i: usize = 0;
     while i < data.len() {
@@ -130,7 +130,7 @@ fn main() {
 
 References can become invalid if the underlying data is freed or reallocated:
 
-```zeru
+```rust
 fn main() {
     var list: Vec<i32> = [1, 2, 3];
     var first: &i32 = &list[0];
@@ -168,7 +168,7 @@ Reference {
 
 On dereference, we verify:
 
-```zeru
+```rust
 // Compiler-generated check:
 fn deref(ref: &T) T {
     if ref.expected_generation != ref.ptr.header.generation {
@@ -202,7 +202,7 @@ Generational reference checks are controlled by compile mode:
 
 References can only be returned if derived from reference parameters:
 
-```zeru
+```rust
 // ✅ ALLOWED: Return ref derived from ref parameter
 fn first(data: &Vec<i32>) &i32 {
     return &data[0];
@@ -263,7 +263,7 @@ Zeru supports three compilation modes with different safety/performance tradeoff
 
 All owned values are automatically freed when they go out of scope:
 
-```zeru
+```rust
 fn process() {
     var list: Vec<i32> = Vec::new();
     list.push(1);
@@ -281,7 +281,7 @@ fn process() {
 
 Variables are dropped in **reverse declaration order**:
 
-```zeru
+```rust
 fn main() {
     var a = Resource::new();  // Created first
     var b = Resource::new();  // Created second
@@ -292,7 +292,7 @@ fn main() {
 
 Types can define a `drop` method for custom cleanup:
 
-```zeru
+```rust
 struct FileHandle {
     fd: i32,
 
@@ -310,7 +310,7 @@ struct FileHandle {
 
 ### 6.1 Memory Layout
 
-```
+```rust
 Vec<T> {
     ptr: *T,           // Pointer to heap-allocated buffer
     len: usize,        // Number of elements
@@ -326,7 +326,7 @@ Heap Buffer (with generational header):
 
 ### 6.2 API
 
-```zeru
+```rust
 // Construction
 fn new() Vec<T>                          // Empty vector
 fn with_capacity(cap: usize) Vec<T>      // Pre-allocated
@@ -362,7 +362,7 @@ fn iter_mut(self: &var Vec<T>) Iterator<&var T>
 
 ### 6.3 Usage Examples
 
-```zeru
+```rust
 fn main() {
     // Creation
     var numbers: Vec<i32> = Vec::new();

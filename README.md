@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/Logo.svg" alt="Zeru Logo" >
+  <img src="./docs/src/assets/Logo.svg" alt="Zeru Logo" >
 
 # Zeru Programming Language
 
@@ -33,7 +33,8 @@ I am no expert, nor do I consider myself a better programmer than those who have
 
 I would also like to note that **Zeru is not "The next language"** to reign over them all. We all know the "JS frameworks" memes. Zeru's ideal state is simply what **my** perfect language would look like and what I'd love to program in. If this philosophy attracts other people, they are kindly welcome to join me.
 
-> **Disclaimer:** As of the current state, Zeru is not recommended for any application requiring strict guarantees. Hopefully, some future version (v1.0+) will be robust and ready for usage.
+> [!WARNING]
+> As of the current state, Zeru is not recommended for any application requiring strict guarantees. Hopefully, some future version (v1.0+) will be robust and ready for usage.
 
 ## ⚡ Features
 
@@ -90,15 +91,9 @@ To collaborate, you can fork the project, create a branch for the feature/improv
 
 ### Syntax Highlighting (Tree-sitter)
 
-For syntax highlighting in Vim/Neovim, VSCode or Emacs checkout: 
+For syntax highlighting in Vim/Neovim, VSCode or Emacs checkout:
 
-👉 **https://github.com/Miguevrgo/zeru-editors**
-
-```shell
-git clone https://github.com/Miguevrgo/tree-sitter-zeru
-cd tree-sitter-zeru
-./install.sh neovim   # or: ./install.sh helix
-```
+👉 **<https://github.com/Miguevrgo/zeru-editors>**
 
 ## 📄 License
 
