@@ -2418,16 +2418,30 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder.position_at_end(grow_bb);
 
                 let zero = usize_type.const_int(0, false);
-                let four = usize_type.const_int(4, false);
+                let eight = usize_type.const_int(8, false);
                 let two = usize_type.const_int(2, false);
                 let cap_is_zero = self
                     .builder
                     .build_int_compare(IntPredicate::EQ, cap, zero, "cap_zero")
                     .unwrap();
-                let doubled_cap = self.builder.build_int_mul(cap, two, "doubled").unwrap();
+
+                let half_cap = self
+                    .builder
+                    .build_int_unsigned_div(cap, two, "half_cap")
+                    .unwrap();
+                let grown_cap = self
+                    .builder
+                    .build_int_add(
+                        self.builder
+                            .build_int_add(cap, half_cap, "cap_plus_half")
+                            .unwrap(),
+                        eight,
+                        "grown_cap",
+                    )
+                    .unwrap();
                 let new_cap = self
                     .builder
-                    .build_select(cap_is_zero, four, doubled_cap, "new_cap")
+                    .build_select(cap_is_zero, eight, grown_cap, "new_cap")
                     .unwrap()
                     .into_int_value();
 

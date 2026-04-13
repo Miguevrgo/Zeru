@@ -80,8 +80,7 @@ impl Type {
             Type::Vec { .. } => true,
             Type::Struct { .. } => true,
             Type::Enum { .. } => false,
-            //TODO: Maybe consider size
-            Type::Array { elem_type, .. } => elem_type.has_move_semantics(),
+            Type::Array { .. } => true,
             Type::Pointer(_) => false,
             Type::Ref(_) | Type::RefMut(_) => false,
             Type::Tuple(types) => types.iter().any(|t| t.has_move_semantics()),

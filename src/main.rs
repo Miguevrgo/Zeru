@@ -61,6 +61,8 @@ enum CompileError {
     Llvm(#[from] LLVMString),
     #[error("std library not found: install zeru or set ZERU_STD_PATH for local development")]
     StdNotFound,
+    #[error("invalid path: must point to a .zr file with a valid UTF-8 name")]
+    InvalidPath,
 }
 
 fn run_compiler(args: Cli) -> Result<(), CompileError> {

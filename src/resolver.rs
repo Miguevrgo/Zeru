@@ -291,8 +291,6 @@ fn resolve_direct_symbols(
     result
 }
 
-//TODO: Convertir esto a que devuelva el error ese de abajo para saber que pasa en la compilacion
-//simplificar y tal todo, no se si lo conveniente es uqe el error sea un std::io::error y ale o convertilo y
 pub fn compile_pipeline(
     path: &Path,
     safety_mode: SafetyMode,
@@ -304,9 +302,8 @@ pub fn compile_pipeline(
 
     let filename = path
         .file_stem()
-        .expect("TODO: When does this fail??")
-        .to_str()
-        .unwrap();
+        .and_then(|s| s.to_str())
+        .ok_or(CompileError::InvalidPath)?;
     let build_dir = Path::new("build");
 
     fs::create_dir_all(build_dir)?;
