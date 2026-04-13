@@ -1242,7 +1242,7 @@ impl SemanticAnalyzer {
 
                     let right_type = self.check_expression(right, expected_type);
                     match &right_type {
-                        Type::Integer { .. } | Type::Float(_) => right_type,
+                        Type::Integer { .. } | Type::Float(_) | Type::ParamType(_) => right_type,
                         _ => {
                             self.error(
                                 format!(

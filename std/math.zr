@@ -26,66 +26,17 @@ fn clamp<T>(value: T, low: T, high: T) T {
     return value;
 }
 
-fn abs(num: i32) i32 {
+fn abs<T>(num: T) T {
     if num < 0 {
         return -num;
     }
     return num;
 }
 
-fn abs64(num: i64) i64 {
-    if num < 0 {
-        return -num;
-    }
-    return num;
-}
-
-fn absf(num: f64) f64 {
-    if num < 0.0 {
-        return -num;
-    }
-    return num;
-}
-
-fn pow(base: i32, exp: u32) i32 {
-    var result: i32 = 1;
-    var b: i32 = base;
+fn pow<T>(base: T, exp: u32) T {
+    var result: T = 1;
+    var b: T = base;
     var e: u32 = exp;
-    while e > 0 {
-        if (e % 2) == 1 {
-            result = result * b;
-        }
-        b = b * b;
-        e = e / 2;
-    }
-    return result;
-}
-
-fn pow64(base: i64, exp: u32) i64 {
-    var result: i64 = 1;
-    var b: i64 = base;
-    var e: u32 = exp;
-    while e > 0 {
-        if (e % 2) == 1 {
-            result = result * b;
-        }
-        b = b * b;
-        e = e / 2;
-    }
-    return result;
-}
-
-fn powf(base: f64, exp: i32) f64 {
-    if exp == 0 {
-        return 1.0;
-    }
-    var result: f64 = 1.0;
-    var b: f64 = base;
-    var e: i32 = exp;
-    if e < 0 {
-        b = 1.0 / b;
-        e = -e;
-    }
     while e > 0 {
         if (e % 2) == 1 {
             result = result * b;
@@ -100,9 +51,9 @@ fn is_power_of_two(n: u64) bool {
     return n != 0 && (n & (n - 1)) == 0;
 }
 
-fn div_euclid(a: i32, b: i32) i32 {
-    var q: i32 = a / b;
-    var r: i32 = a % b;
+fn div_euclid<T>(a: T, b: T) T {
+    var q: T = a / b;
+    var r: T = a % b;
     if r < 0 {
         if b > 0 {
             return q - 1;
@@ -113,8 +64,8 @@ fn div_euclid(a: i32, b: i32) i32 {
     return q;
 }
 
-fn mod_euclid(a: i32, b: i32) i32 {
-    var r: i32 = a % b;
+fn mod_euclid<T>(a: T, b: T) T {
+    var r: T = a % b;
     if r < 0 {
         if b > 0 {
             return r + b;
