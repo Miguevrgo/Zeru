@@ -30,6 +30,39 @@ enum MethodCallOutcome<'ctx> {
 }
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
+    /// Build a `{ *u8, usize }` string slice from raw bytes.
+    ///
+    /// The bytes are emitted as a global string and packed into the
+    /// 2-field struct that string literals lower to.
+    fn build_str_slice(&mut self, s: &[u8]) -> BasicValueEnum<'ctx> {
+        let str_val = std::str::from_utf8(s).unwrap();
+        let global_str = self
+            .builder
+            .build_global_string_ptr(str_val, "str")
+            .unwrap();
+        let str_ptr = global_str.as_pointer_value();
+        let str_len = self.context.i64_type().const_int(s.len() as u64, false);
+
+        let ptr_type = self
+            .context
+            .ptr_type(inkwell::AddressSpace::default())
+            .into();
+        let len_type = self.context.i64_type().into();
+        let str_type = self.context.struct_type(&[ptr_type, len_type], false);
+
+        let mut str_slice = str_type.get_undef();
+        str_slice = self
+            .builder
+            .build_insert_value(str_slice, str_ptr, 0, "str_ptr")
+            .unwrap()
+            .into_struct_value();
+        str_slice = self
+            .builder
+            .build_insert_value(str_slice, str_len, 1, "str_len")
+            .unwrap()
+            .into_struct_value();
+        str_slice.into()
+    }
     pub(super) fn compile_fn_prototype(
         &mut self,
         name: &str,
@@ -507,35 +540,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .bool_type()
                 .const_int(*val as u64, false)
                 .into(),
-            ExpressionKind::StringLit(s) => {
-                let str_val = std::str::from_utf8(s).unwrap();
-                let global_str = self
-                    .builder
-                    .build_global_string_ptr(str_val, "str")
-                    .unwrap();
-                let str_ptr = global_str.as_pointer_value();
-                let str_len = self.context.i64_type().const_int(s.len() as u64, false);
-
-                let ptr_type = self
-                    .context
-                    .ptr_type(inkwell::AddressSpace::default())
-                    .into();
-                let len_type = self.context.i64_type().into();
-                let str_type = self.context.struct_type(&[ptr_type, len_type], false);
-
-                let mut str_slice = str_type.get_undef();
-                str_slice = self
-                    .builder
-                    .build_insert_value(str_slice, str_ptr, 0, "str_ptr")
-                    .unwrap()
-                    .into_struct_value();
-                str_slice = self
-                    .builder
-                    .build_insert_value(str_slice, str_len, 1, "str_len")
-                    .unwrap()
-                    .into_struct_value();
-                str_slice.into()
-            }
+            ExpressionKind::StringLit(s) => self.build_str_slice(s),
             _ => {
                 self.error(
                     format!("Unsupported constant expression: {:?}", expr.kind),
@@ -862,35 +867,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .const_int(*val as u64, false)
                 .into(),
 
-            ExpressionKind::StringLit(s) => {
-                let str_val = std::str::from_utf8(s).unwrap();
-                let global_str = self
-                    .builder
-                    .build_global_string_ptr(str_val, "str")
-                    .unwrap();
-                let str_ptr = global_str.as_pointer_value();
-                let str_len = self.context.i64_type().const_int(s.len() as u64, false);
-
-                let ptr_type = self
-                    .context
-                    .ptr_type(inkwell::AddressSpace::default())
-                    .into();
-                let len_type = self.context.i64_type().into();
-                let str_type = self.context.struct_type(&[ptr_type, len_type], false);
-
-                let mut str_slice = str_type.get_undef();
-                str_slice = self
-                    .builder
-                    .build_insert_value(str_slice, str_ptr, 0, "str_ptr")
-                    .unwrap()
-                    .into_struct_value();
-                str_slice = self
-                    .builder
-                    .build_insert_value(str_slice, str_len, 1, "str_len")
-                    .unwrap()
-                    .into_struct_value();
-                str_slice.into()
-            }
+            ExpressionKind::StringLit(s) => self.build_str_slice(s),
             ExpressionKind::Prefix { operator, right } => {
                 let operand = self.compile_expression(right, expected_type);
                 match operator {
@@ -997,15 +974,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 if let Some(BasicTypeEnum::StructType(opt_type)) = expected_type {
                     let has_value = self.context.bool_type().const_int(0, false);
                     let inner_type = opt_type.get_field_type_at_index(1).unwrap();
-                    let zero_val: BasicValueEnum = match inner_type {
-                        BasicTypeEnum::IntType(t) => t.const_int(0, false).into(),
-                        BasicTypeEnum::FloatType(t) => t.const_float(0.0).into(),
-                        BasicTypeEnum::PointerType(t) => t.const_null().into(),
-                        BasicTypeEnum::StructType(t) => t.get_undef().into(),
-                        BasicTypeEnum::ArrayType(t) => t.get_undef().into(),
-                        BasicTypeEnum::VectorType(t) => t.get_undef().into(),
-                        BasicTypeEnum::ScalableVectorType(t) => t.get_undef().into(),
-                    };
+                    let zero_val = self.zero_value_for(inner_type);
                     let mut opt_val = opt_type.get_undef();
                     opt_val = self
                         .builder

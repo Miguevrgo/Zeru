@@ -11,7 +11,7 @@
 
 use inkwell::{
     IntPredicate,
-    types::BasicTypeEnum,
+    types::{BasicTypeEnum, StructType},
     values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PointerValue},
 };
 
@@ -30,6 +30,65 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     /// Produce a safe dummy `i32 0` value used as a fallback after an error is recorded.
     pub(super) fn dummy_val(&self) -> BasicValueEnum<'ctx> {
         self.context.i32_type().const_int(0, false).into()
+    }
+
+    /// The `{ *mut u8, usize, usize }` LLVM struct shape used for built-in `Vec`.
+    pub(super) fn vec_struct_type(&self) -> StructType<'ctx> {
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let usize_type = self.context.i64_type();
+        self.context.struct_type(
+            &[ptr_type.into(), usize_type.into(), usize_type.into()],
+            false,
+        )
+    }
+
+    /// The `{ bool, T }` LLVM struct shape used for `Option<T>` returned from
+    /// runtime helpers (e.g. `Vec::pop`).
+    pub(super) fn option_struct_type(&self, elem_ty: BasicTypeEnum<'ctx>) -> StructType<'ctx> {
+        self.context
+            .struct_type(&[self.context.bool_type().into(), elem_ty], false)
+    }
+
+    /// Produce the canonical "zero" value for any LLVM basic type.
+    ///
+    /// Used to populate the payload slot of `None` and `Err(_)` values
+    /// where the inner value is logically absent but LLVM still requires
+    /// a concrete bit pattern.
+    pub(super) fn zero_value_for(&self, ty: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
+        match ty {
+            BasicTypeEnum::IntType(t) => t.const_int(0, false).into(),
+            BasicTypeEnum::FloatType(t) => t.const_float(0.0).into(),
+            BasicTypeEnum::PointerType(t) => t.const_null().into(),
+            BasicTypeEnum::StructType(t) => t.get_undef().into(),
+            BasicTypeEnum::ArrayType(t) => t.get_undef().into(),
+            BasicTypeEnum::VectorType(t) => t.get_undef().into(),
+            BasicTypeEnum::ScalableVectorType(t) => t.get_undef().into(),
+        }
+    }
+
+    /// Register `func` in the given LLVM appending-array global
+    /// (`llvm.global_ctors` or `llvm.global_dtors`) at default priority.
+    fn register_global_array(&mut self, array_name: &str, func: FunctionValue<'ctx>) {
+        let i32_type = self.context.i32_type();
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let entry_struct_type = self
+            .context
+            .struct_type(&[i32_type.into(), ptr_type.into(), ptr_type.into()], false);
+
+        let entry = entry_struct_type.const_named_struct(&[
+            i32_type.const_int(65535, false).into(),
+            func.as_global_value().as_pointer_value().into(),
+            ptr_type.const_null().into(),
+        ]);
+
+        let entries_array: inkwell::values::ArrayValue = entry_struct_type.const_array(&[entry]);
+        let global = self.module.add_global(
+            entries_array.get_type(),
+            Some(inkwell::AddressSpace::default()),
+            array_name,
+        );
+        global.set_linkage(inkwell::module::Linkage::Appending);
+        global.set_initializer(&entries_array);
     }
 
     pub(super) fn get_or_create_panic_fn(&mut self) -> FunctionValue<'ctx> {
@@ -221,10 +280,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) -> BasicValueEnum<'ctx> {
         let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
         let usize_type = self.context.i64_type();
-        let vec_type = self.context.struct_type(
-            &[ptr_type.into(), usize_type.into(), usize_type.into()],
-            false,
-        );
+        let vec_type = self.vec_struct_type();
 
         match method_name {
             "new" => {
@@ -370,10 +426,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) -> Option<BasicValueEnum<'ctx>> {
         let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
         let usize_type = self.context.i64_type();
-        let vec_type = self.context.struct_type(
-            &[ptr_type.into(), usize_type.into(), usize_type.into()],
-            false,
-        );
+        let vec_type = self.vec_struct_type();
 
         match method_name {
             "push" => {
@@ -548,9 +601,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 self.builder.position_at_end(empty_bb);
                 let elem_type = self.context.i64_type();
-                let opt_type = self
-                    .context
-                    .struct_type(&[self.context.bool_type().into(), elem_type.into()], false);
+                let opt_type = self.option_struct_type(elem_type.into());
                 let none_val = {
                     let mut v = opt_type.get_undef();
                     v = self
@@ -663,9 +714,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 self.builder.position_at_end(oob_bb);
                 let elem_type = self.context.i64_type();
-                let opt_type = self
-                    .context
-                    .struct_type(&[self.context.bool_type().into(), elem_type.into()], false);
+                let opt_type = self.option_struct_type(elem_type.into());
                 let none_val = {
                     let mut v = opt_type.get_undef();
                     v = self
@@ -945,37 +994,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.stdout_stream = Some(stdout_ptr);
         self.stderr_stream = Some(stderr_ptr);
 
-        let ctor_struct_type = self.context.struct_type(
-            &[
-                self.context.i32_type().into(),
-                self.context
-                    .ptr_type(inkwell::AddressSpace::default())
-                    .into(),
-                self.context
-                    .ptr_type(inkwell::AddressSpace::default())
-                    .into(),
-            ],
-            false,
-        );
-
-        let ctor_element = ctor_struct_type.const_named_struct(&[
-            self.context.i32_type().const_int(65535, false).into(),
-            init_fn.as_global_value().as_pointer_value().into(),
-            self.context
-                .ptr_type(inkwell::AddressSpace::default())
-                .const_null()
-                .into(),
-        ]);
-
-        let ctors_array: inkwell::values::ArrayValue =
-            ctor_struct_type.const_array(&[ctor_element]);
-        let global_ctors = self.module.add_global(
-            ctors_array.get_type(),
-            Some(inkwell::AddressSpace::default()),
-            "llvm.global_ctors",
-        );
-        global_ctors.set_linkage(inkwell::module::Linkage::Appending);
-        global_ctors.set_initializer(&ctors_array);
+        self.register_global_array("llvm.global_ctors", init_fn);
     }
 
     pub(super) fn create_builtin_cleanup(&mut self) {
@@ -1009,37 +1028,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         self.builder.build_return(None).unwrap();
 
-        let ctor_struct_type = self.context.struct_type(
-            &[
-                self.context.i32_type().into(),
-                self.context
-                    .ptr_type(inkwell::AddressSpace::default())
-                    .into(),
-                self.context
-                    .ptr_type(inkwell::AddressSpace::default())
-                    .into(),
-            ],
-            false,
-        );
-
-        let dtor_element = ctor_struct_type.const_named_struct(&[
-            self.context.i32_type().const_int(65535, false).into(),
-            dtor_fn.as_global_value().as_pointer_value().into(),
-            self.context
-                .ptr_type(inkwell::AddressSpace::default())
-                .const_null()
-                .into(),
-        ]);
-
-        let dtors_array: inkwell::values::ArrayValue =
-            ctor_struct_type.const_array(&[dtor_element]);
-        let global_dtors = self.module.add_global(
-            dtors_array.get_type(),
-            Some(inkwell::AddressSpace::default()),
-            "llvm.global_dtors",
-        );
-        global_dtors.set_linkage(inkwell::module::Linkage::Appending);
-        global_dtors.set_initializer(&dtors_array);
+        self.register_global_array("llvm.global_dtors", dtor_fn);
     }
 
     pub(super) fn compile_builtin_print(
@@ -1193,15 +1182,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         let is_ok = self.context.bool_type().const_int(0, false); // false = Err
         let inner_type = result_type.get_field_type_at_index(1).unwrap();
-        let zero_val: BasicValueEnum = match inner_type {
-            BasicTypeEnum::IntType(t) => t.const_int(0, false).into(),
-            BasicTypeEnum::FloatType(t) => t.const_float(0.0).into(),
-            BasicTypeEnum::PointerType(t) => t.const_null().into(),
-            BasicTypeEnum::StructType(t) => t.get_undef().into(),
-            BasicTypeEnum::ArrayType(t) => t.get_undef().into(),
-            BasicTypeEnum::VectorType(t) => t.get_undef().into(),
-            BasicTypeEnum::ScalableVectorType(t) => t.get_undef().into(),
-        };
+        let zero_val = self.zero_value_for(inner_type);
 
         let mut result_val = result_type.get_undef();
         result_val = self
