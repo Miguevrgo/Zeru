@@ -655,11 +655,10 @@ impl SemanticAnalyzer {
                 self.in_loop = prev_loop;
             }
 
-            StatementKind::Break | StatementKind::Continue => {
-                if !self.in_loop {
-                    self.error("Break/Continue can only be used inside loops".into(), span);
-                }
+            StatementKind::Break | StatementKind::Continue if !self.in_loop => {
+                self.error("Break/Continue can only be used inside loops".into(), span);
             }
+            StatementKind::Break | StatementKind::Continue => {}
 
             StatementKind::Expression(expr) => {
                 self.check_expression(expr, None);
