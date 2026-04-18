@@ -18,6 +18,17 @@ use crate::{
     token::Token,
 };
 
+/// Outcome of resolving a method call on a receiver expression.
+///
+/// Some receivers (vector built-ins, `copy()`, slice `.len()`) produce a
+/// value directly; others resolve to a real LLVM function plus the
+/// implicit `self` argument, which is then dispatched through the shared
+/// call-site emission code.
+enum MethodCallOutcome<'ctx> {
+    Done(BasicValueEnum<'ctx>),
+    Resolved(FunctionValue<'ctx>, Vec<BasicMetadataValueEnum<'ctx>>),
+}
+
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub(super) fn compile_fn_prototype(
         &mut self,
@@ -839,600 +850,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ExpressionKind::Call {
                 function,
                 arguments,
-            } => {
-                let (fn_val, implicit_args) = if let ExpressionKind::Get {
-                    object,
-                    name: method_name,
-                } = &function.kind
-                {
-                    if method_name == "copy" && arguments.is_empty() {
-                        return self.compile_expression(object, expected_type);
-                    }
-
-                    if let ExpressionKind::Identifier(type_name) = &object.kind
-                        && type_name == "Vec"
-                    {
-                        return self.compile_vec_static_method(
-                            method_name,
-                            arguments,
-                            expected_type,
-                            expr.span,
-                        );
-                    }
-
-                    if let ExpressionKind::Identifier(var_name) = &object.kind
-                        && let Some((ptr, ty, _)) = self.variables.get(var_name).cloned()
-                        && let BasicTypeEnum::StructType(st) = ty
-                        && st.count_fields() == 3
-                    {
-                        let elem_size: u64 = 8;
-                        if let Some(result) =
-                            self.compile_vec_method_mut(method_name, ptr, arguments, elem_size)
-                        {
-                            return result;
-                        }
-                    }
-
-                    let obj_val = self.compile_expression(object, None);
-
-                    if let BasicValueEnum::StructValue(vec_struct) = obj_val {
-                        let struct_type = vec_struct.get_type();
-                        if struct_type.count_fields() == 3
-                            && let Some(result) =
-                                self.compile_vec_method(method_name, vec_struct, arguments, object)
-                        {
-                            return result;
-                        }
-                        if struct_type.count_fields() == 2 && method_name == "len" {
-                            let len = self
-                                .builder
-                                .build_extract_value(vec_struct, 1, "slice_len")
-                                .unwrap();
-                            return len;
-                        }
-                    }
-
-                    let struct_name_result = if let ExpressionKind::Identifier(var_name) =
-                        &object.kind
-                    {
-                        self.variables.get(var_name).and_then(|(_, ty, _)| {
-                            if let BasicTypeEnum::StructType(st) = ty {
-                                Some(st.get_name().unwrap().to_str().unwrap().to_string())
-                            } else if let BasicTypeEnum::PointerType(_) = ty {
-                                self.pointer_elem_types.get(var_name).and_then(|elem_ty| {
-                                    if let BasicTypeEnum::StructType(st) = elem_ty {
-                                        Some(st.get_name().unwrap().to_str().unwrap().to_string())
-                                    } else {
-                                        None
-                                    }
-                                })
-                            } else {
-                                None
-                            }
-                        })
-                    } else {
-                        None
-                    };
-
-                    let struct_name = if let Some(name) = struct_name_result {
-                        name
-                    } else {
-                        let obj_val = self.compile_expression(object, None);
-                        match obj_val.get_type() {
-                            BasicTypeEnum::StructType(st) => {
-                                st.get_name().unwrap().to_str().unwrap().to_string()
-                            }
-                            _ => {
-                                self.error("Method call on non-struct value", expr.span);
-                                return self.dummy_val();
-                            }
-                        }
-                    };
-
-                    let mangled = format!("{}::{}", struct_name, method_name);
-                    let func = match self.module.get_function(&mangled) {
-                        Some(f) => f,
-                        None => {
-                            self.error(format!("Method '{}' not found", mangled), expr.span);
-                            return self.dummy_val();
-                        }
-                    };
-
-                    let param_types = func.get_type().get_param_types();
-                    let first_param_is_ptr = param_types
-                        .first()
-                        .map(|t| matches!(t, inkwell::types::BasicMetadataTypeEnum::PointerType(_)))
-                        .unwrap_or(false);
-
-                    let args: Vec<BasicMetadataValueEnum> = if first_param_is_ptr {
-                        if let ExpressionKind::Identifier(var_name) = &object.kind {
-                            if let Some((ptr, _, _)) = self.variables.get(var_name) {
-                                if self.pointer_elem_types.contains_key(var_name) {
-                                    let ptr_type =
-                                        self.context.ptr_type(inkwell::AddressSpace::default());
-                                    let loaded_ptr = self
-                                        .builder
-                                        .build_load(ptr_type, *ptr, "self_loaded")
-                                        .unwrap();
-                                    vec![loaded_ptr.into()]
-                                } else {
-                                    vec![(*ptr).into()]
-                                }
-                            } else {
-                                self.error(
-                                    "Cannot get pointer to object for method call",
-                                    expr.span,
-                                );
-                                return self.dummy_val();
-                            }
-                        } else {
-                            self.error(
-                                "'var self' method requires an identifier as receiver",
-                                expr.span,
-                            );
-                            return self.dummy_val();
-                        }
-                    } else {
-                        let obj_val = self.compile_expression(object, None);
-                        vec![obj_val.into()]
-                    };
-
-                    (func, args)
-                } else if let ExpressionKind::Identifier(name) = &function.kind {
-                    if matches!(name.as_str(), "print" | "println" | "eprint" | "eprintln") {
-                        return self.compile_builtin_print(name, arguments, expr.span);
-                    }
-
-                    if name == "Ok" {
-                        return self.compile_ok_constructor(arguments, expected_type, expr.span);
-                    }
-
-                    if name == "Err" {
-                        return self.compile_err_constructor(arguments, expected_type, expr.span);
-                    }
-
-                    if self.generic_functions.contains_key(name) {
-                        let func = self.monomorphize_call(name, arguments);
-                        (func, Vec::new())
-                    } else {
-                        let func = match self.module.get_function(name) {
-                            Some(f) => f,
-                            None => {
-                                self.error(format!("Unknown function '{}'", name), expr.span);
-                                return self.dummy_val();
-                            }
-                        };
-                        (func, Vec::new())
-                    }
-                } else {
-                    self.error("Indirect function calls are not yet supported", expr.span);
-                    return self.dummy_val();
-                };
-
-                let mut compiled_args: Vec<BasicMetadataValueEnum> = implicit_args;
-                let param_types: Vec<_> = fn_val.get_type().get_param_types();
-                let param_offset = compiled_args.len();
-
-                for (i, arg) in arguments.iter().enumerate() {
-                    let expected: Option<BasicTypeEnum> =
-                        param_types.get(i + param_offset).and_then(|t| match t {
-                            inkwell::types::BasicMetadataTypeEnum::ArrayType(t) => {
-                                Some((*t).into())
-                            }
-                            inkwell::types::BasicMetadataTypeEnum::FloatType(t) => {
-                                Some((*t).into())
-                            }
-                            inkwell::types::BasicMetadataTypeEnum::IntType(t) => Some((*t).into()),
-                            inkwell::types::BasicMetadataTypeEnum::PointerType(t) => {
-                                Some((*t).into())
-                            }
-                            inkwell::types::BasicMetadataTypeEnum::StructType(t) => {
-                                Some((*t).into())
-                            }
-                            inkwell::types::BasicMetadataTypeEnum::VectorType(t) => {
-                                Some((*t).into())
-                            }
-                            _ => None,
-                        });
-                    compiled_args.push(self.compile_expression(arg, expected).into());
-                }
-
-                let call_site = self
-                    .builder
-                    .build_call(fn_val, &compiled_args, "call_res")
-                    .unwrap();
-
-                match call_site.try_as_basic_value() {
-                    inkwell::values::ValueKind::Basic(value) => value,
-                    inkwell::values::ValueKind::Instruction(_) => {
-                        self.context.i32_type().const_int(0, false).into()
-                    }
-                }
-            }
+            } => self.lower_call(function, arguments, expected_type, expr.span),
             ExpressionKind::Infix {
                 left,
                 operator,
                 right,
-            } => {
-                if *operator == Token::DoubleColon
-                    && let (
-                        ExpressionKind::Identifier(enum_name),
-                        ExpressionKind::Identifier(variant_name),
-                    ) = (&left.kind, &right.kind)
-                {
-                    if let Some(variants) = self.enum_defs.get(enum_name)
-                        && let Some(index) = variants.iter().position(|v| v == variant_name)
-                    {
-                        return self
-                            .context
-                            .i32_type()
-                            .const_int(index as u64, false)
-                            .into();
-                    }
-
-                    self.error("Invalid '::' expression", expr.span);
-                    return self.dummy_val();
-                }
-
-                if *operator == Token::And || *operator == Token::Or {
-                    let bool_type = self.context.bool_type();
-                    let current_fn = self
-                        .builder
-                        .get_insert_block()
-                        .unwrap()
-                        .get_parent()
-                        .unwrap();
-
-                    let lhs = self.compile_expression(left, Some(bool_type.into()));
-                    let lhs_bool = match lhs {
-                        BasicValueEnum::IntValue(v) => {
-                            if v.get_type().get_bit_width() == 1 {
-                                v
-                            } else {
-                                self.builder
-                                    .build_int_compare(
-                                        IntPredicate::NE,
-                                        v,
-                                        v.get_type().const_zero(),
-                                        "tobool",
-                                    )
-                                    .unwrap()
-                            }
-                        }
-                        _ => {
-                            self.error(
-                                "'&&' and '||' require boolean or integer operands",
-                                expr.span,
-                            );
-                            self.context.bool_type().const_zero()
-                        }
-                    };
-
-                    let entry_block = self.builder.get_insert_block().unwrap();
-                    let rhs_block = self.context.append_basic_block(current_fn, "rhs_eval");
-                    let merge_block = self.context.append_basic_block(current_fn, "merge");
-
-                    if *operator == Token::And {
-                        self.builder
-                            .build_conditional_branch(lhs_bool, rhs_block, merge_block)
-                            .unwrap();
-                    } else {
-                        self.builder
-                            .build_conditional_branch(lhs_bool, merge_block, rhs_block)
-                            .unwrap();
-                    }
-
-                    self.builder.position_at_end(rhs_block);
-                    let rhs = self.compile_expression(right, Some(bool_type.into()));
-                    let rhs_bool = match rhs {
-                        BasicValueEnum::IntValue(v) => {
-                            if v.get_type().get_bit_width() == 1 {
-                                v
-                            } else {
-                                self.builder
-                                    .build_int_compare(
-                                        IntPredicate::NE,
-                                        v,
-                                        v.get_type().const_zero(),
-                                        "tobool",
-                                    )
-                                    .unwrap()
-                            }
-                        }
-                        _ => {
-                            self.error(
-                                "'&&' and '||' require boolean or integer operands",
-                                expr.span,
-                            );
-                            self.context.bool_type().const_zero()
-                        }
-                    };
-                    let rhs_end_block = self.builder.get_insert_block().unwrap();
-                    self.builder
-                        .build_unconditional_branch(merge_block)
-                        .unwrap();
-
-                    self.builder.position_at_end(merge_block);
-                    let phi = self.builder.build_phi(bool_type, "result").unwrap();
-
-                    if *operator == Token::And {
-                        phi.add_incoming(&[
-                            (&bool_type.const_zero(), entry_block),
-                            (&rhs_bool, rhs_end_block),
-                        ]);
-                    } else {
-                        phi.add_incoming(&[
-                            (&bool_type.const_all_ones(), entry_block),
-                            (&rhs_bool, rhs_end_block),
-                        ]);
-                    }
-
-                    return phi.as_basic_value();
-                }
-
-                let is_comparison = matches!(
-                    operator,
-                    Token::Eq | Token::NotEq | Token::Lt | Token::Leq | Token::Gt | Token::Geq
-                );
-
-                let operand_hint = if is_comparison { None } else { expected_type };
-
-                let lhs = self.compile_expression(left, operand_hint);
-                let rhs = self.compile_expression(right, Some(lhs.get_type()));
-
-                match (lhs, rhs) {
-                    (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => match operator {
-                        Token::Plus => self.builder.build_int_add(l, r, "addtmp").unwrap().into(),
-                        Token::Minus => self.builder.build_int_sub(l, r, "subtmp").unwrap().into(),
-                        Token::Star => self.builder.build_int_mul(l, r, "multmp").unwrap().into(),
-                        Token::Slash => {
-                            let is_signed = self.is_signed_integer(expr).unwrap_or(true);
-                            if is_signed {
-                                self.builder
-                                    .build_int_signed_div(l, r, "divtmp")
-                                    .unwrap()
-                                    .into()
-                            } else {
-                                self.builder
-                                    .build_int_unsigned_div(l, r, "udivtmp")
-                                    .unwrap()
-                                    .into()
-                            }
-                        }
-                        Token::Mod => {
-                            let is_signed = self.is_signed_integer(expr).unwrap_or(true);
-                            if is_signed {
-                                self.builder
-                                    .build_int_signed_rem(l, r, "modtmp")
-                                    .unwrap()
-                                    .into()
-                            } else {
-                                self.builder
-                                    .build_int_unsigned_rem(l, r, "umodtmp")
-                                    .unwrap()
-                                    .into()
-                            }
-                        }
-                        Token::Eq => self
-                            .builder
-                            .build_int_compare(IntPredicate::EQ, l, r, "eqtmp")
-                            .unwrap()
-                            .into(),
-                        Token::NotEq => self
-                            .builder
-                            .build_int_compare(IntPredicate::NE, l, r, "netmp")
-                            .unwrap()
-                            .into(),
-                        Token::Lt => {
-                            let pred = if Self::is_unsigned_expr(left) {
-                                IntPredicate::ULT
-                            } else {
-                                IntPredicate::SLT
-                            };
-                            self.builder
-                                .build_int_compare(pred, l, r, "lttmp")
-                                .unwrap()
-                                .into()
-                        }
-                        Token::Leq => {
-                            let pred = if Self::is_unsigned_expr(left) {
-                                IntPredicate::ULE
-                            } else {
-                                IntPredicate::SLE
-                            };
-                            self.builder
-                                .build_int_compare(pred, l, r, "letmp")
-                                .unwrap()
-                                .into()
-                        }
-                        Token::Gt => {
-                            let pred = if Self::is_unsigned_expr(left) {
-                                IntPredicate::UGT
-                            } else {
-                                IntPredicate::SGT
-                            };
-                            self.builder
-                                .build_int_compare(pred, l, r, "gttmp")
-                                .unwrap()
-                                .into()
-                        }
-                        Token::Geq => {
-                            let pred = if Self::is_unsigned_expr(left) {
-                                IntPredicate::UGE
-                            } else {
-                                IntPredicate::SGE
-                            };
-                            self.builder
-                                .build_int_compare(pred, l, r, "getmp")
-                                .unwrap()
-                                .into()
-                        }
-                        Token::BitAnd => self.builder.build_and(l, r, "andtmp").unwrap().into(),
-                        Token::BitOr => self.builder.build_or(l, r, "ortmp").unwrap().into(),
-                        Token::BitXor => self.builder.build_xor(l, r, "xortmp").unwrap().into(),
-                        Token::ShiftLeft => self
-                            .builder
-                            .build_left_shift(l, r, "shltmp")
-                            .unwrap()
-                            .into(),
-                        Token::ShiftRight => {
-                            let is_signed = self.is_signed_integer(left).unwrap_or(true);
-                            self.builder
-                                .build_right_shift(l, r, is_signed, "shrtmp")
-                                .unwrap()
-                                .into()
-                        }
-                        _ => {
-                            self.error(
-                                format!("Integer operator '{:?}' is not implemented", operator),
-                                expr.span,
-                            );
-                            self.dummy_val()
-                        }
-                    },
-                    (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) => {
-                        match operator {
-                            Token::Plus => self
-                                .builder
-                                .build_float_add(l, r, "faddtmp")
-                                .unwrap()
-                                .into(),
-                            Token::Minus => self
-                                .builder
-                                .build_float_sub(l, r, "fsubtmp")
-                                .unwrap()
-                                .into(),
-                            Token::Star => self
-                                .builder
-                                .build_float_mul(l, r, "fmultmp")
-                                .unwrap()
-                                .into(),
-                            Token::Slash => self
-                                .builder
-                                .build_float_div(l, r, "fdivtmp")
-                                .unwrap()
-                                .into(),
-                            Token::Mod => self
-                                .builder
-                                .build_float_rem(l, r, "fmodtmp")
-                                .unwrap()
-                                .into(),
-
-                            Token::Eq => self
-                                .builder
-                                .build_float_compare(FloatPredicate::OEQ, l, r, "feqtmp")
-                                .unwrap()
-                                .into(),
-                            Token::NotEq => self
-                                .builder
-                                .build_float_compare(FloatPredicate::ONE, l, r, "fnetmp")
-                                .unwrap()
-                                .into(),
-                            Token::Lt => self
-                                .builder
-                                .build_float_compare(FloatPredicate::OLT, l, r, "flttmp")
-                                .unwrap()
-                                .into(),
-                            Token::Leq => self
-                                .builder
-                                .build_float_compare(FloatPredicate::OLE, l, r, "fletmp")
-                                .unwrap()
-                                .into(),
-                            Token::Gt => self
-                                .builder
-                                .build_float_compare(FloatPredicate::OGT, l, r, "fgttmp")
-                                .unwrap()
-                                .into(),
-                            Token::Geq => self
-                                .builder
-                                .build_float_compare(FloatPredicate::OGE, l, r, "fgetmp")
-                                .unwrap()
-                                .into(),
-                            _ => {
-                                self.error(
-                                    format!("Float operator '{:?}' is not implemented", operator),
-                                    expr.span,
-                                );
-                                self.dummy_val()
-                            }
-                        }
-                    }
-                    (BasicValueEnum::PointerValue(ptr), BasicValueEnum::IntValue(offset)) => {
-                        let off = match operator {
-                            Token::Plus => offset,
-                            Token::Minus => self.builder.build_int_neg(offset, "neg").unwrap(),
-                            _ => {
-                                self.error(
-                                    "Only '+' and '-' are supported for pointer arithmetic",
-                                    expr.span,
-                                );
-                                return self.dummy_val();
-                            }
-                        };
-                        unsafe {
-                            self.builder
-                                .build_gep(self.context.i8_type(), ptr, &[off], "ptr")
-                                .unwrap()
-                                .into()
-                        }
-                    }
-                    (BasicValueEnum::PointerValue(l), BasicValueEnum::PointerValue(r)) => {
-                        // Pointer comparison - convert to int and compare
-                        let usize_type = self.context.i64_type();
-                        let l_int = self
-                            .builder
-                            .build_ptr_to_int(l, usize_type, "ptr_l")
-                            .unwrap();
-                        let r_int = self
-                            .builder
-                            .build_ptr_to_int(r, usize_type, "ptr_r")
-                            .unwrap();
-                        match operator {
-                            Token::Eq => self
-                                .builder
-                                .build_int_compare(IntPredicate::EQ, l_int, r_int, "ptr_eq")
-                                .unwrap()
-                                .into(),
-                            Token::NotEq => self
-                                .builder
-                                .build_int_compare(IntPredicate::NE, l_int, r_int, "ptr_ne")
-                                .unwrap()
-                                .into(),
-                            Token::Lt => self
-                                .builder
-                                .build_int_compare(IntPredicate::ULT, l_int, r_int, "ptr_lt")
-                                .unwrap()
-                                .into(),
-                            Token::Leq => self
-                                .builder
-                                .build_int_compare(IntPredicate::ULE, l_int, r_int, "ptr_le")
-                                .unwrap()
-                                .into(),
-                            Token::Gt => self
-                                .builder
-                                .build_int_compare(IntPredicate::UGT, l_int, r_int, "ptr_gt")
-                                .unwrap()
-                                .into(),
-                            Token::Geq => self
-                                .builder
-                                .build_int_compare(IntPredicate::UGE, l_int, r_int, "ptr_ge")
-                                .unwrap()
-                                .into(),
-                            _ => {
-                                self.error(
-                                    "Only comparison operators are supported for pointer-pointer operations",
-                                    expr.span,
-                                );
-                                self.dummy_val()
-                            }
-                        }
-                    }
-                    _ => {
-                        self.error("Type mismatch in binary operation", expr.span);
-                        self.dummy_val()
-                    }
-                }
-            }
+            } => self.lower_infix(left, operator, right, expected_type, expr),
             ExpressionKind::Boolean(val) => self
                 .context
                 .bool_type()
@@ -1501,87 +924,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
             }
 
-            ExpressionKind::Cast { left, target } => {
-                let src_val = self.compile_expression(left, None);
-
-                let target_typespec = match Self::expr_to_typespec(target) {
-                    Some(t) => t,
-                    None => {
-                        self.error(
-                            format!("Cannot use '{:?}' as a cast target type", target.kind),
-                            target.span,
-                        );
-                        return self.dummy_val();
-                    }
-                };
-                let target_type = match self.get_llvm_type(&target_typespec) {
-                    Some(t) => t,
-                    None => {
-                        self.error("Cast to void type is not allowed", target.span);
-                        return self.dummy_val();
-                    }
-                };
-
-                match (src_val, target_type) {
-                    (BasicValueEnum::IntValue(v), BasicTypeEnum::IntType(t)) => {
-                        let src_bits = v.get_type().get_bit_width();
-                        let dst_bits = t.get_bit_width();
-                        if src_bits == dst_bits {
-                            v.into()
-                        } else if src_bits < dst_bits {
-                            self.builder
-                                .build_int_z_extend(v, t, "zexttmp")
-                                .unwrap()
-                                .into()
-                        } else {
-                            self.builder
-                                .build_int_truncate(v, t, "trunctmp")
-                                .unwrap()
-                                .into()
-                        }
-                    }
-                    (BasicValueEnum::FloatValue(v), BasicTypeEnum::IntType(t)) => self
-                        .builder
-                        .build_float_to_signed_int(v, t, "fptosi")
-                        .unwrap()
-                        .into(),
-                    (BasicValueEnum::IntValue(v), BasicTypeEnum::FloatType(t)) => self
-                        .builder
-                        .build_signed_int_to_float(v, t, "sitofp")
-                        .unwrap()
-                        .into(),
-                    (BasicValueEnum::FloatValue(v), BasicTypeEnum::FloatType(t)) => {
-                        if v.get_type() == t {
-                            v.into()
-                        } else {
-                            let src_is_f32 = v.get_type() == self.context.f32_type();
-                            let dst_is_f32 = t == self.context.f32_type();
-                            if src_is_f32 && !dst_is_f32 {
-                                self.builder.build_float_ext(v, t, "fext").unwrap().into()
-                            } else {
-                                self.builder
-                                    .build_float_trunc(v, t, "ftrunc")
-                                    .unwrap()
-                                    .into()
-                            }
-                        }
-                    }
-                    (BasicValueEnum::PointerValue(v), BasicTypeEnum::IntType(t)) => self
-                        .builder
-                        .build_ptr_to_int(v, t, "ptrtoint")
-                        .unwrap()
-                        .into(),
-                    (BasicValueEnum::IntValue(v), BasicTypeEnum::PointerType(t)) => self
-                        .builder
-                        .build_int_to_ptr(v, t, "inttoptr")
-                        .unwrap()
-                        .into(),
-                    _ => {
-                        self.error("Unsupported cast combination", expr.span);
-                        self.dummy_val()
-                    }
-                }
-            }
+            ExpressionKind::Cast { left, target } => self.lower_cast(left, target, expr.span),
             ExpressionKind::AddressOf(inner) => {
                 if let Some((ptr, _ty)) = self.compile_lvalue(inner) {
                     ptr.into()
@@ -1649,87 +992,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 tuple_val.into()
             }
-            ExpressionKind::Match { value, arms } => {
-                let parent_fn = self.current_fn.unwrap();
-                let match_val = self.compile_expression(value, None).into_int_value();
-
-                let merge_bb = self.context.append_basic_block(parent_fn, "match_merge");
-
-                let mut arm_blocks: Vec<(BasicBlock<'ctx>, BasicValueEnum<'ctx>)> = Vec::new();
-                let mut default_block: Option<BasicBlock<'ctx>> = None;
-                let mut cases: Vec<(inkwell::values::IntValue<'ctx>, BasicBlock<'ctx>)> =
-                    Vec::new();
-
-                for (pattern, _) in arms {
-                    let block = self.context.append_basic_block(parent_fn, "match_arm");
-
-                    if let ExpressionKind::Identifier(name) = &pattern.kind
-                        && name == "default"
-                    {
-                        default_block = Some(block);
-                        continue;
-                    }
-
-                    let pattern_val = self.compile_expression(pattern, None).into_int_value();
-                    cases.push((pattern_val, block));
-                }
-
-                let default_bb = default_block.unwrap_or_else(|| {
-                    let bb = self.context.append_basic_block(parent_fn, "match_default");
-                    self.builder.position_at_end(bb);
-                    self.builder.build_unreachable().unwrap();
-                    bb
-                });
-
-                let entry_bb = self.builder.get_insert_block().unwrap();
-                self.builder.position_at_end(entry_bb);
-
-                let switch = self
-                    .builder
-                    .build_switch(match_val, default_bb, &cases)
-                    .unwrap();
-                let _ = switch;
-
-                let mut arm_idx = 0;
-                for (pattern, result) in arms {
-                    let is_default = if let ExpressionKind::Identifier(name) = &pattern.kind {
-                        name == "default"
-                    } else {
-                        false
-                    };
-
-                    let block = if is_default {
-                        default_block.unwrap()
-                    } else {
-                        let (_, block) = cases[arm_idx];
-                        arm_idx += 1;
-                        block
-                    };
-
-                    self.builder.position_at_end(block);
-                    let result_val = self.compile_expression(result, expected_type);
-                    let current_bb = self.builder.get_insert_block().unwrap();
-                    if current_bb.get_terminator().is_none() {
-                        self.builder.build_unconditional_branch(merge_bb).unwrap();
-                    }
-                    arm_blocks.push((self.builder.get_insert_block().unwrap(), result_val));
-                }
-
-                self.builder.position_at_end(merge_bb);
-
-                if arm_blocks.is_empty() {
-                    return self.context.i32_type().const_int(0, false).into();
-                }
-
-                let result_type = arm_blocks[0].1.get_type();
-                let phi = self.builder.build_phi(result_type, "match_result").unwrap();
-
-                for (block, val) in &arm_blocks {
-                    phi.add_incoming(&[(val, *block)]);
-                }
-
-                phi.as_basic_value()
-            }
+            ExpressionKind::Match { value, arms } => self.lower_match(value, arms, expected_type),
             ExpressionKind::None => {
                 if let Some(BasicTypeEnum::StructType(opt_type)) = expected_type {
                     let has_value = self.context.bool_type().const_int(0, false);
@@ -1859,5 +1122,757 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.dummy_val()
             }
         }
+    }
+
+    /// Lower an `ExpressionKind::Call`.
+    ///
+    /// Resolves the callee (method, free function, generic instantiation,
+    /// or built-in) and dispatches through the shared call-site emission.
+    fn lower_call(
+        &mut self,
+        function: &Expression,
+        arguments: &[Expression],
+        expected_type: Option<BasicTypeEnum<'ctx>>,
+        span: Span,
+    ) -> BasicValueEnum<'ctx> {
+        let (fn_val, implicit_args) = if let ExpressionKind::Get {
+            object,
+            name: method_name,
+        } = &function.kind
+        {
+            match self.compile_method_call(object, method_name, arguments, expected_type, span) {
+                MethodCallOutcome::Done(v) => return v,
+                MethodCallOutcome::Resolved(func, args) => (func, args),
+            }
+        } else if let ExpressionKind::Identifier(name) = &function.kind {
+            if matches!(name.as_str(), "print" | "println" | "eprint" | "eprintln") {
+                return self.compile_builtin_print(name, arguments, span);
+            }
+
+            if name == "Ok" {
+                return self.compile_ok_constructor(arguments, expected_type, span);
+            }
+
+            if name == "Err" {
+                return self.compile_err_constructor(arguments, expected_type, span);
+            }
+
+            if self.generic_functions.contains_key(name) {
+                let func = self.monomorphize_call(name, arguments);
+                (func, Vec::new())
+            } else {
+                let func = match self.module.get_function(name) {
+                    Some(f) => f,
+                    None => {
+                        self.error(format!("Unknown function '{}'", name), span);
+                        return self.dummy_val();
+                    }
+                };
+                (func, Vec::new())
+            }
+        } else {
+            self.error("Indirect function calls are not yet supported", span);
+            return self.dummy_val();
+        };
+
+        let mut compiled_args: Vec<BasicMetadataValueEnum> = implicit_args;
+        let param_types: Vec<_> = fn_val.get_type().get_param_types();
+        let param_offset = compiled_args.len();
+
+        for (i, arg) in arguments.iter().enumerate() {
+            let expected: Option<BasicTypeEnum> =
+                param_types.get(i + param_offset).and_then(|t| match t {
+                    inkwell::types::BasicMetadataTypeEnum::ArrayType(t) => Some((*t).into()),
+                    inkwell::types::BasicMetadataTypeEnum::FloatType(t) => Some((*t).into()),
+                    inkwell::types::BasicMetadataTypeEnum::IntType(t) => Some((*t).into()),
+                    inkwell::types::BasicMetadataTypeEnum::PointerType(t) => Some((*t).into()),
+                    inkwell::types::BasicMetadataTypeEnum::StructType(t) => Some((*t).into()),
+                    inkwell::types::BasicMetadataTypeEnum::VectorType(t) => Some((*t).into()),
+                    _ => None,
+                });
+            compiled_args.push(self.compile_expression(arg, expected).into());
+        }
+
+        let call_site = self
+            .builder
+            .build_call(fn_val, &compiled_args, "call_res")
+            .unwrap();
+
+        match call_site.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(value) => value,
+            inkwell::values::ValueKind::Instruction(_) => {
+                self.context.i32_type().const_int(0, false).into()
+            }
+        }
+    }
+
+    /// Resolve a method call on `object`.
+    ///
+    /// Handles built-in fast paths (`copy`, `Vec::*`, slice `.len()`) by
+    /// returning [`MethodCallOutcome::Done`] with the result. Otherwise
+    /// resolves the user-defined method and returns it together with the
+    /// implicit `self` argument as [`MethodCallOutcome::Resolved`].
+    fn compile_method_call(
+        &mut self,
+        object: &Expression,
+        method_name: &str,
+        arguments: &[Expression],
+        expected_type: Option<BasicTypeEnum<'ctx>>,
+        span: Span,
+    ) -> MethodCallOutcome<'ctx> {
+        if method_name == "copy" && arguments.is_empty() {
+            return MethodCallOutcome::Done(self.compile_expression(object, expected_type));
+        }
+
+        if let ExpressionKind::Identifier(type_name) = &object.kind
+            && type_name == "Vec"
+        {
+            return MethodCallOutcome::Done(self.compile_vec_static_method(
+                method_name,
+                arguments,
+                expected_type,
+                span,
+            ));
+        }
+
+        if let ExpressionKind::Identifier(var_name) = &object.kind
+            && let Some((ptr, ty, _)) = self.variables.get(var_name).cloned()
+            && let BasicTypeEnum::StructType(st) = ty
+            && st.count_fields() == 3
+        {
+            let elem_size: u64 = 8;
+            if let Some(result) =
+                self.compile_vec_method_mut(method_name, ptr, arguments, elem_size)
+            {
+                return MethodCallOutcome::Done(result);
+            }
+        }
+
+        let obj_val = self.compile_expression(object, None);
+
+        if let BasicValueEnum::StructValue(vec_struct) = obj_val {
+            let struct_type = vec_struct.get_type();
+            if struct_type.count_fields() == 3
+                && let Some(result) =
+                    self.compile_vec_method(method_name, vec_struct, arguments, object)
+            {
+                return MethodCallOutcome::Done(result);
+            }
+            if struct_type.count_fields() == 2 && method_name == "len" {
+                let len = self
+                    .builder
+                    .build_extract_value(vec_struct, 1, "slice_len")
+                    .unwrap();
+                return MethodCallOutcome::Done(len);
+            }
+        }
+
+        let struct_name_result = if let ExpressionKind::Identifier(var_name) = &object.kind {
+            self.variables.get(var_name).and_then(|(_, ty, _)| {
+                if let BasicTypeEnum::StructType(st) = ty {
+                    Some(st.get_name().unwrap().to_str().unwrap().to_string())
+                } else if let BasicTypeEnum::PointerType(_) = ty {
+                    self.pointer_elem_types.get(var_name).and_then(|elem_ty| {
+                        if let BasicTypeEnum::StructType(st) = elem_ty {
+                            Some(st.get_name().unwrap().to_str().unwrap().to_string())
+                        } else {
+                            None
+                        }
+                    })
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        };
+
+        let struct_name = if let Some(name) = struct_name_result {
+            name
+        } else {
+            let obj_val = self.compile_expression(object, None);
+            match obj_val.get_type() {
+                BasicTypeEnum::StructType(st) => {
+                    st.get_name().unwrap().to_str().unwrap().to_string()
+                }
+                _ => {
+                    self.error("Method call on non-struct value", span);
+                    return MethodCallOutcome::Done(self.dummy_val());
+                }
+            }
+        };
+
+        let mangled = format!("{}::{}", struct_name, method_name);
+        let func = match self.module.get_function(&mangled) {
+            Some(f) => f,
+            None => {
+                self.error(format!("Method '{}' not found", mangled), span);
+                return MethodCallOutcome::Done(self.dummy_val());
+            }
+        };
+
+        let param_types = func.get_type().get_param_types();
+        let first_param_is_ptr = param_types
+            .first()
+            .map(|t| matches!(t, inkwell::types::BasicMetadataTypeEnum::PointerType(_)))
+            .unwrap_or(false);
+
+        let args: Vec<BasicMetadataValueEnum> = if first_param_is_ptr {
+            if let ExpressionKind::Identifier(var_name) = &object.kind {
+                if let Some((ptr, _, _)) = self.variables.get(var_name) {
+                    if self.pointer_elem_types.contains_key(var_name) {
+                        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+                        let loaded_ptr = self
+                            .builder
+                            .build_load(ptr_type, *ptr, "self_loaded")
+                            .unwrap();
+                        vec![loaded_ptr.into()]
+                    } else {
+                        vec![(*ptr).into()]
+                    }
+                } else {
+                    self.error("Cannot get pointer to object for method call", span);
+                    return MethodCallOutcome::Done(self.dummy_val());
+                }
+            } else {
+                self.error("'var self' method requires an identifier as receiver", span);
+                return MethodCallOutcome::Done(self.dummy_val());
+            }
+        } else {
+            let obj_val = self.compile_expression(object, None);
+            vec![obj_val.into()]
+        };
+
+        MethodCallOutcome::Resolved(func, args)
+    }
+
+    /// Lower an `ExpressionKind::Infix`.
+    ///
+    /// Dispatches the operator to the appropriate LLVM builder based on
+    /// the operand category (integer, float, pointer arithmetic, pointer
+    /// comparison) and handles the special-cased `::`, `&&` and `||`.
+    fn lower_infix(
+        &mut self,
+        left: &Expression,
+        operator: &Token,
+        right: &Expression,
+        expected_type: Option<BasicTypeEnum<'ctx>>,
+        expr: &Expression,
+    ) -> BasicValueEnum<'ctx> {
+        if *operator == Token::DoubleColon
+            && let (ExpressionKind::Identifier(enum_name), ExpressionKind::Identifier(variant_name)) =
+                (&left.kind, &right.kind)
+        {
+            if let Some(variants) = self.enum_defs.get(enum_name)
+                && let Some(index) = variants.iter().position(|v| v == variant_name)
+            {
+                return self
+                    .context
+                    .i32_type()
+                    .const_int(index as u64, false)
+                    .into();
+            }
+
+            self.error("Invalid '::' expression", expr.span);
+            return self.dummy_val();
+        }
+
+        if *operator == Token::And || *operator == Token::Or {
+            return self.lower_short_circuit(left, operator, right, expr.span);
+        }
+
+        let is_comparison = matches!(
+            operator,
+            Token::Eq | Token::NotEq | Token::Lt | Token::Leq | Token::Gt | Token::Geq
+        );
+
+        let operand_hint = if is_comparison { None } else { expected_type };
+
+        let lhs = self.compile_expression(left, operand_hint);
+        let rhs = self.compile_expression(right, Some(lhs.get_type()));
+
+        match (lhs, rhs) {
+            (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => {
+                // Helper for the 4 signed/unsigned-aware integer comparisons.
+                let unsigned = Self::is_unsigned_expr(left);
+                let int_cmp = |signed: IntPredicate, unsigned_pred: IntPredicate, name: &str| {
+                    let pred = if unsigned { unsigned_pred } else { signed };
+                    self.builder
+                        .build_int_compare(pred, l, r, name)
+                        .unwrap()
+                        .into()
+                };
+
+                match operator {
+                    Token::Plus => self.builder.build_int_add(l, r, "addtmp").unwrap().into(),
+                    Token::Minus => self.builder.build_int_sub(l, r, "subtmp").unwrap().into(),
+                    Token::Star => self.builder.build_int_mul(l, r, "multmp").unwrap().into(),
+                    Token::Slash => {
+                        let is_signed = self.is_signed_integer(expr).unwrap_or(true);
+                        if is_signed {
+                            self.builder
+                                .build_int_signed_div(l, r, "divtmp")
+                                .unwrap()
+                                .into()
+                        } else {
+                            self.builder
+                                .build_int_unsigned_div(l, r, "udivtmp")
+                                .unwrap()
+                                .into()
+                        }
+                    }
+                    Token::Mod => {
+                        let is_signed = self.is_signed_integer(expr).unwrap_or(true);
+                        if is_signed {
+                            self.builder
+                                .build_int_signed_rem(l, r, "modtmp")
+                                .unwrap()
+                                .into()
+                        } else {
+                            self.builder
+                                .build_int_unsigned_rem(l, r, "umodtmp")
+                                .unwrap()
+                                .into()
+                        }
+                    }
+                    Token::Eq => self
+                        .builder
+                        .build_int_compare(IntPredicate::EQ, l, r, "eqtmp")
+                        .unwrap()
+                        .into(),
+                    Token::NotEq => self
+                        .builder
+                        .build_int_compare(IntPredicate::NE, l, r, "netmp")
+                        .unwrap()
+                        .into(),
+                    Token::Lt => int_cmp(IntPredicate::SLT, IntPredicate::ULT, "lttmp"),
+                    Token::Leq => int_cmp(IntPredicate::SLE, IntPredicate::ULE, "letmp"),
+                    Token::Gt => int_cmp(IntPredicate::SGT, IntPredicate::UGT, "gttmp"),
+                    Token::Geq => int_cmp(IntPredicate::SGE, IntPredicate::UGE, "getmp"),
+                    Token::BitAnd => self.builder.build_and(l, r, "andtmp").unwrap().into(),
+                    Token::BitOr => self.builder.build_or(l, r, "ortmp").unwrap().into(),
+                    Token::BitXor => self.builder.build_xor(l, r, "xortmp").unwrap().into(),
+                    Token::ShiftLeft => self
+                        .builder
+                        .build_left_shift(l, r, "shltmp")
+                        .unwrap()
+                        .into(),
+                    Token::ShiftRight => {
+                        let is_signed = self.is_signed_integer(left).unwrap_or(true);
+                        self.builder
+                            .build_right_shift(l, r, is_signed, "shrtmp")
+                            .unwrap()
+                            .into()
+                    }
+                    _ => {
+                        self.error(
+                            format!("Integer operator '{:?}' is not implemented", operator),
+                            expr.span,
+                        );
+                        self.dummy_val()
+                    }
+                }
+            }
+            (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) => match operator {
+                Token::Plus => self
+                    .builder
+                    .build_float_add(l, r, "faddtmp")
+                    .unwrap()
+                    .into(),
+                Token::Minus => self
+                    .builder
+                    .build_float_sub(l, r, "fsubtmp")
+                    .unwrap()
+                    .into(),
+                Token::Star => self
+                    .builder
+                    .build_float_mul(l, r, "fmultmp")
+                    .unwrap()
+                    .into(),
+                Token::Slash => self
+                    .builder
+                    .build_float_div(l, r, "fdivtmp")
+                    .unwrap()
+                    .into(),
+                Token::Mod => self
+                    .builder
+                    .build_float_rem(l, r, "fmodtmp")
+                    .unwrap()
+                    .into(),
+
+                Token::Eq => self
+                    .builder
+                    .build_float_compare(FloatPredicate::OEQ, l, r, "feqtmp")
+                    .unwrap()
+                    .into(),
+                Token::NotEq => self
+                    .builder
+                    .build_float_compare(FloatPredicate::ONE, l, r, "fnetmp")
+                    .unwrap()
+                    .into(),
+                Token::Lt => self
+                    .builder
+                    .build_float_compare(FloatPredicate::OLT, l, r, "flttmp")
+                    .unwrap()
+                    .into(),
+                Token::Leq => self
+                    .builder
+                    .build_float_compare(FloatPredicate::OLE, l, r, "fletmp")
+                    .unwrap()
+                    .into(),
+                Token::Gt => self
+                    .builder
+                    .build_float_compare(FloatPredicate::OGT, l, r, "fgttmp")
+                    .unwrap()
+                    .into(),
+                Token::Geq => self
+                    .builder
+                    .build_float_compare(FloatPredicate::OGE, l, r, "fgetmp")
+                    .unwrap()
+                    .into(),
+                _ => {
+                    self.error(
+                        format!("Float operator '{:?}' is not implemented", operator),
+                        expr.span,
+                    );
+                    self.dummy_val()
+                }
+            },
+            (BasicValueEnum::PointerValue(ptr), BasicValueEnum::IntValue(offset)) => {
+                let off = match operator {
+                    Token::Plus => offset,
+                    Token::Minus => self.builder.build_int_neg(offset, "neg").unwrap(),
+                    _ => {
+                        self.error(
+                            "Only '+' and '-' are supported for pointer arithmetic",
+                            expr.span,
+                        );
+                        return self.dummy_val();
+                    }
+                };
+                unsafe {
+                    self.builder
+                        .build_gep(self.context.i8_type(), ptr, &[off], "ptr")
+                        .unwrap()
+                        .into()
+                }
+            }
+            (BasicValueEnum::PointerValue(l), BasicValueEnum::PointerValue(r)) => {
+                // Pointer comparison - convert to int and compare
+                let usize_type = self.context.i64_type();
+                let l_int = self
+                    .builder
+                    .build_ptr_to_int(l, usize_type, "ptr_l")
+                    .unwrap();
+                let r_int = self
+                    .builder
+                    .build_ptr_to_int(r, usize_type, "ptr_r")
+                    .unwrap();
+                match operator {
+                    Token::Eq => self
+                        .builder
+                        .build_int_compare(IntPredicate::EQ, l_int, r_int, "ptr_eq")
+                        .unwrap()
+                        .into(),
+                    Token::NotEq => self
+                        .builder
+                        .build_int_compare(IntPredicate::NE, l_int, r_int, "ptr_ne")
+                        .unwrap()
+                        .into(),
+                    Token::Lt => self
+                        .builder
+                        .build_int_compare(IntPredicate::ULT, l_int, r_int, "ptr_lt")
+                        .unwrap()
+                        .into(),
+                    Token::Leq => self
+                        .builder
+                        .build_int_compare(IntPredicate::ULE, l_int, r_int, "ptr_le")
+                        .unwrap()
+                        .into(),
+                    Token::Gt => self
+                        .builder
+                        .build_int_compare(IntPredicate::UGT, l_int, r_int, "ptr_gt")
+                        .unwrap()
+                        .into(),
+                    Token::Geq => self
+                        .builder
+                        .build_int_compare(IntPredicate::UGE, l_int, r_int, "ptr_ge")
+                        .unwrap()
+                        .into(),
+                    _ => {
+                        self.error(
+                            "Only comparison operators are supported for pointer-pointer operations",
+                            expr.span,
+                        );
+                        self.dummy_val()
+                    }
+                }
+            }
+            _ => {
+                self.error("Type mismatch in binary operation", expr.span);
+                self.dummy_val()
+            }
+        }
+    }
+
+    /// Lower the short-circuit operators `&&` and `||` with proper
+    /// branching and a phi node, leaving the builder at the merge block.
+    fn lower_short_circuit(
+        &mut self,
+        left: &Expression,
+        operator: &Token,
+        right: &Expression,
+        span: Span,
+    ) -> BasicValueEnum<'ctx> {
+        let bool_type = self.context.bool_type();
+        let current_fn = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+
+        let to_bool = |v: BasicValueEnum<'ctx>, this: &Self| -> inkwell::values::IntValue<'ctx> {
+            match v {
+                BasicValueEnum::IntValue(v) => {
+                    if v.get_type().get_bit_width() == 1 {
+                        v
+                    } else {
+                        this.builder
+                            .build_int_compare(
+                                IntPredicate::NE,
+                                v,
+                                v.get_type().const_zero(),
+                                "tobool",
+                            )
+                            .unwrap()
+                    }
+                }
+                _ => this.context.bool_type().const_zero(),
+            }
+        };
+
+        let lhs = self.compile_expression(left, Some(bool_type.into()));
+        if !matches!(lhs, BasicValueEnum::IntValue(_)) {
+            self.error("'&&' and '||' require boolean or integer operands", span);
+        }
+        let lhs_bool = to_bool(lhs, self);
+
+        let entry_block = self.builder.get_insert_block().unwrap();
+        let rhs_block = self.context.append_basic_block(current_fn, "rhs_eval");
+        let merge_block = self.context.append_basic_block(current_fn, "merge");
+
+        if operator == &Token::And {
+            self.builder
+                .build_conditional_branch(lhs_bool, rhs_block, merge_block)
+                .unwrap();
+        } else {
+            self.builder
+                .build_conditional_branch(lhs_bool, merge_block, rhs_block)
+                .unwrap();
+        }
+
+        self.builder.position_at_end(rhs_block);
+        let rhs = self.compile_expression(right, Some(bool_type.into()));
+        if !matches!(rhs, BasicValueEnum::IntValue(_)) {
+            self.error("'&&' and '||' require boolean or integer operands", span);
+        }
+        let rhs_bool = to_bool(rhs, self);
+        let rhs_end_block = self.builder.get_insert_block().unwrap();
+        self.builder
+            .build_unconditional_branch(merge_block)
+            .unwrap();
+
+        self.builder.position_at_end(merge_block);
+        let phi = self.builder.build_phi(bool_type, "result").unwrap();
+
+        if operator == &Token::And {
+            phi.add_incoming(&[
+                (&bool_type.const_zero(), entry_block),
+                (&rhs_bool, rhs_end_block),
+            ]);
+        } else {
+            phi.add_incoming(&[
+                (&bool_type.const_all_ones(), entry_block),
+                (&rhs_bool, rhs_end_block),
+            ]);
+        }
+
+        phi.as_basic_value()
+    }
+
+    /// Lower an `ExpressionKind::Cast` to the appropriate LLVM conversion.
+    fn lower_cast(
+        &mut self,
+        left: &Expression,
+        target: &Expression,
+        span: Span,
+    ) -> BasicValueEnum<'ctx> {
+        let src_val = self.compile_expression(left, None);
+
+        let target_typespec = match Self::expr_to_typespec(target) {
+            Some(t) => t,
+            None => {
+                self.error(
+                    format!("Cannot use '{:?}' as a cast target type", target.kind),
+                    target.span,
+                );
+                return self.dummy_val();
+            }
+        };
+        let target_type = match self.get_llvm_type(&target_typespec) {
+            Some(t) => t,
+            None => {
+                self.error("Cast to void type is not allowed", target.span);
+                return self.dummy_val();
+            }
+        };
+
+        match (src_val, target_type) {
+            (BasicValueEnum::IntValue(v), BasicTypeEnum::IntType(t)) => {
+                let src_bits = v.get_type().get_bit_width();
+                let dst_bits = t.get_bit_width();
+                if src_bits == dst_bits {
+                    v.into()
+                } else if src_bits < dst_bits {
+                    self.builder
+                        .build_int_z_extend(v, t, "zexttmp")
+                        .unwrap()
+                        .into()
+                } else {
+                    self.builder
+                        .build_int_truncate(v, t, "trunctmp")
+                        .unwrap()
+                        .into()
+                }
+            }
+            (BasicValueEnum::FloatValue(v), BasicTypeEnum::IntType(t)) => self
+                .builder
+                .build_float_to_signed_int(v, t, "fptosi")
+                .unwrap()
+                .into(),
+            (BasicValueEnum::IntValue(v), BasicTypeEnum::FloatType(t)) => self
+                .builder
+                .build_signed_int_to_float(v, t, "sitofp")
+                .unwrap()
+                .into(),
+            (BasicValueEnum::FloatValue(v), BasicTypeEnum::FloatType(t)) => {
+                if v.get_type() == t {
+                    v.into()
+                } else {
+                    let src_is_f32 = v.get_type() == self.context.f32_type();
+                    let dst_is_f32 = t == self.context.f32_type();
+                    if src_is_f32 && !dst_is_f32 {
+                        self.builder.build_float_ext(v, t, "fext").unwrap().into()
+                    } else {
+                        self.builder
+                            .build_float_trunc(v, t, "ftrunc")
+                            .unwrap()
+                            .into()
+                    }
+                }
+            }
+            (BasicValueEnum::PointerValue(v), BasicTypeEnum::IntType(t)) => self
+                .builder
+                .build_ptr_to_int(v, t, "ptrtoint")
+                .unwrap()
+                .into(),
+            (BasicValueEnum::IntValue(v), BasicTypeEnum::PointerType(t)) => self
+                .builder
+                .build_int_to_ptr(v, t, "inttoptr")
+                .unwrap()
+                .into(),
+            _ => {
+                self.error("Unsupported cast combination", span);
+                self.dummy_val()
+            }
+        }
+    }
+
+    /// Lower an `ExpressionKind::Match` into a `switch` plus a result phi.
+    fn lower_match(
+        &mut self,
+        value: &Expression,
+        arms: &[(Expression, Expression)],
+        expected_type: Option<BasicTypeEnum<'ctx>>,
+    ) -> BasicValueEnum<'ctx> {
+        let parent_fn = self.current_fn.unwrap();
+        let match_val = self.compile_expression(value, None).into_int_value();
+
+        let merge_bb = self.context.append_basic_block(parent_fn, "match_merge");
+
+        let mut arm_blocks: Vec<(BasicBlock<'ctx>, BasicValueEnum<'ctx>)> = Vec::new();
+        let mut default_block: Option<BasicBlock<'ctx>> = None;
+        let mut cases: Vec<(inkwell::values::IntValue<'ctx>, BasicBlock<'ctx>)> = Vec::new();
+
+        for (pattern, _) in arms {
+            let block = self.context.append_basic_block(parent_fn, "match_arm");
+
+            if let ExpressionKind::Identifier(name) = &pattern.kind
+                && name == "default"
+            {
+                default_block = Some(block);
+                continue;
+            }
+
+            let pattern_val = self.compile_expression(pattern, None).into_int_value();
+            cases.push((pattern_val, block));
+        }
+
+        let default_bb = default_block.unwrap_or_else(|| {
+            let bb = self.context.append_basic_block(parent_fn, "match_default");
+            self.builder.position_at_end(bb);
+            self.builder.build_unreachable().unwrap();
+            bb
+        });
+
+        let entry_bb = self.builder.get_insert_block().unwrap();
+        self.builder.position_at_end(entry_bb);
+
+        let switch = self
+            .builder
+            .build_switch(match_val, default_bb, &cases)
+            .unwrap();
+        let _ = switch;
+
+        let mut arm_idx = 0;
+        for (pattern, result) in arms {
+            let is_default = if let ExpressionKind::Identifier(name) = &pattern.kind {
+                name == "default"
+            } else {
+                false
+            };
+
+            let block = if is_default {
+                default_block.unwrap()
+            } else {
+                let (_, block) = cases[arm_idx];
+                arm_idx += 1;
+                block
+            };
+
+            self.builder.position_at_end(block);
+            let result_val = self.compile_expression(result, expected_type);
+            let current_bb = self.builder.get_insert_block().unwrap();
+            if current_bb.get_terminator().is_none() {
+                self.builder.build_unconditional_branch(merge_bb).unwrap();
+            }
+            arm_blocks.push((self.builder.get_insert_block().unwrap(), result_val));
+        }
+
+        self.builder.position_at_end(merge_bb);
+
+        if arm_blocks.is_empty() {
+            return self.context.i32_type().const_int(0, false).into();
+        }
+
+        let result_type = arm_blocks[0].1.get_type();
+        let phi = self.builder.build_phi(result_type, "match_result").unwrap();
+
+        for (block, val) in &arm_blocks {
+            phi.add_incoming(&[(val, *block)]);
+        }
+
+        phi.as_basic_value()
     }
 }
