@@ -3266,9 +3266,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
                 None
             }
-            TypeSpec::IntLiteral(_) => {
-                None
-            }
+            TypeSpec::IntLiteral(_) => None,
             TypeSpec::Tuple(types) => {
                 let field_types: Vec<_> =
                     types.iter().filter_map(|t| self.get_llvm_type(t)).collect();

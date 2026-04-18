@@ -1,5 +1,5 @@
-use crate::codegen::compiler::Compiler;
 use crate::codegen::SafetyMode;
+use crate::codegen::compiler::Compiler;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::sema::analyzer::SemanticAnalyzer;

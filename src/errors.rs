@@ -71,12 +71,27 @@ impl ZeruError {
             ErrorKind::Semantic => Color::Magenta,
         };
 
-        let (display_source, mut span_start, mut span_end, display_filename) = if self.span.start >= offset {
-            let src = if offset <= source.len() { &source[offset..] } else { source };
-            (src, self.span.start - offset, self.span.end - offset, filename.to_string())
-        } else {
-            (source, self.span.start, self.span.end, format!("{} (in std library)", filename))
-        };
+        let (display_source, mut span_start, mut span_end, display_filename) =
+            if self.span.start >= offset {
+                let src = if offset <= source.len() {
+                    &source[offset..]
+                } else {
+                    source
+                };
+                (
+                    src,
+                    self.span.start - offset,
+                    self.span.end - offset,
+                    filename.to_string(),
+                )
+            } else {
+                (
+                    source,
+                    self.span.start,
+                    self.span.end,
+                    format!("{} (in std library)", filename),
+                )
+            };
 
         let source_len = display_source.len();
         span_start = span_start.min(source_len);
@@ -87,7 +102,11 @@ impl ZeruError {
                 ErrorKind::Syntax => "Syntax Error",
                 ErrorKind::Semantic => "Semantic Error",
             };
-            eprintln!("\x1b[31m{}\x1b[0m: {}", prefix, self.message.replace("__", "::"));
+            eprintln!(
+                "\x1b[31m{}\x1b[0m: {}",
+                prefix,
+                self.message.replace("__", "::")
+            );
             return;
         }
 

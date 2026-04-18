@@ -197,7 +197,9 @@ fn load_std_modules(
 
         if import.path.starts_with("std.") {
             if let Some(file_path) = resolve_std_import(&import.path)? {
-                if file_path.exists() && let Ok(content) = fs::read_to_string(&file_path) {
+                if file_path.exists()
+                    && let Ok(content) = fs::read_to_string(&file_path)
+                {
                     loaded.insert(import.path.clone());
                     let short_name = get_module_short_name(&import.path);
 
