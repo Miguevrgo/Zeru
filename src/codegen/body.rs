@@ -235,7 +235,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    pub(super) fn compile_statement(&mut self, stmt: &Statement) {
+    fn compile_statement(&mut self, stmt: &Statement) {
         match &stmt.kind {
             StatementKind::Var {
                 name,
@@ -665,7 +665,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         result
     }
 
-    pub(super) fn compile_expression_inner(
+    fn compile_expression_inner(
         &mut self,
         expr: &Expression,
         expected_type: Option<BasicTypeEnum<'ctx>>,
@@ -1009,73 +1009,41 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    pub(super) fn apply_compound_op(
+    fn apply_compound_op(
         &mut self,
         lhs: BasicValueEnum<'ctx>,
         rhs: BasicValueEnum<'ctx>,
         operator: &Token,
         span: Span,
     ) -> BasicValueEnum<'ctx> {
+        // Map the compound operator to its plain binary equivalent, then reuse
+        // the arithmetic helpers shared with `lower_infix`.
+        let plain = match operator {
+            Token::PlusEq => Token::Plus,
+            Token::MinusEq => Token::Minus,
+            Token::StarEq => Token::Star,
+            Token::SlashEq => Token::Slash,
+            Token::ModEq => Token::Mod,
+            Token::BitAndEq => Token::BitAnd,
+            Token::BitOrEq => Token::BitOr,
+            Token::BitXorEq => Token::BitXor,
+            Token::BitLShiftEq => Token::ShiftLeft,
+            Token::BitRShiftEq => Token::ShiftRight,
+            _ => {
+                self.error(format!("Unknown compound operator '{:?}'", operator), span);
+                return self.dummy_val();
+            }
+        };
+
         match (lhs, rhs) {
-            (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => match operator {
-                Token::PlusEq => self.builder.build_int_add(l, r, "addtmp").unwrap().into(),
-                Token::MinusEq => self.builder.build_int_sub(l, r, "subtmp").unwrap().into(),
-                Token::StarEq => self.builder.build_int_mul(l, r, "multmp").unwrap().into(),
-                Token::SlashEq => self
-                    .builder
-                    .build_int_signed_div(l, r, "divtmp")
-                    .unwrap()
-                    .into(),
-                Token::ModEq => self
-                    .builder
-                    .build_int_signed_rem(l, r, "modtmp")
-                    .unwrap()
-                    .into(),
-                Token::BitAndEq => self.builder.build_and(l, r, "andtmp").unwrap().into(),
-                Token::BitOrEq => self.builder.build_or(l, r, "ortmp").unwrap().into(),
-                Token::BitXorEq => self.builder.build_xor(l, r, "xortmp").unwrap().into(),
-                Token::BitLShiftEq => self
-                    .builder
-                    .build_left_shift(l, r, "shltmp")
-                    .unwrap()
-                    .into(),
-                Token::BitRShiftEq => self
-                    .builder
-                    .build_right_shift(l, r, true, "shrtmp")
-                    .unwrap()
-                    .into(),
-                _ => {
+            (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => {
+                self.apply_int_arith(l, r, &plain, true).unwrap_or_else(|| {
                     self.error(format!("Unknown compound operator '{:?}'", operator), span);
                     self.dummy_val()
-                }
-            },
-            (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) => match operator {
-                Token::PlusEq => self
-                    .builder
-                    .build_float_add(l, r, "faddtmp")
-                    .unwrap()
-                    .into(),
-                Token::MinusEq => self
-                    .builder
-                    .build_float_sub(l, r, "fsubtmp")
-                    .unwrap()
-                    .into(),
-                Token::StarEq => self
-                    .builder
-                    .build_float_mul(l, r, "fmultmp")
-                    .unwrap()
-                    .into(),
-                Token::SlashEq => self
-                    .builder
-                    .build_float_div(l, r, "fdivtmp")
-                    .unwrap()
-                    .into(),
-                Token::ModEq => self
-                    .builder
-                    .build_float_rem(l, r, "fmodtmp")
-                    .unwrap()
-                    .into(),
-                _ => {
+                })
+            }
+            (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) => {
+                self.apply_float_arith(l, r, &plain).unwrap_or_else(|| {
                     self.error(
                         format!(
                             "Compound operator '{:?}' is not supported for floats",
@@ -1084,13 +1052,108 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         span,
                     );
                     self.dummy_val()
-                }
-            },
+                })
+            }
             _ => {
                 self.error("Type mismatch in compound assignment", span);
                 self.dummy_val()
             }
         }
+    }
+
+    /// Build an integer arithmetic/bitwise op. Returns `None` for unsupported
+    /// operators so the caller can choose its own error message.
+    fn apply_int_arith(
+        &self,
+        l: inkwell::values::IntValue<'ctx>,
+        r: inkwell::values::IntValue<'ctx>,
+        op: &Token,
+        signed: bool,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        let v: BasicValueEnum<'ctx> = match op {
+            Token::Plus => self.builder.build_int_add(l, r, "addtmp").unwrap().into(),
+            Token::Minus => self.builder.build_int_sub(l, r, "subtmp").unwrap().into(),
+            Token::Star => self.builder.build_int_mul(l, r, "multmp").unwrap().into(),
+            Token::Slash => {
+                if signed {
+                    self.builder
+                        .build_int_signed_div(l, r, "divtmp")
+                        .unwrap()
+                        .into()
+                } else {
+                    self.builder
+                        .build_int_unsigned_div(l, r, "udivtmp")
+                        .unwrap()
+                        .into()
+                }
+            }
+            Token::Mod => {
+                if signed {
+                    self.builder
+                        .build_int_signed_rem(l, r, "modtmp")
+                        .unwrap()
+                        .into()
+                } else {
+                    self.builder
+                        .build_int_unsigned_rem(l, r, "umodtmp")
+                        .unwrap()
+                        .into()
+                }
+            }
+            Token::BitAnd => self.builder.build_and(l, r, "andtmp").unwrap().into(),
+            Token::BitOr => self.builder.build_or(l, r, "ortmp").unwrap().into(),
+            Token::BitXor => self.builder.build_xor(l, r, "xortmp").unwrap().into(),
+            Token::ShiftLeft => self
+                .builder
+                .build_left_shift(l, r, "shltmp")
+                .unwrap()
+                .into(),
+            Token::ShiftRight => self
+                .builder
+                .build_right_shift(l, r, signed, "shrtmp")
+                .unwrap()
+                .into(),
+            _ => return None,
+        };
+        Some(v)
+    }
+
+    /// Build a float arithmetic op. Returns `None` for unsupported operators.
+    fn apply_float_arith(
+        &self,
+        l: inkwell::values::FloatValue<'ctx>,
+        r: inkwell::values::FloatValue<'ctx>,
+        op: &Token,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        let v: BasicValueEnum<'ctx> = match op {
+            Token::Plus => self
+                .builder
+                .build_float_add(l, r, "faddtmp")
+                .unwrap()
+                .into(),
+            Token::Minus => self
+                .builder
+                .build_float_sub(l, r, "fsubtmp")
+                .unwrap()
+                .into(),
+            Token::Star => self
+                .builder
+                .build_float_mul(l, r, "fmultmp")
+                .unwrap()
+                .into(),
+            Token::Slash => self
+                .builder
+                .build_float_div(l, r, "fdivtmp")
+                .unwrap()
+                .into(),
+            Token::Mod => self
+                .builder
+                .build_float_rem(l, r, "fmodtmp")
+                .unwrap()
+                .into(),
+            _ => return None,
+        };
+        Some(v)
     }
 
     /// Lower an `ExpressionKind::Call`.
@@ -1362,7 +1425,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         match (lhs, rhs) {
             (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => {
-                // Helper for the 4 signed/unsigned-aware integer comparisons.
+                // Comparisons are signed/unsigned-aware via the LHS expr type.
                 let unsigned = Self::is_unsigned_expr(left);
                 let int_cmp = |signed: IntPredicate, unsigned_pred: IntPredicate, name: &str| {
                     let pred = if unsigned { unsigned_pred } else { signed };
@@ -1373,37 +1436,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 };
 
                 match operator {
-                    Token::Plus => self.builder.build_int_add(l, r, "addtmp").unwrap().into(),
-                    Token::Minus => self.builder.build_int_sub(l, r, "subtmp").unwrap().into(),
-                    Token::Star => self.builder.build_int_mul(l, r, "multmp").unwrap().into(),
-                    Token::Slash => {
-                        let is_signed = self.is_signed_integer(expr).unwrap_or(true);
-                        if is_signed {
-                            self.builder
-                                .build_int_signed_div(l, r, "divtmp")
-                                .unwrap()
-                                .into()
-                        } else {
-                            self.builder
-                                .build_int_unsigned_div(l, r, "udivtmp")
-                                .unwrap()
-                                .into()
-                        }
-                    }
-                    Token::Mod => {
-                        let is_signed = self.is_signed_integer(expr).unwrap_or(true);
-                        if is_signed {
-                            self.builder
-                                .build_int_signed_rem(l, r, "modtmp")
-                                .unwrap()
-                                .into()
-                        } else {
-                            self.builder
-                                .build_int_unsigned_rem(l, r, "umodtmp")
-                                .unwrap()
-                                .into()
-                        }
-                    }
                     Token::Eq => self
                         .builder
                         .build_int_compare(IntPredicate::EQ, l, r, "eqtmp")
@@ -1418,57 +1450,26 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     Token::Leq => int_cmp(IntPredicate::SLE, IntPredicate::ULE, "letmp"),
                     Token::Gt => int_cmp(IntPredicate::SGT, IntPredicate::UGT, "gttmp"),
                     Token::Geq => int_cmp(IntPredicate::SGE, IntPredicate::UGE, "getmp"),
-                    Token::BitAnd => self.builder.build_and(l, r, "andtmp").unwrap().into(),
-                    Token::BitOr => self.builder.build_or(l, r, "ortmp").unwrap().into(),
-                    Token::BitXor => self.builder.build_xor(l, r, "xortmp").unwrap().into(),
-                    Token::ShiftLeft => self
-                        .builder
-                        .build_left_shift(l, r, "shltmp")
-                        .unwrap()
-                        .into(),
-                    Token::ShiftRight => {
-                        let is_signed = self.is_signed_integer(left).unwrap_or(true);
-                        self.builder
-                            .build_right_shift(l, r, is_signed, "shrtmp")
-                            .unwrap()
-                            .into()
-                    }
                     _ => {
-                        self.error(
-                            format!("Integer operator '{:?}' is not implemented", operator),
-                            expr.span,
-                        );
-                        self.dummy_val()
+                        // For arithmetic/bitwise the signedness of the *result* (or
+                        // the LHS for shifts) drives the LLVM op choice.
+                        let signed = if matches!(operator, Token::ShiftRight) {
+                            self.is_signed_integer(left).unwrap_or(true)
+                        } else {
+                            self.is_signed_integer(expr).unwrap_or(true)
+                        };
+                        self.apply_int_arith(l, r, operator, signed)
+                            .unwrap_or_else(|| {
+                                self.error(
+                                    format!("Integer operator '{:?}' is not implemented", operator),
+                                    expr.span,
+                                );
+                                self.dummy_val()
+                            })
                     }
                 }
             }
             (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) => match operator {
-                Token::Plus => self
-                    .builder
-                    .build_float_add(l, r, "faddtmp")
-                    .unwrap()
-                    .into(),
-                Token::Minus => self
-                    .builder
-                    .build_float_sub(l, r, "fsubtmp")
-                    .unwrap()
-                    .into(),
-                Token::Star => self
-                    .builder
-                    .build_float_mul(l, r, "fmultmp")
-                    .unwrap()
-                    .into(),
-                Token::Slash => self
-                    .builder
-                    .build_float_div(l, r, "fdivtmp")
-                    .unwrap()
-                    .into(),
-                Token::Mod => self
-                    .builder
-                    .build_float_rem(l, r, "fmodtmp")
-                    .unwrap()
-                    .into(),
-
                 Token::Eq => self
                     .builder
                     .build_float_compare(FloatPredicate::OEQ, l, r, "feqtmp")
@@ -1499,13 +1500,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .build_float_compare(FloatPredicate::OGE, l, r, "fgetmp")
                     .unwrap()
                     .into(),
-                _ => {
+                _ => self.apply_float_arith(l, r, operator).unwrap_or_else(|| {
                     self.error(
                         format!("Float operator '{:?}' is not implemented", operator),
                         expr.span,
                     );
                     self.dummy_val()
-                }
+                }),
             },
             (BasicValueEnum::PointerValue(ptr), BasicValueEnum::IntValue(offset)) => {
                 let off = match operator {

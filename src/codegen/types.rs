@@ -59,7 +59,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    pub(super) fn llvm_type_to_type_spec(&self, ty: BasicTypeEnum<'ctx>) -> TypeSpec {
+    fn llvm_type_to_type_spec(&self, ty: BasicTypeEnum<'ctx>) -> TypeSpec {
         match ty {
             BasicTypeEnum::IntType(int_ty) => {
                 let width = int_ty.get_bit_width();
@@ -252,7 +252,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    pub(super) fn type_size(&self, ty: BasicTypeEnum<'ctx>) -> u64 {
+    fn type_size(&self, ty: BasicTypeEnum<'ctx>) -> u64 {
         match ty {
             BasicTypeEnum::IntType(t) => t.get_bit_width() as u64,
             BasicTypeEnum::FloatType(t) => {
@@ -272,7 +272,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    pub(super) fn get_named_llvm_type(&self, name: &str) -> Option<BasicTypeEnum<'ctx>> {
+    fn get_named_llvm_type(&self, name: &str) -> Option<BasicTypeEnum<'ctx>> {
         let int_type = match name {
             "i8" | "u8" => Some(self.context.i8_type()),
             "i16" | "u16" => Some(self.context.i16_type()),

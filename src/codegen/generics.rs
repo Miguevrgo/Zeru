@@ -83,11 +83,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         func
     }
 
-    pub(super) fn substitute_type_spec(
-        &self,
-        ty: &TypeSpec,
-        subs: &HashMap<String, TypeSpec>,
-    ) -> TypeSpec {
+    fn substitute_type_spec(&self, ty: &TypeSpec, subs: &HashMap<String, TypeSpec>) -> TypeSpec {
         match ty {
             TypeSpec::Named(name) => {
                 if let Some(replacement) = subs.get(name) {
@@ -126,7 +122,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    pub(super) fn mangle_generic_name(
+    fn mangle_generic_name(
         &self,
         base_name: &str,
         subs: &HashMap<String, TypeSpec>,
@@ -143,7 +139,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         mangled
     }
 
-    pub(super) fn type_spec_to_mangled(&self, ty: &TypeSpec) -> String {
+    fn type_spec_to_mangled(&self, ty: &TypeSpec) -> String {
         match ty {
             TypeSpec::Named(name) => name.clone(),
             TypeSpec::Pointer(inner) => format!("ptr_{}", self.type_spec_to_mangled(inner)),

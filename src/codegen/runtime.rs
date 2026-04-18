@@ -33,7 +33,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     /// The `{ *mut u8, usize, usize }` LLVM struct shape used for built-in `Vec`.
-    pub(super) fn vec_struct_type(&self) -> StructType<'ctx> {
+    fn vec_struct_type(&self) -> StructType<'ctx> {
         let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
         let usize_type = self.context.i64_type();
         self.context.struct_type(
@@ -44,7 +44,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     /// The `{ bool, T }` LLVM struct shape used for `Option<T>` returned from
     /// runtime helpers (e.g. `Vec::pop`).
-    pub(super) fn option_struct_type(&self, elem_ty: BasicTypeEnum<'ctx>) -> StructType<'ctx> {
+    fn option_struct_type(&self, elem_ty: BasicTypeEnum<'ctx>) -> StructType<'ctx> {
         self.context
             .struct_type(&[self.context.bool_type().into(), elem_ty], false)
     }
@@ -91,7 +91,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         global.set_initializer(&entries_array);
     }
 
-    pub(super) fn get_or_create_panic_fn(&mut self) -> FunctionValue<'ctx> {
+    fn get_or_create_panic_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(f) = self.panic_fn {
             return f;
         }
@@ -873,7 +873,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    pub(super) fn get_or_create_alloc_fn(&mut self) -> FunctionValue<'ctx> {
+    fn get_or_create_alloc_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(f) = self.module.get_function("__zeru_alloc") {
             return f;
         }
@@ -887,7 +887,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         )
     }
 
-    pub(super) fn get_or_create_realloc_fn(&mut self) -> FunctionValue<'ctx> {
+    fn get_or_create_realloc_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(f) = self.module.get_function("__zeru_realloc") {
             return f;
         }
@@ -904,7 +904,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         )
     }
 
-    pub(super) fn get_or_create_memcpy_fn(&mut self) -> FunctionValue<'ctx> {
+    fn get_or_create_memcpy_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(f) = self.module.get_function("__zeru_memcpy") {
             return f;
         }
