@@ -1,5 +1,5 @@
-use crate::codegen::SafetyMode;
 use crate::codegen::compiler::Compiler;
+use crate::codegen::SafetyMode;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::sema::analyzer::SemanticAnalyzer;
@@ -12,7 +12,7 @@ fn compile_to_ir(input: &str) -> Result<String, String> {
 fn compile_to_ir_with_mode(input: &str, safety_mode: SafetyMode) -> Result<String, String> {
     let lexer = Lexer::new(input);
     let mut parser = Parser::new(lexer);
-    let program = parser.parse_program();
+    let mut program = parser.parse_program();
 
     if !parser.errors.is_empty() {
         let msgs: Vec<_> = parser.errors.iter().map(|e| e.message.as_str()).collect();
@@ -20,7 +20,7 @@ fn compile_to_ir_with_mode(input: &str, safety_mode: SafetyMode) -> Result<Strin
     }
 
     let mut analyzer = SemanticAnalyzer::new();
-    analyzer.analyze(&program);
+    analyzer.analyze(&mut program);
 
     if !analyzer.errors.is_empty() {
         let msgs: Vec<_> = analyzer.errors.iter().map(|e| e.message.as_str()).collect();
@@ -33,6 +33,11 @@ fn compile_to_ir_with_mode(input: &str, safety_mode: SafetyMode) -> Result<Strin
 
     let mut compiler = Compiler::new(&context, &builder, &module, safety_mode);
     compiler.compile_program(&program);
+
+    if !compiler.errors.is_empty() {
+        let msgs: Vec<_> = compiler.errors.iter().map(|e| e.message.as_str()).collect();
+        return Err(format!("Codegen errors: {:?}", msgs));
+    }
 
     Ok(module.print_to_string().to_string())
 }

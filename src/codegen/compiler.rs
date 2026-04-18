@@ -13,6 +13,8 @@ use inkwell::{
 use crate::{
     ast::{AsmOperand, Expression, ExpressionKind, Program, Statement, StatementKind, TypeSpec},
     codegen::SafetyMode,
+    errors::{Span, ZeruError},
+    sema::types::{Signedness, Type},
     token::Token,
 };
 
@@ -50,6 +52,8 @@ pub struct Compiler<'a, 'ctx> {
     current_type_substitutions: HashMap<String, TypeSpec>,
 
     scope_stack: Vec<Vec<String>>,
+
+    pub errors: Vec<ZeruError>,
 }
 
 #[derive(Clone)]
@@ -87,6 +91,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             monomorphized: HashMap::new(),
             current_type_substitutions: HashMap::new(),
             scope_stack: vec![Vec::new()], // Global scope
+            errors: Vec::new(),
         }
     }
 
@@ -129,7 +134,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 && type_params.is_empty()
             {
                 self.current_struct_context = Some(name.clone());
-                self.compile_struct_body(name, fields);
+                self.compile_struct_body(name, fields, stmt.span);
                 self.current_struct_context = None;
             }
         }
@@ -237,6 +242,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.create_builtin_cleanup();
     }
 
+    /// Record a codegen error. Compilation continues so further errors can be found.
+    fn error(&mut self, message: impl Into<String>, span: Span) {
+        self.errors.push(ZeruError::semantic(message, span, 0));
+    }
+
+    /// Produce a safe dummy `i32 0` value used as a fallback after an error is recorded.
+    fn dummy_val(&self) -> BasicValueEnum<'ctx> {
+        self.context.i32_type().const_int(0, false).into()
+    }
+
     fn get_or_create_panic_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(f) = self.panic_fn {
             return f;
@@ -293,7 +308,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(continue_block);
     }
 
-    fn compile_struct_body(&mut self, name: &str, fields: &[(String, TypeSpec)]) {
+    fn compile_struct_body(&mut self, name: &str, fields: &[(String, TypeSpec)], span: Span) {
         let mut field_types = Vec::new();
         let mut field_indices = HashMap::new();
 
@@ -302,7 +317,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 field_types.push(ty);
                 field_indices.insert(field_name.clone(), i as u32);
             } else {
-                panic!("Compiler: Unknown type in struct field {}", field_name);
+                self.error(
+                    format!("Compiler: Unknown type in struct field '{}'", field_name),
+                    span,
+                );
+                return;
             }
         }
 
@@ -510,7 +529,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn compile_fn_prototype(
-        &self,
+        &mut self,
         name: &str,
         params: &[(String, TypeSpec, bool)],
         return_type: &Option<TypeSpec>,
@@ -549,16 +568,23 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     }
                     continue;
                 }
-                panic!(
-                    "'self' parameter used outside of struct context in function '{}'",
-                    name
+                self.error(
+                    format!(
+                        "'self' parameter used outside of struct context in function '{}'",
+                        name
+                    ),
+                    Span::default(),
                 );
+                continue;
             }
 
             if let Some(ty) = self.get_llvm_type(type_spec) {
                 param_types.push(ty.into());
             } else {
-                panic!("Function parameter '{}' cannot be void", param_name);
+                self.error(
+                    format!("Function parameter '{}' cannot be void", param_name),
+                    Span::default(),
+                );
             }
         }
 
@@ -623,10 +649,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     continue;
                 }
 
-                panic!("self in non-struct context body");
+                self.error("'self' used in non-struct context body", Span::default());
+                return;
             }
 
-            let arg_type = self.get_llvm_type(param_spec).expect("Invalid param type");
+            let arg_type = match self.get_llvm_type(param_spec) {
+                Some(t) => t,
+                None => {
+                    self.error(
+                        format!("Parameter '{}' has invalid type", param_name),
+                        Span::default(),
+                    );
+                    return;
+                }
+            };
 
             let alloca = self.create_entry_block_alloca(function, param_name, arg_type);
             self.builder.build_store(alloca, arg).unwrap();
@@ -677,7 +713,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let target_type = if let Some(spec) = type_annotation {
                     match self.get_llvm_type(spec) {
                         Some(ty) => Some(ty),
-                        None => panic!("Codegen: Variable '{}' cannot be void", name),
+                        None => {
+                            self.error(
+                                format!("Variable '{}' cannot have void type", name),
+                                stmt.span,
+                            );
+                            return;
+                        }
                     }
                 } else {
                     None
@@ -992,7 +1034,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .into_struct_value();
                 str_slice.into()
             }
-            _ => panic!("Codegen: Unsupported constant expression: {:?}", expr.kind),
+            _ => {
+                self.error(
+                    format!("Unsupported constant expression: {:?}", expr.kind),
+                    expr.span,
+                );
+                self.dummy_val()
+            }
         }
     }
 
@@ -1150,10 +1198,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
 
                 if let Some((ptr, ty, _)) = self.variables.get(name) {
-                    return self.builder.build_load(*ty, *ptr, "loadtmp").unwrap();
+                    let load_name = format!("{}_load", name);
+                    return self.builder.build_load(*ty, *ptr, &load_name).unwrap();
                 }
 
-                panic!("Codegen: Unknown identifier '{}'", name);
+                self.error(format!("Unknown identifier '{}'", name), expr.span);
+                self.dummy_val()
             }
             ExpressionKind::Get { .. } | ExpressionKind::Index { .. } => {
                 if let ExpressionKind::Get { object, name } = &expr.kind
@@ -1169,7 +1219,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
 
                 if let Some((ptr, ty)) = self.compile_lvalue(expr) {
-                    return self.builder.build_load(ty, ptr, "loadtmp").unwrap();
+                    let load_name = match &expr.kind {
+                        ExpressionKind::Get { name, .. } => format!("{}_load", name),
+                        ExpressionKind::Index { .. } => "elem_load".to_string(),
+                        ExpressionKind::Identifier(name) => format!("{}_load", name),
+                        _ => "field_load".to_string(),
+                    };
+                    return self.builder.build_load(ty, ptr, &load_name).unwrap();
                 }
 
                 if let ExpressionKind::Get { object, name } = &expr.kind {
@@ -1193,7 +1249,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     }
                 }
 
-                panic!("Codegen: Failed to load identifier/field {:?}", expr);
+                self.error(
+                    format!("Failed to load expression: {:?}", expr.kind),
+                    expr.span,
+                );
+                self.dummy_val()
             }
             ExpressionKind::StructLiteral { name, fields } => {
                 let (struct_ty, field_tasks) =
@@ -1205,12 +1265,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                                 let field_type = st.get_field_type_at_index(index).unwrap();
                                 tasks.push((index, field_type, field_expr));
                             } else {
-                                panic!("Unknown field {} in struct {}", field_name, name);
+                                self.error(
+                                    format!("Unknown field '{}' in struct '{}'", field_name, name),
+                                    field_expr.span,
+                                );
+                                return self.dummy_val();
                             }
                         }
                         (st, tasks)
                     } else {
-                        panic!("Unknown struct type {}", name);
+                        self.error(format!("Unknown struct type '{}'", name), expr.span);
+                        return self.dummy_val();
                     };
 
                 let mut struct_val = struct_ty.get_undef();
@@ -1229,7 +1294,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     if let Some(BasicTypeEnum::ArrayType(arr_ty)) = expected_type {
                         return arr_ty.get_undef().into();
                     }
-                    panic!("Cannot infer type from an empty array literal");
+                    self.error("Cannot infer type from an empty array literal", expr.span);
+                    return self.dummy_val();
                 }
 
                 let elem_type = if let Some(BasicTypeEnum::ArrayType(arr_ty)) = expected_type {
@@ -1263,10 +1329,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let final_val = if *operator == Token::Assign {
                     self.compile_expression(value, Some(ty))
                 } else {
-                    let current_val = self.builder.build_load(ty, ptr, "loadtmp").unwrap();
+                    let current_val = {
+                        let load_name = match &target.kind {
+                            ExpressionKind::Identifier(name) => format!("{}_cur", name),
+                            ExpressionKind::Get { name, .. } => format!("{}_cur", name),
+                            _ => "cur_val".to_string(),
+                        };
+                        self.builder.build_load(ty, ptr, &load_name).unwrap()
+                    };
                     let rhs = self.compile_expression(value, Some(ty));
 
-                    self.apply_compound_op(current_val, rhs, operator)
+                    self.apply_compound_op(current_val, rhs, operator, expr.span)
                 };
 
                 self.builder.build_store(ptr, final_val).unwrap();
@@ -1292,16 +1365,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                             method_name,
                             arguments,
                             expected_type,
+                            expr.span,
                         );
                     }
 
-                    let is_mutating_vec_method = matches!(
-                        method_name.as_str(),
-                        "push" | "pop" | "clear" | "get" | "copy"
-                    );
-
-                    if is_mutating_vec_method
-                        && let ExpressionKind::Identifier(var_name) = &object.kind
+                    if let ExpressionKind::Identifier(var_name) = &object.kind
                         && let Some((ptr, ty, _)) = self.variables.get(var_name).cloned()
                         && let BasicTypeEnum::StructType(st) = ty
                         && st.count_fields() == 3
@@ -1363,15 +1431,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                             BasicTypeEnum::StructType(st) => {
                                 st.get_name().unwrap().to_str().unwrap().to_string()
                             }
-                            _ => panic!("Method call on non-struct"),
+                            _ => {
+                                self.error("Method call on non-struct value", expr.span);
+                                return self.dummy_val();
+                            }
                         }
                     };
 
                     let mangled = format!("{}::{}", struct_name, method_name);
-                    let func = self
-                        .module
-                        .get_function(&mangled)
-                        .expect("Method not found");
+                    let func = match self.module.get_function(&mangled) {
+                        Some(f) => f,
+                        None => {
+                            self.error(format!("Method '{}' not found", mangled), expr.span);
+                            return self.dummy_val();
+                        }
+                    };
 
                     let param_types = func.get_type().get_param_types();
                     let first_param_is_ptr = param_types
@@ -1394,10 +1468,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                                     vec![(*ptr).into()]
                                 }
                             } else {
-                                panic!("Cannot get pointer to object for method call");
+                                self.error(
+                                    "Cannot get pointer to object for method call",
+                                    expr.span,
+                                );
+                                return self.dummy_val();
                             }
                         } else {
-                            panic!("var self method requires identifier object");
+                            self.error(
+                                "'var self' method requires an identifier as receiver",
+                                expr.span,
+                            );
+                            return self.dummy_val();
                         }
                     } else {
                         let obj_val = self.compile_expression(object, None);
@@ -1407,30 +1489,33 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     (func, args)
                 } else if let ExpressionKind::Identifier(name) = &function.kind {
                     if matches!(name.as_str(), "print" | "println" | "eprint" | "eprintln") {
-                        return self.compile_builtin_print(name, arguments);
-                    }
-
-                    if name == "exit" {
-                        return self.compile_builtin_exit(arguments);
+                        return self.compile_builtin_print(name, arguments, expr.span);
                     }
 
                     if name == "Ok" {
-                        return self.compile_ok_constructor(arguments, expected_type);
+                        return self.compile_ok_constructor(arguments, expected_type, expr.span);
                     }
 
                     if name == "Err" {
-                        return self.compile_err_constructor(arguments, expected_type);
+                        return self.compile_err_constructor(arguments, expected_type, expr.span);
                     }
 
                     if self.generic_functions.contains_key(name) {
                         let func = self.monomorphize_call(name, arguments);
                         (func, Vec::new())
                     } else {
-                        let func = self.module.get_function(name).expect("Function not found");
+                        let func = match self.module.get_function(name) {
+                            Some(f) => f,
+                            None => {
+                                self.error(format!("Unknown function '{}'", name), expr.span);
+                                return self.dummy_val();
+                            }
+                        };
                         (func, Vec::new())
                     }
                 } else {
-                    panic!("Indirect calls not implemented");
+                    self.error("Indirect function calls are not yet supported", expr.span);
+                    return self.dummy_val();
                 };
 
                 let mut compiled_args: Vec<BasicMetadataValueEnum> = implicit_args;
@@ -1494,7 +1579,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                             .into();
                     }
 
-                    panic!("Codegen: Invalid :: expression");
+                    self.error("Invalid '::' expression", expr.span);
+                    return self.dummy_val();
                 }
 
                 if *operator == Token::And || *operator == Token::Or {
@@ -1522,7 +1608,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                                     .unwrap()
                             }
                         }
-                        _ => panic!("&& and || require boolean/integer operands"),
+                        _ => {
+                            self.error(
+                                "'&&' and '||' require boolean or integer operands",
+                                expr.span,
+                            );
+                            self.context.bool_type().const_zero()
+                        }
                     };
 
                     let entry_block = self.builder.get_insert_block().unwrap();
@@ -1556,7 +1648,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                                     .unwrap()
                             }
                         }
-                        _ => panic!("&& and || require boolean/integer operands"),
+                        _ => {
+                            self.error(
+                                "'&&' and '||' require boolean or integer operands",
+                                expr.span,
+                            );
+                            self.context.bool_type().const_zero()
+                        }
                     };
                     let rhs_end_block = self.builder.get_insert_block().unwrap();
                     self.builder
@@ -1634,26 +1732,50 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                             .build_int_compare(IntPredicate::NE, l, r, "netmp")
                             .unwrap()
                             .into(),
-                        Token::Lt => self
-                            .builder
-                            .build_int_compare(IntPredicate::SLT, l, r, "lttmp")
-                            .unwrap()
-                            .into(),
-                        Token::Leq => self
-                            .builder
-                            .build_int_compare(IntPredicate::SLE, l, r, "letmp")
-                            .unwrap()
-                            .into(),
-                        Token::Gt => self
-                            .builder
-                            .build_int_compare(IntPredicate::SGT, l, r, "gttmp")
-                            .unwrap()
-                            .into(),
-                        Token::Geq => self
-                            .builder
-                            .build_int_compare(IntPredicate::SGE, l, r, "getmp")
-                            .unwrap()
-                            .into(),
+                        Token::Lt => {
+                            let pred = if Self::is_unsigned_expr(left) {
+                                IntPredicate::ULT
+                            } else {
+                                IntPredicate::SLT
+                            };
+                            self.builder
+                                .build_int_compare(pred, l, r, "lttmp")
+                                .unwrap()
+                                .into()
+                        }
+                        Token::Leq => {
+                            let pred = if Self::is_unsigned_expr(left) {
+                                IntPredicate::ULE
+                            } else {
+                                IntPredicate::SLE
+                            };
+                            self.builder
+                                .build_int_compare(pred, l, r, "letmp")
+                                .unwrap()
+                                .into()
+                        }
+                        Token::Gt => {
+                            let pred = if Self::is_unsigned_expr(left) {
+                                IntPredicate::UGT
+                            } else {
+                                IntPredicate::SGT
+                            };
+                            self.builder
+                                .build_int_compare(pred, l, r, "gttmp")
+                                .unwrap()
+                                .into()
+                        }
+                        Token::Geq => {
+                            let pred = if Self::is_unsigned_expr(left) {
+                                IntPredicate::UGE
+                            } else {
+                                IntPredicate::SGE
+                            };
+                            self.builder
+                                .build_int_compare(pred, l, r, "getmp")
+                                .unwrap()
+                                .into()
+                        }
                         Token::BitAnd => self.builder.build_and(l, r, "andtmp").unwrap().into(),
                         Token::BitOr => self.builder.build_or(l, r, "ortmp").unwrap().into(),
                         Token::BitXor => self.builder.build_xor(l, r, "xortmp").unwrap().into(),
@@ -1669,7 +1791,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                                 .unwrap()
                                 .into()
                         }
-                        _ => panic!("Op int not implemented"),
+                        _ => {
+                            self.error(
+                                format!("Integer operator '{:?}' is not implemented", operator),
+                                expr.span,
+                            );
+                            self.dummy_val()
+                        }
                     },
                     (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) => {
                         match operator {
@@ -1729,14 +1857,26 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                                 .build_float_compare(FloatPredicate::OGE, l, r, "fgetmp")
                                 .unwrap()
                                 .into(),
-                            _ => panic!("Op float not implemented"),
+                            _ => {
+                                self.error(
+                                    format!("Float operator '{:?}' is not implemented", operator),
+                                    expr.span,
+                                );
+                                self.dummy_val()
+                            }
                         }
                     }
                     (BasicValueEnum::PointerValue(ptr), BasicValueEnum::IntValue(offset)) => {
                         let off = match operator {
                             Token::Plus => offset,
                             Token::Minus => self.builder.build_int_neg(offset, "neg").unwrap(),
-                            _ => panic!("Only +/- supported for pointer arithmetic"),
+                            _ => {
+                                self.error(
+                                    "Only '+' and '-' are supported for pointer arithmetic",
+                                    expr.span,
+                                );
+                                return self.dummy_val();
+                            }
                         };
                         unsafe {
                             self.builder
@@ -1787,12 +1927,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                                 .build_int_compare(IntPredicate::UGE, l_int, r_int, "ptr_ge")
                                 .unwrap()
                                 .into(),
-                            _ => panic!(
-                                "Only comparison operators supported for pointer-pointer ops"
-                            ),
+                            _ => {
+                                self.error(
+                                    "Only comparison operators are supported for pointer-pointer operations",
+                                    expr.span,
+                                );
+                                self.dummy_val()
+                            }
                         }
                     }
-                    _ => panic!("Type mismatch in binary operation"),
+                    _ => {
+                        self.error("Type mismatch in binary operation", expr.span);
+                        self.dummy_val()
+                    }
                 }
             }
             ExpressionKind::Boolean(val) => self
@@ -1840,26 +1987,49 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         BasicValueEnum::FloatValue(v) => {
                             self.builder.build_float_neg(v, "fnegtmp").unwrap().into()
                         }
-                        _ => panic!("Codegen: Cannot negate non-numeric type"),
+                        _ => {
+                            self.error("Cannot negate a non-numeric type", right.span);
+                            self.dummy_val()
+                        }
                     },
                     Token::Bang => {
                         if let BasicValueEnum::IntValue(v) = operand {
                             self.builder.build_not(v, "nottmp").unwrap().into()
                         } else {
-                            panic!("Codegen: Cannot apply '!' operator to non-integer type");
+                            self.error("Cannot apply '!' to a non-integer type", right.span);
+                            self.dummy_val()
                         }
                     }
-                    _ => panic!("Codegen: Unimplemented prefix operator: {operator:?}"),
+                    _ => {
+                        self.error(
+                            format!("Prefix operator '{:?}' is not implemented", operator),
+                            expr.span,
+                        );
+                        self.dummy_val()
+                    }
                 }
             }
 
             ExpressionKind::Cast { left, target } => {
                 let src_val = self.compile_expression(left, None);
 
-                let target_typespec = Self::expr_to_typespec(target);
-                let target_type = self
-                    .get_llvm_type(&target_typespec)
-                    .expect("Cast to void not allowed");
+                let target_typespec = match Self::expr_to_typespec(target) {
+                    Some(t) => t,
+                    None => {
+                        self.error(
+                            format!("Cannot use '{:?}' as a cast target type", target.kind),
+                            target.span,
+                        );
+                        return self.dummy_val();
+                    }
+                };
+                let target_type = match self.get_llvm_type(&target_typespec) {
+                    Some(t) => t,
+                    None => {
+                        self.error("Cast to void type is not allowed", target.span);
+                        return self.dummy_val();
+                    }
+                };
 
                 match (src_val, target_type) {
                     (BasicValueEnum::IntValue(v), BasicTypeEnum::IntType(t)) => {
@@ -1915,14 +2085,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .build_int_to_ptr(v, t, "inttoptr")
                         .unwrap()
                         .into(),
-                    _ => panic!("Codegen: Unsupported cast combination"),
+                    _ => {
+                        self.error("Unsupported cast combination", expr.span);
+                        self.dummy_val()
+                    }
                 }
             }
             ExpressionKind::AddressOf(inner) => {
                 if let Some((ptr, _ty)) = self.compile_lvalue(inner) {
                     ptr.into()
                 } else {
-                    panic!("Codegen: Cannot take address of non-lvalue expression");
+                    self.error("Cannot take address of non-lvalue expression", inner.span);
+                    self.dummy_val()
                 }
             }
 
@@ -1930,7 +2104,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 if let Some((ptr, _ty)) = self.compile_lvalue(inner) {
                     ptr.into()
                 } else {
-                    panic!("Codegen: Cannot create reference to non-lvalue expression");
+                    self.error(
+                        "Cannot create reference to non-lvalue expression",
+                        inner.span,
+                    );
+                    self.dummy_val()
                 }
             }
 
@@ -1951,7 +2129,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .unwrap_or_else(|| self.context.i64_type().into());
                     self.builder.build_load(load_type, ptr, "deref").unwrap()
                 } else {
-                    panic!("Codegen: Cannot dereference non-pointer value");
+                    self.error("Cannot dereference a non-pointer value", inner.span);
+                    self.dummy_val()
                 }
             }
 
@@ -2086,7 +2265,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .into_struct_value();
                     opt_val.into()
                 } else {
-                    panic!("Codegen: None requires known optional type context");
+                    self.error("'None' requires a known optional type context", expr.span);
+                    self.dummy_val()
                 }
             }
             ExpressionKind::InlineAsm {
@@ -2218,6 +2398,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         method_name: &str,
         arguments: &[Expression],
         _expected_type: Option<BasicTypeEnum<'ctx>>,
+        call_span: Span,
     ) -> BasicValueEnum<'ctx> {
         let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
         let usize_type = self.context.i64_type();
@@ -2310,7 +2491,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 vec_val.into()
             }
-            _ => panic!("Codegen: Unknown Vec static method '{}'", method_name),
+            _ => {
+                self.error(
+                    format!("Unknown Vec static method '{}'", method_name),
+                    call_span,
+                );
+                self.dummy_val()
+            }
         }
     }
 
@@ -2866,17 +3053,39 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         )
     }
 
-    fn is_signed_integer(&self, expr: &Expression) -> Option<bool> {
-        match &expr.kind {
-            ExpressionKind::Identifier(name) => {
-                if let Some((_, _, is_unsigned)) = self.variables.get(name) {
-                    Some(!is_unsigned)
-                } else {
-                    None
+    /// Returns true if the expression has an unsigned integer type, false otherwise.
+    /// Reads the type annotated by the sema pass (`expr.ty`); falls back to
+    /// variable-table signedness for identifiers not yet annotated, and defaults
+    /// to `false` (= signed / unknown) when no information is available.
+    fn is_unsigned_expr(expr: &Expression) -> bool {
+        if let Some(ty) = &expr.ty {
+            return matches!(
+                ty,
+                Type::Integer {
+                    signed: Signedness::Unsigned,
+                    ..
                 }
-            }
-            _ => None,
+            );
         }
+        false
+    }
+
+    fn is_signed_integer(&self, expr: &Expression) -> Option<bool> {
+        if let Some(ty) = &expr.ty {
+            return Some(!matches!(
+                ty,
+                Type::Integer {
+                    signed: Signedness::Unsigned,
+                    ..
+                }
+            ));
+        }
+        if let ExpressionKind::Identifier(name) = &expr.kind
+            && let Some((_, _, is_unsigned)) = self.variables.get(name)
+        {
+            return Some(!is_unsigned);
+        }
+        None
     }
 
     fn is_unsigned_type(spec: &TypeSpec) -> bool {
@@ -2913,10 +3122,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn apply_compound_op(
-        &self,
+        &mut self,
         lhs: BasicValueEnum<'ctx>,
         rhs: BasicValueEnum<'ctx>,
         operator: &Token,
+        span: Span,
     ) -> BasicValueEnum<'ctx> {
         match (lhs, rhs) {
             (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => match operator {
@@ -2946,7 +3156,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .build_right_shift(l, r, true, "shrtmp")
                     .unwrap()
                     .into(),
-                _ => panic!("Codegen: Unknown compound operator {:?}", operator),
+                _ => {
+                    self.error(format!("Unknown compound operator '{:?}'", operator), span);
+                    self.dummy_val()
+                }
             },
             (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) => match operator {
                 Token::PlusEq => self
@@ -2974,37 +3187,48 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .build_float_rem(l, r, "fmodtmp")
                     .unwrap()
                     .into(),
-                _ => panic!(
-                    "Codegen: Compound operator {:?} not supported for floats",
-                    operator
-                ),
+                _ => {
+                    self.error(
+                        format!(
+                            "Compound operator '{:?}' is not supported for floats",
+                            operator
+                        ),
+                        span,
+                    );
+                    self.dummy_val()
+                }
             },
-            _ => panic!("Codegen: Type mismatch in compound assignment"),
+            _ => {
+                self.error("Type mismatch in compound assignment", span);
+                self.dummy_val()
+            }
         }
     }
 
-    fn expr_to_typespec(expr: &Expression) -> TypeSpec {
+    fn expr_to_typespec(expr: &Expression) -> Option<TypeSpec> {
         match &expr.kind {
-            ExpressionKind::Identifier(name) => TypeSpec::Named(name.clone()),
+            ExpressionKind::Identifier(name) => Some(TypeSpec::Named(name.clone())),
             ExpressionKind::Dereference(inner) => {
-                TypeSpec::Pointer(Box::new(Self::expr_to_typespec(inner)))
+                Self::expr_to_typespec(inner).map(|t| TypeSpec::Pointer(Box::new(t)))
             }
-            _ => panic!(
-                "Codegen: Cannot convert expression to type: {:?}",
-                expr.kind
-            ),
+            _ => None,
         }
     }
 
     fn get_llvm_type(&self, spec: &TypeSpec) -> Option<BasicTypeEnum<'ctx>> {
         match spec {
-            TypeSpec::Named(name) => self.get_named_llvm_type(name),
+            TypeSpec::Named(name) => {
+                if let Some(substituted) = self.current_type_substitutions.get(name) {
+                    return self.get_llvm_type(substituted);
+                }
+                self.get_named_llvm_type(name)
+            }
             TypeSpec::Generic { name, args } => {
                 if name == "Array" && args.len() == 2 {
                     let elem_type = self.get_llvm_type(&args[0])?;
                     let len = match &args[1] {
                         TypeSpec::IntLiteral(val) => *val as u32,
-                        _ => panic!("Array length must be an integer literal"),
+                        _ => return None,
                     };
                     return Some(elem_type.array_type(len).into());
                 }
@@ -3040,10 +3264,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                             .into(),
                     );
                 }
-                panic!("Codegen: Unknown generic type {name}");
+                None
             }
             TypeSpec::IntLiteral(_) => {
-                panic!("Codegen: Unexpected integer literal in type position")
+                None
             }
             TypeSpec::Tuple(types) => {
                 let field_types: Vec<_> =
@@ -3139,8 +3363,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .current_struct_context
                     .as_ref()
                     .and_then(|struct_name| self.struct_defs.get(struct_name))
-                    .map(|(st, _)| st.as_basic_type_enum())
-                    .or_else(|| panic!("Self used outside struct context"));
+                    .map(|(st, _)| st.as_basic_type_enum());
             }
             _ => {}
         }
@@ -3152,7 +3375,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             return Some(self.context.i32_type().into());
         }
 
-        panic!("Codegen: Unknown type {name}");
+        None
     }
 
     fn init_builtin_streams(&mut self) {
@@ -3329,9 +3552,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         &mut self,
         name: &str,
         arguments: &[Expression],
+        call_span: Span,
     ) -> BasicValueEnum<'ctx> {
         if arguments.len() != 1 {
-            panic!("{}() expects exactly 1 argument", name);
+            self.error(
+                format!("'{}()' expects exactly 1 argument", name),
+                call_span,
+            );
+            return self.dummy_val();
         }
 
         let stream_ptr = match name {
@@ -3361,7 +3589,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         } else if let BasicValueEnum::PointerValue(ptr) = string_arg {
             ptr.into()
         } else {
-            panic!("Expected str slice or pointer for print");
+            self.error(format!("'{}()' expects a string argument", name), call_span);
+            return self.dummy_val();
         };
 
         let write_str_fn = self
@@ -3398,60 +3627,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.context.i32_type().const_int(0, false).into()
     }
 
-    fn compile_builtin_exit(&mut self, arguments: &[Expression]) -> BasicValueEnum<'ctx> {
-        if arguments.len() != 1 {
-            panic!("exit() expects exactly 1 argument");
-        }
-
-        if let Some(stdout_ptr) = self.stdout_stream {
-            let flush_fn = self
-                .module
-                .get_function("OutStream::flush")
-                .expect("OutStream::flush not found");
-            self.builder
-                .build_call(flush_fn, &[stdout_ptr.into()], "")
-                .unwrap();
-        }
-
-        if let Some(stderr_ptr) = self.stderr_stream {
-            let flush_fn = self
-                .module
-                .get_function("OutStream::flush")
-                .expect("OutStream::flush not found");
-            self.builder
-                .build_call(flush_fn, &[stderr_ptr.into()], "")
-                .unwrap();
-        }
-
-        let exit_code = self
-            .compile_expression(&arguments[0], Some(self.context.i32_type().into()))
-            .into_int_value();
-
-        let syscall1_fn = self
-            .module
-            .get_function("syscall1")
-            .expect("syscall1 not found");
-        let sys_exit = self.context.i64_type().const_int(60, false);
-        let exit_code_i64 = self
-            .builder
-            .build_int_s_extend(exit_code, self.context.i64_type(), "exit_code_i64")
-            .unwrap();
-
-        self.builder
-            .build_call(syscall1_fn, &[sys_exit.into(), exit_code_i64.into()], "")
-            .unwrap();
-
-        self.builder.build_unreachable().unwrap();
-        self.context.i32_type().const_int(0, false).into()
-    }
-
     fn compile_ok_constructor(
         &mut self,
         arguments: &[Expression],
         expected_type: Option<BasicTypeEnum<'ctx>>,
+        call_span: Span,
     ) -> BasicValueEnum<'ctx> {
         if arguments.len() != 1 {
-            panic!("Ok() expects exactly 1 argument");
+            self.error("'Ok()' expects exactly 1 argument", call_span);
+            return self.dummy_val();
         }
 
         let result_type = if let Some(BasicTypeEnum::StructType(st)) = expected_type {
@@ -3495,15 +3679,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         &mut self,
         arguments: &[Expression],
         expected_type: Option<BasicTypeEnum<'ctx>>,
+        call_span: Span,
     ) -> BasicValueEnum<'ctx> {
         if arguments.len() != 1 {
-            panic!("Err() expects exactly 1 argument (error code)");
+            self.error("'Err()' expects exactly 1 argument", call_span);
+            return self.dummy_val();
         }
 
         let result_type = if let Some(BasicTypeEnum::StructType(st)) = expected_type {
             st
         } else {
-            panic!("Err() requires known Result type context");
+            self.error("'Err()' requires a known Result type context", call_span);
+            return self.dummy_val();
         };
 
         let error_code = self

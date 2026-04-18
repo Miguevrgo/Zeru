@@ -1,4 +1,5 @@
 use crate::errors::Span;
+use crate::sema::types::Type;
 use crate::token::Token;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -98,6 +99,7 @@ pub enum StatementKind {
 pub struct Expression {
     pub kind: ExpressionKind,
     pub span: Span,
+    pub ty: Option<Type>,
 }
 
 #[derive(Debug, Clone)]
@@ -182,6 +184,10 @@ impl Statement {
 
 impl Expression {
     pub fn new(kind: ExpressionKind, span: Span) -> Self {
-        Self { kind, span }
+        Self {
+            kind,
+            span,
+            ty: None,
+        }
     }
 }

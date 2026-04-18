@@ -14,7 +14,7 @@ fn analyze(input: &str) -> Vec<String> {
     }
 
     let mut analyzer = SemanticAnalyzer::new();
-    analyzer.analyze(&program);
+    analyzer.analyze(&mut program.clone());
     analyzer.errors.iter().map(|e| e.message.clone()).collect()
 }
 

@@ -195,28 +195,33 @@ fn load_std_modules(
             continue;
         }
 
-        if let Some(file_path) = resolve_std_import(&import.path)?
-            && file_path.exists()
-            && let Ok(content) = fs::read_to_string(&file_path)
-        {
-            loaded.insert(import.path.clone());
-            let short_name = get_module_short_name(&import.path);
+        if import.path.starts_with("std.") {
+            if let Some(file_path) = resolve_std_import(&import.path)? {
+                if file_path.exists() && let Ok(content) = fs::read_to_string(&file_path) {
+                    loaded.insert(import.path.clone());
+                    let short_name = get_module_short_name(&import.path);
 
-            let nested_imports = extract_imports(&content);
-            let nested_code =
-                load_std_modules(&nested_imports, loaded, direct_symbols, module_prefixes)?;
-            code.push_str(&nested_code);
+                    let nested_imports = extract_imports(&content);
+                    let nested_code =
+                        load_std_modules(&nested_imports, loaded, direct_symbols, module_prefixes)?;
+                    code.push_str(&nested_code);
 
-            let prefixed = prefix_definitions(&content, &short_name);
-            code.push_str(&prefixed);
-            code.push('\n');
+                    let prefixed = prefix_definitions(&content, &short_name);
+                    code.push_str(&prefixed);
+                    code.push('\n');
 
-            if let Some(ref symbols) = import.symbols {
-                for sym in symbols {
-                    direct_symbols.insert(sym.clone(), format!("{}__{}", short_name, sym));
+                    if let Some(ref symbols) = import.symbols {
+                        for sym in symbols {
+                            direct_symbols.insert(sym.clone(), format!("{}__{}", short_name, sym));
+                        }
+                    } else {
+                        module_prefixes.insert(short_name);
+                    }
+                } else {
+                    return Err(CompileError::StdNotFound);
                 }
             } else {
-                module_prefixes.insert(short_name);
+                return Err(CompileError::StdNotFound);
             }
         }
     }
@@ -335,24 +340,25 @@ pub fn compile_pipeline(
     )?;
 
     let user_code_resolved = resolve_direct_symbols(&user_code, &direct_symbols, &module_prefixes);
+    let offset = std_builtin.len() + 1 + additional_std.len() + 1;
     let input = format!("{std_builtin}\n{additional_std}\n{user_code_resolved}",);
 
     let lexer = Lexer::new(&input);
     let mut parser = Parser::new(lexer);
-    let program = parser.parse_program();
+    let mut program = parser.parse_program();
 
     let filepath_str = path.to_str().unwrap();
 
     if !parser.errors.is_empty() {
-        report_errors(&parser.errors, filepath_str, &input);
+        report_errors(&parser.errors, filepath_str, &input, offset);
         return Err(CompileError::Unknown);
     }
 
     let mut analyzer = SemanticAnalyzer::new();
-    analyzer.analyze(&program);
+    analyzer.analyze(&mut program);
 
     if !analyzer.errors.is_empty() {
-        report_errors(&analyzer.errors, filepath_str, &input);
+        report_errors(&analyzer.errors, filepath_str, &input, offset);
         return Err(CompileError::Unknown);
     }
 
@@ -362,6 +368,11 @@ pub fn compile_pipeline(
 
     let mut compiler = Compiler::new(&context, &builder, &module, safety_mode.clone());
     compiler.compile_program(&program);
+
+    if !compiler.errors.is_empty() {
+        report_errors(&compiler.errors, filepath_str, &input, offset);
+        return Err(CompileError::Unknown);
+    }
 
     module.verify()?;
     module.print_to_file(&ir_path)?;

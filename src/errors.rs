@@ -60,7 +60,7 @@ impl ZeruError {
         }
     }
 
-    pub fn report(&self, filename: &str, source: &str) {
+    pub fn report(&self, filename: &str, source: &str, offset: usize) {
         let kind = match self.kind {
             ErrorKind::Syntax => ReportKind::Error,
             ErrorKind::Semantic => ReportKind::Error,
@@ -71,39 +71,47 @@ impl ZeruError {
             ErrorKind::Semantic => Color::Magenta,
         };
 
-        let span_start = self.span.start.min(source.len());
-        let span_end = self.span.end.min(source.len()).max(span_start);
+        let (display_source, mut span_start, mut span_end, display_filename) = if self.span.start >= offset {
+            let src = if offset <= source.len() { &source[offset..] } else { source };
+            (src, self.span.start - offset, self.span.end - offset, filename.to_string())
+        } else {
+            (source, self.span.start, self.span.end, format!("{} (in std library)", filename))
+        };
 
-        if span_start == span_end || source.is_empty() {
+        let source_len = display_source.len();
+        span_start = span_start.min(source_len);
+        span_end = span_end.min(source_len).max(span_start);
+
+        if span_start == span_end || display_source.is_empty() {
             let prefix = match self.kind {
                 ErrorKind::Syntax => "Syntax Error",
                 ErrorKind::Semantic => "Semantic Error",
             };
-            eprintln!("\x1b[31m{}\x1b[0m: {}", prefix, self.message);
+            eprintln!("\x1b[31m{}\x1b[0m: {}", prefix, self.message.replace("__", "::"));
             return;
         }
 
-        let filename = filename.to_string();
-        let source = source.to_string();
+        let message = self.message.replace("__", "::");
+        let display_source = display_source.replace("__", "::");
 
         Report::<(String, std::ops::Range<usize>)>::build(
             kind,
-            (filename.clone(), span_start..span_end),
+            (display_filename.clone(), span_start..span_end),
         )
-        .with_message(&self.message)
+        .with_message(&message)
         .with_label(
-            Label::new((filename.clone(), span_start..span_end))
-                .with_message(&self.message)
+            Label::new((display_filename.clone(), span_start..span_end))
+                .with_message(&message)
                 .with_color(color),
         )
         .finish()
-        .eprint(ariadne::sources([(filename, source)]))
+        .eprint(ariadne::sources([(display_filename, display_source)]))
         .unwrap();
     }
 }
 
-pub fn report_errors(errors: &[ZeruError], filename: &str, source: &str) {
+pub fn report_errors(errors: &[ZeruError], filename: &str, source: &str, offset: usize) {
     for error in errors {
-        error.report(filename, source);
+        error.report(filename, source, offset);
     }
 }

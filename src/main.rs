@@ -55,9 +55,9 @@ enum Commands {
 enum CompileError {
     #[error("[IO]: {0}")]
     Io(#[from] std::io::Error),
-    #[error("Not defined YET")]
+    #[error("aborting due to previous error")]
     Unknown,
-    #[error("Not defined YET")]
+    #[error("LLVM error: {0}")]
     Llvm(#[from] LLVMString),
     #[error("std library not found: install zeru or set ZERU_STD_PATH for local development")]
     StdNotFound,

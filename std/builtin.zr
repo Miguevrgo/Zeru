@@ -44,6 +44,10 @@ fn syscall1(nr: i64, arg1: i64) i64 {
     return result;
 }
 
+fn exit(code: i32) {
+    syscall1(SYS_EXIT, code as i64);
+}
+
 fn syscall2(nr: i64, arg1: i64, arg2: i64) i64 {
     var result: i64 = 0;
     asm volatile (
