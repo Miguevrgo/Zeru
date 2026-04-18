@@ -1,4 +1,9 @@
+pub mod body;
 pub mod compiler;
+pub mod generics;
+pub mod runtime;
+pub mod types;
+
 #[cfg(test)]
 mod tests;
 
