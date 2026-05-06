@@ -1,0 +1,64 @@
+// Zeru Standard Library - OS (Linux x86_64)
+
+fn getpid() i64 { return syscall1(39, 0); }
+fn getppid() i64 { return syscall1(110, 0); }
+fn getuid() i64 { return syscall1(102, 0); }
+fn getgid() i64 { return syscall1(104, 0); }
+fn geteuid() i64 { return syscall1(107, 0); }
+fn getegid() i64 { return syscall1(108, 0); }
+
+fn getcwd(buf: *u8, size: usize) i64! {
+    var r: i64 = syscall2(79, buf as i64, size as i64);
+    if r < 0 { return Err((-r) as i32); }
+    return Ok(0);
+}
+
+fn sleep_ms(ms: i64) {
+    var ts: Array<u8, 16> = [0; 16];
+    var sec: *i64 = (&ts[0]) as *i64;
+    var nsec: *i64 = (&ts[8]) as *i64;
+    *sec = ms / 1000;
+    *nsec = (ms % 1000) * 1000000;
+    syscall2(35, (&ts[0]) as i64, 0);
+}
+
+fn sleep(seconds: i64) {
+    var ts: Array<u8, 16> = [0; 16];
+    var sec: *i64 = (&ts[0]) as *i64;
+    *sec = seconds;
+    syscall2(35, (&ts[0]) as i64, 0);
+}
+
+fn clock_ns() i64! {
+    var ts: Array<u8, 16> = [0; 16];
+    var r: i64 = syscall2(228, 1, (&ts[0]) as i64);
+    if r < 0 { return Err((-r) as i32); }
+    var sec: *i64 = (&ts[0]) as *i64;
+    var nsec: *i64 = (&ts[8]) as *i64;
+    return Ok((*sec) * 1000000000 + (*nsec));
+}
+
+fn time() i64! {
+    var ts: Array<u8, 16> = [0; 16];
+    var r: i64 = syscall2(228, 0, (&ts[0]) as i64);
+    if r < 0 { return Err((-r) as i32); }
+    var sec: *i64 = (&ts[0]) as *i64;
+    return Ok(*sec);
+}
+
+fn hostname(buf: *u8, size: usize) i64! {
+    var utsname: Array<u8, 390> = [0; 390];
+    var r: i64 = syscall1(63, (&utsname[0]) as i64);
+    if r < 0 { return Err((-r) as i32); }
+    var i: usize = 0;
+    while i < 64 && i < size - 1 {
+        var src: *u8 = &utsname[65 + i];
+        if *src == 0 { break; }
+        var dst: *u8 = buf + i;
+        *dst = *src;
+        i += 1;
+    }
+    var term: *u8 = buf + i;
+    *term = 0;
+    return Ok(0);
+}

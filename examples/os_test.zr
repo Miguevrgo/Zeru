@@ -1,0 +1,26 @@
+import std.os
+
+fn main() {
+    if os::getpid() <= 0 { exit(1); }
+    if os::getppid() <= 0 { exit(2); }
+
+    var t = os::time();
+    if t.is_err() { exit(3); }
+    if t.unwrap() < 1000000000 { exit(4); }
+
+    var ns = os::clock_ns();
+    if ns.is_err() { exit(5); }
+    if ns.unwrap() <= 0 { exit(6); }
+
+    var cwd: Array<u8, 256> = [0; 256];
+    var cwd_r = os::getcwd(&cwd[0], 256);
+    if cwd_r.is_err() { exit(7); }
+    if cwd[0] != 47 { exit(8); }
+
+    if os::getuid() < 0 { exit(9); }
+
+    var host: Array<u8, 65> = [0; 65];
+    if os::hostname(&host[0], 65).is_err() { exit(10); }
+
+    println("os: all tests passed");
+}

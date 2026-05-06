@@ -1,0 +1,82 @@
+// Zeru Standard Library - BinaryHeap (max-heap, i64 elements)
+// Fixed-capacity array-backed binary max-heap. 1024 elements max.
+// NOTE: Requires module system improvements for import. Copy into programs for now.
+
+struct BinaryHeap {
+    data: Array<i64, 1024>,
+    len: usize,
+
+    fn push(var self, val: i64) bool {
+        if self.len >= 1024 {
+            return false;
+        }
+        var idx: usize = self.len;
+        self.data[idx] = val;
+        self.len += 1;
+
+        while idx > 0 {
+            var parent: usize = (idx - 1) / 2;
+            if self.data[idx] > self.data[parent] {
+                var tmp: i64 = self.data[idx];
+                self.data[idx] = self.data[parent];
+                self.data[parent] = tmp;
+                idx = parent;
+            } else {
+                break;
+            }
+        }
+        return true;
+    }
+
+    fn pop(var self) i64? {
+        if self.len == 0 {
+            return None;
+        }
+        var max_val: i64 = self.data[0];
+        self.len -= 1;
+        if self.len == 0 {
+            return max_val;
+        }
+
+        self.data[0] = self.data[self.len];
+        var idx: usize = 0;
+        while true {
+            var left: usize = 2 * idx + 1;
+            var right: usize = 2 * idx + 2;
+            var largest: usize = idx;
+            if left < self.len && self.data[left] > self.data[largest] {
+                largest = left;
+            }
+            if right < self.len && self.data[right] > self.data[largest] {
+                largest = right;
+            }
+            if largest == idx {
+                break;
+            }
+            var tmp: i64 = self.data[idx];
+            self.data[idx] = self.data[largest];
+            self.data[largest] = tmp;
+            idx = largest;
+        }
+        return max_val;
+    }
+
+    fn peek(self) i64? {
+        if self.len == 0 {
+            return None;
+        }
+        return self.data[0];
+    }
+
+    fn size(self) usize {
+        return self.len;
+    }
+
+    fn is_empty(self) bool {
+        return self.len == 0;
+    }
+
+    fn clear(var self) {
+        self.len = 0;
+    }
+}

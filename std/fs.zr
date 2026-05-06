@@ -1,0 +1,130 @@
+// Zeru Standard Library - File System (Linux x86_64)
+
+const O_RDONLY: i64 = 0;
+const O_WRONLY: i64 = 1;
+const O_RDWR: i64 = 2;
+const O_CREAT: i64 = 64;
+const O_TRUNC: i64 = 512;
+const O_APPEND: i64 = 1024;
+const O_EXCL: i64 = 128;
+
+const SEEK_SET: i64 = 0;
+const SEEK_CUR: i64 = 1;
+const SEEK_END: i64 = 2;
+
+const PERM_644: i64 = 420;
+const PERM_755: i64 = 493;
+const PERM_600: i64 = 384;
+const PERM_700: i64 = 448;
+
+fn open(path: *u8, flags: i64, mode: i64) i64! {
+    var r: i64 = syscall3(2, path as i64, flags, mode);
+    if r < 0 { return Err((-r) as i32); }
+    return Ok(r);
+}
+
+fn close(fd: i64) i64! {
+    var r: i64 = syscall1(3, fd);
+    if r < 0 { return Err((-r) as i32); }
+    return Ok(0);
+}
+
+fn read(fd: i64, buf: *u8, count: usize) i64! {
+    var r: i64 = syscall3(0, fd, buf as i64, count as i64);
+    if r < 0 { return Err((-r) as i32); }
+    return Ok(r);
+}
+
+fn write(fd: i64, buf: *u8, count: usize) i64! {
+    var r: i64 = syscall3(1, fd, buf as i64, count as i64);
+    if r < 0 { return Err((-r) as i32); }
+    return Ok(r);
+}
+
+fn lseek(fd: i64, offset: i64, whence: i64) i64! {
+    var r: i64 = syscall3(8, fd, offset, whence);
+    if r < 0 { return Err((-r) as i32); }
+    return Ok(r);
+}
+
+fn mkdir(path: *u8, mode: i64) i64! {
+    var r: i64 = syscall2(83, path as i64, mode);
+    if r < 0 { return Err((-r) as i32); }
+    return Ok(0);
+}
+
+fn rmdir(path: *u8) i64! {
+    var r: i64 = syscall1(84, path as i64);
+    if r < 0 { return Err((-r) as i32); }
+    return Ok(0);
+}
+
+fn unlink(path: *u8) i64! {
+    var r: i64 = syscall1(87, path as i64);
+    if r < 0 { return Err((-r) as i32); }
+    return Ok(0);
+}
+
+fn rename(old_path: *u8, new_path: *u8) i64! {
+    var r: i64 = syscall2(82, old_path as i64, new_path as i64);
+    if r < 0 { return Err((-r) as i32); }
+    return Ok(0);
+}
+
+fn file_size(path: *u8) i64! {
+    var buf: Array<u8, 144> = [0; 144];
+    var ptr: *u8 = &buf[0];
+    var r: i64 = syscall2(4, path as i64, ptr as i64);
+    if r < 0 { return Err((-r) as i32); }
+    var size_ptr: *i64 = (&buf[48]) as *i64;
+    return Ok(*size_ptr);
+}
+
+fn exists(path: *u8) bool {
+    return syscall2(21, path as i64, 0) == 0;
+}
+
+fn truncate(path: *u8, length: i64) i64! {
+    var r: i64 = syscall2(76, path as i64, length);
+    if r < 0 { return Err((-r) as i32); }
+    return Ok(0);
+}
+
+fn fsync(fd: i64) i64! {
+    var r: i64 = syscall1(74, fd);
+    if r < 0 { return Err((-r) as i32); }
+    return Ok(0);
+}
+
+fn read_file(path: *u8, buf: *u8, buf_size: usize) i64! {
+    var fd: i64 = syscall3(2, path as i64, 0, 0);
+    if fd < 0 { return Err((-fd) as i32); }
+
+    var total: i64 = 0;
+    var remaining: usize = buf_size;
+    while remaining > 0 {
+        var n: i64 = syscall3(0, fd, (buf + total as usize) as i64, remaining as i64);
+        if n < 0 { syscall1(3, fd); return Err((-n) as i32); }
+        if n == 0 { break; }
+        total = total + n;
+        remaining = remaining - n as usize;
+    }
+    syscall1(3, fd);
+    return Ok(total);
+}
+
+fn write_file(path: *u8, data: *u8, len: usize) i64! {
+    var fd: i64 = syscall3(2, path as i64, 577, 420);
+    if fd < 0 { return Err((-fd) as i32); }
+
+    var total: i64 = 0;
+    var remaining: usize = len;
+    while remaining > 0 {
+        var n: i64 = syscall3(1, fd, (data + total as usize) as i64, remaining as i64);
+        if n < 0 { syscall1(3, fd); return Err((-n) as i32); }
+        total = total + n;
+        remaining = remaining - n as usize;
+    }
+    syscall1(3, fd);
+    return Ok(total);
+}

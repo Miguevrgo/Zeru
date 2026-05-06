@@ -807,3 +807,78 @@ fn test_str_len() {
     ";
     assert_compiles(input);
 }
+
+#[test]
+fn test_result_is_ok() {
+    let input = "
+        fn try_it() i32! {
+            return Ok(42);
+        }
+        fn main() {
+            var r: i32! = try_it();
+            var ok: bool = r.is_ok();
+        }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_result_is_err() {
+    let input = "
+        fn try_it() i32! {
+            return Err(1);
+        }
+        fn main() {
+            var r: i32! = try_it();
+            var err: bool = r.is_err();
+        }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_result_unwrap() {
+    let input = "
+        fn try_it() i32! {
+            return Ok(42);
+        }
+        fn main() {
+            var r: i32! = try_it();
+            var val: i32 = r.unwrap();
+        }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_result_unwrap_err() {
+    let input = "
+        fn try_it() i32! {
+            return Err(5);
+        }
+        fn main() {
+            var r: i32! = try_it();
+            var code: i32 = r.unwrap_err();
+        }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_result_is_ok_branch() {
+    let input = "
+        fn divide(a: i32, b: i32) i32! {
+            if b == 0 {
+                return Err(1);
+            }
+            return Ok(a / b);
+        }
+        fn main() {
+            var r: i32! = divide(10, 2);
+            if r.is_ok() {
+                var val: i32 = r.unwrap();
+            }
+        }
+    ";
+    assert_compiles(input);
+}

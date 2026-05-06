@@ -1203,4 +1203,93 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         result_val.into()
     }
+
+    /// Compile a method call on a Result value (`is_ok`, `is_err`, `unwrap`, `unwrap_err`).
+    pub(super) fn compile_result_method(
+        &mut self,
+        method_name: &str,
+        result_val: inkwell::values::StructValue<'ctx>,
+        _span: Span,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        match method_name {
+            "is_ok" => {
+                let tag = self
+                    .builder
+                    .build_extract_value(result_val, 0, "res_tag")
+                    .unwrap();
+                Some(tag)
+            }
+            "is_err" => {
+                let tag = self
+                    .builder
+                    .build_extract_value(result_val, 0, "res_tag")
+                    .unwrap()
+                    .into_int_value();
+                let negated = self
+                    .builder
+                    .build_not(tag, "res_is_err")
+                    .unwrap();
+                Some(negated.into())
+            }
+            "unwrap" => {
+                let tag = self
+                    .builder
+                    .build_extract_value(result_val, 0, "res_tag")
+                    .unwrap()
+                    .into_int_value();
+
+                let current_fn = self.current_fn.expect("unwrap called outside function");
+                let ok_bb = self.context.append_basic_block(current_fn, "unwrap_ok");
+                let panic_bb = self.context.append_basic_block(current_fn, "unwrap_panic");
+
+                self.builder
+                    .build_conditional_branch(tag, ok_bb, panic_bb)
+                    .unwrap();
+
+                // Panic path: abort on Err
+                self.builder.position_at_end(panic_bb);
+                let abort_fn = self.get_or_create_panic_fn();
+                self.builder.build_call(abort_fn, &[], "").unwrap();
+                self.builder.build_unreachable().unwrap();
+
+                // Ok path: extract the value
+                self.builder.position_at_end(ok_bb);
+                let val = self
+                    .builder
+                    .build_extract_value(result_val, 1, "unwrap_val")
+                    .unwrap();
+                Some(val)
+            }
+            "unwrap_err" => {
+                let tag = self
+                    .builder
+                    .build_extract_value(result_val, 0, "res_tag")
+                    .unwrap()
+                    .into_int_value();
+
+                let current_fn = self.current_fn.expect("unwrap_err called outside function");
+                let ok_bb = self.context.append_basic_block(current_fn, "unwrap_err_panic");
+                let err_bb = self.context.append_basic_block(current_fn, "unwrap_err_ok");
+
+                self.builder
+                    .build_conditional_branch(tag, ok_bb, err_bb)
+                    .unwrap();
+
+                // Panic path: abort on Ok
+                self.builder.position_at_end(ok_bb);
+                let abort_fn = self.get_or_create_panic_fn();
+                self.builder.build_call(abort_fn, &[], "").unwrap();
+                self.builder.build_unreachable().unwrap();
+
+                // Err path: extract the error code
+                self.builder.position_at_end(err_bb);
+                let err_code = self
+                    .builder
+                    .build_extract_value(result_val, 2, "unwrap_err_val")
+                    .unwrap();
+                Some(err_code)
+            }
+            _ => None,
+        }
+    }
 }

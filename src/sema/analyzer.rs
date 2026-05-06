@@ -996,7 +996,12 @@ impl SemanticAnalyzer {
                             self.error("Ok() takes exactly one argument".into(), span);
                             return Type::Unknown;
                         }
-                        let inner_type = self.check_expression(&mut arguments[0], None);
+                        let ok_hint = match expected_type {
+                            Some(Type::Result { ok_type, .. }) => Some(ok_type.as_ref().clone()),
+                            _ => None,
+                        };
+                        let inner_type =
+                            self.check_expression(&mut arguments[0], ok_hint.as_ref());
                         Type::Result {
                             ok_type: Box::new(inner_type),
                             err_type: Box::new(Type::Struct {
@@ -1121,6 +1126,16 @@ impl SemanticAnalyzer {
                             }
                             self.error(format!("Slice has no method '{}'", method_name), span);
                             return Type::Unknown;
+                        }
+
+                        if let Type::Result { ok_type, .. } = &obj_type {
+                            let ok_type = ok_type.clone();
+                            return self.check_result_method(
+                                &method_name,
+                                &ok_type,
+                                arguments,
+                                span,
+                            );
                         }
 
                         let struct_name = match &obj_type {
@@ -1670,6 +1685,48 @@ impl SemanticAnalyzer {
             }
             _ => {
                 self.error(format!("Vec<T> has no method '{}'", method_name), span);
+                Type::Unknown
+            }
+        }
+    }
+
+    fn check_result_method(
+        &mut self,
+        method_name: &str,
+        ok_type: &Type,
+        arguments: &mut [Expression],
+        span: Span,
+    ) -> Type {
+        match method_name {
+            "is_ok" | "is_err" => {
+                if !arguments.is_empty() {
+                    self.error(
+                        format!("{}() takes no arguments", method_name),
+                        span,
+                    );
+                }
+                Type::Bool
+            }
+            "unwrap" => {
+                if !arguments.is_empty() {
+                    self.error("unwrap() takes no arguments".into(), span);
+                }
+                ok_type.clone()
+            }
+            "unwrap_err" => {
+                if !arguments.is_empty() {
+                    self.error("unwrap_err() takes no arguments".into(), span);
+                }
+                Type::Integer {
+                    signed: Signedness::Signed,
+                    width: IntWidth::W32,
+                }
+            }
+            _ => {
+                self.error(
+                    format!("Result type has no method '{}'", method_name),
+                    span,
+                );
                 Type::Unknown
             }
         }

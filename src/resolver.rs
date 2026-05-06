@@ -127,45 +127,91 @@ fn get_module_short_name(import_path: &str) -> String {
 }
 
 fn prefix_definitions(content: &str, prefix: &str) -> String {
-    let mut result = String::with_capacity(content.len() + 50);
+    // Pass 1: collect top-level definition names (skip methods inside structs)
+    let mut def_names: HashSet<String> = HashSet::new();
+    {
+        let mut chars = content.chars().peekable();
+        let mut brace_depth: i32 = 0;
+        while let Some(c) = chars.next() {
+            if c == '{' {
+                brace_depth += 1;
+                continue;
+            }
+            if c == '}' {
+                brace_depth -= 1;
+                continue;
+            }
+            // Skip string literals
+            if c == '"' {
+                while let Some(sc) = chars.next() {
+                    if sc == '\\' {
+                        chars.next();
+                    } else if sc == '"' {
+                        break;
+                    }
+                }
+                continue;
+            }
+            // Skip single-line comments
+            if c == '/' && chars.peek() == Some(&'/') {
+                while let Some(cc) = chars.next() {
+                    if cc == '\n' {
+                        break;
+                    }
+                }
+                continue;
+            }
+            if c.is_alphabetic() || c == '_' {
+                let mut word = String::from(c);
+                while chars.peek().is_some_and(|&nc| nc.is_alphanumeric() || nc == '_') {
+                    word.push(chars.next().unwrap());
+                }
+                if matches!(word.as_str(), "fn" | "struct" | "const") && brace_depth == 0 {
+                    while chars.peek().is_some_and(|&ws| ws.is_whitespace()) {
+                        chars.next();
+                    }
+                    let mut name = String::new();
+                    while chars.peek().is_some_and(|&nc| nc.is_alphanumeric() || nc == '_') {
+                        name.push(chars.next().unwrap());
+                    }
+                    if !name.is_empty() {
+                        def_names.insert(name);
+                    }
+                }
+            }
+        }
+    }
+
+    // Pass 2: prefix every identifier that matches a top-level definition name
+    let mut result = String::with_capacity(content.len() + def_names.len() * (prefix.len() + 2));
     let mut chars = content.chars().peekable();
 
     while let Some(c) = chars.next() {
-        if c.is_alphabetic() || c == '_' {
-            let mut word = String::from(c);
-            while let Some(&next) = chars.peek() {
-                if next.is_alphanumeric() || next == '_' {
-                    word.push(chars.next().unwrap());
-                } else {
+        // Copy string literals verbatim
+        if c == '"' {
+            result.push(c);
+            while let Some(sc) = chars.next() {
+                result.push(sc);
+                if sc == '\\' {
+                    if let Some(esc) = chars.next() {
+                        result.push(esc);
+                    }
+                } else if sc == '"' {
                     break;
                 }
             }
-            result.push_str(&word);
-
-            if word == "fn" || word == "struct" || word == "const" {
-                while let Some(&ws) = chars.peek() {
-                    if ws.is_whitespace() {
-                        result.push(chars.next().unwrap());
-                    } else {
-                        break;
-                    }
-                }
-
-                let mut name = String::new();
-                while let Some(&nc) = chars.peek() {
-                    if nc.is_alphanumeric() || nc == '_' {
-                        name.push(chars.next().unwrap());
-                    } else {
-                        break;
-                    }
-                }
-
-                if !name.is_empty() {
-                    result.push_str(prefix);
-                    result.push_str("__");
-                    result.push_str(&name);
-                }
+            continue;
+        }
+        if c.is_alphabetic() || c == '_' {
+            let mut word = String::from(c);
+            while chars.peek().is_some_and(|&nc| nc.is_alphanumeric() || nc == '_') {
+                word.push(chars.next().unwrap());
             }
+            if def_names.contains(&word) {
+                result.push_str(prefix);
+                result.push_str("__");
+            }
+            result.push_str(&word);
         } else {
             result.push(c);
         }

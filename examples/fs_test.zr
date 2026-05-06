@@ -1,0 +1,30 @@
+import std.fs
+
+fn main() {
+    var path: *u8 = "build/test_fs.txt" as *u8;
+    var data: *u8 = "Hello from Zeru!" as *u8;
+
+    // write_file + exists + file_size
+    var wr = fs::write_file(path, data, 16);
+    if wr.is_err() { exit(1); }
+    if !fs::exists(path) { exit(2); }
+    var sz = fs::file_size(path);
+    if sz.is_err() { exit(3); }
+    if sz.unwrap() != 16 { exit(4); }
+
+    // read_file + verify content
+    var buf: Array<u8, 64> = [0; 64];
+    var rd = fs::read_file(path, &buf[0], 64);
+    if rd.is_err() { exit(5); }
+    if rd.unwrap() != 16 { exit(6); }
+    if buf[0] != 72 { exit(7); }
+
+    // open + write + close
+    var path2: *u8 = "build/test_fs2.txt" as *u8;
+    var fd = fs::open(path2, 577, 420);
+    if fd.is_err() { exit(8); }
+    var w2 = fs::write(fd.unwrap(), "test" as *u8, 4);
+    if w2.is_err() { exit(9); }
+
+    println("fs: all tests passed");
+}

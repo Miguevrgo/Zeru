@@ -1,0 +1,128 @@
+// Zeru Standard Library - HashMap (i64 keys, i64 values)
+// Fixed-capacity open-addressing hash map. 256 slots, ~192 usable (75% load).
+//
+// NOTE: Requires module system improvements (resolver.rs) to work via import.
+// Can be copied directly into user programs until then.
+
+const EMPTY: u8 = 0;
+const OCCUPIED: u8 = 1;
+const DELETED: u8 = 2;
+
+struct HashMap {
+    keys: Array<i64, 256>,
+    vals: Array<i64, 256>,
+    state: Array<u8, 256>,
+    len: usize,
+
+    fn insert(var self, key: i64, val: i64) bool {
+        if self.len >= 192 {
+            return false;
+        }
+
+        var h: u64 = key as u64;
+        h = (h ^ (h >> 30)) * 13787848793156543929 as u64;
+        h = (h ^ (h >> 27)) * 10723151780598845931 as u64;
+        h = h ^ (h >> 31);
+        var idx: usize = (h & 255) as usize;
+
+        var i: usize = 0;
+        while i < 256 {
+            if self.state[idx] == 0 || self.state[idx] == 2 {
+                self.keys[idx] = key;
+                self.vals[idx] = val;
+                self.state[idx] = 1;
+                self.len += 1;
+                return true;
+            }
+            if self.state[idx] == 1 && self.keys[idx] == key {
+                self.vals[idx] = val;
+                return true;
+            }
+            idx = (idx + 1) & 255;
+            i += 1;
+        }
+        return false;
+    }
+
+    fn get(self, key: i64) i64? {
+        var h: u64 = key as u64;
+        h = (h ^ (h >> 30)) * 13787848793156543929 as u64;
+        h = (h ^ (h >> 27)) * 10723151780598845931 as u64;
+        h = h ^ (h >> 31);
+        var idx: usize = (h & 255) as usize;
+
+        var i: usize = 0;
+        while i < 256 {
+            if self.state[idx] == 0 {
+                return None;
+            }
+            if self.state[idx] == 1 && self.keys[idx] == key {
+                return self.vals[idx];
+            }
+            idx = (idx + 1) & 255;
+            i += 1;
+        }
+        return None;
+    }
+
+    fn contains(self, key: i64) bool {
+        var h: u64 = key as u64;
+        h = (h ^ (h >> 30)) * 13787848793156543929 as u64;
+        h = (h ^ (h >> 27)) * 10723151780598845931 as u64;
+        h = h ^ (h >> 31);
+        var idx: usize = (h & 255) as usize;
+
+        var i: usize = 0;
+        while i < 256 {
+            if self.state[idx] == 0 {
+                return false;
+            }
+            if self.state[idx] == 1 && self.keys[idx] == key {
+                return true;
+            }
+            idx = (idx + 1) & 255;
+            i += 1;
+        }
+        return false;
+    }
+
+    fn remove(var self, key: i64) bool {
+        var h: u64 = key as u64;
+        h = (h ^ (h >> 30)) * 13787848793156543929 as u64;
+        h = (h ^ (h >> 27)) * 10723151780598845931 as u64;
+        h = h ^ (h >> 31);
+        var idx: usize = (h & 255) as usize;
+
+        var i: usize = 0;
+        while i < 256 {
+            if self.state[idx] == 0 {
+                return false;
+            }
+            if self.state[idx] == 1 && self.keys[idx] == key {
+                self.state[idx] = 2;
+                self.len -= 1;
+                return true;
+            }
+            idx = (idx + 1) & 255;
+            i += 1;
+        }
+        return false;
+    }
+
+    fn clear(var self) {
+        var i: usize = 0;
+        while i < 256 {
+            self.state[i] = 0;
+            i += 1;
+        }
+        self.len = 0;
+    }
+
+    fn size(self) usize {
+        return self.len;
+    }
+
+    fn is_empty(self) bool {
+        return self.len == 0;
+    }
+}

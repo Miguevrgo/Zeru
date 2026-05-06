@@ -1,0 +1,79 @@
+// Result type (T!) integration test
+// Tests is_ok, is_err, unwrap, unwrap_err
+// Uses exit codes to verify behavior
+
+fn divide(a: i32, b: i32) i32! {
+    if b == 0 {
+        return Err(1);
+    }
+    return Ok(a / b);
+}
+
+fn always_fail() i64! {
+    return Err(42);
+}
+
+fn always_ok() i64! {
+    var v: i64 = 100;
+    return Ok(v);
+}
+
+fn main() {
+    // Test Ok path
+    var r1: i32! = divide(10, 2);
+    if !r1.is_ok() {
+        exit(1);
+    }
+    if r1.is_err() {
+        exit(2);
+    }
+    var val: i32 = r1.unwrap();
+    if val != 5 {
+        exit(3);
+    }
+
+    // Test Err path
+    var r2: i32! = divide(10, 0);
+    if r2.is_ok() {
+        exit(4);
+    }
+    if !r2.is_err() {
+        exit(5);
+    }
+    var code: i32 = r2.unwrap_err();
+    if code != 1 {
+        exit(6);
+    }
+
+    // Test i64! Ok
+    var r3: i64! = always_ok();
+    if !r3.is_ok() {
+        exit(7);
+    }
+    if r3.unwrap() != 100 {
+        exit(8);
+    }
+
+    // Test i64! Err
+    var r4: i64! = always_fail();
+    if !r4.is_err() {
+        exit(9);
+    }
+    if r4.unwrap_err() != 42 {
+        exit(10);
+    }
+
+    // Test branching on result
+    var r5: i32! = divide(20, 4);
+    if r5.is_ok() {
+        var v: i32 = r5.unwrap();
+        if v != 5 {
+            exit(11);
+        }
+    } else {
+        exit(12);
+    }
+
+    println("result: all tests passed");
+    exit(0);
+}

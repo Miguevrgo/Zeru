@@ -1,0 +1,88 @@
+// Zeru Standard Library - VecDeque (double-ended queue, i64 elements)
+// Fixed-capacity circular buffer. 1024 elements max. O(1) push/pop both ends.
+// NOTE: Requires module system improvements for import. Copy into programs for now.
+
+struct VecDeque {
+    data: Array<i64, 1024>,
+    head: usize,
+    len: usize,
+
+    fn push_back(var self, val: i64) bool {
+        if self.len >= 1024 {
+            return false;
+        }
+        var tail: usize = (self.head + self.len) & 1023;
+        self.data[tail] = val;
+        self.len += 1;
+        return true;
+    }
+
+    fn push_front(var self, val: i64) bool {
+        if self.len >= 1024 {
+            return false;
+        }
+        if self.head == 0 {
+            self.head = 1023;
+        } else {
+            self.head -= 1;
+        }
+        self.data[self.head] = val;
+        self.len += 1;
+        return true;
+    }
+
+    fn pop_front(var self) i64? {
+        if self.len == 0 {
+            return None;
+        }
+        var val: i64 = self.data[self.head];
+        self.head = (self.head + 1) & 1023;
+        self.len -= 1;
+        return val;
+    }
+
+    fn pop_back(var self) i64? {
+        if self.len == 0 {
+            return None;
+        }
+        self.len -= 1;
+        var tail: usize = (self.head + self.len) & 1023;
+        return self.data[tail];
+    }
+
+    fn front(self) i64? {
+        if self.len == 0 {
+            return None;
+        }
+        return self.data[self.head];
+    }
+
+    fn back(self) i64? {
+        if self.len == 0 {
+            return None;
+        }
+        var tail: usize = (self.head + self.len - 1) & 1023;
+        return self.data[tail];
+    }
+
+    fn at(self, index: usize) i64? {
+        if index >= self.len {
+            return None;
+        }
+        var real_idx: usize = (self.head + index) & 1023;
+        return self.data[real_idx];
+    }
+
+    fn size(self) usize {
+        return self.len;
+    }
+
+    fn is_empty(self) bool {
+        return self.len == 0;
+    }
+
+    fn clear(var self) {
+        self.head = 0;
+        self.len = 0;
+    }
+}
