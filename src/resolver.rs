@@ -154,7 +154,7 @@ fn prefix_definitions(content: &str, prefix: &str) -> String {
             }
             // Skip single-line comments
             if c == '/' && chars.peek() == Some(&'/') {
-                while let Some(cc) = chars.next() {
+                for cc in chars.by_ref() {
                     if cc == '\n' {
                         break;
                     }
@@ -163,7 +163,10 @@ fn prefix_definitions(content: &str, prefix: &str) -> String {
             }
             if c.is_alphabetic() || c == '_' {
                 let mut word = String::from(c);
-                while chars.peek().is_some_and(|&nc| nc.is_alphanumeric() || nc == '_') {
+                while chars
+                    .peek()
+                    .is_some_and(|&nc| nc.is_alphanumeric() || nc == '_')
+                {
                     word.push(chars.next().unwrap());
                 }
                 if matches!(word.as_str(), "fn" | "struct" | "const") && brace_depth == 0 {
@@ -171,7 +174,10 @@ fn prefix_definitions(content: &str, prefix: &str) -> String {
                         chars.next();
                     }
                     let mut name = String::new();
-                    while chars.peek().is_some_and(|&nc| nc.is_alphanumeric() || nc == '_') {
+                    while chars
+                        .peek()
+                        .is_some_and(|&nc| nc.is_alphanumeric() || nc == '_')
+                    {
                         name.push(chars.next().unwrap());
                     }
                     if !name.is_empty() {
@@ -204,7 +210,10 @@ fn prefix_definitions(content: &str, prefix: &str) -> String {
         }
         if c.is_alphabetic() || c == '_' {
             let mut word = String::from(c);
-            while chars.peek().is_some_and(|&nc| nc.is_alphanumeric() || nc == '_') {
+            while chars
+                .peek()
+                .is_some_and(|&nc| nc.is_alphanumeric() || nc == '_')
+            {
                 word.push(chars.next().unwrap());
             }
             if def_names.contains(&word) {

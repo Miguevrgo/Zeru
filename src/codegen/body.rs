@@ -1291,18 +1291,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 return MethodCallOutcome::Done(result);
             }
             // Check if this is a Result type (field 0 is i1/bool tag)
-            if struct_type.count_fields() == 3 {
-                if let Some(inkwell::types::BasicTypeEnum::IntType(it)) =
+            if struct_type.count_fields() == 3
+                && let Some(inkwell::types::BasicTypeEnum::IntType(it)) =
                     struct_type.get_field_type_at_index(0)
-                {
-                    if it.get_bit_width() == 1 {
-                        if let Some(result) =
-                            self.compile_result_method(method_name, vec_struct, span)
-                        {
-                            return MethodCallOutcome::Done(result);
-                        }
-                    }
-                }
+                && it.get_bit_width() == 1
+                && let Some(result) = self.compile_result_method(method_name, vec_struct, span)
+            {
+                return MethodCallOutcome::Done(result);
             }
             if struct_type.count_fields() == 2 && method_name == "len" {
                 let len = self
@@ -1772,9 +1767,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             (BasicValueEnum::StructValue(v), BasicTypeEnum::PointerType(_t)) => {
                 let struct_ty = v.get_type();
                 if struct_ty.count_fields() == 2 {
-                    self.builder
-                        .build_extract_value(v, 0, "str_ptr")
-                        .unwrap()
+                    self.builder.build_extract_value(v, 0, "str_ptr").unwrap()
                 } else {
                     self.error("Unsupported cast combination", span);
                     self.dummy_val()
@@ -1784,10 +1777,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             (BasicValueEnum::StructValue(v), BasicTypeEnum::IntType(t)) => {
                 let struct_ty = v.get_type();
                 if struct_ty.count_fields() == 2 {
-                    let ptr_val = self
-                        .builder
-                        .build_extract_value(v, 0, "str_ptr")
-                        .unwrap();
+                    let ptr_val = self.builder.build_extract_value(v, 0, "str_ptr").unwrap();
                     if let BasicValueEnum::PointerValue(p) = ptr_val {
                         self.builder
                             .build_ptr_to_int(p, t, "str_ptrtoint")

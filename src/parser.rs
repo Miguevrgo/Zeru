@@ -1035,8 +1035,10 @@ impl<'a> Parser<'a> {
                 let name_clone = name.clone();
                 // Check the last segment for uppercase (handles module__Struct prefixing)
                 let last_segment = name.rsplit("__").next().unwrap_or(name);
-                let starts_with_upper =
-                    last_segment.chars().next().is_some_and(|c| c.is_uppercase());
+                let starts_with_upper = last_segment
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_uppercase());
                 if starts_with_upper && self.peek_token_is(&Token::LBrace) {
                     self.parse_struct_literal(name_clone, start_span)
                 } else {
@@ -1394,18 +1396,17 @@ impl<'a> Parser<'a> {
             return self.parse_get_expression(left);
         }
 
-        // Flatten Ident::Ident into a single qualified identifier (e.g. Struct::method)
-        if operator == Token::DoubleColon {
-            if let ExpressionKind::Identifier(left_name) = &left.kind {
-                self.next_token();
-                if let Token::Identifier(right_name) = &self.current_token {
-                    let qualified = format!("{}::{}", left_name, right_name);
-                    let end_span = self.current_span;
-                    return Some(Expression::new(
-                        ExpressionKind::Identifier(qualified),
-                        start_span.merge(end_span),
-                    ));
-                }
+        if operator == Token::DoubleColon
+            && let ExpressionKind::Identifier(left_name) = &left.kind
+        {
+            self.next_token();
+            if let Token::Identifier(right_name) = &self.current_token {
+                let qualified = format!("{}::{}", left_name, right_name);
+                let end_span = self.current_span;
+                return Some(Expression::new(
+                    ExpressionKind::Identifier(qualified),
+                    start_span.merge(end_span),
+                ));
             }
         }
 
