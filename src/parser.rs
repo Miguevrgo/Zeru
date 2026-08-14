@@ -1081,7 +1081,7 @@ impl<'a> Parser<'a> {
             Token::Asm => self.parse_asm_expression(),
             _ => {
                 self.error_current(
-                    format!("Expected expression, found: {:?}", &self.current_token).as_str(),
+                    format!("Expected expression, found: {:?}", self.current_token).as_str(),
                 );
                 None
             }
