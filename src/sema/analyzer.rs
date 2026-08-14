@@ -1000,8 +1000,7 @@ impl SemanticAnalyzer {
                             Some(Type::Result { ok_type, .. }) => Some(ok_type.as_ref().clone()),
                             _ => None,
                         };
-                        let inner_type =
-                            self.check_expression(&mut arguments[0], ok_hint.as_ref());
+                        let inner_type = self.check_expression(&mut arguments[0], ok_hint.as_ref());
                         Type::Result {
                             ok_type: Box::new(inner_type),
                             err_type: Box::new(Type::Struct {
@@ -1700,10 +1699,7 @@ impl SemanticAnalyzer {
         match method_name {
             "is_ok" | "is_err" => {
                 if !arguments.is_empty() {
-                    self.error(
-                        format!("{}() takes no arguments", method_name),
-                        span,
-                    );
+                    self.error(format!("{}() takes no arguments", method_name), span);
                 }
                 Type::Bool
             }
@@ -1723,10 +1719,7 @@ impl SemanticAnalyzer {
                 }
             }
             _ => {
-                self.error(
-                    format!("Result type has no method '{}'", method_name),
-                    span,
-                );
+                self.error(format!("Result type has no method '{}'", method_name), span);
                 Type::Unknown
             }
         }

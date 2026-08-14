@@ -1225,10 +1225,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .build_extract_value(result_val, 0, "res_tag")
                     .unwrap()
                     .into_int_value();
-                let negated = self
-                    .builder
-                    .build_not(tag, "res_is_err")
-                    .unwrap();
+                let negated = self.builder.build_not(tag, "res_is_err").unwrap();
                 Some(negated.into())
             }
             "unwrap" => {
@@ -1268,7 +1265,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .into_int_value();
 
                 let current_fn = self.current_fn.expect("unwrap_err called outside function");
-                let ok_bb = self.context.append_basic_block(current_fn, "unwrap_err_panic");
+                let ok_bb = self
+                    .context
+                    .append_basic_block(current_fn, "unwrap_err_panic");
                 let err_bb = self.context.append_basic_block(current_fn, "unwrap_err_ok");
 
                 self.builder
