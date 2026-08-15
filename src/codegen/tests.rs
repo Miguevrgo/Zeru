@@ -141,9 +141,16 @@ fn test_integer_arithmetic() {
                 var rem = a % b;
             }
         ";
+    // Debug traps on overflow, so `+ - *` go through the intrinsic.
     assert_ir_contains(
         input,
-        &["add i32", "sub i32", "mul i32", "sdiv i32", "srem i32"],
+        &[
+            "llvm.sadd.with.overflow.i32",
+            "llvm.ssub.with.overflow.i32",
+            "llvm.smul.with.overflow.i32",
+            "sdiv i32",
+            "srem i32",
+        ],
     );
 }
 
@@ -331,7 +338,10 @@ fn test_compound_add_assign() {
             x += 5;
         }
     ";
-    assert_ir_contains(input, &["load i32", "add i32", "store i32"]);
+    assert_ir_contains(
+        input,
+        &["load i32", "llvm.sadd.with.overflow.i32", "store i32"],
+    );
 }
 
 #[test]
@@ -342,7 +352,10 @@ fn test_compound_sub_assign() {
             x -= 3;
         }
     ";
-    assert_ir_contains(input, &["load i32", "sub i32", "store i32"]);
+    assert_ir_contains(
+        input,
+        &["load i32", "llvm.ssub.with.overflow.i32", "store i32"],
+    );
 }
 
 #[test]
@@ -353,7 +366,10 @@ fn test_compound_mul_assign() {
             x *= 2;
         }
     ";
-    assert_ir_contains(input, &["load i32", "mul i32", "store i32"]);
+    assert_ir_contains(
+        input,
+        &["load i32", "llvm.smul.with.overflow.i32", "store i32"],
+    );
 }
 
 #[test]
@@ -434,7 +450,10 @@ fn test_compound_in_loop() {
             }
         }
     ";
-    assert_ir_contains(input, &["loop_cond:", "loop_body:", "add i32"]);
+    assert_ir_contains(
+        input,
+        &["loop_cond:", "loop_body:", "llvm.sadd.with.overflow.i32"],
+    );
 }
 
 #[test]
@@ -1104,6 +1123,31 @@ fn test_optional_literal_takes_payload_type() {
 }
 
 #[test]
+fn test_array_index_is_bounds_checked() {
+    let input = "
+        fn main() {
+            var a: Array<i32, 2> = [1, 2];
+            var i: i32 = 8;
+            a[i] = 99;
+        }
+    ";
+    assert_ir_contains(input, &["bounds_panic", "call void @abort()"]);
+}
+
+#[test]
+fn test_release_fast_drops_bounds_check() {
+    let input = "
+        fn main() {
+            var a: Array<i32, 2> = [1, 2];
+            var i: i32 = 8;
+            a[i] = 99;
+        }
+    ";
+    let ir = compile_to_ir_with_mode(input, SafetyMode::ReleaseFast).expect("Compilation failed");
+    assert!(!ir.contains("bounds_panic"), "Full IR:\n{ir}");
+}
+
+#[test]
 fn test_integer_literal_beyond_i64_survives() {
     // The lexer used to fall back to 0 for anything `i64::from_str` rejected,
     // so `u64` literals above i64::MAX became zero with no diagnostic.
@@ -1161,6 +1205,46 @@ fn test_method_call_through_pointer() {
 }
 
 #[test]
+fn test_overflow_is_checked() {
+    let input = "fn main() { var a: i32 = 1; var b: i32 = 2; var c = a + b; }";
+    assert_ir_contains(input, &["llvm.sadd.with.overflow.i32", "overflow_panic"]);
+}
+
+#[test]
+fn test_division_and_shift_are_checked() {
+    let input = "
+        fn main() {
+            var a: i32 = 10;
+            var b: i32 = 2;
+            var q = a / b;
+            var s = a << b;
+        }
+    ";
+    assert_ir_contains(input, &["div_panic", "shift_panic", "div_overflow"]);
+}
+
+#[test]
+fn test_release_fast_drops_arithmetic_checks() {
+    let input = "
+        fn main() {
+            var a: i32 = 10;
+            var b: i32 = 2;
+            var c = a + b;
+            var q = a / b;
+            var s = a << b;
+        }
+    ";
+    let ir = compile_to_ir_with_mode(input, SafetyMode::ReleaseFast).expect("Compilation failed");
+    for pattern in ["overflow", "div_panic", "shift_panic"] {
+        assert!(
+            !ir.contains(pattern),
+            "{pattern} survived\n\nFull IR:\n{ir}"
+        );
+    }
+    assert!(ir.contains("add i32"), "Full IR:\n{ir}");
+}
+
+#[test]
 fn test_same_scope_shadowing() {
     // The new binding is created after its initialiser runs, so the
     // initialiser still reads the old one, and the type may change.
@@ -1173,4 +1257,16 @@ fn test_same_scope_shadowing() {
         }
     ";
     assert_compiles(input);
+}
+
+#[test]
+fn test_constant_index_needs_no_bounds_check() {
+    // The analyser settles a literal index, so the branch is dead weight.
+    let input = "
+        fn main() {
+            var a: Array<i32, 4> = [1, 2, 3, 4];
+            var v: i32 = a[2];
+        }
+    ";
+    assert_ir_lacks(input, &["bounds_panic"]);
 }

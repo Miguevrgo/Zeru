@@ -3,6 +3,7 @@
 
 use inkwell::{
     AddressSpace, IntPredicate,
+    intrinsics::Intrinsic,
     module::Linkage,
     types::{BasicType, BasicTypeEnum, FunctionType, IntType, PointerType},
     values::{
@@ -18,6 +19,7 @@ use crate::{
         layout::{RESULT_ERR, RESULT_TAG, RESULT_VALUE, SLICE_PTR, VEC_CAP, VEC_LEN, VEC_PTR},
     },
     errors::{Span, ZeruError},
+    token::Token,
 };
 
 const ALLOC_FN: &str = "__zeru_alloc";
@@ -180,14 +182,31 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_unreachable().unwrap();
     }
 
+    /// Abort when `condition` holds, then carry on in a fresh block. Every
+    /// safety check funnels through here.
+    fn emit_trap_if(&mut self, condition: IntValue<'ctx>, label: &str) {
+        let Some(current_fn) = self.current_fn else {
+            return;
+        };
+        let panic_bb = self
+            .context
+            .append_basic_block(current_fn, &format!("{label}_panic"));
+        let ok_bb = self
+            .context
+            .append_basic_block(current_fn, &format!("{label}_ok"));
+
+        self.builder
+            .build_conditional_branch(condition, panic_bb, ok_bb)
+            .unwrap();
+
+        self.build_panic(panic_bb);
+        self.builder.position_at_end(ok_bb);
+    }
+
     pub(super) fn emit_null_check(&mut self, ptr: PointerValue<'ctx>, _error_msg: &str) {
         if !self.safety_mode.emit_safety_checks() {
             return;
         }
-        let Some(current_fn) = self.current_fn else {
-            return;
-        };
-
         let is_null = self
             .builder
             .build_int_compare(
@@ -197,15 +216,145 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 "is_null",
             )
             .unwrap();
+        self.emit_trap_if(is_null, "null");
+    }
 
-        let panic_bb = self.context.append_basic_block(current_fn, "null_panic");
-        let ok_bb = self.context.append_basic_block(current_fn, "null_ok");
-        self.builder
-            .build_conditional_branch(is_null, panic_bb, ok_bb)
+    /// Trap when `index` falls outside `0..len`. One unsigned compare covers
+    /// both ends: a negative index wraps to a value above any length.
+    pub(super) fn emit_bounds_check(&mut self, index: IntValue<'ctx>, len: u64, unsigned: bool) {
+        if !self.safety_mode.emit_safety_checks() {
+            return;
+        }
+        // A constant index needs no check; the analyser already rejected the
+        // ones that do not fit.
+        if let Some(constant) = index.get_sign_extended_constant()
+            && (0..len as i64).contains(&constant)
+        {
+            return;
+        }
+
+        let usize_type = self.usize_type();
+        let index = match index
+            .get_type()
+            .get_bit_width()
+            .cmp(&usize_type.get_bit_width())
+        {
+            std::cmp::Ordering::Less if unsigned => self
+                .builder
+                .build_int_z_extend(index, usize_type, "idx")
+                .unwrap(),
+            std::cmp::Ordering::Less => self
+                .builder
+                .build_int_s_extend(index, usize_type, "idx")
+                .unwrap(),
+            _ => index,
+        };
+
+        let out_of_range = self
+            .builder
+            .build_int_compare(
+                IntPredicate::UGE,
+                index,
+                usize_type.const_int(len, false),
+                "out_of_range",
+            )
+            .unwrap();
+        self.emit_trap_if(out_of_range, "bounds");
+    }
+
+    /// Trap on a zero divisor, and on `MIN / -1`, whose result has no
+    /// representation and which LLVM leaves undefined.
+    pub(super) fn emit_division_check(
+        &mut self,
+        lhs: IntValue<'ctx>,
+        rhs: IntValue<'ctx>,
+        signed: bool,
+    ) {
+        if !self.safety_mode.emit_safety_checks() {
+            return;
+        }
+        let int_type = rhs.get_type();
+        let mut invalid = self
+            .builder
+            .build_int_compare(IntPredicate::EQ, rhs, int_type.const_zero(), "div_zero")
             .unwrap();
 
-        self.build_panic(panic_bb);
-        self.builder.position_at_end(ok_bb);
+        if signed {
+            let min = int_type.const_int(1 << (int_type.get_bit_width() - 1), false);
+            let lhs_is_min = self
+                .builder
+                .build_int_compare(IntPredicate::EQ, lhs, min, "lhs_is_min")
+                .unwrap();
+            let rhs_is_neg_one = self
+                .builder
+                .build_int_compare(
+                    IntPredicate::EQ,
+                    rhs,
+                    int_type.const_all_ones(),
+                    "rhs_is_neg_one",
+                )
+                .unwrap();
+            let overflows = self
+                .builder
+                .build_and(lhs_is_min, rhs_is_neg_one, "div_overflow")
+                .unwrap();
+            invalid = self
+                .builder
+                .build_or(invalid, overflows, "div_invalid")
+                .unwrap();
+        }
+
+        self.emit_trap_if(invalid, "div");
+    }
+
+    /// LLVM leaves a shift by the operand width or more undefined.
+    pub(super) fn emit_shift_check(&mut self, amount: IntValue<'ctx>) {
+        if !self.safety_mode.emit_safety_checks() {
+            return;
+        }
+        let int_type = amount.get_type();
+        let width = int_type.const_int(int_type.get_bit_width() as u64, false);
+        let too_wide = self
+            .builder
+            .build_int_compare(IntPredicate::UGE, amount, width, "shift_wide")
+            .unwrap();
+        self.emit_trap_if(too_wide, "shift");
+    }
+
+    /// `+`, `-` and `*` through LLVM's overflow intrinsic, trapping when it
+    /// reports one. `None` if the intrinsic is unavailable, so the caller can
+    /// fall back to the plain operation.
+    pub(super) fn build_checked_int_arith(
+        &mut self,
+        lhs: IntValue<'ctx>,
+        rhs: IntValue<'ctx>,
+        op: &Token,
+        signed: bool,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        let name = match (op, signed) {
+            (Token::Plus, true) => "llvm.sadd.with.overflow",
+            (Token::Plus, false) => "llvm.uadd.with.overflow",
+            (Token::Minus, true) => "llvm.ssub.with.overflow",
+            (Token::Minus, false) => "llvm.usub.with.overflow",
+            (Token::Star, true) => "llvm.smul.with.overflow",
+            (Token::Star, false) => "llvm.umul.with.overflow",
+            _ => return None,
+        };
+
+        let declaration =
+            Intrinsic::find(name)?.get_declaration(self.module, &[lhs.get_type().into()])?;
+        let ValueKind::Basic(BasicValueEnum::StructValue(pair)) = self
+            .builder
+            .build_call(declaration, &[lhs.into(), rhs.into()], "arith")
+            .unwrap()
+            .try_as_basic_value()
+        else {
+            return None;
+        };
+
+        let overflowed = self.extract(pair, 1, "overflowed").into_int_value();
+        self.emit_trap_if(overflowed, "overflow");
+        Some(self.extract(pair, 0, "arith_val"))
     }
 
     pub(super) fn create_entry_block_alloca(

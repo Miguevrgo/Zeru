@@ -565,6 +565,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let offset = self
                     .compile_expression(index, Some(usize_type.into()))
                     .into_int_value();
+                self.emit_bounds_check(
+                    offset,
+                    array_ty.len() as u64,
+                    Self::is_unsigned_expr(index),
+                );
                 let elem_ptr = unsafe {
                     self.builder
                         .build_in_bounds_gep(
@@ -956,41 +961,68 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     /// Apply an arithmetic or bitwise operator to a matching pair of operands.
     /// `None` when the operator does not apply, so callers word their own error.
     fn apply_arith(
-        &self,
+        &mut self,
         lhs: BasicValueEnum<'ctx>,
         rhs: BasicValueEnum<'ctx>,
         op: &Token,
         signed: bool,
     ) -> Option<BasicValueEnum<'ctx>> {
-        let b = self.builder;
+        match (lhs, rhs) {
+            (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => {
+                self.apply_int_arith(l, r, op, signed)
+            }
+            (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) => {
+                let b = self.builder;
+                Some(match op {
+                    Token::Plus => b.build_float_add(l, r, "fadd").unwrap().into(),
+                    Token::Minus => b.build_float_sub(l, r, "fsub").unwrap().into(),
+                    Token::Star => b.build_float_mul(l, r, "fmul").unwrap().into(),
+                    Token::Slash => b.build_float_div(l, r, "fdiv").unwrap().into(),
+                    Token::Mod => b.build_float_rem(l, r, "frem").unwrap().into(),
+                    _ => return None,
+                })
+            }
+            _ => None,
+        }
+    }
 
-        let value: BasicValueEnum<'ctx> = match (lhs, rhs) {
-            (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => match op {
-                Token::Plus => b.build_int_add(l, r, "add").unwrap().into(),
-                Token::Minus => b.build_int_sub(l, r, "sub").unwrap().into(),
-                Token::Star => b.build_int_mul(l, r, "mul").unwrap().into(),
-                Token::Slash if signed => b.build_int_signed_div(l, r, "div").unwrap().into(),
-                Token::Slash => b.build_int_unsigned_div(l, r, "udiv").unwrap().into(),
-                Token::Mod if signed => b.build_int_signed_rem(l, r, "rem").unwrap().into(),
-                Token::Mod => b.build_int_unsigned_rem(l, r, "urem").unwrap().into(),
-                Token::BitAnd => b.build_and(l, r, "and").unwrap().into(),
-                Token::BitOr => b.build_or(l, r, "or").unwrap().into(),
-                Token::BitXor => b.build_xor(l, r, "xor").unwrap().into(),
-                Token::ShiftLeft => b.build_left_shift(l, r, "shl").unwrap().into(),
-                Token::ShiftRight => b.build_right_shift(l, r, signed, "shr").unwrap().into(),
-                _ => return None,
-            },
-            (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) => match op {
-                Token::Plus => b.build_float_add(l, r, "fadd").unwrap().into(),
-                Token::Minus => b.build_float_sub(l, r, "fsub").unwrap().into(),
-                Token::Star => b.build_float_mul(l, r, "fmul").unwrap().into(),
-                Token::Slash => b.build_float_div(l, r, "fdiv").unwrap().into(),
-                Token::Mod => b.build_float_rem(l, r, "frem").unwrap().into(),
-                _ => return None,
-            },
+    /// The operations that can go wrong emit a check first: `+ - *` trap on
+    /// overflow, `/ %` on a zero divisor, and shifts on an oversized amount.
+    /// All three are skipped in ReleaseFast.
+    fn apply_int_arith(
+        &mut self,
+        l: IntValue<'ctx>,
+        r: IntValue<'ctx>,
+        op: &Token,
+        signed: bool,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        match op {
+            Token::Plus | Token::Minus | Token::Star if self.safety_mode.emit_safety_checks() => {
+                if let Some(checked) = self.build_checked_int_arith(l, r, op, signed) {
+                    return Some(checked);
+                }
+            }
+            Token::Slash | Token::Mod => self.emit_division_check(l, r, signed),
+            Token::ShiftLeft | Token::ShiftRight => self.emit_shift_check(r),
+            _ => {}
+        }
+
+        let b = self.builder;
+        Some(match op {
+            Token::Plus => b.build_int_add(l, r, "add").unwrap().into(),
+            Token::Minus => b.build_int_sub(l, r, "sub").unwrap().into(),
+            Token::Star => b.build_int_mul(l, r, "mul").unwrap().into(),
+            Token::Slash if signed => b.build_int_signed_div(l, r, "div").unwrap().into(),
+            Token::Slash => b.build_int_unsigned_div(l, r, "udiv").unwrap().into(),
+            Token::Mod if signed => b.build_int_signed_rem(l, r, "rem").unwrap().into(),
+            Token::Mod => b.build_int_unsigned_rem(l, r, "urem").unwrap().into(),
+            Token::BitAnd => b.build_and(l, r, "and").unwrap().into(),
+            Token::BitOr => b.build_or(l, r, "or").unwrap().into(),
+            Token::BitXor => b.build_xor(l, r, "xor").unwrap().into(),
+            Token::ShiftLeft => b.build_left_shift(l, r, "shl").unwrap().into(),
+            Token::ShiftRight => b.build_right_shift(l, r, signed, "shr").unwrap().into(),
             _ => return None,
-        };
-        Some(value)
+        })
     }
 
     /// Resolve the callee (method, builtin, generic instantiation or free
@@ -1564,9 +1596,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             return self.dummy_val();
         };
 
-        // The switch belongs in the block the subject was evaluated in, so it is
-        // captured before any arm block moves the builder.
-        let switch_bb = self.builder.get_insert_block().unwrap();
         let merge_bb = self.context.append_basic_block(parent_fn, "match_merge");
 
         let mut cases = Vec::with_capacity(arms.len());
@@ -1588,6 +1617,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 );
             }
         }
+
+        // The switch goes in whichever block the patterns left behind, captured
+        // before the synthesised default moves the builder.
+        let switch_bb = self.builder.get_insert_block().unwrap();
 
         // An exhaustive match has no `default` arm, so one is synthesised for the
         // switch to fall back to.
