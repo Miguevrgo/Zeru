@@ -16,7 +16,10 @@ use crate::{
     ast::{AsmOperand, Expression},
     codegen::{
         compiler::Compiler,
-        layout::{RESULT_ERR, RESULT_TAG, RESULT_VALUE, SLICE_PTR, VEC_CAP, VEC_LEN, VEC_PTR},
+        layout::{
+            OPTION_TAG, OPTION_VALUE, RESULT_ERR, RESULT_TAG, RESULT_VALUE, SLICE_PTR, VEC_CAP,
+            VEC_LEN, VEC_PTR,
+        },
     },
     errors::{Span, ZeruError},
     token::Token,
@@ -991,6 +994,28 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             "res_err",
         )
         .into()
+    }
+
+    /// `T?` queries, mirroring the ones on `T!`.
+    pub(super) fn compile_option_method(
+        &mut self,
+        method_name: &str,
+        option: StructValue<'ctx>,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        let tag = self.extract(option, OPTION_TAG, "opt_tag").into_int_value();
+
+        match method_name {
+            "is_some" => Some(tag.into()),
+            "is_none" => Some(self.builder.build_not(tag, "opt_is_none").unwrap().into()),
+            "unwrap" => {
+                self.emit_trap_if(
+                    self.builder.build_not(tag, "opt_empty").unwrap(),
+                    "unwrap_none",
+                );
+                Some(self.extract(option, OPTION_VALUE, "opt_val"))
+            }
+            _ => None,
+        }
     }
 
     pub(super) fn compile_result_method(

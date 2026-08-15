@@ -1152,6 +1152,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             {
                 return MethodCallOutcome::Done(result);
             }
+            if self.is_option_layout(shape)
+                && let Some(result) = self.compile_option_method(method_name, sv)
+            {
+                return MethodCallOutcome::Done(result);
+            }
             if self.is_slice_layout(shape) && method_name == "len" {
                 return MethodCallOutcome::Done(self.extract(sv, SLICE_LEN, "slice_len"));
             }

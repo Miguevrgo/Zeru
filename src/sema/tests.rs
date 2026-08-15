@@ -2266,3 +2266,15 @@ fn test_index_must_be_an_integer() {
         "got: {errors:?}"
     );
 }
+
+#[test]
+fn test_constant_index_out_of_range_is_rejected() {
+    // Known at compile time, so it should not wait for the runtime check.
+    let errors = analyze("fn main() { var a: Array<i32,2> = [1,2]; var v = a[5]; }");
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("outside the array's 0..2")),
+        "got: {errors:?}"
+    );
+}

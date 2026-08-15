@@ -1227,6 +1227,11 @@ impl SemanticAnalyzer {
                     return self.check_result_method(&method_name, &ok_type, arguments, span);
                 }
 
+                if let Type::Optional(inner) = &obj_type {
+                    let inner = inner.as_ref().clone();
+                    return self.check_option_method(&method_name, &inner, arguments, span);
+                }
+
                 let struct_name = match &obj_type {
                     Type::Struct { name, .. } => name.clone(),
                     Type::Pointer(elem_type) => {
@@ -1462,7 +1467,19 @@ impl SemanticAnalyzer {
         }
 
         match left_type {
-            Type::Array { elem_type, .. } => *elem_type,
+            Type::Array { elem_type, len } => {
+                // A literal index is settled here rather than left to the
+                // runtime bounds check.
+                if let ExpressionKind::Int(value) = &index.kind
+                    && !(0..len as i64).contains(value)
+                {
+                    self.error(
+                        format!("Index {value} is outside the array's 0..{len}"),
+                        index.span,
+                    );
+                }
+                *elem_type
+            }
             Type::Unknown => Type::Unknown,
             _ => {
                 self.error(
@@ -1857,6 +1874,26 @@ impl SemanticAnalyzer {
             "copy" => vec_type(),
             _ => {
                 self.error(format!("Vec<T> has no method '{method_name}'"), span);
+                Type::Unknown
+            }
+        }
+    }
+
+    /// `T?` queries, mirroring the ones on `T!`.
+    fn check_option_method(
+        &mut self,
+        method_name: &str,
+        inner: &Type,
+        arguments: &mut [Expression],
+        span: Span,
+    ) -> Type {
+        self.expect_arity(method_name, arguments, 0, span);
+
+        match method_name {
+            "is_some" | "is_none" => Type::Bool,
+            "unwrap" => inner.clone(),
+            _ => {
+                self.error(format!("Optional has no method '{method_name}'"), span);
                 Type::Unknown
             }
         }

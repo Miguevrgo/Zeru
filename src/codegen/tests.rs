@@ -1205,6 +1205,22 @@ fn test_method_call_through_pointer() {
 }
 
 #[test]
+fn test_optional_methods() {
+    // `T?` had no accessor at all, so `Vec::get` and `Vec::pop` returned values
+    // nothing could read.
+    let input = "
+        fn main() {
+            var some: i32? = 5;
+            var none: i32? = None;
+            var a: bool = some.is_some();
+            var b: bool = none.is_none();
+            var v: i32 = some.unwrap();
+        }
+    ";
+    assert_ir_contains(input, &["opt_tag", "unwrap_none_panic"]);
+}
+
+#[test]
 fn test_overflow_is_checked() {
     let input = "fn main() { var a: i32 = 1; var b: i32 = 2; var c = a + b; }";
     assert_ir_contains(input, &["llvm.sadd.with.overflow.i32", "overflow_panic"]);
