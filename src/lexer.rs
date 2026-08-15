@@ -270,7 +270,7 @@ impl<'a> Lexer<'a> {
             if radix != 0 {
                 self.advance();
                 let digits = self.read_digits(predicate);
-                return Token::Int(i64::from_str_radix(&digits, radix).unwrap_or(0));
+                return Self::int_token(&digits, radix);
             }
         }
 
@@ -291,7 +291,19 @@ impl<'a> Lexer<'a> {
         if dot {
             Token::Float(literal.parse::<f64>().unwrap_or(0.0))
         } else {
-            Token::Int(literal.parse::<i64>().unwrap_or(0))
+            Self::int_token(&literal, 10)
+        }
+    }
+
+    /// Integer literals are carried as an `i64` bit pattern so the whole `u64`
+    /// range survives; the analyser decides whether the value suits its type.
+    fn int_token(digits: &str, radix: u32) -> Token {
+        if let Ok(value) = i64::from_str_radix(digits, radix) {
+            return Token::Int(value);
+        }
+        match u64::from_str_radix(digits, radix) {
+            Ok(value) => Token::Int(value as i64),
+            Err(_) => Token::Illegal(format!("Integer literal '{digits}' is out of range")),
         }
     }
 
