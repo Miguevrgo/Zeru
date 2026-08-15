@@ -1,0 +1,251 @@
+// Language behaviour test. Every check exits with its own code, so a failure
+// says exactly which one broke. Run by ci/compile_suite.py in all safety modes.
+
+enum Color { Red, Green, Blue }
+
+struct Point {
+    x: i32,
+    y: i32,
+
+    fn sum(self) i32 { return self.x + self.y; }
+    fn shift(var self, by: i32) { self.x = self.x + by; }
+}
+
+struct Wrapper {
+    data: Array<i32, 3>,
+    n: i32,
+}
+
+struct Chain {
+    v: i32,
+    fn point(self) Point { return Point { x: self.v, y: self.v }; }
+}
+
+fn twice<T>(x: T) T { return x + x; }
+
+fn pick<T>(a: T, b: T) T { return a; }
+
+fn fib(n: i32) i32 {
+    if n < 2 { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn divide(a: i32, b: i32) i32! {
+    if b == 0 { return Err(1); }
+    return Ok(a / b);
+}
+
+fn bump(p: *i32) bool {
+    *p = *p + 1;
+    return true;
+}
+
+fn sum3(a: Array<i32, 3>) i32 { return a[0] + a[1] + a[2]; }
+
+fn read_through(p: *Point) i32 { return p.x; }
+
+fn shift_through(p: *Point) { p.shift(5); }
+
+fn main() {
+    // --- integers: signedness, shifts ----------------------------------------
+    // Overflow, division by zero and oversized shifts abort in Debug and
+    // ReleaseSafe, so there is nothing to assert about them from in here.
+    var umax: u32 = 4294967295;
+    var one: u32 = 1;
+    if umax - one != 4294967294 { exit(1); }
+    if umax / 2 != 2147483647 { exit(2); }
+    if umax < one { exit(3); }
+
+    var neg: i32 = -5;
+    if neg / 2 != -2 { exit(4); }
+    if neg % 2 != -1 { exit(5); }
+    if neg > 1 { exit(6); }
+
+    var wide: i32 = -8;
+    if wide >> 1 != -4 { exit(7); }
+    var uwide: u32 = 4294967288;
+    if uwide >> 1 != 2147483644 { exit(8); }
+
+    var big: u64 = 18446744073709551615;
+    if big == 0 { exit(9); }
+    if big / 2 != 9223372036854775807 { exit(10); }
+
+    // --- casts ---------------------------------------------------------------
+    var small: i32 = -1;
+    if small as i64 != -1 { exit(11); }
+    var upos: u32 = 7;
+    if upos as u64 != 7 { exit(12); }
+    var yes: bool = true;
+    if yes as i32 != 1 { exit(13); }
+    var over: i32 = 300;
+    if over as u8 != 44 { exit(14); }
+    var frac: f64 = -2.7;
+    if frac as i32 != -2 { exit(15); }
+    var whole: i32 = 7;
+    if whole as f64 as i32 != 7 { exit(16); }
+
+    // --- structs and methods -------------------------------------------------
+    var p = Point { x: 1, y: 2 };
+    if p.sum() != 3 { exit(20); }
+    p.shift(10);
+    if p.x != 11 { exit(21); }
+    if p.sum() != 13 { exit(22); }
+    var copy = p;
+    if copy.x != 11 { exit(23); }
+
+    var chain = Chain { v: 5 };
+    if chain.point().sum() != 10 { exit(24); }
+
+    // --- aggregates ----------------------------------------------------------
+    var w = Wrapper { data: [1, 2, 3], n: 3 };
+    if w.data[1] != 2 { exit(30); }
+    w.data[1] = 20;
+    if w.data[1] != 20 { exit(31); }
+    if w.n != 3 { exit(32); }
+
+    var pts: Array<Point, 2> = [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
+    if pts[1].x != 3 { exit(33); }
+    pts[0].y = 9;
+    if pts[0].y != 9 { exit(34); }
+
+    var plain: Array<i32, 3> = [4, 5, 6];
+    if sum3(plain) != 15 { exit(35); }
+
+    var through = Point { x: 4, y: 0 };
+    if read_through(&through) != 4 { exit(36); }
+    shift_through(&through);
+    if through.x != 9 { exit(37); }
+
+    // --- scoping and shadowing -----------------------------------------------
+    var shadowed: i32 = 1;
+    {
+        var shadowed: i32 = 2;
+        if shadowed != 2 { exit(40); }
+    }
+    if shadowed != 1 { exit(41); }
+
+    // Rebinding in the same scope: the initialiser still sees the old value,
+    // and the type is free to change.
+    var reused: i32 = 1;
+    var reused: i32 = reused + 1;
+    if reused != 2 { exit(42); }
+    var flag: i32 = 5;
+    var flag: bool = flag > 0;
+    if !flag { exit(43); }
+
+    // Bitwise binds tighter than comparison, as in Rust.
+    var bits: u32 = 12;
+    if !(bits & 4 == 4) { exit(44); }
+
+    // --- pointers ------------------------------------------------------------
+    var target: i32 = 41;
+    var ptr: *i32 = &target;
+    *ptr = *ptr + 1;
+    if target != 42 { exit(50); }
+
+    var cells: Array<i32, 3> = [1, 2, 3];
+    var cell: *i32 = &cells[1];
+    *cell = 99;
+    if cells[1] != 99 { exit(51); }
+    if cells[0] != 1 { exit(52); }
+    if cells[2] != 3 { exit(53); }
+
+    // --- control flow --------------------------------------------------------
+    var i: i32 = 0;
+    var sum: i32 = 0;
+    while i < 10 {
+        i += 1;
+        if i == 3 { continue; }
+        if i == 8 { break; }
+        sum += i;
+    }
+    if sum != 25 { exit(60); }
+
+    var rows: Array<i32, 3> = [1, 2, 3];
+    var cols: Array<i32, 2> = [10, 20];
+    var grid: i32 = 0;
+    for r in rows {
+        for c in cols {
+            grid += r * c;
+        }
+    }
+    if grid != 180 { exit(61); }
+
+    if fib(10) != 55 { exit(62); }
+
+    // --- short circuit -------------------------------------------------------
+    var calls: i32 = 0;
+    var counter: *i32 = &calls;
+    var no: bool = false;
+    if no && bump(counter) { exit(70); }
+    if calls != 0 { exit(71); }
+    if yes || bump(counter) { }
+    if calls != 0 { exit(72); }
+    if yes && bump(counter) { }
+    if calls != 1 { exit(73); }
+
+    // --- generics ------------------------------------------------------------
+    if twice(3) != 6 { exit(80); }
+    var wide64: i64 = 10;
+    if twice(wide64) != 20 { exit(81); }
+
+    // A generic result keeps its concrete type, so its fields are reachable.
+    var first = Point { x: 1, y: 1 };
+    var second = Point { x: 2, y: 2 };
+    if pick(first, second).sum() != 2 { exit(82); }
+
+    // --- enums and match -----------------------------------------------------
+    var color: Color = Color::Green;
+    if color != Color::Green { exit(90); }
+    var named = match color {
+        Color::Red => 1,
+        Color::Green => 2,
+        Color::Blue => 3
+    };
+    if named != 2 { exit(91); }
+    var fallback = match color {
+        Color::Red => 1,
+        default => 9
+    };
+    if fallback != 9 { exit(92); }
+
+    // --- Result --------------------------------------------------------------
+    var ok: i32! = divide(10, 2);
+    if !ok.is_ok() { exit(100); }
+    if ok.unwrap() != 5 { exit(101); }
+    var bad: i32! = divide(10, 0);
+    if !bad.is_err() { exit(102); }
+    if bad.unwrap_err() != 1 { exit(103); }
+
+    // --- optionals -----------------------------------------------------------
+    var some: i32? = 5;
+    var none: i32? = None;
+    if !some.is_some() { exit(120); }
+    if some.is_none() { exit(121); }
+    if some.unwrap() != 5 { exit(122); }
+    if none.is_some() { exit(123); }
+    if !none.is_none() { exit(124); }
+
+    // --- Vec -----------------------------------------------------------------
+    var list: Vec<i64> = Vec.new();
+    var n: i64 = 0;
+    while n < 20 {
+        list.push(n);
+        n += 1;
+    }
+    if list.len() != 20 { exit(110); }
+
+    var got = list.get(3);
+    if !got.is_some() { exit(111); }
+    if got.unwrap() != 3 { exit(112); }
+    if list.get(99).is_some() { exit(113); }
+
+    var dropped = list.pop();
+    if dropped.unwrap() != 19 { exit(114); }
+    if list.len() != 19 { exit(115); }
+    list.clear();
+    if !list.is_empty() { exit(116); }
+
+    println("lang: all tests passed");
+    exit(0);
+}

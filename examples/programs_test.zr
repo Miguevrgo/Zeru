@@ -1,0 +1,101 @@
+// Whole programs rather than isolated features, so the pieces get exercised
+// together: pointers walking a structure, an in-place sort, a Vec of structs
+// wider than a word, and a Result threaded through several calls.
+
+struct Node {
+    value: i32,
+    next: *Node,
+}
+
+struct Big {
+    a: i64,
+    b: i64,
+    c: i64,
+}
+
+fn sum_list(head: *Node, length: i32) i32 {
+    var total: i32 = 0;
+    var cur: *Node = head;
+    var step: i32 = 0;
+    while step < length {
+        total += cur.value;
+        cur = cur.next;
+        step += 1;
+    }
+    return total;
+}
+
+fn parse_digit(c: u8) i32! {
+    if c < 48 { return Err(1); }
+    if c > 57 { return Err(1); }
+    return Ok(c as i32 - 48);
+}
+
+fn digits_value(text: Array<u8, 3>) i32! {
+    var total: i32 = 0;
+    var i: usize = 0;
+    while i < 3 {
+        var digit: i32! = parse_digit(text[i]);
+        if digit.is_err() {
+            return Err(digit.unwrap_err());
+        }
+        total = total * 10 + digit.unwrap();
+        i += 1;
+    }
+    return Ok(total);
+}
+
+fn main() {
+    // A list walked through raw pointers.
+    var third = Node { value: 3, next: 0 as *Node };
+    var second = Node { value: 2, next: &third };
+    var first = Node { value: 1, next: &second };
+    if sum_list(&first, 3) != 6 { exit(1); }
+
+    // Bubble sort in place, then confirm the whole array is ordered.
+    var values: Array<i32, 6> = [5, 2, 9, 1, 7, 3];
+    var pass: usize = 0;
+    while pass < 6 {
+        var i: usize = 0;
+        while i + 1 < 6 {
+            if values[i] > values[i + 1] {
+                var swap: i32 = values[i];
+                values[i] = values[i + 1];
+                values[i + 1] = swap;
+            }
+            i += 1;
+        }
+        pass += 1;
+    }
+    if values[0] != 1 { exit(10); }
+    if values[5] != 9 { exit(11); }
+    var check: usize = 0;
+    while check + 1 < 6 {
+        if values[check] > values[check + 1] { exit(12); }
+        check += 1;
+    }
+
+    // A Vec whose element is three words wide: every push has to advance by
+    // the element size, not by a fixed slot.
+    var records: Vec<Big> = Vec.new();
+    records.push(Big { a: 1, b: 2, c: 3 });
+    records.push(Big { a: 4, b: 5, c: 6 });
+    records.push(Big { a: 7, b: 8, c: 9 });
+    if records.len() != 3 { exit(20); }
+    if records.get(0).unwrap().a != 1 { exit(21); }
+    if records.get(0).unwrap().c != 3 { exit(22); }
+    if records.get(2).unwrap().a != 7 { exit(23); }
+    if records.get(2).unwrap().c != 9 { exit(24); }
+
+    // A Result carried up through two calls, on both paths.
+    var good: i32! = digits_value([49, 50, 51]);
+    if !good.is_ok() { exit(30); }
+    if good.unwrap() != 123 { exit(31); }
+
+    var bad: i32! = digits_value([49, 65, 51]);
+    if !bad.is_err() { exit(32); }
+    if bad.unwrap_err() != 1 { exit(33); }
+
+    println("programs: all tests passed");
+    exit(0);
+}
