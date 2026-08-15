@@ -63,6 +63,8 @@ enum CompileError {
     StdNotFound,
     #[error("invalid path: must point to a .zr file with a valid UTF-8 name")]
     InvalidPath,
+    #[error("linking failed: clang exited with {0}")]
+    Link(std::process::ExitStatus),
 }
 
 fn run_compiler(args: Cli) -> Result<(), CompileError> {
@@ -119,5 +121,11 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
 
 fn main() {
     let cli = Cli::parse();
-    run_compiler(cli).unwrap_or_else(|err| panic!("{RED_FG}[-] Error: {err}{RESET}"));
+    if let Err(err) = run_compiler(cli) {
+        // A broken source file is not a compiler crash. Report it and exit
+        // non-zero, without a Rust panic message and backtrace note on top of
+        // the diagnostics the user actually needs to read.
+        eprintln!("{RED_FG}[-] Error: {err}{RESET}");
+        std::process::exit(1);
+    }
 }

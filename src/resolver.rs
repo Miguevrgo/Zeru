@@ -452,15 +452,20 @@ pub fn compile_pipeline(
     }
 
     let status = cmd.status()?;
-    if status.success() {
-        let end = start.elapsed().as_millis() as f64 / 1000.0;
-        eprintln!("  {GREEN_FG}✅Finished  {RESET}{safety_mode} in {end:.3}s",);
-
-        if !force_emit_ir {
-            let _ = fs::remove_file(ir_path);
-        } else {
-            println!("  {GREEN_FG} IR saved  {RESET}{}", ir_path.display());
-        }
+    if !status.success() {
+        // Leave the IR in place: a link failure is almost always something to
+        // go read in there.
+        return Err(CompileError::Link(status));
     }
+
+    let end = start.elapsed().as_millis() as f64 / 1000.0;
+    eprintln!("  {GREEN_FG}✅Finished  {RESET}{safety_mode} in {end:.3}s",);
+
+    if !force_emit_ir {
+        let _ = fs::remove_file(ir_path);
+    } else {
+        println!("  {GREEN_FG} IR saved  {RESET}{}", ir_path.display());
+    }
+
     Ok(exe_path)
 }
