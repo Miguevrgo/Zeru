@@ -1670,16 +1670,19 @@ impl<'a> Parser<'a> {
 }
 
 #[derive(PartialEq, PartialOrd)]
+/// Loosest first. Bitwise operators bind tighter than comparison, as in Rust,
+/// so `flags & MASK == 0` groups the way it reads instead of C's
+/// `flags & (MASK == 0)`.
 enum Precedence {
     Lowest,
     Assignment,
     LogicalOr,
     LogicalAnd,
+    Equals,
+    LessGreater,
     BitwiseOr,
     BitwiseXor,
     BitwiseAnd,
-    Equals,
-    LessGreater,
     Shift,
     Sum,
     Product,
@@ -1758,6 +1761,51 @@ mod tests {
             StatementKind::Function { body, .. } => body,
             _ => panic!("Expected Function statement"),
         }
+    }
+
+    /// Render an expression's shape so precedence is visible in one string.
+    fn shape(expr: &crate::ast::Expression) -> String {
+        match &expr.kind {
+            ExpressionKind::Infix {
+                left,
+                operator,
+                right,
+            } => format!("({} {:?} {})", shape(left), operator, shape(right)),
+            ExpressionKind::Int(v) => v.to_string(),
+            ExpressionKind::Identifier(name) => name.clone(),
+            other => format!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_bitwise_binds_tighter_than_comparison() {
+        // C groups this as `flags & (mask == 0)`, which is almost never meant.
+        let program = parse_input("fn main() { var t = flags & mask == 0; }");
+        let body = get_function_body(&program.statements[0]);
+        let StatementKind::Var { value, .. } = &body[0].kind else {
+            panic!("Expected a var statement");
+        };
+        assert_eq!(shape(value), "((flags BitAnd mask) Eq 0)");
+    }
+
+    #[test]
+    fn test_precedence_within_the_bitwise_group() {
+        let program = parse_input("fn main() { var t = a | b ^ c & d; }");
+        let body = get_function_body(&program.statements[0]);
+        let StatementKind::Var { value, .. } = &body[0].kind else {
+            panic!("Expected a var statement");
+        };
+        assert_eq!(shape(value), "(a BitOr (b BitXor (c BitAnd d)))");
+    }
+
+    #[test]
+    fn test_shift_stays_looser_than_arithmetic() {
+        let program = parse_input("fn main() { var t = a << 2 + 1; }");
+        let body = get_function_body(&program.statements[0]);
+        let StatementKind::Var { value, .. } = &body[0].kind else {
+            panic!("Expected a var statement");
+        };
+        assert_eq!(shape(value), "(a ShiftLeft (2 Plus 1))");
     }
 
     #[test]
