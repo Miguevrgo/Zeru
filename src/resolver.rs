@@ -20,6 +20,16 @@ pub const GREEN_FG: &str = "\x1b[1;38;2;152;195;121m";
 pub const YELLOW_FG: &str = "\x1b[1;38;2;229;192;123m";
 pub const RESET: &str = "\x1b[0m";
 
+/// Width the verb is padded to, so every status line's detail starts in the
+/// same column.
+const VERB_WIDTH: usize = 9;
+
+/// Print a progress line: a Nerd Font icon, the right-aligned verb in colour,
+/// then the detail. Every line goes through here so the columns cannot drift.
+pub fn status(colour: &str, icon: char, verb: &str, detail: impl std::fmt::Display) {
+    eprintln!("  {colour}{icon} {verb:>VERB_WIDTH$}{RESET} {detail}");
+}
+
 fn get_std_path() -> Result<PathBuf, CompileError> {
     if let Ok(path) = std::env::var("ZERU_STD_PATH") {
         return Ok(PathBuf::from(path));
@@ -359,7 +369,12 @@ pub fn compile_pipeline(
     force_emit_ir: bool,
 ) -> Result<PathBuf, CompileError> {
     if path.extension().and_then(|s| s.to_str()) != Some("zr") {
-        eprintln!("{YELLOW_FG}⚠️Warning: Zeru extension is .zr{RESET}");
+        status(
+            YELLOW_FG,
+            '\u{ea6c}',
+            "Warning",
+            "Zeru sources use the .zr extension",
+        );
     }
 
     let filename = path
@@ -373,10 +388,11 @@ pub fn compile_pipeline(
     let ir_path = build_dir.join(format!("{filename}.ll"));
     let exe_path = build_dir.join(filename);
 
-    eprintln!(
-        "  {GREEN_FG} Compiling {RESET}v{} ({})",
-        env!("CARGO_PKG_VERSION"),
-        path.to_str().unwrap(),
+    status(
+        GREEN_FG,
+        '\u{eb6d}',
+        "Compiling",
+        format_args!("v{} ({})", env!("CARGO_PKG_VERSION"), path.display()),
     );
     let start = std::time::Instant::now();
 
@@ -451,20 +467,25 @@ pub fn compile_pipeline(
         cmd.arg(flag);
     }
 
-    let status = cmd.status()?;
-    if !status.success() {
+    let link = cmd.status()?;
+    if !link.success() {
         // Leave the IR in place: a link failure is almost always something to
         // go read in there.
-        return Err(CompileError::Link(status));
+        return Err(CompileError::Link(link));
     }
 
     let end = start.elapsed().as_millis() as f64 / 1000.0;
-    eprintln!("  {GREEN_FG}✅Finished  {RESET}{safety_mode} in {end:.3}s",);
+    status(
+        GREEN_FG,
+        '\u{eab2}',
+        "Finished",
+        format_args!("{safety_mode} in {end:.3}s"),
+    );
 
     if !force_emit_ir {
         let _ = fs::remove_file(ir_path);
     } else {
-        println!("  {GREEN_FG} IR saved  {RESET}{}", ir_path.display());
+        status(GREEN_FG, '\u{eaf3}', "IR saved", ir_path.display());
     }
 
     Ok(exe_path)

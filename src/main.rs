@@ -8,7 +8,7 @@ mod sema;
 mod token;
 
 use crate::codegen::SafetyMode;
-use crate::resolver::{GREEN_FG, RED_FG, RESET, compile_pipeline};
+use crate::resolver::{GREEN_FG, RED_FG, RESET, compile_pipeline, status};
 use clap::{Parser, Subcommand};
 use inkwell::support::LLVMString;
 use std::fs;
@@ -97,10 +97,7 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
                 SafetyMode::Debug
             };
             let executable_path = compile_pipeline(&file, safety_mode.clone(), false)?;
-            eprintln!(
-                "  {GREEN_FG} Running   {RESET}{}",
-                executable_path.display()
-            );
+            status(GREEN_FG, '\u{e7d5}', "Running", executable_path.display());
             let status = Command::new(&executable_path).status()?;
             std::process::exit(
                 status
@@ -112,7 +109,7 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
             let build_dir = Path::new("build");
             if build_dir.exists() {
                 fs::remove_dir_all(build_dir)?;
-                println!("{GREEN_FG}✅ Build directory cleaned{RESET}");
+                status(GREEN_FG, '\u{ea81}', "Cleaned", build_dir.display());
             }
         }
     }
