@@ -2184,3 +2184,85 @@ fn test_generic_type_param_in_body() {
         errors
     );
 }
+
+#[test]
+fn test_missing_return_is_rejected() {
+    // The body used to compile to a bare `unreachable`, so the caller read
+    // whatever happened to be in the return register.
+    let errors = analyze("fn f() i32 { } fn main() { }");
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("without returning a value")),
+        "got: {errors:?}"
+    );
+}
+
+#[test]
+fn test_return_on_every_branch_is_accepted() {
+    let cases = [
+        "fn f(n: i32) i32 { if n > 0 { return 1; } else { return 2; } }",
+        "fn f(n: i32) i32 { if n > 0 { return 1; } return 2; }",
+        "fn f(n: i32) i32 { while n > 0 { return 1; } return 0; }",
+        "fn f() { }",
+    ];
+    for case in cases {
+        let errors = analyze(&format!("{case} fn main() {{ }}"));
+        assert!(errors.is_empty(), "{case} -> {errors:?}");
+    }
+}
+
+#[test]
+fn test_self_referential_struct_is_rejected() {
+    // Laying this out sent the compiler into a stack overflow.
+    for input in [
+        "struct S { next: S } fn main() { }",
+        "struct A { b: B } struct B { a: A } fn main() { }",
+        "struct S { kids: Array<S, 2> } fn main() { }",
+    ] {
+        let errors = analyze(input);
+        assert!(
+            errors.iter().any(|e| e.contains("no finite size")),
+            "{input} -> {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn test_indirection_breaks_struct_recursion() {
+    let errors = analyze("struct N { next: *N, v: i32 } fn main() { }");
+    assert!(errors.is_empty(), "got: {errors:?}");
+}
+
+#[test]
+fn test_duplicate_declarations_are_rejected() {
+    let cases = [
+        (
+            "struct S { a: i32, a: i32 } fn main() { }",
+            "field 'a' twice",
+        ),
+        (
+            "fn f(a: i32, a: i32) { } fn main() { }",
+            "parameter 'a' twice",
+        ),
+        ("enum E { A, A } fn main() { }", "variant 'A' twice"),
+    ];
+    for (input, expected) in cases {
+        let errors = analyze(input);
+        assert!(
+            errors.iter().any(|e| e.contains(expected)),
+            "{input} -> {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn test_index_must_be_an_integer() {
+    let errors = analyze("fn main() { var a: Array<i32,2> = [1,2]; var v = a[true]; }");
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("Index must be an integer")),
+        "got: {errors:?}"
+    );
+}

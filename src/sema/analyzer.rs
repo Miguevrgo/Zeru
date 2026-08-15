@@ -6,9 +6,16 @@ use crate::{
         types::{FloatWidth, IntWidth, Signedness, Type},
     },
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 type TraitMethod = (String, Vec<Type>, Option<Type>);
+
+#[derive(PartialEq, Clone, Copy)]
+enum Borrow {
+    Address,
+    Shared,
+    Mutable,
+}
 
 enum CallKind {
     Named(String),
@@ -62,8 +69,76 @@ impl SemanticAnalyzer {
 
     pub fn analyze(&mut self, program: &mut Program) {
         self.scan_types(&program.statements);
+        self.check_recursive_structs(&program.statements);
         self.scan_functions(&program.statements);
         self.analyze_bodies(&mut program.statements);
+    }
+
+    /// A struct that stores itself, directly or through another struct, has no
+    /// finite size. Reported here so codegen never tries to lay one out.
+    fn check_recursive_structs(&mut self, stmts: &[Statement]) {
+        let structs: HashMap<&str, &[(String, TypeSpec)]> = stmts
+            .iter()
+            .filter_map(|stmt| match &stmt.kind {
+                StatementKind::Struct { name, fields, .. } => {
+                    Some((name.as_str(), fields.as_slice()))
+                }
+                _ => None,
+            })
+            .collect();
+
+        for stmt in stmts {
+            let StatementKind::Struct { name, .. } = &stmt.kind else {
+                continue;
+            };
+            if Self::stores_by_value(name, name, &structs, &mut HashSet::new()) {
+                self.error(
+                    format!("Struct '{name}' stores itself, so it has no finite size"),
+                    stmt.span,
+                );
+            }
+        }
+    }
+
+    /// Depth-first walk of the by-value edges out of `from`, looking for `target`.
+    fn stores_by_value(
+        from: &str,
+        target: &str,
+        structs: &HashMap<&str, &[(String, TypeSpec)]>,
+        seen: &mut HashSet<String>,
+    ) -> bool {
+        let Some(fields) = structs.get(from) else {
+            return false;
+        };
+
+        let mut deps = Vec::new();
+        for (_, spec) in fields.iter() {
+            Self::value_dependencies(spec, &mut deps);
+        }
+        deps.into_iter().any(|dep| {
+            dep == target
+                || (seen.insert(dep.clone()) && Self::stores_by_value(&dep, target, structs, seen))
+        })
+    }
+
+    /// Type names a field stores inline. Pointers, references, slices and `Vec`
+    /// keep their payload elsewhere, so they break a cycle.
+    fn value_dependencies(spec: &TypeSpec, out: &mut Vec<String>) {
+        match spec {
+            TypeSpec::Named(name) => out.push(name.clone()),
+            TypeSpec::Tuple(types) => {
+                types.iter().for_each(|t| Self::value_dependencies(t, out));
+            }
+            TypeSpec::Optional(inner) | TypeSpec::Result(inner) => {
+                Self::value_dependencies(inner, out);
+            }
+            TypeSpec::Generic { name, args } if name == "Array" => {
+                if let Some(elem) = args.first() {
+                    Self::value_dependencies(elem, out);
+                }
+            }
+            _ => {}
+        }
     }
 
     fn scan_types(&mut self, stmts: &[Statement]) {
@@ -86,6 +161,13 @@ impl SemanticAnalyzer {
                     if self.enum_defs.contains_key(name) || self.struct_defs.contains_key(name) {
                         self.error(format!("Type '{name}' is already defined"), stmt.span);
                         continue;
+                    }
+
+                    if let Some(dup) = Self::first_duplicate(variants) {
+                        self.error(
+                            format!("Enum '{name}' declares variant '{dup}' twice"),
+                            stmt.span,
+                        );
                     }
 
                     let enum_type = Type::Enum {
@@ -118,8 +200,15 @@ impl SemanticAnalyzer {
 
         for stmt in stmts {
             if let StatementKind::Struct { name, fields, .. } = &stmt.kind {
-                let mut resolved_fields = Vec::with_capacity(fields.len());
+                let mut resolved_fields: Vec<(String, Type)> = Vec::with_capacity(fields.len());
                 for (f_name, f_type_spec) in fields {
+                    if resolved_fields.iter().any(|(seen, _)| seen == f_name) {
+                        self.error(
+                            format!("Struct '{name}' declares field '{f_name}' twice"),
+                            stmt.span,
+                        );
+                        continue;
+                    }
                     let f_ty = self.resolve_spec(f_type_spec);
                     resolved_fields.push((f_name.clone(), f_ty));
                 }
@@ -174,6 +263,12 @@ impl SemanticAnalyzer {
         }
     }
 
+    /// First name that appears more than once, if any.
+    fn first_duplicate(names: &[String]) -> Option<&String> {
+        let mut seen = HashSet::new();
+        names.iter().find(|name| !seen.insert(*name))
+    }
+
     fn register_function(
         &mut self,
         name: String,
@@ -188,6 +283,15 @@ impl SemanticAnalyzer {
                 Span::default(),
             );
             return;
+        }
+
+        if let Some(dup) =
+            Self::first_duplicate(&params.iter().map(|(n, _, _)| n.clone()).collect::<Vec<_>>())
+        {
+            self.error(
+                format!("Function '{name}' declares parameter '{dup}' twice"),
+                Span::default(),
+            );
         }
 
         if name == "main" {
@@ -297,6 +401,24 @@ impl SemanticAnalyzer {
         }
     }
 
+    /// Whether control always leaves `body` through a `return`. Conservative:
+    /// a loop may run zero times, so only branches that all return count.
+    fn always_returns(body: &[Statement]) -> bool {
+        body.iter().any(|stmt| match &stmt.kind {
+            StatementKind::Return(_) => true,
+            StatementKind::Block(inner) => Self::always_returns(inner),
+            StatementKind::If {
+                then_branch,
+                else_branch: Some(else_branch),
+                ..
+            } => {
+                Self::always_returns(std::slice::from_ref(then_branch))
+                    && Self::always_returns(std::slice::from_ref(else_branch))
+            }
+            _ => false,
+        })
+    }
+
     fn check_function_body(
         &mut self,
         name: &str,
@@ -326,6 +448,20 @@ impl SemanticAnalyzer {
 
             for s in body.iter_mut() {
                 self.check_statement(s);
+            }
+
+            // `main` gets an implicit `return 0`, every other function has to
+            // produce its value or the call site reads whatever was in the
+            // return register.
+            if !matches!(self.current_fn_return_type, Some(Type::Void))
+                && name != "main"
+                && !Self::always_returns(body)
+            {
+                let span = body.last().map(|s| s.span).unwrap_or_default();
+                self.error(
+                    format!("Function '{name}' can finish without returning a value"),
+                    span,
+                );
             }
 
             self.symbols.exit_scope();
@@ -402,16 +538,7 @@ impl SemanticAnalyzer {
                 let ok_type = self.resolve_spec(inner);
                 Type::Result {
                     ok_type: Box::new(ok_type),
-                    err_type: Box::new(Type::Struct {
-                        name: "Error".to_string(),
-                        fields: vec![(
-                            "code".to_string(),
-                            Type::Integer {
-                                signed: crate::sema::types::Signedness::Signed,
-                                width: crate::sema::types::IntWidth::W32,
-                            },
-                        )],
-                    }),
+                    err_type: Box::new(Self::error_type()),
                 }
             }
             TypeSpec::Slice(inner) => {
@@ -502,6 +629,108 @@ impl SemanticAnalyzer {
             .map(|(name, _)| name)
     }
 
+    fn check_var_declaration(
+        &mut self,
+        name: &str,
+        is_const: bool,
+        value: &mut Expression,
+        type_annotation: &Option<TypeSpec>,
+        span: Span,
+    ) {
+        let expected_type = type_annotation.as_ref().map(|spec| self.resolve_spec(spec));
+
+        let value_type = self.check_expression(value, expected_type.as_ref());
+
+        let final_type = if let Some(expected) = expected_type {
+            let is_compatible = if expected.accepts(&value_type) {
+                true
+            } else {
+                match (&expected, &value_type) {
+                    (Type::Float(FloatWidth::W64), Type::Float(FloatWidth::W32)) => true,
+                    (
+                        Type::Array {
+                            elem_type: t1,
+                            len: l1,
+                        },
+                        Type::Array {
+                            elem_type: t2,
+                            len: l2,
+                        },
+                    ) => {
+                        if l1 != l2 {
+                            false
+                        } else {
+                            t1.accepts(t2)
+                        }
+                    }
+                    _ => false,
+                }
+            };
+
+            if !is_compatible && value_type != Type::Unknown {
+                self.error(
+                    format!(
+                        "Type mismatch for variable '{name}. Annotated as {:?} but got {:?}",
+                        expected.to_string(),
+                        value_type.to_string()
+                    ),
+                    span,
+                );
+            }
+
+            expected
+        } else {
+            if value_type == Type::Unknown {
+                self.error(
+                    format!(
+                        "Cannot infer type for variable '{}'. Please add a type annotation.",
+                        name
+                    ),
+                    span,
+                );
+            }
+            value_type.clone()
+        };
+
+        // If initializing from an identifier with move semantics, mark source as moved
+        if final_type.has_move_semantics()
+            && let ExpressionKind::Identifier(source_name) = &value.kind
+        {
+            self.symbols.mark_moved(source_name);
+        }
+
+        self.symbols
+            .insert_var(name.to_string(), final_type, is_const);
+    }
+
+    fn check_for_in(&mut self, variable: &str, iterable: &mut Expression, body: &mut Statement) {
+        let iter_span = iterable.span;
+        let iterable_type = self.check_expression(iterable, None);
+
+        let item_type = match iterable_type {
+            Type::Array { elem_type, .. } => *elem_type,
+            Type::Unknown => Type::Unknown,
+            _ => {
+                self.error(
+                    format!("Type {:?} is not iterable.", iterable_type),
+                    iter_span,
+                );
+                Type::Unknown
+            }
+        };
+
+        let prev_loop = self.in_loop;
+        self.in_loop = true;
+
+        self.symbols.enter_scope();
+        self.symbols
+            .insert_var(variable.to_string(), item_type, true);
+        self.check_statement(body);
+
+        self.symbols.exit_scope();
+        self.in_loop = prev_loop;
+    }
+
     fn check_statement(&mut self, stmt: &mut Statement) {
         let span = stmt.span;
         match &mut stmt.kind {
@@ -511,63 +740,10 @@ impl SemanticAnalyzer {
                 value,
                 type_annotation,
             } => {
-                let expected_type = type_annotation.as_ref().map(|spec| self.resolve_spec(spec));
-
-                let value_type = self.check_expression(value, expected_type.as_ref());
-
-                let final_type = if let Some(expected) = expected_type {
-                    let is_compatible = if expected.accepts(&value_type) {
-                        true
-                    } else {
-                        match (&expected, &value_type) {
-                            (Type::Float(FloatWidth::W64), Type::Float(FloatWidth::W32)) => true,
-                            (
-                                Type::Array {
-                                    elem_type: t1,
-                                    len: l1,
-                                },
-                                Type::Array {
-                                    elem_type: t2,
-                                    len: l2,
-                                },
-                            ) => {
-                                if l1 != l2 {
-                                    false
-                                } else {
-                                    t1.accepts(t2)
-                                }
-                            }
-                            _ => false,
-                        }
-                    };
-
-                    if !is_compatible && value_type != Type::Unknown {
-                        self.error(format!(
-                            "Type mismatch for variable '{name}. Annotated as {:?} but got {:?}",
-                            expected.to_string(),
-                            value_type.to_string()
-                        ), span);
-                    }
-
-                    expected
-                } else {
-                    if value_type == Type::Unknown {
-                        self.error(format!(
-                            "Cannot infer type for variable '{}'. Please add a type annotation.",
-                            name
-                        ), span);
-                    }
-                    value_type.clone()
-                };
-
-                // If initializing from an identifier with move semantics, mark source as moved
-                if final_type.has_move_semantics()
-                    && let ExpressionKind::Identifier(source_name) = &value.kind
-                {
-                    self.symbols.mark_moved(source_name);
-                }
-
-                self.symbols.insert_var(name.clone(), final_type, *is_const);
+                let name = name.clone();
+                let is_const = *is_const;
+                let type_annotation = type_annotation.clone();
+                self.check_var_declaration(&name, is_const, value, &type_annotation, span)
             }
 
             StatementKind::Return(opt_expr) => {
@@ -669,31 +845,10 @@ impl SemanticAnalyzer {
                 iterable,
                 body,
             } => {
-                let iter_span = iterable.span;
-                let iterable_type = self.check_expression(iterable, None);
-
-                let item_type = match iterable_type {
-                    Type::Array { elem_type, .. } => *elem_type,
-                    Type::Unknown => Type::Unknown,
-                    _ => {
-                        self.error(
-                            format!("Type {:?} is not iterable.", iterable_type),
-                            iter_span,
-                        );
-                        Type::Unknown
-                    }
-                };
-
-                let prev_loop = self.in_loop;
-                self.in_loop = true;
-
-                self.symbols.enter_scope();
-                self.symbols.insert_var(variable.clone(), item_type, true);
-                self.check_statement(body);
-
-                self.symbols.exit_scope();
-                self.in_loop = prev_loop;
+                let variable = variable.clone();
+                self.check_for_in(&variable, iterable, body)
             }
+
             _ => {}
         }
     }
@@ -715,42 +870,783 @@ impl SemanticAnalyzer {
         ty
     }
 
+    fn check_identifier(&mut self, name: &str, span: Span) -> Type {
+        if name.contains("::") {
+            let parts: Vec<&str> = name.split("::").collect();
+
+            if parts.len() == 2 {
+                let enum_name = parts[0].to_string();
+                let variant_name = parts[1].to_string();
+                if let Some(Type::Enum { variants, .. }) = self.enum_defs.get(&enum_name) {
+                    if variants.contains(&variant_name) {
+                        return self.enum_defs.get(&enum_name).cloned().unwrap();
+                    } else {
+                        self.error(
+                            format!("Enum '{}' has no variant '{}'", enum_name, variant_name),
+                            span,
+                        );
+                        return Type::Unknown;
+                    }
+                }
+            }
+        }
+
+        if let Some(symbol) = self.symbols.lookup(name).cloned() {
+            match symbol {
+                super::symbol_table::Symbol::Var { ty, is_moved, .. } => {
+                    if is_moved {
+                        self.error(
+                                format!(
+                                    "Use of moved value '{}'. Value was previously moved and is no longer valid.",
+                                    name
+                                ),
+                                span,
+                            );
+                        return Type::Unknown;
+                    }
+                    ty
+                }
+                _ => {
+                    self.error(format!("'{name}' is a function, not a variable"), span);
+                    Type::Unknown
+                }
+            }
+        } else {
+            let suggestion = self.find_similar_variable(name);
+            if let Some(similar) = suggestion {
+                self.error(
+                    format!(
+                        "Undeclared variable '{}'. Did you mean '{}'?",
+                        name, similar
+                    ),
+                    span,
+                );
+            } else {
+                self.error(format!("Undeclared variable '{name}'."), span);
+            }
+            Type::Unknown
+        }
+    }
+
+    fn check_assign(
+        &mut self,
+        target: &mut Expression,
+        value: &mut Expression,
+        span: Span,
+    ) -> Type {
+        let target_type = if let ExpressionKind::Identifier(name) = &target.kind {
+            if let Some(super::symbol_table::Symbol::Var {
+                is_const,
+                ty,
+                is_moved,
+            }) = self.symbols.lookup(name).cloned()
+            {
+                if is_moved {
+                    self.error(
+                        format!(
+                            "Cannot assign to moved variable '{}'. Value was previously moved.",
+                            name
+                        ),
+                        span,
+                    );
+                }
+                if is_const {
+                    self.error(
+                        format!("Cannot reassign constant variable '{}'.", name),
+                        span,
+                    );
+                }
+                Some(ty)
+            } else {
+                None
+            }
+        } else if let ExpressionKind::Get { object, .. } = &target.kind
+            && let ExpressionKind::Identifier(obj_name) = &object.kind
+            && obj_name == "self"
+            && let Some(super::symbol_table::Symbol::Var { is_const, .. }) =
+                self.symbols.lookup("self")
+        {
+            if *is_const {
+                self.error(
+                    "Cannot modify field of immutable 'self'. Declare 'self' as mutable."
+                        .to_string(),
+                    span,
+                );
+            }
+            None
+        } else {
+            None
+        };
+
+        let target_ty = self.check_expression(target, target_type.as_ref());
+        let resolved_target = target_type.unwrap_or(target_ty);
+        let val_type = self.check_expression(value, Some(&resolved_target));
+
+        if !resolved_target.accepts(&val_type)
+            && val_type != Type::Unknown
+            && resolved_target != Type::Unknown
+        {
+            self.error(
+                format!(
+                    "Type mismatch in assignment. Expected {:?}, got {:?}.",
+                    resolved_target.to_string(),
+                    val_type.to_string()
+                ),
+                span,
+            );
+        }
+        Type::Void
+    }
+
+    fn check_infix(
+        &mut self,
+        left: &mut Expression,
+        operator: &crate::token::Token,
+        right: &mut Expression,
+        expected_type: Option<&Type>,
+        span: Span,
+    ) -> Type {
+        if *operator == crate::token::Token::DoubleColon
+            && let (ExpressionKind::Identifier(enum_name), ExpressionKind::Identifier(variant_name)) =
+                (&left.kind, &right.kind)
+        {
+            let enum_name = enum_name.clone();
+            let variant_name = variant_name.clone();
+            if let Some(Type::Enum { variants, .. }) = self.enum_defs.get(&enum_name) {
+                if variants.contains(&variant_name) {
+                    return self.enum_defs.get(&enum_name).unwrap().clone();
+                } else {
+                    self.error(
+                        format!("Enum '{}' has no variant '{}'", enum_name, variant_name),
+                        span,
+                    );
+                    return Type::Unknown;
+                }
+            } else {
+                self.error(format!("'{}' is not an enum type", enum_name), span);
+                return Type::Unknown;
+            }
+        }
+
+        let operator = operator.clone();
+        let l_ty = self.check_expression(left, expected_type);
+        let r_ty = self.check_expression(right, Some(&l_ty));
+
+        if l_ty == Type::Unknown || r_ty == Type::Unknown {
+            return Type::Unknown;
+        }
+
+        if let Type::Pointer(_) = &l_ty
+            && matches!(
+                operator,
+                crate::token::Token::Plus | crate::token::Token::Minus
+            )
+            && matches!(r_ty, Type::Integer { .. })
+        {
+            return l_ty;
+        }
+
+        if !l_ty.accepts(&r_ty) {
+            self.error(format!("Binary operation '{operator:?}' requires operands of same type. Got {:?} and {:?}.", l_ty.to_string(), r_ty.to_string()), span);
+            return Type::Unknown;
+        }
+
+        match operator {
+            crate::token::Token::Eq
+            | crate::token::Token::NotEq
+            | crate::token::Token::Lt
+            | crate::token::Token::Gt
+            | crate::token::Token::Leq
+            | crate::token::Token::Geq => Type::Bool,
+
+            _ => l_ty,
+        }
+    }
+
+    /// The `Error` payload every `T!` carries: a plain i32 code.
+    fn error_type() -> Type {
+        Type::Struct {
+            name: "Error".to_string(),
+            fields: vec![(
+                "code".to_string(),
+                Type::Integer {
+                    signed: Signedness::Signed,
+                    width: IntWidth::W32,
+                },
+            )],
+        }
+    }
+
+    fn check_ok_constructor(
+        &mut self,
+        arguments: &mut [Expression],
+        expected_type: Option<&Type>,
+        span: Span,
+    ) -> Type {
+        if arguments.len() != 1 {
+            self.error("Ok() takes exactly one argument".into(), span);
+            return Type::Unknown;
+        }
+        let ok_hint = match expected_type {
+            Some(Type::Result { ok_type, .. }) => Some(ok_type.as_ref().clone()),
+            _ => None,
+        };
+        let inner_type = self.check_expression(&mut arguments[0], ok_hint.as_ref());
+        Type::Result {
+            ok_type: Box::new(inner_type),
+            err_type: Box::new(Self::error_type()),
+        }
+    }
+
+    fn check_err_constructor(
+        &mut self,
+        arguments: &mut [Expression],
+        expected_type: Option<&Type>,
+        span: Span,
+    ) -> Type {
+        if arguments.len() != 1 {
+            self.error("Err() takes exactly one argument (error code)".into(), span);
+            return Type::Unknown;
+        }
+        let code_type = self.check_expression(
+            &mut arguments[0],
+            Some(&Type::Integer {
+                signed: Signedness::Signed,
+                width: IntWidth::W32,
+            }),
+        );
+        if !matches!(code_type, Type::Integer { .. }) {
+            self.error("Err() code must be an integer".into(), span);
+        }
+        if let Some(Type::Result { ok_type, err_type }) = expected_type {
+            return Type::Result {
+                ok_type: ok_type.clone(),
+                err_type: err_type.clone(),
+            };
+        }
+        Type::Result {
+            ok_type: Box::new(Type::Unknown),
+            err_type: Box::new(Self::error_type()),
+        }
+    }
+
+    fn check_call_expression(
+        &mut self,
+        function: &mut Expression,
+        arguments: &mut [Expression],
+        expected_type: Option<&Type>,
+        span: Span,
+    ) -> Type {
+        let call_kind = match &function.kind {
+            ExpressionKind::Identifier(name) => CallKind::Named(name.clone()),
+            ExpressionKind::Get {
+                object,
+                name: method_name,
+            } => {
+                let is_vec_static =
+                    matches!(&object.kind, ExpressionKind::Identifier(n) if n == "Vec");
+                CallKind::Method {
+                    method_name: method_name.clone(),
+                    is_vec_static,
+                }
+            }
+            _ => CallKind::Unknown,
+        };
+
+        match call_kind {
+            CallKind::Named(name) if name == "Ok" => {
+                self.check_ok_constructor(arguments, expected_type, span)
+            }
+            CallKind::Named(name) if name == "Err" => {
+                self.check_err_constructor(arguments, expected_type, span)
+            }
+            CallKind::Named(name) => self.check_call_mut(&name, arguments, None, span),
+            CallKind::Method {
+                method_name,
+                is_vec_static: true,
+            } => {
+                let elem_type = if let Some(Type::Vec { elem_type }) = expected_type {
+                    elem_type.as_ref().clone()
+                } else {
+                    self.error(
+                        "Cannot infer Vec element type. Please add a type annotation.".into(),
+                        span,
+                    );
+                    Type::Unknown
+                };
+                self.check_vec_method_mut(&method_name, &elem_type, arguments, span)
+            }
+            CallKind::Method {
+                method_name,
+                is_vec_static: false,
+            } => {
+                let obj_type = if let ExpressionKind::Get { object, .. } = &mut function.kind {
+                    self.check_expression(object, None)
+                } else {
+                    unreachable!()
+                };
+
+                if method_name == "copy" && arguments.is_empty() {
+                    if !obj_type.has_move_semantics() {
+                        self.error(
+                            format!(
+                                "Method 'copy' is not needed for type {} (it's already Copy)",
+                                obj_type
+                            ),
+                            span,
+                        );
+                    }
+                    return obj_type;
+                }
+
+                if let Type::Vec { elem_type } = &obj_type {
+                    let elem_type = elem_type.clone();
+                    return self.check_vec_method_mut(&method_name, &elem_type, arguments, span);
+                }
+
+                if let Type::Ref(inner) | Type::RefMut(inner) = &obj_type
+                    && let Type::Vec { elem_type } = inner.as_ref()
+                {
+                    let elem_type = elem_type.clone();
+                    return self.check_vec_method_mut(&method_name, &elem_type, arguments, span);
+                }
+
+                if let Type::Slice { .. } = &obj_type {
+                    if method_name == "len" && arguments.is_empty() {
+                        return Type::Integer {
+                            signed: Signedness::Unsigned,
+                            width: IntWidth::WSize,
+                        };
+                    }
+                    self.error(format!("Slice has no method '{}'", method_name), span);
+                    return Type::Unknown;
+                }
+
+                if let Type::Result { ok_type, .. } = &obj_type {
+                    let ok_type = ok_type.clone();
+                    return self.check_result_method(&method_name, &ok_type, arguments, span);
+                }
+
+                let struct_name = match &obj_type {
+                    Type::Struct { name, .. } => name.clone(),
+                    Type::Pointer(elem_type) => {
+                        if let Type::Struct { name, .. } = elem_type.as_ref() {
+                            name.clone()
+                        } else {
+                            String::new()
+                        }
+                    }
+                    _ => String::new(),
+                };
+
+                if struct_name.is_empty() {
+                    self.error(
+                        format!(
+                            "Cannot call method on non-struct type {:?}",
+                            obj_type.to_string()
+                        ),
+                        span,
+                    );
+                    return Type::Unknown;
+                }
+                let full_name = format!("{struct_name}::{method_name}");
+                self.check_call_mut(&full_name, arguments, Some(obj_type), span)
+            }
+            CallKind::Unknown => {
+                self.error("Invalid call expression".into(), span);
+                Type::Unknown
+            }
+        }
+    }
+
+    fn check_field_access(&mut self, object: &mut Expression, name: &str, span: Span) -> Type {
+        let obj_type = self.check_expression(object, None);
+
+        let actual_type = if let Type::Pointer(elem_type) = &obj_type {
+            elem_type.as_ref().clone()
+        } else {
+            obj_type.clone()
+        };
+
+        if let Type::Struct {
+            name: struct_name, ..
+        } = &actual_type
+        {
+            let struct_name = struct_name.clone();
+            if let Some(Type::Struct { fields, .. }) = self.struct_defs.get(&struct_name) {
+                for (f_name, f_type) in fields {
+                    if f_name == name {
+                        return f_type.clone();
+                    }
+                }
+                self.error(
+                    format!("Struct '{struct_name}' has no field '{name}'"),
+                    span,
+                );
+            }
+        } else if obj_type != Type::Unknown {
+            self.error("Cannot access property on non-struct type.".into(), span);
+        }
+        Type::Unknown
+    }
+
+    fn check_struct_literal(
+        &mut self,
+        name: &str,
+        fields: &mut [(String, Expression)],
+        span: Span,
+    ) -> Type {
+        if let Some(def) = self.struct_defs.get(name).cloned() {
+            if let Type::Struct {
+                fields: def_fields, ..
+            } = &def
+            {
+                for (field_name, _) in fields.iter() {
+                    if !def_fields.iter().any(|(n, _)| n == field_name) {
+                        self.error(
+                            format!("Unknown field '{}' in struct '{}'", field_name, name),
+                            span,
+                        );
+                    }
+                }
+
+                let def_fields = def_fields.clone();
+                for (def_name, def_type) in &def_fields {
+                    let found = fields.iter_mut().find(|(n, _)| n == def_name);
+                    if let Some((_, field_expr)) = found {
+                        let field_span = field_expr.span;
+                        let expr_type = self.check_expression(field_expr, Some(def_type));
+                        let types_match = match (def_type, &expr_type) {
+                            (Type::Float(_), Type::Integer { .. }) => false,
+                            (Type::Integer { .. }, Type::Float(_)) => false,
+                            _ => def_type.accepts(&expr_type),
+                        };
+                        if !types_match && expr_type != Type::Unknown {
+                            self.error(format!(
+                                    "Type mismatch: Field '{}' in struct '{}' expected {:?}, got {:?}.",
+                                    def_name,
+                                    name,
+                                    def_type.to_string(),
+                                    expr_type.to_string()
+                                ), field_span);
+                        }
+                    } else {
+                        self.error(
+                            format!("Missing field '{def_name}' in struct literal {name}"),
+                            span,
+                        );
+                    }
+                }
+                return def;
+            }
+        } else {
+            self.error(format!("Unknown struct type '{name}'."), span);
+        }
+        Type::Unknown
+    }
+
+    fn check_match(
+        &mut self,
+        value: &mut Expression,
+        arms: &mut [(Expression, Expression)],
+        expected_type: Option<&Type>,
+    ) -> Type {
+        let _match_type = self.check_expression(value, None);
+
+        if arms.is_empty() {
+            return Type::Void;
+        }
+
+        let first_arm_type = self.check_expression(&mut arms[0].1, expected_type);
+
+        for (i, (_, result)) in arms.iter_mut().enumerate().skip(1) {
+            let first = first_arm_type.clone();
+            let arm_type = self.check_expression(result, Some(&first));
+            if !first_arm_type.accepts(&arm_type)
+                && arm_type != Type::Unknown
+                && first_arm_type != Type::Unknown
+            {
+                self.error(
+                    format!(
+                        "Match arm {} has inconsistent type. Expected {:?}, got {:?}",
+                        i + 1,
+                        first_arm_type.to_string(),
+                        arm_type.to_string()
+                    ),
+                    result.span,
+                );
+            }
+        }
+
+        first_arm_type
+    }
+
+    fn check_prefix(
+        &mut self,
+        operator: &crate::token::Token,
+        right: &mut Expression,
+        expected_type: Option<&Type>,
+        span: Span,
+    ) -> Type {
+        let operator = operator.clone();
+        match &operator {
+            crate::token::Token::Minus => {
+                if let ExpressionKind::Int(val) = &right.kind
+                    && let Some(Type::Integer { width, signed }) = expected_type
+                {
+                    let negated = -val;
+                    let width = *width;
+                    let signed = *signed;
+                    if self.fits_in_int(negated, width, signed) {
+                        return Type::Integer { width, signed };
+                    } else {
+                        self.error(
+                            format!(
+                                "Literal {} does not fit in type {:?}",
+                                negated,
+                                expected_type.unwrap()
+                            ),
+                            span,
+                        );
+                        return Type::Integer { width, signed };
+                    }
+                }
+
+                let right_type = self.check_expression(right, expected_type);
+                match &right_type {
+                    Type::Integer { .. } | Type::Float(_) | Type::ParamType(_) => right_type,
+                    _ => {
+                        self.error(
+                            format!(
+                                "Cannot negate non-numeric type {:?}",
+                                right_type.to_string()
+                            ),
+                            span,
+                        );
+                        Type::Unknown
+                    }
+                }
+            }
+            crate::token::Token::Bang => {
+                let right_type = self.check_expression(right, None);
+                if right_type != Type::Bool && right_type != Type::Unknown {
+                    self.error(
+                        format!(
+                            "Logical NOT requires bool, got {:?}",
+                            right_type.to_string()
+                        ),
+                        span,
+                    );
+                }
+                Type::Bool
+            }
+            _ => self.check_expression(right, expected_type),
+        }
+    }
+
+    fn check_index(&mut self, left: &mut Expression, index: &mut Expression, span: Span) -> Type {
+        let left_type = self.check_expression(left, None);
+        let index_type = self.check_expression(
+            index,
+            Some(&Type::Integer {
+                signed: Signedness::Unsigned,
+                width: IntWidth::WSize,
+            }),
+        );
+
+        if !matches!(index_type, Type::Integer { .. } | Type::Unknown) {
+            self.error(
+                format!("Index must be an integer, got {index_type}"),
+                index.span,
+            );
+        }
+
+        match left_type {
+            Type::Array { elem_type, .. } => *elem_type,
+            Type::Unknown => Type::Unknown,
+            _ => {
+                self.error(
+                    format!("Cannot index type {:?}", left_type.to_string()),
+                    span,
+                );
+                Type::Unknown
+            }
+        }
+    }
+
+    fn check_array_literal(
+        &mut self,
+        elements: &mut [Expression],
+        expected_type: Option<&Type>,
+    ) -> Type {
+        if elements.is_empty() {
+            if let Some(Type::Array { elem_type, len }) = expected_type {
+                return Type::Array {
+                    elem_type: elem_type.clone(),
+                    len: *len,
+                };
+            }
+            return Type::Array {
+                elem_type: Box::new(Type::Unknown),
+                len: 0,
+            };
+        }
+
+        let elem_hint = if let Some(Type::Array { elem_type, .. }) = expected_type {
+            Some(elem_type.as_ref().clone())
+        } else {
+            None
+        };
+
+        let first_type = self.check_expression(&mut elements[0], elem_hint.as_ref());
+        let len = elements.len();
+
+        for (i, elem) in elements.iter_mut().enumerate().skip(1) {
+            let first = first_type.clone();
+            let elem_span = elem.span;
+            let elem_type = self.check_expression(elem, Some(&first));
+
+            if !first_type.accepts(&elem_type) {
+                self.error(
+                    format!(
+                        "Array element at index {} type mismatch. Expected {:?}, got {:?}.",
+                        i,
+                        first_type.to_string(),
+                        elem_type.to_string()
+                    ),
+                    elem_span,
+                );
+            }
+        }
+
+        Type::Array {
+            elem_type: Box::new(first_type),
+            len,
+        }
+    }
+
+    fn check_tuple(
+        &mut self,
+        elements: &mut [Expression],
+        expected_type: Option<&Type>,
+        span: Span,
+    ) -> Type {
+        let expected_types: Option<Vec<Type>> = if let Some(Type::Tuple(types)) = expected_type {
+            Some(types.clone())
+        } else {
+            None
+        };
+
+        let mut result_types = Vec::with_capacity(elements.len());
+        let len = elements.len();
+
+        for (i, elem) in elements.iter_mut().enumerate() {
+            let expected = expected_types.as_ref().and_then(|types| types.get(i));
+            let elem_type = self.check_expression(elem, expected);
+            result_types.push(elem_type);
+        }
+
+        if let Some(ref expected_types) = expected_types
+            && expected_types.len() != len
+        {
+            self.error(
+                format!(
+                    "Tuple has {} elements, but expected {}",
+                    len,
+                    expected_types.len()
+                ),
+                span,
+            );
+        }
+
+        Type::Tuple(result_types)
+    }
+
+    /// `ptr(x)`, `&x` and `&var x`: each needs a place rather than a temporary,
+    /// and neither reference form may borrow a moved value.
+    fn check_borrow(&mut self, inner: &mut Expression, kind: Borrow, span: Span) -> Type {
+        let inner_kind = inner.kind.clone();
+        let inner_type = self.check_expression(inner, None);
+
+        if let ExpressionKind::Identifier(name) = &inner_kind {
+            let (is_moved, is_const) = match self.symbols.lookup(name) {
+                Some(super::symbol_table::Symbol::Var {
+                    is_moved, is_const, ..
+                }) => (*is_moved, *is_const),
+                _ => (false, false),
+            };
+
+            if is_moved && kind != Borrow::Address {
+                self.error(format!("Cannot borrow '{name}': value was moved"), span);
+            }
+            if is_const && kind == Borrow::Mutable {
+                self.error(
+                    format!("Cannot create mutable reference to immutable variable '{name}'"),
+                    span,
+                );
+            }
+        } else if !matches!(
+            inner_kind,
+            ExpressionKind::Get { .. }
+                | ExpressionKind::Index { .. }
+                | ExpressionKind::Dereference(_)
+        ) {
+            self.error(
+                match kind {
+                    Borrow::Address => "Cannot take address of a temporary value".into(),
+                    Borrow::Shared => "Cannot create reference to a temporary value".into(),
+                    Borrow::Mutable => {
+                        "Cannot create mutable reference to a temporary value".to_string()
+                    }
+                },
+                span,
+            );
+        }
+
+        match kind {
+            Borrow::Address => Type::Pointer(Box::new(inner_type)),
+            Borrow::Shared => Type::Ref(Box::new(inner_type)),
+            Borrow::Mutable => Type::RefMut(Box::new(inner_type)),
+        }
+    }
+
     fn check_expression_inner(
         &mut self,
         expr: &mut Expression,
         expected_type: Option<&Type>,
     ) -> Type {
         let span = expr.span;
+
+        // Under a `T?` context a literal takes the payload type; `Type::accepts`
+        // then lets the bare value stand in for the optional.
+        let inner_expected = match expected_type {
+            Some(Type::Optional(inner)) => Some(inner.as_ref()),
+            other => other,
+        };
+
         match &mut expr.kind {
             ExpressionKind::Int(val) => {
-                if let Some(Type::Integer { width, signed }) = expected_type {
+                if let Some(Type::Integer { width, signed }) = inner_expected {
                     if self.fits_in_int(*val, *width, *signed) {
                         return Type::Integer {
                             width: *width,
                             signed: *signed,
                         };
-                    } else {
-                        self.error(
-                            format!(
-                                "Literal {} does not fit in type {:?}",
-                                val,
-                                expected_type.unwrap()
-                            ),
-                            span,
-                        );
                     }
+                    self.error(
+                        format!("Literal {val} does not fit in type {inner_expected:?}"),
+                        span,
+                    );
                 }
                 Type::Integer {
                     signed: Signedness::Signed,
                     width: IntWidth::W32,
                 }
             }
-            ExpressionKind::Float(_) => {
-                if let Some(Type::Float(width)) = expected_type {
-                    return Type::Float(*width);
-                }
-                Type::Float(FloatWidth::W32)
-            }
+            ExpressionKind::Float(_) => match inner_expected {
+                Some(Type::Float(width)) => Type::Float(*width),
+                _ => Type::Float(FloatWidth::W32),
+            },
             ExpressionKind::Boolean(_) => Type::Bool,
             ExpressionKind::StringLit(_) => Type::Slice {
                 elem_type: Box::new(Type::Integer {
@@ -775,571 +1671,41 @@ impl SemanticAnalyzer {
                 }
             }
 
-            ExpressionKind::Identifier(name) => {
-                if name.contains("::") {
-                    let parts: Vec<&str> = name.split("::").collect();
+            ExpressionKind::Identifier(name) => self.check_identifier(name, span),
 
-                    if parts.len() == 2 {
-                        let enum_name = parts[0].to_string();
-                        let variant_name = parts[1].to_string();
-                        if let Some(Type::Enum { variants, .. }) = self.enum_defs.get(&enum_name) {
-                            if variants.contains(&variant_name) {
-                                return self.enum_defs.get(&enum_name).cloned().unwrap();
-                            } else {
-                                self.error(
-                                    format!(
-                                        "Enum '{}' has no variant '{}'",
-                                        enum_name, variant_name
-                                    ),
-                                    span,
-                                );
-                                return Type::Unknown;
-                            }
-                        }
-                    }
-                }
-
-                if let Some(symbol) = self.symbols.lookup(name).cloned() {
-                    match symbol {
-                        super::symbol_table::Symbol::Var { ty, is_moved, .. } => {
-                            if is_moved {
-                                self.error(
-                                    format!(
-                                        "Use of moved value '{}'. Value was previously moved and is no longer valid.",
-                                        name
-                                    ),
-                                    span,
-                                );
-                                return Type::Unknown;
-                            }
-                            ty
-                        }
-                        _ => {
-                            self.error(format!("'{name}' is a function, not a variable"), span);
-                            Type::Unknown
-                        }
-                    }
-                } else {
-                    let name_owned = name.clone();
-                    let suggestion = self.find_similar_variable(&name_owned);
-                    if let Some(similar) = suggestion {
-                        self.error(
-                            format!(
-                                "Undeclared variable '{}'. Did you mean '{}'?",
-                                name_owned, similar
-                            ),
-                            span,
-                        );
-                    } else {
-                        self.error(format!("Undeclared variable '{}'.", name_owned), span);
-                    }
-                    Type::Unknown
-                }
-            }
-
-            ExpressionKind::Assign {
-                target,
-                operator: _,
-                value,
-            } => {
-                let target_type = if let ExpressionKind::Identifier(name) = &target.kind {
-                    if let Some(super::symbol_table::Symbol::Var {
-                        is_const,
-                        ty,
-                        is_moved,
-                    }) = self.symbols.lookup(name).cloned()
-                    {
-                        if is_moved {
-                            self.error(
-                                format!(
-                                    "Cannot assign to moved variable '{}'. Value was previously moved.",
-                                    name
-                                ),
-                                span,
-                            );
-                        }
-                        if is_const {
-                            self.error(
-                                format!("Cannot reassign constant variable '{}'.", name),
-                                span,
-                            );
-                        }
-                        Some(ty)
-                    } else {
-                        None
-                    }
-                } else if let ExpressionKind::Get { object, .. } = &target.kind
-                    && let ExpressionKind::Identifier(obj_name) = &object.kind
-                    && obj_name == "self"
-                    && let Some(super::symbol_table::Symbol::Var { is_const, .. }) =
-                        self.symbols.lookup("self")
-                {
-                    if *is_const {
-                        self.error(
-                            "Cannot modify field of immutable 'self'. Declare 'self' as mutable."
-                                .to_string(),
-                            span,
-                        );
-                    }
-                    None
-                } else {
-                    None
-                };
-
-                let target_ty = self.check_expression(target, target_type.as_ref());
-                let resolved_target = target_type.unwrap_or(target_ty);
-                let val_type = self.check_expression(value, Some(&resolved_target));
-
-                if !resolved_target.accepts(&val_type)
-                    && val_type != Type::Unknown
-                    && resolved_target != Type::Unknown
-                {
-                    self.error(
-                        format!(
-                            "Type mismatch in assignment. Expected {:?}, got {:?}.",
-                            resolved_target.to_string(),
-                            val_type.to_string()
-                        ),
-                        span,
-                    );
-                }
-                Type::Void
-            }
+            ExpressionKind::Assign { target, value, .. } => self.check_assign(target, value, span),
 
             ExpressionKind::Infix {
                 left,
                 operator,
                 right,
             } => {
-                if *operator == crate::token::Token::DoubleColon
-                    && let (
-                        ExpressionKind::Identifier(enum_name),
-                        ExpressionKind::Identifier(variant_name),
-                    ) = (&left.kind, &right.kind)
-                {
-                    let enum_name = enum_name.clone();
-                    let variant_name = variant_name.clone();
-                    if let Some(Type::Enum { variants, .. }) = self.enum_defs.get(&enum_name) {
-                        if variants.contains(&variant_name) {
-                            return self.enum_defs.get(&enum_name).unwrap().clone();
-                        } else {
-                            self.error(
-                                format!("Enum '{}' has no variant '{}'", enum_name, variant_name),
-                                span,
-                            );
-                            return Type::Unknown;
-                        }
-                    } else {
-                        self.error(format!("'{}' is not an enum type", enum_name), span);
-                        return Type::Unknown;
-                    }
-                }
-
                 let operator = operator.clone();
-                let l_ty = self.check_expression(left, expected_type);
-                let r_ty = self.check_expression(right, Some(&l_ty));
-
-                if l_ty == Type::Unknown || r_ty == Type::Unknown {
-                    return Type::Unknown;
-                }
-
-                if let Type::Pointer(_) = &l_ty
-                    && matches!(
-                        operator,
-                        crate::token::Token::Plus | crate::token::Token::Minus
-                    )
-                    && matches!(r_ty, Type::Integer { .. })
-                {
-                    return l_ty;
-                }
-
-                if !l_ty.accepts(&r_ty) {
-                    self.error(format!("Binary operation '{operator:?}' requires operands of same type. Got {:?} and {:?}.", l_ty.to_string(), r_ty.to_string()), span);
-                    return Type::Unknown;
-                }
-
-                match operator {
-                    crate::token::Token::Eq
-                    | crate::token::Token::NotEq
-                    | crate::token::Token::Lt
-                    | crate::token::Token::Gt
-                    | crate::token::Token::Leq
-                    | crate::token::Token::Geq => Type::Bool,
-
-                    _ => l_ty,
-                }
+                self.check_infix(left, &operator, right, expected_type, span)
             }
 
             ExpressionKind::Call {
                 function,
                 arguments,
-            } => {
-                let call_kind = match &function.kind {
-                    ExpressionKind::Identifier(name) => CallKind::Named(name.clone()),
-                    ExpressionKind::Get {
-                        object,
-                        name: method_name,
-                    } => {
-                        let is_vec_static =
-                            matches!(&object.kind, ExpressionKind::Identifier(n) if n == "Vec");
-                        CallKind::Method {
-                            method_name: method_name.clone(),
-                            is_vec_static,
-                        }
-                    }
-                    _ => CallKind::Unknown,
-                };
-
-                match call_kind {
-                    CallKind::Named(name) if name == "Ok" => {
-                        if arguments.len() != 1 {
-                            self.error("Ok() takes exactly one argument".into(), span);
-                            return Type::Unknown;
-                        }
-                        let ok_hint = match expected_type {
-                            Some(Type::Result { ok_type, .. }) => Some(ok_type.as_ref().clone()),
-                            _ => None,
-                        };
-                        let inner_type = self.check_expression(&mut arguments[0], ok_hint.as_ref());
-                        Type::Result {
-                            ok_type: Box::new(inner_type),
-                            err_type: Box::new(Type::Struct {
-                                name: "Error".to_string(),
-                                fields: vec![(
-                                    "code".to_string(),
-                                    Type::Integer {
-                                        signed: Signedness::Signed,
-                                        width: IntWidth::W32,
-                                    },
-                                )],
-                            }),
-                        }
-                    }
-                    CallKind::Named(name) if name == "Err" => {
-                        if arguments.len() != 1 {
-                            self.error(
-                                "Err() takes exactly one argument (error code)".into(),
-                                span,
-                            );
-                            return Type::Unknown;
-                        }
-                        let code_type = self.check_expression(
-                            &mut arguments[0],
-                            Some(&Type::Integer {
-                                signed: Signedness::Signed,
-                                width: IntWidth::W32,
-                            }),
-                        );
-                        if !matches!(code_type, Type::Integer { .. }) {
-                            self.error("Err() code must be an integer".into(), span);
-                        }
-                        if let Some(Type::Result { ok_type, err_type }) = expected_type {
-                            return Type::Result {
-                                ok_type: ok_type.clone(),
-                                err_type: err_type.clone(),
-                            };
-                        }
-                        Type::Result {
-                            ok_type: Box::new(Type::Unknown),
-                            err_type: Box::new(Type::Struct {
-                                name: "Error".to_string(),
-                                fields: vec![(
-                                    "code".to_string(),
-                                    Type::Integer {
-                                        signed: Signedness::Signed,
-                                        width: IntWidth::W32,
-                                    },
-                                )],
-                            }),
-                        }
-                    }
-                    CallKind::Named(name) => self.check_call_mut(&name, arguments, None, span),
-                    CallKind::Method {
-                        method_name,
-                        is_vec_static: true,
-                    } => {
-                        let elem_type = if let Some(Type::Vec { elem_type }) = expected_type {
-                            elem_type.as_ref().clone()
-                        } else {
-                            self.error(
-                                "Cannot infer Vec element type. Please add a type annotation."
-                                    .into(),
-                                span,
-                            );
-                            Type::Unknown
-                        };
-                        self.check_vec_method_mut(&method_name, &elem_type, arguments, span)
-                    }
-                    CallKind::Method {
-                        method_name,
-                        is_vec_static: false,
-                    } => {
-                        let obj_type =
-                            if let ExpressionKind::Get { object, .. } = &mut function.kind {
-                                self.check_expression(object, None)
-                            } else {
-                                unreachable!()
-                            };
-
-                        if method_name == "copy" && arguments.is_empty() {
-                            if !obj_type.has_move_semantics() {
-                                self.error(
-                                    format!(
-                                        "Method 'copy' is not needed for type {} (it's already Copy)",
-                                        obj_type
-                                    ),
-                                    span,
-                                );
-                            }
-                            return obj_type;
-                        }
-
-                        if let Type::Vec { elem_type } = &obj_type {
-                            let elem_type = elem_type.clone();
-                            return self.check_vec_method_mut(
-                                &method_name,
-                                &elem_type,
-                                arguments,
-                                span,
-                            );
-                        }
-
-                        if let Type::Ref(inner) | Type::RefMut(inner) = &obj_type
-                            && let Type::Vec { elem_type } = inner.as_ref()
-                        {
-                            let elem_type = elem_type.clone();
-                            return self.check_vec_method_mut(
-                                &method_name,
-                                &elem_type,
-                                arguments,
-                                span,
-                            );
-                        }
-
-                        if let Type::Slice { .. } = &obj_type {
-                            if method_name == "len" && arguments.is_empty() {
-                                return Type::Integer {
-                                    signed: Signedness::Unsigned,
-                                    width: IntWidth::WSize,
-                                };
-                            }
-                            self.error(format!("Slice has no method '{}'", method_name), span);
-                            return Type::Unknown;
-                        }
-
-                        if let Type::Result { ok_type, .. } = &obj_type {
-                            let ok_type = ok_type.clone();
-                            return self.check_result_method(
-                                &method_name,
-                                &ok_type,
-                                arguments,
-                                span,
-                            );
-                        }
-
-                        let struct_name = match &obj_type {
-                            Type::Struct { name, .. } => name.clone(),
-                            Type::Pointer(elem_type) => {
-                                if let Type::Struct { name, .. } = elem_type.as_ref() {
-                                    name.clone()
-                                } else {
-                                    String::new()
-                                }
-                            }
-                            _ => String::new(),
-                        };
-
-                        if struct_name.is_empty() {
-                            self.error(
-                                format!(
-                                    "Cannot call method on non-struct type {:?}",
-                                    obj_type.to_string()
-                                ),
-                                span,
-                            );
-                            return Type::Unknown;
-                        }
-                        let full_name = format!("{struct_name}::{method_name}");
-                        self.check_call_mut(&full_name, arguments, Some(obj_type), span)
-                    }
-                    CallKind::Unknown => {
-                        self.error("Invalid call expression".into(), span);
-                        Type::Unknown
-                    }
-                }
-            }
+            } => self.check_call_expression(function, arguments, expected_type, span),
 
             ExpressionKind::Get { object, name } => {
                 let name = name.clone();
-                let obj_type = self.check_expression(object, None);
-
-                let actual_type = if let Type::Pointer(elem_type) = &obj_type {
-                    elem_type.as_ref().clone()
-                } else {
-                    obj_type.clone()
-                };
-
-                if let Type::Struct {
-                    name: struct_name, ..
-                } = &actual_type
-                {
-                    let struct_name = struct_name.clone();
-                    if let Some(Type::Struct { fields, .. }) = self.struct_defs.get(&struct_name) {
-                        for (f_name, f_type) in fields {
-                            if f_name == &name {
-                                return f_type.clone();
-                            }
-                        }
-                        self.error(
-                            format!("Struct '{struct_name}' has no field '{name}'"),
-                            span,
-                        );
-                    }
-                } else if obj_type != Type::Unknown {
-                    self.error("Cannot access property on non-struct type.".into(), span);
-                }
-                Type::Unknown
+                self.check_field_access(object, &name, span)
             }
 
             ExpressionKind::StructLiteral { name, fields } => {
                 let name = name.clone();
-                if let Some(def) = self.struct_defs.get(&name).cloned() {
-                    if let Type::Struct {
-                        fields: def_fields, ..
-                    } = &def
-                    {
-                        for (field_name, _) in fields.iter() {
-                            if !def_fields.iter().any(|(n, _)| n == field_name) {
-                                self.error(
-                                    format!("Unknown field '{}' in struct '{}'", field_name, name),
-                                    span,
-                                );
-                            }
-                        }
-
-                        let def_fields = def_fields.clone();
-                        for (def_name, def_type) in &def_fields {
-                            let found = fields.iter_mut().find(|(n, _)| n == def_name);
-                            if let Some((_, field_expr)) = found {
-                                let field_span = field_expr.span;
-                                let expr_type = self.check_expression(field_expr, Some(def_type));
-                                let types_match = match (def_type, &expr_type) {
-                                    (Type::Float(_), Type::Integer { .. }) => false,
-                                    (Type::Integer { .. }, Type::Float(_)) => false,
-                                    _ => def_type.accepts(&expr_type),
-                                };
-                                if !types_match && expr_type != Type::Unknown {
-                                    self.error(format!(
-                                        "Type mismatch: Field '{}' in struct '{}' expected {:?}, got {:?}.",
-                                        def_name,
-                                        name,
-                                        def_type.to_string(),
-                                        expr_type.to_string()
-                                    ), field_span);
-                                }
-                            } else {
-                                self.error(
-                                    format!("Missing field '{def_name}' in struct literal {name}"),
-                                    span,
-                                );
-                            }
-                        }
-                        return def;
-                    }
-                } else {
-                    self.error(format!("Unknown struct type '{name}'."), span);
-                }
-                Type::Unknown
+                self.check_struct_literal(&name, fields, span)
             }
 
-            ExpressionKind::Match { value, arms } => {
-                let _match_type = self.check_expression(value, None);
+            ExpressionKind::Match { value, arms } => self.check_match(value, arms, expected_type),
 
-                if arms.is_empty() {
-                    return Type::Void;
-                }
-
-                let first_arm_type = self.check_expression(&mut arms[0].1, expected_type);
-
-                for (i, (_, result)) in arms.iter_mut().enumerate().skip(1) {
-                    let first = first_arm_type.clone();
-                    let arm_type = self.check_expression(result, Some(&first));
-                    if !first_arm_type.accepts(&arm_type)
-                        && arm_type != Type::Unknown
-                        && first_arm_type != Type::Unknown
-                    {
-                        self.error(
-                            format!(
-                                "Match arm {} has inconsistent type. Expected {:?}, got {:?}",
-                                i + 1,
-                                first_arm_type.to_string(),
-                                arm_type.to_string()
-                            ),
-                            result.span,
-                        );
-                    }
-                }
-
-                first_arm_type
-            }
             ExpressionKind::Prefix { operator, right } => {
                 let operator = operator.clone();
-                match &operator {
-                    crate::token::Token::Minus => {
-                        if let ExpressionKind::Int(val) = &right.kind
-                            && let Some(Type::Integer { width, signed }) = expected_type
-                        {
-                            let negated = -val;
-                            let width = *width;
-                            let signed = *signed;
-                            if self.fits_in_int(negated, width, signed) {
-                                return Type::Integer { width, signed };
-                            } else {
-                                self.error(
-                                    format!(
-                                        "Literal {} does not fit in type {:?}",
-                                        negated,
-                                        expected_type.unwrap()
-                                    ),
-                                    span,
-                                );
-                                return Type::Integer { width, signed };
-                            }
-                        }
-
-                        let right_type = self.check_expression(right, expected_type);
-                        match &right_type {
-                            Type::Integer { .. } | Type::Float(_) | Type::ParamType(_) => {
-                                right_type
-                            }
-                            _ => {
-                                self.error(
-                                    format!(
-                                        "Cannot negate non-numeric type {:?}",
-                                        right_type.to_string()
-                                    ),
-                                    span,
-                                );
-                                Type::Unknown
-                            }
-                        }
-                    }
-                    crate::token::Token::Bang => {
-                        let right_type = self.check_expression(right, None);
-                        if right_type != Type::Bool && right_type != Type::Unknown {
-                            self.error(
-                                format!(
-                                    "Logical NOT requires bool, got {:?}",
-                                    right_type.to_string()
-                                ),
-                                span,
-                            );
-                        }
-                        Type::Bool
-                    }
-                    _ => self.check_expression(right, expected_type),
-                }
+                self.check_prefix(&operator, right, expected_type, span)
             }
+
             ExpressionKind::Cast { left, target } => {
                 let _source_type = self.check_expression(left, None);
 
@@ -1350,157 +1716,15 @@ impl SemanticAnalyzer {
                     Type::Unknown
                 }
             }
-            ExpressionKind::Index { left, index } => {
-                let left_type = self.check_expression(left, None);
-                let _index_type = self.check_expression(
-                    index,
-                    Some(&Type::Integer {
-                        signed: Signedness::Unsigned,
-                        width: IntWidth::WSize,
-                    }),
-                );
+            ExpressionKind::Index { left, index } => self.check_index(left, index, span),
 
-                match left_type {
-                    Type::Array { elem_type, .. } => *elem_type,
-                    Type::Unknown => Type::Unknown,
-                    _ => {
-                        self.error(
-                            format!("Cannot index type {:?}", left_type.to_string()),
-                            span,
-                        );
-                        Type::Unknown
-                    }
-                }
-            }
             ExpressionKind::ArrayLiteral(elements) => {
-                if elements.is_empty() {
-                    if let Some(Type::Array { elem_type, len }) = expected_type {
-                        return Type::Array {
-                            elem_type: elem_type.clone(),
-                            len: *len,
-                        };
-                    }
-                    return Type::Array {
-                        elem_type: Box::new(Type::Unknown),
-                        len: 0,
-                    };
-                }
-
-                let elem_hint = if let Some(Type::Array { elem_type, .. }) = expected_type {
-                    Some(elem_type.as_ref().clone())
-                } else {
-                    None
-                };
-
-                let first_type = self.check_expression(&mut elements[0], elem_hint.as_ref());
-                let len = elements.len();
-
-                for (i, elem) in elements.iter_mut().enumerate().skip(1) {
-                    let first = first_type.clone();
-                    let elem_span = elem.span;
-                    let elem_type = self.check_expression(elem, Some(&first));
-
-                    if !first_type.accepts(&elem_type) {
-                        self.error(
-                            format!(
-                                "Array element at index {} type mismatch. Expected {:?}, got {:?}.",
-                                i,
-                                first_type.to_string(),
-                                elem_type.to_string()
-                            ),
-                            elem_span,
-                        );
-                    }
-                }
-
-                Type::Array {
-                    elem_type: Box::new(first_type),
-                    len,
-                }
+                self.check_array_literal(elements, expected_type)
             }
-            ExpressionKind::AddressOf(inner) => {
-                let inner_kind_is_lvalue = matches!(
-                    &inner.kind,
-                    ExpressionKind::Identifier(_)
-                        | ExpressionKind::Get { .. }
-                        | ExpressionKind::Index { .. }
-                        | ExpressionKind::Dereference(_)
-                );
-                let inner_type = self.check_expression(inner, None);
-                if !inner_kind_is_lvalue {
-                    self.error("Cannot take address of a temporary value".into(), span);
-                }
-                Type::Pointer(Box::new(inner_type))
-            }
-            ExpressionKind::BorrowRef(inner) => {
-                let inner_kind = inner.kind.clone();
-                let inner_type = self.check_expression(inner, None);
 
-                if let ExpressionKind::Identifier(name) = &inner_kind {
-                    let is_moved =
-                        if let Some(super::symbol_table::Symbol::Var { is_moved, .. }) =
-                            self.symbols.lookup(name)
-                        {
-                            *is_moved
-                        } else {
-                            false
-                        };
-
-                    if is_moved {
-                        self.error(format!("Cannot borrow '{}': value was moved", name), span);
-                    }
-                } else if !matches!(
-                    inner_kind,
-                    ExpressionKind::Get { .. }
-                        | ExpressionKind::Index { .. }
-                        | ExpressionKind::Dereference(_)
-                ) {
-                    self.error("Cannot create reference to a temporary value".into(), span);
-                }
-
-                Type::Ref(Box::new(inner_type))
-            }
-            ExpressionKind::BorrowRefMut(inner) => {
-                let inner_kind = inner.kind.clone();
-                let inner_type = self.check_expression(inner, None);
-
-                if let ExpressionKind::Identifier(name) = &inner_kind {
-                    let (is_moved, is_const) =
-                        if let Some(super::symbol_table::Symbol::Var {
-                            is_const, is_moved, ..
-                        }) = self.symbols.lookup(name)
-                        {
-                            (*is_moved, *is_const)
-                        } else {
-                            (false, false)
-                        };
-
-                    if is_moved {
-                        self.error(format!("Cannot borrow '{}': value was moved", name), span);
-                    }
-                    if is_const {
-                        self.error(
-                            format!(
-                                "Cannot create mutable reference to immutable variable '{}'",
-                                name
-                            ),
-                            span,
-                        );
-                    }
-                } else if !matches!(
-                    inner_kind,
-                    ExpressionKind::Get { .. }
-                        | ExpressionKind::Index { .. }
-                        | ExpressionKind::Dereference(_)
-                ) {
-                    self.error(
-                        "Cannot create mutable reference to a temporary value".into(),
-                        span,
-                    );
-                }
-
-                Type::RefMut(Box::new(inner_type))
-            }
+            ExpressionKind::AddressOf(inner) => self.check_borrow(inner, Borrow::Address, span),
+            ExpressionKind::BorrowRef(inner) => self.check_borrow(inner, Borrow::Shared, span),
+            ExpressionKind::BorrowRefMut(inner) => self.check_borrow(inner, Borrow::Mutable, span),
             ExpressionKind::Dereference(inner) => {
                 let inner_type = self.check_expression(inner, None);
 
@@ -1518,38 +1742,8 @@ impl SemanticAnalyzer {
                     }
                 }
             }
-            ExpressionKind::Tuple(elements) => {
-                let expected_types: Option<Vec<Type>> =
-                    if let Some(Type::Tuple(types)) = expected_type {
-                        Some(types.clone())
-                    } else {
-                        None
-                    };
+            ExpressionKind::Tuple(elements) => self.check_tuple(elements, expected_type, span),
 
-                let mut result_types = Vec::with_capacity(elements.len());
-                let len = elements.len();
-
-                for (i, elem) in elements.iter_mut().enumerate() {
-                    let expected = expected_types.as_ref().and_then(|types| types.get(i));
-                    let elem_type = self.check_expression(elem, expected);
-                    result_types.push(elem_type);
-                }
-
-                if let Some(ref expected_types) = expected_types
-                    && expected_types.len() != len
-                {
-                    self.error(
-                        format!(
-                            "Tuple has {} elements, but expected {}",
-                            len,
-                            expected_types.len()
-                        ),
-                        span,
-                    );
-                }
-
-                Type::Tuple(result_types)
-            }
             ExpressionKind::InlineAsm {
                 outputs, inputs, ..
             } => {
@@ -1578,6 +1772,25 @@ impl SemanticAnalyzer {
     }
 
     /// Type-check Vec<T> built-in methods
+    /// Report a wrong argument count, and say whether the arity was right.
+    fn expect_arity(
+        &mut self,
+        name: &str,
+        arguments: &[Expression],
+        arity: usize,
+        span: Span,
+    ) -> bool {
+        if arguments.len() == arity {
+            return true;
+        }
+        let plural = if arity == 1 { "" } else { "s" };
+        self.error(
+            format!("{name}() takes exactly {arity} argument{plural}"),
+            span,
+        );
+        false
+    }
+
     fn check_vec_method_mut(
         &mut self,
         method_name: &str,
@@ -1589,43 +1802,38 @@ impl SemanticAnalyzer {
             signed: Signedness::Unsigned,
             width: IntWidth::WSize,
         };
+        let vec_type = || Type::Vec {
+            elem_type: Box::new(elem_type.clone()),
+        };
+        let full_name = format!("Vec::{method_name}");
+
+        // Arity first: every method reports its own count, then checks the one
+        // argument it may take.
+        let arity = match method_name {
+            "with_capacity" | "push" | "get" => 1,
+            _ => 0,
+        };
+        let arity_ok = self.expect_arity(&full_name, arguments, arity, span);
 
         match method_name {
-            "new" => {
-                if !arguments.is_empty() {
-                    self.error("Vec::new() takes no arguments".into(), span);
-                }
-                Type::Vec {
-                    elem_type: Box::new(elem_type.clone()),
-                }
-            }
+            "new" => vec_type(),
             "with_capacity" => {
-                if arguments.len() != 1 {
-                    self.error(
-                        "Vec::with_capacity() takes exactly one argument".into(),
-                        span,
-                    );
-                } else {
+                if arity_ok {
                     let arg_type = self.check_expression(&mut arguments[0], Some(&usize_type));
                     if !usize_type.accepts(&arg_type) {
-                        self.error("Vec::with_capacity() argument must be usize".into(), span);
+                        self.error(format!("{full_name}() argument must be usize"), span);
                     }
                 }
-                Type::Vec {
-                    elem_type: Box::new(elem_type.clone()),
-                }
+                vec_type()
             }
             "push" => {
-                if arguments.len() != 1 {
-                    self.error("Vec::push() takes exactly one argument".into(), span);
-                } else {
+                if arity_ok {
                     let elem = elem_type.clone();
                     let arg_type = self.check_expression(&mut arguments[0], Some(&elem));
                     if !elem_type.accepts(&arg_type) {
                         self.error(
                             format!(
-                                "Vec::push() argument type mismatch. Expected {}, got {}",
-                                elem_type, arg_type
+                                "Vec::push() argument type mismatch. Expected {elem_type}, got {arg_type}"
                             ),
                             span,
                         );
@@ -1633,34 +1841,8 @@ impl SemanticAnalyzer {
                 }
                 Type::Void
             }
-            "pop" => {
-                if !arguments.is_empty() {
-                    self.error("Vec::pop() takes no arguments".into(), span);
-                }
-                Type::Optional(Box::new(elem_type.clone()))
-            }
-            "len" => {
-                if !arguments.is_empty() {
-                    self.error("Vec::len() takes no arguments".into(), span);
-                }
-                usize_type
-            }
-            "capacity" => {
-                if !arguments.is_empty() {
-                    self.error("Vec::capacity() takes no arguments".into(), span);
-                }
-                usize_type
-            }
-            "is_empty" => {
-                if !arguments.is_empty() {
-                    self.error("Vec::is_empty() takes no arguments".into(), span);
-                }
-                Type::Bool
-            }
             "get" => {
-                if arguments.len() != 1 {
-                    self.error("Vec::get() takes exactly one argument".into(), span);
-                } else {
+                if arity_ok {
                     let arg_type = self.check_expression(&mut arguments[0], Some(&usize_type));
                     if !usize_type.accepts(&arg_type) {
                         self.error("Vec::get() index must be usize".into(), span);
@@ -1668,22 +1850,13 @@ impl SemanticAnalyzer {
                 }
                 Type::Optional(Box::new(elem_type.clone()))
             }
-            "clear" => {
-                if !arguments.is_empty() {
-                    self.error("Vec::clear() takes no arguments".into(), span);
-                }
-                Type::Void
-            }
-            "copy" => {
-                if !arguments.is_empty() {
-                    self.error("Vec::copy() takes no arguments".into(), span);
-                }
-                Type::Vec {
-                    elem_type: Box::new(elem_type.clone()),
-                }
-            }
+            "pop" => Type::Optional(Box::new(elem_type.clone())),
+            "len" | "capacity" => usize_type,
+            "is_empty" => Type::Bool,
+            "clear" => Type::Void,
+            "copy" => vec_type(),
             _ => {
-                self.error(format!("Vec<T> has no method '{}'", method_name), span);
+                self.error(format!("Vec<T> has no method '{method_name}'"), span);
                 Type::Unknown
             }
         }
@@ -1740,6 +1913,11 @@ impl SemanticAnalyzer {
             if let Some(self_type) = implicit_self
                 && !expected_args.is_empty()
             {
+                // A pointer receiver is followed, matching field access.
+                let self_type = match self_type {
+                    Type::Pointer(pointee) | Type::Ref(pointee) | Type::RefMut(pointee) => *pointee,
+                    other => other,
+                };
                 if !expected_args[0].accepts(&self_type) {
                     self.error(
                         format!(
