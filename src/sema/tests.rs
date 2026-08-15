@@ -2235,6 +2235,22 @@ fn test_indirection_breaks_struct_recursion() {
 }
 
 #[test]
+fn test_generic_return_type_is_concrete_at_the_call_site() {
+    // The return type stayed as the type parameter, so anything that had to
+    // know the real type -- a field, a method -- was rejected.
+    let input = "
+        struct P { x: i32, fn get(self) i32 { return self.x; } }
+        fn pick<T>(a: T, b: T) T { return a; }
+        fn main() {
+            var p1 = P { x: 1 };
+            var p2 = P { x: 2 };
+            var field: i32 = pick(p1, p2).x;
+        }
+    ";
+    assert!(analyze(input).is_empty(), "{:?}", analyze(input));
+}
+
+#[test]
 fn test_duplicate_declarations_are_rejected() {
     let cases = [
         (

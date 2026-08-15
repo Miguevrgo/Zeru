@@ -1946,6 +1946,7 @@ impl SemanticAnalyzer {
             self.symbols.lookup(name).cloned()
         {
             let mut expected_args = params.clone();
+            let mut substitutions: HashMap<String, Type> = HashMap::new();
 
             if let Some(self_type) = implicit_self
                 && !expected_args.is_empty()
@@ -1983,6 +1984,12 @@ impl SemanticAnalyzer {
                     let arg_span = args[i].span;
                     let arg_type = self.check_expression(&mut args[i], Some(&expected));
 
+                    // A type parameter takes whatever the argument turned out
+                    // to be, so the return type below is the concrete one.
+                    if let Type::ParamType(param) = &expected {
+                        substitutions.insert(param.clone(), arg_type.clone());
+                    }
+
                     if !expected.accepts(&arg_type) {
                         self.error(format!("Argument {} type mismatch.", i + 1), arg_span);
                     }
@@ -1998,11 +2005,46 @@ impl SemanticAnalyzer {
                     }
                 }
             }
-            return ret_type;
+            return Self::substitute_params(&ret_type, &substitutions);
         }
 
         self.error(format!("Function '{name}' not defined."), call_span);
         Type::Unknown
+    }
+
+    /// Replace the type parameters of a generic signature with what the call
+    /// site inferred, so the caller sees a concrete type.
+    fn substitute_params(ty: &Type, subs: &HashMap<String, Type>) -> Type {
+        let boxed = |inner: &Type| Box::new(Self::substitute_params(inner, subs));
+
+        match ty {
+            Type::ParamType(name) => subs.get(name).cloned().unwrap_or_else(|| ty.clone()),
+            Type::Pointer(inner) => Type::Pointer(boxed(inner)),
+            Type::Ref(inner) => Type::Ref(boxed(inner)),
+            Type::RefMut(inner) => Type::RefMut(boxed(inner)),
+            Type::Optional(inner) => Type::Optional(boxed(inner)),
+            Type::Slice { elem_type } => Type::Slice {
+                elem_type: boxed(elem_type),
+            },
+            Type::Vec { elem_type } => Type::Vec {
+                elem_type: boxed(elem_type),
+            },
+            Type::Array { elem_type, len } => Type::Array {
+                elem_type: boxed(elem_type),
+                len: *len,
+            },
+            Type::Result { ok_type, err_type } => Type::Result {
+                ok_type: boxed(ok_type),
+                err_type: boxed(err_type),
+            },
+            Type::Tuple(types) => Type::Tuple(
+                types
+                    .iter()
+                    .map(|t| Self::substitute_params(t, subs))
+                    .collect(),
+            ),
+            _ => ty.clone(),
+        }
     }
 
     fn error(&mut self, msg: String, span: Span) {
