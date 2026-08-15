@@ -2,44 +2,111 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+
+# Superseded runs of the same branch or PR are cancelled so pushing twice in a
+# row does not queue two full matrices.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build_and_test:
-    name: Build & Test (LLVM 21)
+  # Cheapest signal first, and the only job that needs no LLVM at all: it
+  # reports in seconds instead of waiting on a toolchain install.
+  format:
+    name: Format
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v6
-
-      - name: Install LLVM 21
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 21 all
-          sudo apt-get install -y libpolly-21-dev zlib1g-dev
-
-      - name: Set LLVM_SYS_210_PREFIX
-        run: echo "LLVM_SYS_210_PREFIX=/usr/lib/llvm-21" >> $GITHUB_ENV
-
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: rustfmt
+      - run: cargo fmt --all -- --check
 
-      - name: Cache Cargo Registry
-        uses: Swatinem/rust-cache@v2
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-llvm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --all-targets -- -D warnings
 
-      - name: Check Formatting
-        run: cargo fmt -- --check
+  # Build and unit-test the compiler itself on every free runner class, so a
+  # host-specific assumption in codegen shows up here rather than in a release.
+  test:
+    name: Test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-latest
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+          - name: macos-arm64
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-llvm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.name }}
+      - run: cargo test --release --verbose
 
-      - name: Lint with Clippy
-        run: cargo clippy -- -D warnings
+  # End-to-end check: every example and std module has to compile, link, and
+  # (for the examples, which self-check through their exit codes) run clean.
+  #
+  # x86_64 Linux only: std/builtin.zr reaches the kernel through inline `syscall`
+  # asm with Linux call numbers, so a Zeru program cannot be built anywhere else
+  # yet. Widen the matrix once std grows a portable syscall layer.
+  compile-suite:
+    name: Compile Suite (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: debug
+            flag: ""
+          - name: release-safe
+            flag: --release-safe
+          - name: release-fast
+            flag: --release-fast
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-llvm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-x86_64
+      - run: cargo build --release
+      - run: python3 ci/compile_suite.py ${{ matrix.flag }}
 
-      - name: Run Unit Tests
-        run: cargo test --release --verbose
+  # Single gate to require in branch protection: adding or renaming a job above
+  # then needs no settings change.
+  ci:
+    name: CI
+    if: always()
+    needs: [format, clippy, test, compile-suite]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check that every job succeeded
+        run: |
+          for result in ${{ join(needs.*.result, ' ') }}; do
+            if [ "$result" != "success" ]; then
+              echo "a required job reported: $result"
+              exit 1
+            fi
+          done
+          echo "all required jobs succeeded"

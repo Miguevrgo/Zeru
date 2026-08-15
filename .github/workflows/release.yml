@@ -32,17 +32,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v6
 
-      - name: Install LLVM 21
-        run: |
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            wget https://apt.llvm.org/llvm.sh
-            chmod +x llvm.sh
-            sudo ./llvm.sh 21 all
-            echo "LLVM_SYS_210_PREFIX=/usr/lib/llvm-21" >> $GITHUB_ENV
-          else
-            brew install llvm@21
-            echo "LLVM_SYS_210_PREFIX=$(brew --prefix llvm@21)" >> $GITHUB_ENV
-          fi
+      - uses: ./.github/actions/setup-llvm
 
       - name: Build Binary
         env:

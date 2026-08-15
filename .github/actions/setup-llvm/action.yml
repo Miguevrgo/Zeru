@@ -1,0 +1,49 @@
+name: Setup LLVM
+description: >
+  Install the LLVM toolchain Zeru builds against and expose it on PATH,
+  so `llvm-config` and `clang` both resolve to the right major version.
+
+inputs:
+  version:
+    description: LLVM major version
+    required: false
+    default: "21"
+
+runs:
+  using: composite
+  steps:
+    # `llvm.sh <ver> all` pulls lldb, mlir, bolt and more. Zeru needs the
+    # libraries and headers (llvm-sys), polly, and clang to link the IR it
+    # emits, so the script only adds the apt source and the packages are
+    # named explicitly.
+    - name: Install LLVM ${{ inputs.version }} (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        wget -q https://apt.llvm.org/llvm.sh
+        chmod +x llvm.sh
+        sudo ./llvm.sh ${{ inputs.version }}
+        sudo apt-get install -y --no-install-recommends \
+          llvm-${{ inputs.version }}-dev \
+          libpolly-${{ inputs.version }}-dev \
+          zlib1g-dev libzstd-dev
+        rm llvm.sh
+        echo "LLVM_SYS_${{ inputs.version }}0_PREFIX=/usr/lib/llvm-${{ inputs.version }}" >> "$GITHUB_ENV"
+        # Ahead of the distro clang, whose IR reader is a version behind and
+        # would reject the textual IR Zeru emits.
+        echo "/usr/lib/llvm-${{ inputs.version }}/bin" >> "$GITHUB_PATH"
+
+    - name: Install LLVM ${{ inputs.version }} (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        brew install llvm@${{ inputs.version }}
+        prefix="$(brew --prefix llvm@${{ inputs.version }})"
+        echo "LLVM_SYS_${{ inputs.version }}0_PREFIX=$prefix" >> "$GITHUB_ENV"
+        echo "$prefix/bin" >> "$GITHUB_PATH"
+
+    - name: Report toolchain
+      shell: bash
+      run: |
+        llvm-config --version
+        clang --version | head -1
