@@ -882,3 +882,295 @@ fn test_result_is_ok_branch() {
     ";
     assert_compiles(input);
 }
+
+// Regression tests: each pins a bug that emitted wrong code rather than an
+// error, so the IR is the only witness.
+
+fn assert_ir_lacks(input: &str, patterns: &[&str]) {
+    let ir = compile_to_ir(input).expect("Compilation failed");
+    for pattern in patterns {
+        assert!(
+            !ir.contains(pattern),
+            "IR contains unexpected pattern: '{}'\n\nFull IR:\n{}",
+            pattern,
+            ir
+        );
+    }
+}
+
+#[test]
+fn test_signed_widening_cast_sign_extends() {
+    // Zero-extending turns `-1 as i64` into 4294967295.
+    let input = "
+        fn main() {
+            var a: i32 = -1;
+            var b: i64 = a as i64;
+        }
+    ";
+    assert_ir_contains(input, &["sext i32"]);
+    assert_ir_lacks(input, &["zext i32"]);
+}
+
+#[test]
+fn test_unsigned_widening_cast_zero_extends() {
+    let input = "
+        fn main() {
+            var a: u32 = 7;
+            var b: u64 = a as u64;
+        }
+    ";
+    assert_ir_contains(input, &["zext i32"]);
+    assert_ir_lacks(input, &["sext i32"]);
+}
+
+#[test]
+fn test_bool_widening_cast_zero_extends() {
+    // Sign-extending an i1 makes `true as i32` equal -1.
+    let input = "
+        fn main() {
+            var flag: bool = true;
+            var n: i32 = flag as i32;
+        }
+    ";
+    assert_ir_contains(input, &["zext i1"]);
+    assert_ir_lacks(input, &["sext i1"]);
+}
+
+#[test]
+fn test_float_to_unsigned_cast_is_unsigned() {
+    let input = "
+        fn main() {
+            var f: f64 = 3.5;
+            var n: u32 = f as u32;
+        }
+    ";
+    assert_ir_contains(input, &["fptoui"]);
+}
+
+#[test]
+fn test_three_field_struct_method_is_not_a_vec_method() {
+    // A struct shaped like `Vec`'s header went through the Vec fast path, which
+    // reads a garbage pointer out of the first field.
+    let input = "
+        struct Buf {
+            a: i32,
+            b: i32,
+            c: i32,
+
+            fn get(self, i: i32) i32 { return self.a; }
+            fn len(self) i32 { return 3; }
+        }
+        fn main() {
+            var buf = Buf { a: 1, b: 2, c: 3 };
+            var x: i32 = buf.get(0);
+            var n: i32 = buf.len();
+        }
+    ";
+    assert_ir_contains(input, &["call i32 @\"Buf::get\"", "call i32 @\"Buf::len\""]);
+}
+
+#[test]
+fn test_store_through_pointer_uses_pointee_width() {
+    // Storing i64 through a *i32 overwrites the next four bytes.
+    let input = "
+        fn main() {
+            var arr: Array<i32, 4> = [1, 2, 3, 4];
+            var p: *i32 = &arr[0];
+            *p = 77;
+        }
+    ";
+    assert_ir_contains(input, &["store i32 77"]);
+    assert_ir_lacks(input, &["store i64 77"]);
+}
+
+#[test]
+fn test_enum_variant_path_resolves() {
+    // Arrives as one qualified identifier; without a case for it every enum use
+    // failed with "Unknown identifier".
+    let input = "
+        enum Status { Connected, Disconnected, Connecting }
+        fn main() {
+            var s: Status = Status::Connecting;
+        }
+    ";
+    assert_ir_contains(input, &["store i32 2"]);
+}
+
+#[test]
+fn test_enum_variant_path_in_match() {
+    let input = "
+        enum Color { Red, Green, Blue }
+        fn main() {
+            var c: Color = Color::Green;
+            var n = match c {
+                Color::Red => 0,
+                Color::Green => 1,
+                default => 2
+            };
+        }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_method_call_on_temporary_evaluates_receiver_once() {
+    // The receiver was compiled three times, so a call in that position ran its
+    // side effects three times.
+    let input = "
+        struct Counter {
+            n: i32,
+            fn value(self) i32 { return self.n; }
+        }
+        fn make() Counter { return Counter { n: 1 }; }
+        fn main() {
+            var v: i32 = make().value();
+        }
+    ";
+    let ir = compile_to_ir(input).expect("Compilation failed");
+    let calls = ir.matches("call %Counter @make()").count();
+    assert_eq!(
+        calls, 1,
+        "expected exactly one call to @make\n\nFull IR:\n{ir}"
+    );
+}
+
+#[test]
+fn test_exhaustive_match_without_default_arm() {
+    // The switch landed in the synthesised default block, after its
+    // `unreachable`, leaving the entry block with no terminator.
+    let input = "
+        enum Color { Red, Green }
+        fn main() {
+            var c: Color = Color::Red;
+            var n = match c {
+                Color::Red => 1,
+                Color::Green => 2
+            };
+        }
+    ";
+    assert_ir_contains(input, &["switch i32", "match_default"]);
+}
+
+#[test]
+fn test_nested_for_allocates_in_entry_block() {
+    // An alloca in the loop body grows the stack once per iteration.
+    let input = "
+        fn main() {
+            var outer: Array<i32, 2> = [1, 2];
+            var inner: Array<i32, 2> = [3, 4];
+            var total: i32 = 0;
+            for a in outer {
+                for b in inner {
+                    total += a + b;
+                }
+            }
+        }
+    ";
+    let ir = compile_to_ir(input).expect("Compilation failed");
+    let entry = ir
+        .split("for_cond")
+        .next()
+        .expect("entry block should precede the loop");
+    assert_eq!(
+        ir.matches("alloca").count(),
+        entry.matches("alloca").count(),
+        "every alloca must sit in the entry block\n\nFull IR:\n{ir}"
+    );
+}
+
+#[test]
+fn test_block_scope_restores_shadowed_variable() {
+    // The inner declaration used to overwrite the outer binding for good, so
+    // the outer `x` read the inner slot after the block closed.
+    let input = "
+        fn main() {
+            var x: i32 = 1;
+            {
+                var x: i32 = 2;
+                var inner: i32 = x;
+            }
+            var outer: i32 = x;
+        }
+    ";
+    // The shadowing slot is `%x1`, so a load from `%x` proves the outer
+    // binding came back.
+    assert_ir_contains(input, &["load i32, ptr %x,"]);
+}
+
+#[test]
+fn test_optional_literal_takes_payload_type() {
+    // `200` was typed as i32 against a `u8?` annotation and rejected.
+    assert_compiles("fn main() { var c: u8? = 200; }");
+}
+
+#[test]
+fn test_integer_literal_beyond_i64_survives() {
+    // The lexer used to fall back to 0 for anything `i64::from_str` rejected,
+    // so `u64` literals above i64::MAX became zero with no diagnostic.
+    let input = "fn main() { var a: u64 = 18446744073709551615; }";
+    assert_ir_contains(input, &["store i64 -1"]);
+}
+
+#[test]
+fn test_out_of_range_literal_is_rejected() {
+    let err = compile_to_ir("fn main() { var a: u64 = 99999999999999999999999; }")
+        .expect_err("literal does not fit any integer type");
+    assert!(err.contains("out of range"), "got: {err}");
+}
+
+#[test]
+fn test_vec_uses_its_element_type() {
+    // Every element used to occupy a fixed 8-byte slot, so a `Vec<i32>` stored
+    // four bytes and read eight back.
+    let input = "
+        fn main() {
+            var v: Vec<i32> = Vec.new();
+            v.push(11);
+        }
+    ";
+    assert_ir_contains(input, &["getelementptr i32", "store i32 11"]);
+    assert_ir_lacks(input, &["getelementptr i8"]);
+}
+
+#[test]
+fn test_field_access_through_pointer() {
+    // Only a receiver literally named `self` used to be followed, so any other
+    // pointer failed to resolve its fields at all.
+    let input = "
+        struct S { v: i32, w: i32 }
+        fn read(p: *S) i32 { return p.v; }
+        fn write(p: *S) { p.w = 42; }
+        fn main() { }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_method_call_through_pointer() {
+    let input = "
+        struct S {
+            v: i32,
+            fn get(self) i32 { return self.v; }
+            fn bump(var self) { self.v = self.v + 1; }
+        }
+        fn peek(p: *S) i32 { return p.get(); }
+        fn poke(p: *S) { p.bump(); }
+        fn main() { }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_same_scope_shadowing() {
+    // The new binding is created after its initialiser runs, so the
+    // initialiser still reads the old one, and the type may change.
+    let input = "
+        fn main() {
+            var x: i32 = 1;
+            var x: i32 = x + 1;
+            var y: i32 = 5;
+            var y: bool = y > 0;
+        }
+    ";
+    assert_compiles(input);
+}

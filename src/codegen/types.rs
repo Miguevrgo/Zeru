@@ -8,7 +8,7 @@ use crate::{
     ast::{Expression, ExpressionKind, TypeSpec},
     codegen::compiler::Compiler,
     errors::Span,
-    sema::types::{Signedness, Type},
+    sema::types::{FloatWidth, IntWidth, Signedness, Type},
 };
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
@@ -18,20 +18,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         fields: &[(String, TypeSpec)],
         span: Span,
     ) {
-        let mut field_types = Vec::new();
-        let mut field_indices = HashMap::new();
+        let mut field_types = Vec::with_capacity(fields.len());
+        let mut field_indices = HashMap::with_capacity(fields.len());
 
         for (i, (field_name, field_spec)) in fields.iter().enumerate() {
-            if let Some(ty) = self.get_llvm_type(field_spec) {
-                field_types.push(ty);
-                field_indices.insert(field_name.clone(), i as u32);
-            } else {
-                self.error(
-                    format!("Compiler: Unknown type in struct field '{}'", field_name),
-                    span,
-                );
+            let Some(ty) = self.get_llvm_type(field_spec) else {
+                self.error(format!("Unknown type in struct field '{field_name}'"), span);
                 return;
-            }
+            };
+            field_types.push(ty);
+            field_indices.insert(field_name.clone(), i as u32);
         }
 
         if let Some((struct_type, indices)) = self.struct_defs.get_mut(name) {
@@ -40,79 +36,67 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
+    /// Type argument for a generic call, inferred from the argument expression.
     pub(super) fn infer_type_from_expression(&self, expr: &Expression) -> TypeSpec {
+        let named = |name: &str| TypeSpec::Named(name.to_string());
+
         match &expr.kind {
-            ExpressionKind::Int(_) => TypeSpec::Named("i32".to_string()),
-            ExpressionKind::Float(_) => TypeSpec::Named("f64".to_string()),
-            ExpressionKind::Boolean(_) => TypeSpec::Named("bool".to_string()),
-            ExpressionKind::StringLit(_) => TypeSpec::Named("str".to_string()),
+            ExpressionKind::Int(_) => named("i32"),
+            ExpressionKind::Float(_) => named("f64"),
+            ExpressionKind::Boolean(_) => named("bool"),
+            ExpressionKind::StringLit(_) => named("str"),
             ExpressionKind::Identifier(name) => {
-                if let Some((_, ty, _)) = self.variables.get(name) {
-                    self.llvm_type_to_type_spec(*ty)
-                } else if let Some(val) = self.constants.get(name) {
-                    self.llvm_type_to_type_spec(val.get_type())
-                } else {
-                    TypeSpec::Named("i32".to_string())
-                }
+                let llvm_type = match self.variables.get(name) {
+                    Some((_, ty, _)) => Some(*ty),
+                    None => self.constants.get(name).map(|val| val.get_type()),
+                };
+                llvm_type.map_or_else(|| named("i32"), |ty| self.llvm_type_to_type_spec(ty))
             }
-            _ => TypeSpec::Named("i32".to_string()),
+            _ => named("i32"),
         }
     }
 
     fn llvm_type_to_type_spec(&self, ty: BasicTypeEnum<'ctx>) -> TypeSpec {
+        let named = |name: &str| TypeSpec::Named(name.to_string());
+
         match ty {
-            BasicTypeEnum::IntType(int_ty) => {
-                let width = int_ty.get_bit_width();
-                let name = match width {
-                    1 => "bool",
-                    8 => "i8",
-                    16 => "i16",
-                    32 => "i32",
-                    64 => "i64",
-                    _ => "i32",
-                };
-                TypeSpec::Named(name.to_string())
-            }
-            BasicTypeEnum::FloatType(float_ty) => {
-                let name = if float_ty == self.context.f32_type() {
-                    "f32"
-                } else {
-                    "f64"
-                };
-                TypeSpec::Named(name.to_string())
-            }
-            BasicTypeEnum::PointerType(_) => {
-                TypeSpec::Pointer(Box::new(TypeSpec::Named("u8".to_string())))
-            }
-            BasicTypeEnum::StructType(st) => {
-                TypeSpec::Named(st.get_name().unwrap().to_str().unwrap().to_string())
-            }
-            _ => TypeSpec::Named("i32".to_string()),
+            BasicTypeEnum::IntType(t) => named(match t.get_bit_width() {
+                1 => "bool",
+                8 => "i8",
+                16 => "i16",
+                64 => "i64",
+                _ => "i32",
+            }),
+            BasicTypeEnum::FloatType(t) if t == self.context.f32_type() => named("f32"),
+            BasicTypeEnum::FloatType(_) => named("f64"),
+            BasicTypeEnum::PointerType(_) => TypeSpec::Pointer(Box::new(named("u8"))),
+            BasicTypeEnum::StructType(st) => match st.get_name().and_then(|n| n.to_str().ok()) {
+                Some(name) => named(name),
+                None => named("i32"),
+            },
+            _ => named("i32"),
         }
+    }
+
+    fn is_unsigned(ty: &Type) -> bool {
+        matches!(
+            ty,
+            Type::Integer {
+                signed: Signedness::Unsigned,
+                ..
+            }
+        )
     }
 
     pub(super) fn is_unsigned_expr(expr: &Expression) -> bool {
-        if let Some(ty) = &expr.ty {
-            return matches!(
-                ty,
-                Type::Integer {
-                    signed: Signedness::Unsigned,
-                    ..
-                }
-            );
-        }
-        false
+        expr.ty.as_ref().is_some_and(Self::is_unsigned)
     }
 
+    /// Whether `expr` is a signed integer, falling back to the variable table
+    /// when the analyser left no type behind. `None` when nothing is known.
     pub(super) fn is_signed_integer(&self, expr: &Expression) -> Option<bool> {
         if let Some(ty) = &expr.ty {
-            return Some(!matches!(
-                ty,
-                Type::Integer {
-                    signed: Signedness::Unsigned,
-                    ..
-                }
-            ));
+            return Some(!Self::is_unsigned(ty));
         }
         if let ExpressionKind::Identifier(name) = &expr.kind
             && let Some((_, _, is_unsigned)) = self.variables.get(name)
@@ -127,14 +111,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             TypeSpec::Named(name) => {
                 matches!(name.as_str(), "u8" | "u16" | "u32" | "u64" | "usize")
             }
-            TypeSpec::Pointer(inner) => Self::is_unsigned_type(inner),
-            TypeSpec::Tuple(_) | TypeSpec::Optional(_) | TypeSpec::Result(_) => false,
-            TypeSpec::Generic { args, .. } => {
-                args.first().map(Self::is_unsigned_type).unwrap_or(false)
+            TypeSpec::Pointer(inner) | TypeSpec::Ref(inner) | TypeSpec::RefMut(inner) => {
+                Self::is_unsigned_type(inner)
             }
-            TypeSpec::IntLiteral(_) => false,
-            TypeSpec::Slice(_) => false,
-            TypeSpec::Ref(inner) | TypeSpec::RefMut(inner) => Self::is_unsigned_type(inner),
+            TypeSpec::Generic { args, .. } => args.first().is_some_and(Self::is_unsigned_type),
+            _ => false,
         }
     }
 
@@ -150,162 +131,97 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub(super) fn get_llvm_type(&self, spec: &TypeSpec) -> Option<BasicTypeEnum<'ctx>> {
         match spec {
-            TypeSpec::Named(name) => {
-                if let Some(substituted) = self.current_type_substitutions.get(name) {
-                    return self.get_llvm_type(substituted);
+            TypeSpec::Named(name) => match self.current_type_substitutions.get(name) {
+                Some(substituted) => self.get_llvm_type(substituted),
+                None => self.get_named_llvm_type(name),
+            },
+
+            TypeSpec::Generic { name, args } => match (name.as_str(), args.as_slice()) {
+                ("Array", [elem, TypeSpec::IntLiteral(len)]) => {
+                    Some(self.get_llvm_type(elem)?.array_type(*len as u32).into())
                 }
-                self.get_named_llvm_type(name)
-            }
-            TypeSpec::Generic { name, args } => {
-                if name == "Array" && args.len() == 2 {
-                    let elem_type = self.get_llvm_type(&args[0])?;
-                    let len = match &args[1] {
-                        TypeSpec::IntLiteral(val) => *val as u32,
-                        _ => return None,
-                    };
-                    return Some(elem_type.array_type(len).into());
-                }
-                // Vec<T> is represented as a struct { ptr: *T, len: usize, cap: usize }
-                if name == "Vec" && args.len() == 1 {
-                    let ptr_type = self
-                        .context
-                        .ptr_type(inkwell::AddressSpace::default())
-                        .into();
-                    let usize_type = self.context.i64_type().into();
-                    return Some(
-                        self.context
-                            .struct_type(&[ptr_type, usize_type, usize_type], false)
-                            .into(),
-                    );
-                }
-                if name == "Result" && args.len() == 2 {
-                    let ok_type = self
-                        .get_llvm_type(&args[0])
-                        .unwrap_or(self.context.i8_type().into());
-                    let err_type = self
-                        .get_llvm_type(&args[1])
-                        .unwrap_or(self.context.i8_type().into());
-                    let tag_type = self.context.bool_type().into();
-                    let data_type = if self.type_size(ok_type) >= self.type_size(err_type) {
-                        ok_type
-                    } else {
-                        err_type
-                    };
-                    return Some(
-                        self.context
-                            .struct_type(&[tag_type, data_type], false)
-                            .into(),
-                    );
-                }
-                None
-            }
-            TypeSpec::IntLiteral(_) => None,
+                ("Vec", [_]) => Some(self.vec_type().into()),
+                // `Result<T, E>` shares the layout of `T!`: the error is always
+                // an i32 code, so `E` carries no representation of its own.
+                ("Result", [ok, _]) => Some(self.result_type(self.get_llvm_type(ok)?).into()),
+                _ => None,
+            },
+
+            TypeSpec::Optional(inner) => Some(self.option_type(self.get_llvm_type(inner)?).into()),
+            TypeSpec::Result(inner) => Some(self.result_type(self.get_llvm_type(inner)?).into()),
+            TypeSpec::Slice(_) => Some(self.slice_type().into()),
+
             TypeSpec::Tuple(types) => {
-                let field_types: Vec<_> =
-                    types.iter().filter_map(|t| self.get_llvm_type(t)).collect();
-                Some(self.context.struct_type(&field_types, false).into())
+                let fields: Vec<_> = types.iter().filter_map(|t| self.get_llvm_type(t)).collect();
+                Some(self.context.struct_type(&fields, false).into())
             }
-            TypeSpec::Pointer(_) => Some(
-                self.context
-                    .ptr_type(inkwell::AddressSpace::default())
-                    .into(),
-            ),
-            TypeSpec::Optional(inner) => {
-                let inner_type = self.get_llvm_type(inner)?;
-                let tag_type = self.context.bool_type().into();
-                Some(
-                    self.context
-                        .struct_type(&[tag_type, inner_type], false)
-                        .into(),
-                )
+
+            // References lower to plain pointers until generational checks land.
+            TypeSpec::Pointer(_) | TypeSpec::Ref(_) | TypeSpec::RefMut(_) => {
+                Some(self.ptr_type().into())
             }
-            TypeSpec::Result(inner) => {
-                let inner_type = self.get_llvm_type(inner)?;
-                let tag_type = self.context.bool_type().into();
-                let error_code_type = self.context.i32_type().into();
-                Some(
-                    self.context
-                        .struct_type(&[tag_type, inner_type, error_code_type], false)
-                        .into(),
-                )
-            }
-            TypeSpec::Slice(_) => {
-                let ptr_type = self
-                    .context
-                    .ptr_type(inkwell::AddressSpace::default())
-                    .into();
-                let len_type = self.context.i64_type().into();
-                Some(
-                    self.context
-                        .struct_type(&[ptr_type, len_type], false)
-                        .into(),
-                )
-            }
-            // &T and &var T are represented as pointers (with gen-ref metadata at runtime)
-            // For now, they compile down to simple pointers. Generational reference
-            // checking will be added in a later phase.
-            TypeSpec::Ref(_) | TypeSpec::RefMut(_) => Some(
-                self.context
-                    .ptr_type(inkwell::AddressSpace::default())
-                    .into(),
-            ),
+
+            TypeSpec::IntLiteral(_) => None,
         }
     }
 
-    fn type_size(&self, ty: BasicTypeEnum<'ctx>) -> u64 {
-        match ty {
-            BasicTypeEnum::IntType(t) => t.get_bit_width() as u64,
-            BasicTypeEnum::FloatType(t) => {
-                if t == self.context.f32_type() {
-                    32
-                } else {
-                    64
-                }
+    /// LLVM type for a type the analyser already resolved.
+    pub(super) fn llvm_type_of(&self, ty: &Type) -> Option<BasicTypeEnum<'ctx>> {
+        Some(match ty {
+            Type::Integer { width, .. } => match width {
+                IntWidth::W8 => self.context.i8_type().into(),
+                IntWidth::W16 => self.context.i16_type().into(),
+                IntWidth::W32 => self.context.i32_type().into(),
+                IntWidth::W64 | IntWidth::WSize => self.usize_type().into(),
+            },
+            Type::Float(FloatWidth::W32) => self.context.f32_type().into(),
+            Type::Float(FloatWidth::W64) => self.context.f64_type().into(),
+            Type::Bool => self.context.bool_type().into(),
+            Type::Enum { .. } => self.context.i32_type().into(),
+            Type::Pointer(_) | Type::Ref(_) | Type::RefMut(_) => self.ptr_type().into(),
+            Type::Slice { .. } => self.slice_type().into(),
+            Type::Vec { .. } => self.vec_type().into(),
+            Type::Optional(inner) => self.option_type(self.llvm_type_of(inner)?).into(),
+            Type::Result { ok_type, .. } => self.result_type(self.llvm_type_of(ok_type)?).into(),
+            Type::Array { elem_type, len } => {
+                self.llvm_type_of(elem_type)?.array_type(*len as u32).into()
             }
-            BasicTypeEnum::PointerType(_) => 64,
-            BasicTypeEnum::ArrayType(t) => t.len() as u64 * self.type_size(t.get_element_type()),
-            BasicTypeEnum::StructType(t) => {
-                t.get_field_types().iter().map(|f| self.type_size(*f)).sum()
+            Type::Tuple(types) => {
+                let fields: Vec<_> = types.iter().filter_map(|t| self.llvm_type_of(t)).collect();
+                self.context.struct_type(&fields, false).into()
             }
-            BasicTypeEnum::VectorType(t) => t.get_size() as u64,
-            BasicTypeEnum::ScalableVectorType(_) => 64,
-        }
+            Type::Struct { name, .. } => self.struct_defs.get(name)?.0.as_basic_type_enum(),
+            Type::Void | Type::ParamType(_) | Type::Unknown => return None,
+        })
     }
 
     fn get_named_llvm_type(&self, name: &str) -> Option<BasicTypeEnum<'ctx>> {
-        let int_type = match name {
-            "i8" | "u8" => Some(self.context.i8_type()),
-            "i16" | "u16" => Some(self.context.i16_type()),
-            "i32" | "u32" => Some(self.context.i32_type()),
-            "i64" | "u64" | "isize" | "usize" => Some(self.context.i64_type()),
+        let primitive = match name {
+            "i8" | "u8" => Some(self.context.i8_type().into()),
+            "i16" | "u16" => Some(self.context.i16_type().into()),
+            "i32" | "u32" => Some(self.context.i32_type().into()),
+            "i64" | "u64" | "isize" | "usize" => Some(self.usize_type().into()),
+            "f32" => Some(self.context.f32_type().into()),
+            "f64" => Some(self.context.f64_type().into()),
+            "bool" => Some(self.context.bool_type().into()),
             _ => None,
         };
-        if let Some(ty) = int_type {
-            return Some(ty.into());
+        if primitive.is_some() {
+            return primitive;
         }
 
-        match name {
-            "f32" => return Some(self.context.f32_type().into()),
-            "f64" => return Some(self.context.f64_type().into()),
-            "bool" => return Some(self.context.bool_type().into()),
+        let struct_name = match name {
             "void" => return None,
-            "self" => {
-                return self
-                    .current_struct_context
-                    .as_ref()
-                    .and_then(|struct_name| self.struct_defs.get(struct_name))
-                    .map(|(st, _)| st.as_basic_type_enum());
-            }
-            _ => {}
-        }
+            "self" => self.current_struct_context.as_deref()?,
+            other => other,
+        };
 
-        if let Some((struct_ty, _)) = self.struct_defs.get(name) {
+        if let Some((struct_ty, _)) = self.struct_defs.get(struct_name) {
             return Some(struct_ty.as_basic_type_enum());
         }
-        if self.enum_defs.contains_key(name) {
-            return Some(self.context.i32_type().into());
-        }
-
-        None
+        // Enum variants are plain tags.
+        self.enum_defs
+            .contains_key(struct_name)
+            .then(|| self.context.i32_type().into())
     }
 }

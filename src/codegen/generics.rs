@@ -5,158 +5,136 @@ use std::collections::HashMap;
 use inkwell::values::FunctionValue;
 
 use crate::{
-    ast::{Expression, TypeSpec},
+    ast::{Expression, TypeParameter, TypeSpec},
     codegen::compiler::Compiler,
 };
 
+type Substitutions = HashMap<String, TypeSpec>;
+
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
+    /// Emit (or reuse) the instantiation of a generic function for the concrete
+    /// argument types at this call site.
     pub(super) fn monomorphize_call(
         &mut self,
         name: &str,
         arguments: &[Expression],
-    ) -> FunctionValue<'ctx> {
-        let generic_def = self.generic_functions.get(name).cloned().unwrap();
+    ) -> Option<FunctionValue<'ctx>> {
+        let generic = self.generic_functions.get(name).cloned()?;
 
-        let mut type_substitutions: HashMap<String, TypeSpec> = HashMap::new();
-        for (i, (_, param_type, _)) in generic_def.params.iter().enumerate() {
-            if let TypeSpec::Named(type_param_name) = param_type
-                && generic_def
-                    .type_params
-                    .iter()
-                    .any(|tp| &tp.name == type_param_name)
+        let mut subs = Substitutions::new();
+        for (i, (_, param_type, _)) in generic.params.iter().enumerate() {
+            if let TypeSpec::Named(type_param) = param_type
+                && generic.type_params.iter().any(|tp| &tp.name == type_param)
                 && let Some(arg) = arguments.get(i)
             {
-                let inferred = self.infer_type_from_expression(arg);
-                type_substitutions.insert(type_param_name.clone(), inferred);
+                subs.insert(type_param.clone(), self.infer_type_from_expression(arg));
             }
         }
 
-        let mangled_name =
-            self.mangle_generic_name(name, &type_substitutions, &generic_def.type_params);
-
-        if let Some(func) = self.monomorphized.get(&mangled_name) {
-            return *func;
+        let mangled = Self::mangle_generic_name(name, &subs, &generic.type_params);
+        if let Some(existing) = self
+            .monomorphized
+            .get(&mangled)
+            .copied()
+            .or_else(|| self.module.get_function(&mangled))
+        {
+            return Some(existing);
         }
 
-        if let Some(func) = self.module.get_function(&mangled_name) {
-            return func;
-        }
-
-        let substituted_params: Vec<(String, TypeSpec, bool)> = generic_def
+        let params: Vec<(String, TypeSpec, bool)> = generic
             .params
             .iter()
-            .map(|(name, ty, is_mut)| {
-                (
-                    name.clone(),
-                    self.substitute_type_spec(ty, &type_substitutions),
-                    *is_mut,
-                )
-            })
+            .map(|(name, ty, is_mut)| (name.clone(), Self::substitute(ty, &subs), *is_mut))
             .collect();
-
-        let substituted_return = generic_def
+        let return_type = generic
             .return_type
             .as_ref()
-            .map(|ty| self.substitute_type_spec(ty, &type_substitutions));
+            .map(|ty| Self::substitute(ty, &subs));
 
-        let func =
-            self.compile_fn_prototype(&mangled_name, &substituted_params, &substituted_return);
-        self.monomorphized.insert(mangled_name.clone(), func);
+        let func = self.compile_fn_prototype(&mangled, &params, &return_type);
+        // Registered before the body is emitted so a recursive call terminates.
+        self.monomorphized.insert(mangled.clone(), func);
 
+        // The instantiation is a separate function, so it must not see the
+        // caller's locals or enclosing loops.
         let saved_block = self.builder.get_insert_block();
         let saved_fn = self.current_fn;
         let saved_vars = std::mem::take(&mut self.variables);
         let saved_ptr_elems = std::mem::take(&mut self.pointer_elem_types);
-        let saved_subs = std::mem::take(&mut self.current_type_substitutions);
+        let saved_loops = std::mem::take(&mut self.loop_stack);
+        let saved_subs = std::mem::replace(&mut self.current_type_substitutions, subs);
 
-        self.current_type_substitutions = type_substitutions;
-        self.compile_fn_body(&mangled_name, &substituted_params, &generic_def.body);
+        self.compile_fn_body(&mangled, &params, &generic.body);
 
         self.variables = saved_vars;
         self.pointer_elem_types = saved_ptr_elems;
+        self.loop_stack = saved_loops;
         self.current_type_substitutions = saved_subs;
         self.current_fn = saved_fn;
         if let Some(block) = saved_block {
             self.builder.position_at_end(block);
         }
 
-        func
+        Some(func)
     }
 
-    fn substitute_type_spec(&self, ty: &TypeSpec, subs: &HashMap<String, TypeSpec>) -> TypeSpec {
+    fn substitute(ty: &TypeSpec, subs: &Substitutions) -> TypeSpec {
+        let boxed = |inner: &TypeSpec| Box::new(Self::substitute(inner, subs));
+        let all = |types: &[TypeSpec]| types.iter().map(|t| Self::substitute(t, subs)).collect();
+
         match ty {
-            TypeSpec::Named(name) => {
-                if let Some(replacement) = subs.get(name) {
-                    replacement.clone()
-                } else {
-                    ty.clone()
-                }
-            }
-            TypeSpec::Pointer(inner) => {
-                TypeSpec::Pointer(Box::new(self.substitute_type_spec(inner, subs)))
-            }
-            TypeSpec::Tuple(elems) => TypeSpec::Tuple(
-                elems
-                    .iter()
-                    .map(|e| self.substitute_type_spec(e, subs))
-                    .collect(),
-            ),
-            TypeSpec::Optional(inner) => {
-                TypeSpec::Optional(Box::new(self.substitute_type_spec(inner, subs)))
-            }
-            TypeSpec::Result(inner) => {
-                TypeSpec::Result(Box::new(self.substitute_type_spec(inner, subs)))
-            }
+            TypeSpec::Named(name) => subs.get(name).cloned().unwrap_or_else(|| ty.clone()),
+            TypeSpec::Pointer(inner) => TypeSpec::Pointer(boxed(inner)),
+            TypeSpec::Optional(inner) => TypeSpec::Optional(boxed(inner)),
+            TypeSpec::Result(inner) => TypeSpec::Result(boxed(inner)),
+            TypeSpec::Slice(inner) => TypeSpec::Slice(boxed(inner)),
+            TypeSpec::Ref(inner) => TypeSpec::Ref(boxed(inner)),
+            TypeSpec::RefMut(inner) => TypeSpec::RefMut(boxed(inner)),
+            TypeSpec::Tuple(elems) => TypeSpec::Tuple(all(elems)),
             TypeSpec::Generic { name, args } => TypeSpec::Generic {
                 name: name.clone(),
-                args: args
-                    .iter()
-                    .map(|a| self.substitute_type_spec(a, subs))
-                    .collect(),
+                args: all(args),
             },
-            TypeSpec::IntLiteral(_) | TypeSpec::Slice(_) => ty.clone(),
-            TypeSpec::Ref(inner) => TypeSpec::Ref(Box::new(self.substitute_type_spec(inner, subs))),
-            TypeSpec::RefMut(inner) => {
-                TypeSpec::RefMut(Box::new(self.substitute_type_spec(inner, subs)))
-            }
+            TypeSpec::IntLiteral(_) => ty.clone(),
         }
     }
 
     fn mangle_generic_name(
-        &self,
         base_name: &str,
-        subs: &HashMap<String, TypeSpec>,
-        type_params: &[crate::ast::TypeParameter],
+        subs: &Substitutions,
+        type_params: &[TypeParameter],
     ) -> String {
-        let mut mangled = base_name.to_string();
-        mangled.push_str("__");
+        let mut mangled = format!("{base_name}__");
         for tp in type_params {
             if let Some(concrete) = subs.get(&tp.name) {
-                mangled.push_str(&self.type_spec_to_mangled(concrete));
+                mangled.push_str(&Self::mangle_type(concrete));
                 mangled.push('_');
             }
         }
         mangled
     }
 
-    fn type_spec_to_mangled(&self, ty: &TypeSpec) -> String {
+    fn mangle_type(ty: &TypeSpec) -> String {
+        let inner = Self::mangle_type;
+        let joined = |types: &[TypeSpec]| {
+            types
+                .iter()
+                .map(Self::mangle_type)
+                .collect::<Vec<_>>()
+                .join("_")
+        };
+
         match ty {
             TypeSpec::Named(name) => name.clone(),
-            TypeSpec::Pointer(inner) => format!("ptr_{}", self.type_spec_to_mangled(inner)),
-            TypeSpec::Tuple(elems) => {
-                let inner: Vec<_> = elems.iter().map(|e| self.type_spec_to_mangled(e)).collect();
-                format!("tuple_{}", inner.join("_"))
-            }
-            TypeSpec::Optional(inner) => format!("opt_{}", self.type_spec_to_mangled(inner)),
-            TypeSpec::Result(inner) => format!("res_{}", self.type_spec_to_mangled(inner)),
-            TypeSpec::Generic { name, args } => {
-                let inner: Vec<_> = args.iter().map(|a| self.type_spec_to_mangled(a)).collect();
-                format!("{}_{}", name, inner.join("_"))
-            }
-            TypeSpec::IntLiteral(n) => format!("lit{}", n),
-            TypeSpec::Slice(inner) => format!("slice_{}", self.type_spec_to_mangled(inner)),
-            TypeSpec::Ref(inner) => format!("ref_{}", self.type_spec_to_mangled(inner)),
-            TypeSpec::RefMut(inner) => format!("refmut_{}", self.type_spec_to_mangled(inner)),
+            TypeSpec::IntLiteral(n) => format!("lit{n}"),
+            TypeSpec::Pointer(t) => format!("ptr_{}", inner(t)),
+            TypeSpec::Optional(t) => format!("opt_{}", inner(t)),
+            TypeSpec::Result(t) => format!("res_{}", inner(t)),
+            TypeSpec::Slice(t) => format!("slice_{}", inner(t)),
+            TypeSpec::Ref(t) => format!("ref_{}", inner(t)),
+            TypeSpec::RefMut(t) => format!("refmut_{}", inner(t)),
+            TypeSpec::Tuple(elems) => format!("tuple_{}", joined(elems)),
+            TypeSpec::Generic { name, args } => format!("{name}_{}", joined(args)),
         }
     }
 }
