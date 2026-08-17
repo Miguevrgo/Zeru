@@ -20,12 +20,7 @@ pub const GREEN_FG: &str = "\x1b[1;38;2;152;195;121m";
 pub const YELLOW_FG: &str = "\x1b[1;38;2;229;192;123m";
 pub const RESET: &str = "\x1b[0m";
 
-/// Width the verb is padded to, so every status line's detail starts in the
-/// same column.
 const VERB_WIDTH: usize = 9;
-
-/// Print a progress line: a Nerd Font icon, the right-aligned verb in colour,
-/// then the detail. Every line goes through here so the columns cannot drift.
 pub fn status(colour: &str, icon: char, verb: &str, detail: impl std::fmt::Display) {
     eprintln!("  {colour}{icon} {verb:>VERB_WIDTH$}{RESET} {detail}");
 }
@@ -261,34 +256,25 @@ fn load_std_modules(
         }
 
         if import.path.starts_with("std.") {
-            if let Some(file_path) = resolve_std_import(&import.path)? {
-                if file_path.exists()
-                    && let Ok(content) = fs::read_to_string(&file_path)
-                {
-                    loaded.insert(import.path.clone());
-                    let short_name = get_module_short_name(&import.path);
+            let file_path = resolve_std_import(&import.path)?.ok_or(CompileError::StdNotFound)?;
+            let content = fs::read_to_string(&file_path).map_err(|_| CompileError::StdNotFound)?;
+            let short_name = get_module_short_name(&import.path);
 
-                    let nested_imports = extract_imports(&content);
-                    let nested_code =
-                        load_std_modules(&nested_imports, loaded, direct_symbols, module_prefixes)?;
-                    code.push_str(&nested_code);
+            let nested_imports = extract_imports(&content);
+            let nested_code =
+                load_std_modules(&nested_imports, loaded, direct_symbols, module_prefixes)?;
+            code.push_str(&nested_code);
 
-                    let prefixed = prefix_definitions(&content, &short_name);
-                    code.push_str(&prefixed);
-                    code.push('\n');
+            let prefixed = prefix_definitions(&content, &short_name);
+            code.push_str(&prefixed);
+            code.push('\n');
 
-                    if let Some(ref symbols) = import.symbols {
-                        for sym in symbols {
-                            direct_symbols.insert(sym.clone(), format!("{}__{}", short_name, sym));
-                        }
-                    } else {
-                        module_prefixes.insert(short_name);
-                    }
-                } else {
-                    return Err(CompileError::StdNotFound);
+            if let Some(ref symbols) = import.symbols {
+                for sym in symbols {
+                    direct_symbols.insert(sym.clone(), format!("{}__{}", short_name, sym));
                 }
             } else {
-                return Err(CompileError::StdNotFound);
+                module_prefixes.insert(short_name);
             }
         }
     }
