@@ -29,7 +29,7 @@ enum Commands {
         file: PathBuf,
         #[arg(long, conflicts_with = "release_fast")]
         release_safe: bool,
-        #[arg(long, conflicts_with = "release_safe")]
+        #[arg(long)]
         release_fast: bool,
         #[arg(long)]
         emit_ir: bool,
@@ -38,7 +38,7 @@ enum Commands {
         file: PathBuf,
         #[arg(long, conflicts_with = "release_fast")]
         release_safe: bool,
-        #[arg(long, conflicts_with = "release_safe")]
+        #[arg(long)]
         release_fast: bool,
     },
     Clean,
