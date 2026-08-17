@@ -20,6 +20,16 @@ impl SafetyMode {
     pub const fn emit_safety_checks(&self) -> bool {
         matches!(self, SafetyMode::Debug | SafetyMode::ReleaseSafe)
     }
+
+    pub const fn from_flags(release_fast: bool, release_safe: bool) -> Self {
+        if release_fast {
+            Self::ReleaseFast
+        } else if release_safe {
+            Self::ReleaseSafe
+        } else {
+            Self::Debug
+        }
+    }
 }
 
 impl std::fmt::Display for SafetyMode {

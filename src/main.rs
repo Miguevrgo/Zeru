@@ -8,18 +8,16 @@ mod sema;
 mod token;
 
 use crate::codegen::SafetyMode;
+use crate::errors::CompileError;
 use crate::resolver::{GREEN_FG, RED_FG, RESET, compile_pipeline, status};
 use clap::{Parser, Subcommand};
-use inkwell::support::LLVMString;
 use std::fs;
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use thiserror::Error;
 
 #[derive(Parser)]
-#[command(name = "zeru")]
-#[command(author, version, about, long_about = None)]
+#[command(version)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -29,42 +27,21 @@ struct Cli {
 enum Commands {
     Build {
         file: PathBuf,
-
-        #[arg(long)]
+        #[arg(long, conflicts_with = "release_fast")]
         release_safe: bool,
-
-        #[arg(long)]
+        #[arg(long, conflicts_with = "release_safe")]
         release_fast: bool,
-
         #[arg(long)]
         emit_ir: bool,
     },
     Run {
         file: PathBuf,
-
-        #[arg(long)]
+        #[arg(long, conflicts_with = "release_fast")]
         release_safe: bool,
-
-        #[arg(long)]
+        #[arg(long, conflicts_with = "release_safe")]
         release_fast: bool,
     },
     Clean,
-}
-
-#[derive(Error, Debug)]
-enum CompileError {
-    #[error("[IO]: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("aborting due to previous error")]
-    Unknown,
-    #[error("LLVM error: {0}")]
-    Llvm(#[from] LLVMString),
-    #[error("std library not found: install zeru or set ZERU_STD_PATH for local development")]
-    StdNotFound,
-    #[error("invalid path: must point to a .zr file with a valid UTF-8 name")]
-    InvalidPath,
-    #[error("linking failed: clang exited with {0}")]
-    Link(std::process::ExitStatus),
 }
 
 fn run_compiler(args: Cli) -> Result<(), CompileError> {
@@ -75,13 +52,7 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
             release_fast,
             emit_ir,
         } => {
-            let safety_mode = if release_fast {
-                SafetyMode::ReleaseFast
-            } else if release_safe {
-                SafetyMode::ReleaseSafe
-            } else {
-                SafetyMode::Debug
-            };
+            let safety_mode = SafetyMode::from_flags(release_fast, release_safe);
             compile_pipeline(&file, safety_mode, emit_ir)?;
         }
         Commands::Run {
@@ -89,14 +60,8 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
             release_safe,
             release_fast,
         } => {
-            let safety_mode = if release_fast {
-                SafetyMode::ReleaseFast
-            } else if release_safe {
-                SafetyMode::ReleaseSafe
-            } else {
-                SafetyMode::Debug
-            };
-            let executable_path = compile_pipeline(&file, safety_mode.clone(), false)?;
+            let safety_mode = SafetyMode::from_flags(release_fast, release_safe);
+            let executable_path = compile_pipeline(&file, safety_mode, false)?;
             status(GREEN_FG, '\u{e7d5}', "Running", executable_path.display());
             let status = Command::new(&executable_path).status()?;
             std::process::exit(
@@ -117,11 +82,7 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
 }
 
 fn main() {
-    let cli = Cli::parse();
-    if let Err(err) = run_compiler(cli) {
-        // A broken source file is not a compiler crash. Report it and exit
-        // non-zero, without a Rust panic message and backtrace note on top of
-        // the diagnostics the user actually needs to read.
+    if let Err(err) = run_compiler(Cli::parse()) {
         eprintln!("{RED_FG}[-] Error: {err}{RESET}");
         std::process::exit(1);
     }

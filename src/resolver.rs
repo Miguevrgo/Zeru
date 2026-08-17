@@ -477,7 +477,7 @@ pub fn compile_pipeline(
     let end = start.elapsed().as_millis() as f64 / 1000.0;
     status(
         GREEN_FG,
-        '\u{eab2}',
+        '\u{ef0a}',
         "Finished",
         format_args!("{safety_mode} in {end:.3}s"),
     );

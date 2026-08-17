@@ -1,4 +1,6 @@
 use ariadne::{Color, Label, Report, ReportKind};
+use inkwell::support::LLVMString;
+use thiserror::Error;
 
 /// Represents a span in the source code (byte offsets)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -133,4 +135,20 @@ pub fn report_errors(errors: &[ZeruError], filename: &str, source: &str, offset:
     for error in errors {
         error.report(filename, source, offset);
     }
+}
+
+#[derive(Error, Debug)]
+pub enum CompileError {
+    #[error("[IO]: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("aborting due to previous error")]
+    Unknown,
+    #[error("LLVM error: {0}")]
+    Llvm(#[from] LLVMString),
+    #[error("std library not found: install zeru or set ZERU_STD_PATH for local development")]
+    StdNotFound,
+    #[error("invalid path: must point to a .zr file with a valid UTF-8 name")]
+    InvalidPath,
+    #[error("linking failed: clang exited with {0}")]
+    Link(std::process::ExitStatus),
 }
