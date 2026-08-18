@@ -1306,3 +1306,33 @@ fn test_reading_through_a_temporary() {
     ";
     assert_compiles(input);
 }
+
+#[test]
+fn test_deref_of_a_computed_pointer_reads_the_pointee_width() {
+    // `p + 1` has no name to look up, so the width has to come from the type
+    // the analyser resolved. Guessing reads the wrong number of bytes.
+    let input = "
+        fn main() {
+            var bytes: Array<u8, 4> = [1, 2, 3, 4];
+            var p: *u8 = &bytes[0];
+            if *(p + 1) == 2 { return; }
+        }
+    ";
+    // A comparison carries no expected type, so nothing else can supply the
+    // width: an eight byte load here reads past a four byte array.
+    assert_ir_lacks(input, &["load i64"]);
+}
+
+#[test]
+fn test_pointer_arithmetic_steps_by_element() {
+    // As in C: one step is one element, so a *i32 moves four bytes and lands on
+    // the next element instead of inside the one it started on.
+    let input = "
+        fn main() {
+            var words: Array<i32, 3> = [1, 2, 3];
+            var p: *i32 = &words[0];
+            *(p + 1) = 99;
+        }
+    ";
+    assert_ir_contains(input, &["getelementptr i32"]);
+}

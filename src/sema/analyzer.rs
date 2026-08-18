@@ -1500,11 +1500,18 @@ impl SemanticAnalyzer {
                 *elem_type
             }
             Type::Unknown => Type::Unknown,
-            _ => {
+            // A pointer is followed for a field but not for an index. That is
+            // parked: the destination is Rust's split, where `&T` does the
+            // comfortable access and `*T` follows nothing.
+            Type::Pointer(ref pointee) if matches!(pointee.as_ref(), Type::Array { .. }) => {
                 self.error(
-                    format!("Cannot index type {:?}", left_type.to_string()),
+                    format!("Cannot index {left_type} directly, write (*p)[i]"),
                     span,
                 );
+                Type::Unknown
+            }
+            _ => {
+                self.error(format!("Cannot index type {left_type}"), span);
                 Type::Unknown
             }
         }

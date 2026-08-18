@@ -641,11 +641,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.struct_defs.get(struct_name)?.1.get(name).copied()
     }
 
-    /// Declared pointee of a pointer variable.
-    ///
-    /// ponytail: computed pointers (`*(p + 1)`) are untracked and fall back to a
-    /// word-sized access; carrying analyser types into codegen would settle it.
+    /// What `expr` points at, from the type the analyser resolved. A computed
+    /// pointer such as `p + 1` has no name to look up, and guessing a width
+    /// there reads the wrong number of bytes.
     fn pointee_type_of(&self, expr: &Expression) -> Option<BasicTypeEnum<'ctx>> {
+        if let Some(Type::Pointer(pointee) | Type::Ref(pointee) | Type::RefMut(pointee)) = &expr.ty
+        {
+            return self.llvm_type_of(pointee);
+        }
+
         match &expr.kind {
             ExpressionKind::Identifier(name) => self.pointer_elem_types.get(name).copied(),
             _ => None,
@@ -1343,9 +1347,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         return self.dummy_val();
                     }
                 };
+                // A step is one element wide, as in C: `p + 1` on a *i32 moves
+                // four bytes. Without the pointee type it would move one, and
+                // land inside the element it started on.
+                let elem = self
+                    .pointee_type_of(left)
+                    .unwrap_or_else(|| self.context.i8_type().into());
                 unsafe {
                     self.builder
-                        .build_gep(self.context.i8_type(), ptr, &[step], "ptr")
+                        .build_gep(elem, ptr, &[step], "ptr")
                         .unwrap()
                         .into()
                 }

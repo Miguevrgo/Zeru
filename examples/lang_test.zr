@@ -155,6 +155,18 @@ fn main() {
     if cells[0] != 1 { exit(52); }
     if cells[2] != 3 { exit(53); }
 
+    // A step is one element, as in C, whatever the pointee width.
+    var head: *i32 = &cells[0];
+    if *(head + 2) != 3 { exit(54); }
+    *(head + 1) = 7;
+    if cells[1] != 7 { exit(55); }
+    if cells[0] != 1 { exit(56); }
+
+    var octets: Array<u8, 4> = [1, 2, 3, 4];
+    var byte: *u8 = &octets[0];
+    if *(byte + 3) != 4 { exit(57); }
+    if *(byte + 3 - 2) != 2 { exit(58); }
+
     // --- control flow --------------------------------------------------------
     var i: i32 = 0;
     var sum: i32 = 0;
