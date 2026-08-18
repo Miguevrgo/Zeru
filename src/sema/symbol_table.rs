@@ -51,12 +51,9 @@ impl SymbolTable {
         }
     }
 
+    /// A function is always global, wherever the declaration was reached from.
     pub fn insert_fn(&mut self, name: String, params: Vec<Type>, ret_type: Type) {
-        // NOTE: Currently there is only support for global functions so insertion is
-        // performed in the current scope
-        if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name, Symbol::Function { params, ret_type });
-        }
+        self.scopes[0].insert(name, Symbol::Function { params, ret_type });
     }
 
     pub fn mark_moved(&mut self, name: &str) -> bool {

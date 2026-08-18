@@ -1397,3 +1397,46 @@ fn test_generic_call_instantiates_for_the_argument_type() {
     assert_ir_contains(input, &["largest__i64_"]);
     assert_ir_lacks(input, &["largest__i32_"]);
 }
+
+#[test]
+fn test_generic_struct_takes_its_arguments_from_the_values() {
+    // Each set of arguments is a struct of its own, so the same declaration at
+    // two widths lays out twice and the methods follow.
+    let input = "
+        struct Pair<T> {
+            first: T,
+            second: T,
+            fn swap(self) Pair<T> { return Pair { first: self.second, second: self.first }; }
+        }
+        fn main() {
+            var narrow = Pair { first: 1, second: 2 };
+            var wide: Pair<i64> = Pair { first: 100, second: 200 };
+            var swapped: i64 = wide.swap().first;
+            var also: i32 = narrow.swap().second;
+        }
+    ";
+    assert_ir_contains(input, &["%Pair__i32_ = type", "%Pair__i64_ = type"]);
+}
+
+#[test]
+fn test_generic_struct_holds_a_parameterised_field() {
+    // A parameter reached through another generic type: the field is a Vec of
+    // whatever the struct was instantiated with.
+    let input = "
+        struct Holder<T> {
+            items: Vec<T>,
+            fallback: T,
+            fn take(self, index: usize) T {
+                var got = self.items.get(index);
+                if got.is_none() { return self.fallback; }
+                return got.unwrap();
+            }
+        }
+        fn main() {
+            var holder: Holder<i64> = Holder { items: Vec.new(), fallback: -1 };
+            holder.items.push(3);
+            var got: i64 = holder.take(0);
+        }
+    ";
+    assert_compiles(input);
+}

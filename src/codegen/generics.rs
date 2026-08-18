@@ -1,15 +1,12 @@
 //! Monomorphization of generic functions.
 
-use std::collections::HashMap;
-
 use inkwell::values::FunctionValue;
 
 use crate::{
-    ast::{Expression, TypeParameter, TypeSpec},
+    ast::{Expression, TypeSpec},
     codegen::compiler::Compiler,
+    generics::{Substitutions, mangle, substitute},
 };
-
-type Substitutions = HashMap<String, TypeSpec>;
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     /// Emit (or reuse) the instantiation of a generic function for the concrete
@@ -31,7 +28,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
         }
 
-        let mangled = Self::mangle_generic_name(name, &subs, &generic.type_params);
+        let mangled = mangle(name, &generic.type_params, &subs);
         if let Some(existing) = self
             .monomorphized
             .get(&mangled)
@@ -44,12 +41,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let params: Vec<(String, TypeSpec, bool)> = generic
             .params
             .iter()
-            .map(|(name, ty, is_mut)| (name.clone(), Self::substitute(ty, &subs), *is_mut))
+            .map(|(name, ty, is_mut)| (name.clone(), substitute(ty, &subs), *is_mut))
             .collect();
-        let return_type = generic
-            .return_type
-            .as_ref()
-            .map(|ty| Self::substitute(ty, &subs));
+        let return_type = generic.return_type.as_ref().map(|ty| substitute(ty, &subs));
 
         let func = self.compile_fn_prototype(&mangled, &params, &return_type);
         // Registered before the body is emitted so a recursive call terminates.
@@ -76,65 +70,5 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
 
         Some(func)
-    }
-
-    fn substitute(ty: &TypeSpec, subs: &Substitutions) -> TypeSpec {
-        let boxed = |inner: &TypeSpec| Box::new(Self::substitute(inner, subs));
-        let all = |types: &[TypeSpec]| types.iter().map(|t| Self::substitute(t, subs)).collect();
-
-        match ty {
-            TypeSpec::Named(name) => subs.get(name).cloned().unwrap_or_else(|| ty.clone()),
-            TypeSpec::Pointer(inner) => TypeSpec::Pointer(boxed(inner)),
-            TypeSpec::Optional(inner) => TypeSpec::Optional(boxed(inner)),
-            TypeSpec::Result(inner) => TypeSpec::Result(boxed(inner)),
-            TypeSpec::Slice(inner) => TypeSpec::Slice(boxed(inner)),
-            TypeSpec::Ref(inner) => TypeSpec::Ref(boxed(inner)),
-            TypeSpec::RefMut(inner) => TypeSpec::RefMut(boxed(inner)),
-            TypeSpec::Tuple(elems) => TypeSpec::Tuple(all(elems)),
-            TypeSpec::Generic { name, args } => TypeSpec::Generic {
-                name: name.clone(),
-                args: all(args),
-            },
-            TypeSpec::IntLiteral(_) => ty.clone(),
-        }
-    }
-
-    fn mangle_generic_name(
-        base_name: &str,
-        subs: &Substitutions,
-        type_params: &[TypeParameter],
-    ) -> String {
-        let mut mangled = format!("{base_name}__");
-        for tp in type_params {
-            if let Some(concrete) = subs.get(&tp.name) {
-                mangled.push_str(&Self::mangle_type(concrete));
-                mangled.push('_');
-            }
-        }
-        mangled
-    }
-
-    fn mangle_type(ty: &TypeSpec) -> String {
-        let inner = Self::mangle_type;
-        let joined = |types: &[TypeSpec]| {
-            types
-                .iter()
-                .map(Self::mangle_type)
-                .collect::<Vec<_>>()
-                .join("_")
-        };
-
-        match ty {
-            TypeSpec::Named(name) => name.clone(),
-            TypeSpec::IntLiteral(n) => format!("lit{n}"),
-            TypeSpec::Pointer(t) => format!("ptr_{}", inner(t)),
-            TypeSpec::Optional(t) => format!("opt_{}", inner(t)),
-            TypeSpec::Result(t) => format!("res_{}", inner(t)),
-            TypeSpec::Slice(t) => format!("slice_{}", inner(t)),
-            TypeSpec::Ref(t) => format!("ref_{}", inner(t)),
-            TypeSpec::RefMut(t) => format!("refmut_{}", inner(t)),
-            TypeSpec::Tuple(elems) => format!("tuple_{}", joined(elems)),
-            TypeSpec::Generic { name, args } => format!("{name}_{}", joined(args)),
-        }
     }
 }

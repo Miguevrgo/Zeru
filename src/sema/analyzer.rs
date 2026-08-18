@@ -1,6 +1,7 @@
 use crate::{
     ast::{Expression, ExpressionKind, Program, Statement, StatementKind, TypeSpec},
     errors::{Span, ZeruError},
+    generics::{Substitutions, instantiate_struct, mangle, map_types},
     sema::{
         symbol_table::SymbolTable,
         types::{FloatWidth, IntWidth, Signedness, Type},
@@ -36,6 +37,9 @@ pub struct SemanticAnalyzer {
     current_fn_return_type: Option<Type>,
     current_type_params: Vec<String>,
 
+    generic_structs: HashMap<String, Statement>,
+    instantiations: Vec<Statement>,
+
     in_loop: bool,
 }
 
@@ -62,15 +66,196 @@ impl SemanticAnalyzer {
             trait_defs: HashMap::new(),
             current_fn_return_type: None,
             current_type_params: Vec::new(),
+            generic_structs: HashMap::new(),
+            instantiations: Vec::new(),
             in_loop: false,
         }
     }
 
     pub fn analyze(&mut self, program: &mut Program) {
+        self.take_generic_structs(program);
         self.scan_types(&program.statements);
         self.check_recursive_structs(&program.statements);
         self.scan_functions(&program.statements);
         self.analyze_bodies(&mut program.statements);
+
+        while !self.instantiations.is_empty() {
+            self.expand_instantiations(program);
+            self.name_instantiations(program);
+        }
+    }
+
+    /// A generic struct is not a type until its parameters are known, so its
+    /// declaration is set aside and each instantiation takes its place.
+    fn take_generic_structs(&mut self, program: &mut Program) {
+        program.statements.retain(|stmt| {
+            let StatementKind::Struct {
+                name, type_params, ..
+            } = &stmt.kind
+            else {
+                return true;
+            };
+            if type_params.is_empty() {
+                return true;
+            }
+            if self
+                .generic_structs
+                .insert(name.clone(), stmt.clone())
+                .is_some()
+            {
+                self.error(format!("Type {name} is already defined"), stmt.span);
+            }
+            false
+        });
+    }
+
+    /// Analyse each instantiation and put it in the program. Checking one can
+    /// reach a generic struct nothing has instantiated yet, so the caller
+    /// repeats this until no new instantiation turns up.
+    fn expand_instantiations(&mut self, program: &mut Program) {
+        for mut decl in std::mem::take(&mut self.instantiations) {
+            self.check_statement_top_level(&mut decl);
+            program.statements.push(decl);
+        }
+    }
+
+    /// Register `Pair<i32>` as a struct of its own and queue its declaration.
+    /// Returns the name it was given, which is what every reference uses.
+    fn instantiate(&mut self, base: &str, args: &[Type], span: Span) -> Option<String> {
+        let decl = self.generic_structs.get(base)?.clone();
+        let StatementKind::Struct { type_params, .. } = &decl.kind else {
+            return None;
+        };
+
+        if type_params.len() != args.len() {
+            self.error(
+                format!(
+                    "'{base}' takes {} type argument(s), got {}",
+                    type_params.len(),
+                    args.len()
+                ),
+                span,
+            );
+            return None;
+        }
+
+        for (param, arg) in type_params.iter().zip(args) {
+            if let Some(bound) = &param.bound {
+                self.check_bound(base, &param.name, bound, arg, span);
+            }
+        }
+
+        let subs: Substitutions = type_params
+            .iter()
+            .zip(args)
+            .map(|(param, arg)| (param.name.clone(), arg.to_spec()))
+            .collect();
+        let name = mangle(base, type_params, &subs);
+        if self.struct_defs.contains_key(&name) {
+            return Some(name);
+        }
+
+        // Registered before its fields resolve, so a field that names the
+        // instantiation again finds it instead of recursing forever.
+        self.struct_defs.insert(
+            name.clone(),
+            Type::Struct {
+                name: name.clone(),
+                fields: vec![],
+            },
+        );
+
+        let concrete = instantiate_struct(&decl, name.clone(), &subs);
+        self.scan_struct_fields(&concrete);
+        self.scan_functions(std::slice::from_ref(&concrete));
+        self.instantiations.push(concrete);
+        Some(name)
+    }
+
+    /// Report an argument that does not meet what the parameter asks of it, so
+    /// the complaint lands on the bound instead of deep in a method body.
+    fn check_bound(&mut self, base: &str, param: &str, bound: &str, arg: &Type, span: Span) {
+        let satisfied = match bound {
+            "Eq" => matches!(
+                arg,
+                Type::Integer { .. }
+                    | Type::Float(_)
+                    | Type::Bool
+                    | Type::Enum { .. }
+                    | Type::Pointer(_)
+            ),
+            "Ord" | "Num" => matches!(arg, Type::Integer { .. } | Type::Float(_)),
+            _ if self.trait_defs.contains_key(bound) => self.has_trait_methods(arg, bound),
+            _ => {
+                self.error(format!("Unknown trait '{bound}' in a bound"), span);
+                return;
+            }
+        };
+
+        if !satisfied {
+            self.error(
+                format!("'{base}' asks for {param}: {bound}, which {arg} does not satisfy"),
+                span,
+            );
+        }
+    }
+
+    /// A type meets a trait by having its methods; there is no separate way to
+    /// say that it does. Names and how many arguments they take are compared.
+    fn has_trait_methods(&self, arg: &Type, bound: &str) -> bool {
+        let Type::Struct { name, .. } = arg else {
+            return false;
+        };
+        let Some(methods) = self.trait_defs.get(bound) else {
+            return false;
+        };
+
+        methods.iter().all(|(method, params, _)| {
+            matches!(
+                self.symbols.lookup(&format!("{name}::{method}")),
+                Some(super::symbol_table::Symbol::Function { params: have, .. })
+                    if have.len() == params.len()
+            )
+        })
+    }
+
+    /// Rewrite every written `Pair<i32>` as the name of the struct it became,
+    /// so a type written out and an inferred one mean the same from here on.
+    fn name_instantiations(&mut self, program: &mut Program) {
+        for stmt in &mut program.statements {
+            map_types(stmt, &mut |spec| self.name_spec(spec));
+        }
+    }
+
+    fn name_spec(&mut self, spec: &mut TypeSpec) {
+        match spec {
+            TypeSpec::Generic { args, .. } => {
+                for arg in args.iter_mut() {
+                    self.name_spec(arg);
+                }
+                let TypeSpec::Generic { name, .. } = &*spec else {
+                    return;
+                };
+                if !self.generic_structs.contains_key(name) {
+                    return;
+                }
+                if let Type::Struct { name, .. } = self.resolve_spec(spec) {
+                    *spec = TypeSpec::Named(name);
+                }
+            }
+            TypeSpec::Pointer(inner)
+            | TypeSpec::Optional(inner)
+            | TypeSpec::Result(inner)
+            | TypeSpec::Slice(inner)
+            | TypeSpec::Ref(inner)
+            | TypeSpec::RefMut(inner) => self.name_spec(inner),
+            TypeSpec::Tuple(types) => {
+                for ty in types.iter_mut() {
+                    self.name_spec(ty);
+                }
+            }
+            TypeSpec::Named(_) | TypeSpec::IntLiteral(_) => {}
+        }
     }
 
     /// A struct that stores itself, directly or through another struct, has no
@@ -198,24 +383,30 @@ impl SemanticAnalyzer {
         }
 
         for stmt in stmts {
-            if let StatementKind::Struct { name, fields, .. } = &stmt.kind {
-                let mut resolved_fields: Vec<(String, Type)> = Vec::with_capacity(fields.len());
-                for (f_name, f_type_spec) in fields {
-                    if resolved_fields.iter().any(|(seen, _)| seen == f_name) {
-                        self.error(
-                            format!("Struct '{name}' declares field '{f_name}' twice"),
-                            stmt.span,
-                        );
-                        continue;
-                    }
-                    let f_ty = self.resolve_spec(f_type_spec);
-                    resolved_fields.push((f_name.clone(), f_ty));
-                }
+            self.scan_struct_fields(stmt);
+        }
+    }
 
-                if let Some(Type::Struct { fields: f, .. }) = self.struct_defs.get_mut(name) {
-                    *f = resolved_fields;
-                }
+    fn scan_struct_fields(&mut self, stmt: &Statement) {
+        let StatementKind::Struct { name, fields, .. } = &stmt.kind else {
+            return;
+        };
+
+        let mut resolved: Vec<(String, Type)> = Vec::with_capacity(fields.len());
+        for (field_name, spec) in fields {
+            if resolved.iter().any(|(seen, _)| seen == field_name) {
+                self.error(
+                    format!("Struct '{name}' declares field '{field_name}' twice"),
+                    stmt.span,
+                );
+                continue;
             }
+            let ty = self.resolve_spec(spec);
+            resolved.push((field_name.clone(), ty));
+        }
+
+        if let Some(Type::Struct { fields, .. }) = self.struct_defs.get_mut(name) {
+            *fields = resolved;
         }
     }
 
@@ -506,6 +697,13 @@ impl SemanticAnalyzer {
                     return Type::Result {
                         ok_type: Box::new(ok_type),
                         err_type: Box::new(err_type),
+                    };
+                }
+                if self.generic_structs.contains_key(name) {
+                    let args: Vec<Type> = args.iter().map(|a| self.resolve_spec(a)).collect();
+                    return match self.instantiate(name, &args, Span::default()) {
+                        Some(name) => self.struct_defs[&name].clone(),
+                        None => Type::Unknown,
                     };
                 }
                 self.error(
@@ -1313,12 +1511,67 @@ impl SemanticAnalyzer {
         Type::Unknown
     }
 
+    /// The struct a generic literal stands for. An expected type settles the
+    /// parameters when there is one; otherwise they are read off the values.
+    fn instantiate_from_literal(
+        &mut self,
+        base: &str,
+        fields: &mut [(String, Expression)],
+        expected_type: Option<&Type>,
+        span: Span,
+    ) -> String {
+        let Some(decl) = self.generic_structs.get(base) else {
+            return base.to_string();
+        };
+        let StatementKind::Struct {
+            type_params,
+            fields: declared,
+            ..
+        } = &decl.kind
+        else {
+            return base.to_string();
+        };
+        let (type_params, declared) = (type_params.clone(), declared.clone());
+
+        if let Some(Type::Struct { name, .. }) = expected_type
+            && name.starts_with(&format!("{base}__"))
+        {
+            return name.clone();
+        }
+
+        let mut args = Vec::with_capacity(type_params.len());
+        for param in &type_params {
+            // A parameter is read off a field declared as exactly that
+            // parameter, the same rule a generic call goes by.
+            let spec = TypeSpec::Named(param.name.clone());
+            let value = declared
+                .iter()
+                .find(|(_, declared_spec)| *declared_spec == spec)
+                .and_then(|(name, _)| fields.iter_mut().find(|(field, _)| field == name));
+
+            let Some((_, value)) = value else {
+                self.error(
+                    format!("Cannot tell what '{}' is here, name the type", param.name),
+                    span,
+                );
+                return base.to_string();
+            };
+            args.push(self.check_expression(value, None));
+        }
+
+        self.instantiate(base, &args, span)
+            .unwrap_or_else(|| base.to_string())
+    }
+
     fn check_struct_literal(
         &mut self,
         name: &str,
         fields: &mut [(String, Expression)],
+        expected_type: Option<&Type>,
         span: Span,
     ) -> Type {
+        let name = &self.instantiate_from_literal(name, fields, expected_type, span);
+
         if let Some(def) = self.struct_defs.get(name).cloned() {
             if let Type::Struct {
                 fields: def_fields, ..
@@ -1338,7 +1591,11 @@ impl SemanticAnalyzer {
                     let found = fields.iter_mut().find(|(n, _)| n == def_name);
                     if let Some((_, field_expr)) = found {
                         let field_span = field_expr.span;
-                        let expr_type = self.check_expression(field_expr, Some(def_type));
+                        // Settled already if it was read to infer a parameter.
+                        let expr_type = match &field_expr.ty {
+                            Some(ty) => ty.clone(),
+                            None => self.check_expression(field_expr, Some(def_type)),
+                        };
                         let types_match = match (def_type, &expr_type) {
                             (Type::Float(_), Type::Integer { .. }) => false,
                             (Type::Integer { .. }, Type::Float(_)) => false,
@@ -1737,8 +1994,12 @@ impl SemanticAnalyzer {
             }
 
             ExpressionKind::StructLiteral { name, fields } => {
-                let name = name.clone();
-                self.check_struct_literal(&name, fields, span)
+                let written = name.clone();
+                let ty = self.check_struct_literal(&written, fields, expected_type, span);
+                if let Type::Struct { name: concrete, .. } = &ty {
+                    *name = concrete.clone();
+                }
+                ty
             }
 
             ExpressionKind::Match { value, arms } => self.check_match(value, arms, expected_type),

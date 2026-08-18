@@ -2333,3 +2333,37 @@ fn test_every_real_place_stays_assignable() {
         );
     }
 }
+
+#[test]
+fn test_bound_rejects_an_argument_that_does_not_meet_it() {
+    let errors = analyze(
+        "
+        struct Pair<T: Eq> { first: T, second: T }
+        struct Point { x: i32 }
+        fn main() {
+            var p = Point { x: 1 };
+            var bad = Pair { first: p, second: p.copy() };
+        }
+    ",
+    );
+    assert!(
+        errors.iter().any(|e| e.contains("asks for T: Eq")),
+        "expected the bound to be reported: {errors:?}"
+    );
+}
+
+#[test]
+fn test_unknown_trait_in_a_bound_is_reported() {
+    let errors = analyze(
+        "
+        struct Pair<T: Nonesuch> { first: T, second: T }
+        fn main() { var p = Pair { first: 1, second: 2 }; }
+    ",
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("Unknown trait 'Nonesuch'")),
+        "expected the trait to be reported: {errors:?}"
+    );
+}

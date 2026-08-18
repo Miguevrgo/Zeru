@@ -1,0 +1,101 @@
+// Generic structs: the type arguments come from the values, or from a written
+// type when the values do not settle them.
+
+trait Shape { fn area(self) i32; }
+
+struct Square {
+    side: i32,
+    fn area(self) i32 { return self.side * self.side; }
+}
+
+struct Pair<T: Eq> {
+    first: T,
+    second: T,
+
+    fn swap(self) Pair<T> { return Pair { first: self.second, second: self.first }; }
+    fn same(self) bool { return self.first == self.second; }
+}
+
+struct Counter<T: Num> {
+    value: T,
+    step: T,
+
+    fn bump(var self) { self.value = self.value + self.step; }
+}
+
+struct Holder<T> {
+    items: Vec<T>,
+    fallback: T,
+
+    fn take(self, index: usize) T {
+        var got = self.items.get(index);
+        if got.is_none() { return self.fallback; }
+        return got.unwrap();
+    }
+}
+
+struct Wrap<T: Shape> {
+    inner: T,
+    fn doubled(self) i32 { return self.inner.area() * 2; }
+}
+
+fn largest<T>(a: T, b: T) T {
+    if a > b { return a; }
+    return b;
+}
+
+fn make() Pair<i64> { return Pair { first: 10, second: 20 }; }
+
+fn main() {
+    // Read off the fields.
+    var p = Pair { first: 1, second: 2 };
+    if p.first != 1 { exit(1); }
+    if p.same() { exit(2); }
+
+    var q = p.swap();
+    if q.first != 2 { exit(3); }
+    if q.second != 1 { exit(4); }
+
+    // Written out where the values alone would say i32.
+    var wide: Pair<i64> = Pair { first: 100, second: 200 };
+    if wide.swap().first != 200 { exit(5); }
+    if largest(wide.first, wide.second) != 200 { exit(6); }
+
+    // The same declaration at two widths is two structs.
+    var narrow = Pair { first: 7, second: 7 };
+    if !narrow.same() { exit(7); }
+    if wide.same() { exit(8); }
+
+    // A return type settles it too.
+    var made = make();
+    if made.second != 20 { exit(9); }
+
+    // A parameter used more than once in a body.
+    var c = Counter { value: 0, step: 5 };
+    c.bump();
+    c.bump();
+    if c.value != 10 { exit(10); }
+
+    var stepped: Counter<i64> = Counter { value: 1, step: 9 };
+    stepped.bump();
+    if stepped.value != 10 { exit(11); }
+
+    var fractional = Counter { value: 0.5, step: 0.25 };
+    fractional.bump();
+    if fractional.value != 0.75 { exit(12); }
+
+    // A parameter inside another generic type.
+    var holder: Holder<i64> = Holder { items: Vec.new(), fallback: -1 };
+    holder.items.push(3);
+    holder.items.push(4);
+    if holder.take(1) != 4 { exit(13); }
+    if holder.take(99) != -1 { exit(14); }
+
+    // A bound met by a struct that has the trait's methods.
+    var wrapped = Wrap { inner: Square { side: 3 } };
+    if wrapped.inner.area() != 9 { exit(15); }
+    if wrapped.doubled() != 18 { exit(16); }
+
+    println("generics: all tests passed");
+    exit(0);
+}
