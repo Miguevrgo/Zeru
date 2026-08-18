@@ -2,27 +2,21 @@
 // for modules in the compiler
 use inkwell::context::Context;
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::CompileError;
-use crate::ast::Program;
-use crate::codegen::SafetyMode;
-use crate::codegen::compiler::Compiler;
-use crate::errors::{Sources, Span, ZeruError, report_errors};
-use crate::lexer::Lexer;
-use crate::modules;
-use crate::parser::Parser;
+use crate::codegen::{SafetyMode, compiler::Compiler};
+use crate::errors::{Sources, ZeruError, report_errors};
 use crate::sema::analyzer::SemanticAnalyzer;
-use crate::token::Token;
+use crate::{CompileError, ast::Program};
+use crate::{lexer::Lexer, modules, parser::Parser, token::Token};
 
-pub const RED_FG: &str = "\x1b[1;38;2;224;108;117m";
-pub const GREEN_FG: &str = "\x1b[1;38;2;152;195;121m";
-pub const YELLOW_FG: &str = "\x1b[1;38;2;229;192;123m";
+pub const RED: &str = "\x1b[1;38;2;224;108;117m";
+pub const GREEN: &str = "\x1b[1;38;2;152;195;121m";
 pub const RESET: &str = "\x1b[0m";
-
+const YELLOW: &str = "\x1b[1;38;2;229;192;123m";
 const VERB_WIDTH: usize = 9;
+
 pub fn status(colour: &str, icon: char, verb: &str, detail: impl std::fmt::Display) {
     eprintln!("  {colour}{icon} {verb:>VERB_WIDTH$}{RESET} {detail}");
 }
@@ -32,12 +26,9 @@ fn get_std_path() -> Result<PathBuf, CompileError> {
         return Ok(PathBuf::from(path));
     }
     let home = std::env::var("HOME").map_err(|_| CompileError::StdNotFound)?;
-    Ok(PathBuf::from(home).join(".zeru").join("std"))
+    Ok(PathBuf::from(home).join(".zeru/std"))
 }
 
-/// File a dotted import path names. `std.*` resolves under the installed
-/// library, everything else under `root`, so a path means the same thing
-/// written from any module.
 fn resolve_import(import_path: &str, root: &Path) -> Result<Option<PathBuf>, CompileError> {
     let mut parts = import_path.split('.').peekable();
     let base = match parts.peek() {
@@ -58,74 +49,54 @@ fn resolve_import(import_path: &str, root: &Path) -> Result<Option<PathBuf>, Com
     Ok(full_path.exists().then_some(full_path))
 }
 
-fn load_builtin_std() -> String {
-    include_str!("../std/builtin.zr").to_string()
-}
-
 struct ImportInfo {
     path: String,
     symbols: Option<Vec<String>>,
 }
 
-/// Every token with its span, so the rewrites below splice at exact offsets
-/// instead of rescanning characters. String literals and comments are then out
-/// of reach: they never arrive as identifiers.
-fn tokenize(source: &str) -> Vec<(Token, Span)> {
-    let mut lexer = Lexer::new(source);
-    let mut tokens = Vec::new();
-
-    loop {
-        let (token, _, span) = lexer.next_token();
-        if token == Token::Eof {
-            return tokens;
-        }
-        tokens.push((token, span));
-    }
-}
-
-/// `import a.b;` imports the module, `import a.b::{x, y};` its listed symbols.
+/// Extracts imports from the source code, only needs to look
+/// at the beginning as zeru imposes import in the beginning
 fn extract_imports(source: &str) -> Vec<ImportInfo> {
-    let tokens = tokenize(source);
+    let mut lexer = Lexer::new(source);
     let mut imports = Vec::new();
-    let mut i = 0;
+    let mut current = lexer.next_token().0;
 
-    while i < tokens.len() {
-        if tokens[i].0 != Token::Import {
-            i += 1;
-            continue;
-        }
-        i += 1;
-
-        // The dotted path: `std`, `.`, `math`, ...
+    while current == Token::Import {
         let mut path = Vec::new();
-        while let Some((Token::Identifier(name), _)) = tokens.get(i) {
-            path.push(name.clone());
-            i += 1;
-            if tokens.get(i).map(|(t, _)| t) != Some(&Token::Dot) {
+        current = lexer.next_token().0;
+
+        while let Token::Identifier(name) = current {
+            path.push(name);
+            current = lexer.next_token().0;
+            if current == Token::Dot {
+                current = lexer.next_token().0;
+            } else {
                 break;
             }
-            i += 1;
-        }
-        if path.is_empty() {
-            continue;
         }
 
-        // An optional `::{a, b}` selection.
+        if path.is_empty() {
+            break;
+        }
+
         let mut symbols = None;
-        if tokens.get(i).map(|(t, _)| t) == Some(&Token::DoubleColon)
-            && tokens.get(i + 1).map(|(t, _)| t) == Some(&Token::LBrace)
-        {
-            i += 2;
-            let mut listed = Vec::new();
-            while let Some((token, _)) = tokens.get(i) {
-                i += 1;
-                match token {
-                    Token::Identifier(name) => listed.push(name.clone()),
-                    Token::RBrace => break,
-                    _ => {}
+        if current == Token::DoubleColon {
+            if lexer.next_token().0 == Token::LBrace {
+                let mut listed = Vec::new();
+                loop {
+                    match lexer.next_token().0 {
+                        Token::Identifier(sym) => listed.push(sym),
+                        Token::RBrace | Token::Eof => break,
+                        _ => {}
+                    }
                 }
+                symbols = Some(listed);
             }
-            symbols = Some(listed);
+            current = lexer.next_token().0;
+        }
+
+        if current == Token::Semicolon {
+            current = lexer.next_token().0;
         }
 
         imports.push(ImportInfo {
@@ -135,10 +106,6 @@ fn extract_imports(source: &str) -> Vec<ImportInfo> {
     }
 
     imports
-}
-
-fn get_module_short_name(import_path: &str) -> String {
-    import_path.split('.').next_back().unwrap_or("").to_string()
 }
 
 fn load_modules(
@@ -151,11 +118,7 @@ fn load_modules(
     errors: &mut Vec<ZeruError>,
 ) -> Result<(), CompileError> {
     for import in imports {
-        let short_name = get_module_short_name(&import.path);
-
-        // Record how this importer names the module, loaded or not. A plain
-        // import is written `module::name`, which is already how the parser
-        // reads a qualified path, so only a selective import needs an alias.
+        let short_name = import.path.split('.').next_back().unwrap();
         if let Some(listed) = &import.symbols {
             aliases.extend(
                 listed
@@ -164,40 +127,34 @@ fn load_modules(
             );
         }
 
-        if !loaded.insert(import.path.clone()) {
-            continue;
+        if loaded.insert(import.path.clone()) {
+            let Some(file_path) = resolve_import(&import.path, root)? else {
+                return Err(CompileError::ModuleNotFound(import.path.clone()));
+            };
+            let source = std::fs::read_to_string(&file_path)
+                .map_err(|_| CompileError::ModuleNotFound(import.path.clone()))?;
+
+            let mut inner_aliases = HashMap::new();
+            let inner = extract_imports(&source);
+            load_modules(
+                &inner,
+                root,
+                loaded,
+                &mut inner_aliases,
+                sources,
+                program,
+                errors,
+            )?;
+
+            let mut module = parse_file(file_path.display().to_string(), &source, sources, errors);
+            modules::qualify(&mut module, Some(short_name), &inner_aliases);
+            program.statements.append(&mut module.statements);
         }
-
-        let Some(file_path) = resolve_import(&import.path, root)? else {
-            return Err(CompileError::ModuleNotFound(import.path.clone()));
-        };
-        let source = fs::read_to_string(&file_path)
-            .map_err(|_| CompileError::ModuleNotFound(import.path.clone()))?;
-
-        // Depth first, in a scope of its own: a module body may only name what
-        // it imports itself, not what a sibling happened to import.
-        let mut inner_aliases = HashMap::new();
-        let inner = extract_imports(&source);
-        load_modules(
-            &inner,
-            root,
-            loaded,
-            &mut inner_aliases,
-            sources,
-            program,
-            errors,
-        )?;
-
-        let mut module = parse_file(file_path.display().to_string(), &source, sources, errors);
-        modules::qualify(&mut module, Some(&short_name), &inner_aliases);
-        program.statements.append(&mut module.statements);
     }
 
     Ok(())
 }
 
-/// Parse one file into its own tree, recording it in `sources` so its spans
-/// stay locatable once every file has been merged.
 fn parse_file(
     name: String,
     source: &str,
@@ -216,13 +173,8 @@ pub fn compile_pipeline(
     safety_mode: SafetyMode,
     force_emit_ir: bool,
 ) -> Result<PathBuf, CompileError> {
-    if path.extension().and_then(|s| s.to_str()) != Some("zr") {
-        status(
-            YELLOW_FG,
-            '\u{ea6c}',
-            "Warning",
-            "Zeru sources use the .zr extension",
-        );
+    if !path.extension().is_some_and(|ext| ext == "zr") {
+        status(YELLOW, '\u{ea6c}', "Warning", "Zeru extension is .zr");
     }
 
     let filename = path
@@ -231,31 +183,26 @@ pub fn compile_pipeline(
         .ok_or(CompileError::InvalidPath)?;
     let build_dir = Path::new("build");
 
-    fs::create_dir_all(build_dir)?;
-
+    std::fs::create_dir_all(build_dir)?;
     let ir_path = build_dir.join(format!("{filename}.ll"));
     let exe_path = build_dir.join(filename);
 
     status(
-        GREEN_FG,
+        GREEN,
         '\u{eb6d}',
         "Compiling",
         format_args!("v{} ({})", env!("CARGO_PKG_VERSION"), path.display()),
     );
     let start = std::time::Instant::now();
 
-    let user_code = fs::read_to_string(path)?;
-
+    let user_code = std::fs::read_to_string(path)?;
     let mut sources = Sources::default();
     let mut errors = Vec::new();
-    let mut program = Program {
-        statements: Vec::new(),
-    };
+    let mut program = Program::default();
 
-    let builtin = load_builtin_std();
     let mut prelude = parse_file(
-        "std/builtin.zr".to_string(),
-        &builtin,
+        String::from("std/builtin.zr"),
+        include_str!("../std/builtin.zr"),
         &mut sources,
         &mut errors,
     );
@@ -264,8 +211,6 @@ pub fn compile_pipeline(
     let mut loaded = HashSet::from(["std.builtin".to_string()]);
     let mut aliases: HashMap<String, String> = HashMap::new();
 
-    // Project imports resolve from the directory of the file being built, so a
-    // path means the same thing written from any module.
     let root = path.parent().unwrap_or(Path::new("."));
     load_modules(
         &extract_imports(&user_code),
@@ -286,68 +231,55 @@ pub fn compile_pipeline(
     modules::qualify(&mut main, None, &aliases);
     program.statements.append(&mut main.statements);
 
-    if !errors.is_empty() {
-        report_errors(&errors, &sources);
-        return Err(CompileError::Unknown);
-    }
+    let check_errors = |errs: &[ZeruError]| -> Result<(), CompileError> {
+        if !errs.is_empty() {
+            report_errors(errs, &sources);
+            return Err(CompileError::Unknown);
+        }
+        Ok(())
+    };
+
+    check_errors(&errors)?;
 
     let mut analyzer = SemanticAnalyzer::new();
     analyzer.analyze(&mut program);
-
-    if !analyzer.errors.is_empty() {
-        report_errors(&analyzer.errors, &sources);
-        return Err(CompileError::Unknown);
-    }
+    check_errors(&analyzer.errors)?;
 
     let context = Context::create();
     let module = context.create_module(filename);
     let builder = context.create_builder();
 
-    let mut compiler = Compiler::new(&context, &builder, &module, safety_mode.clone());
+    let mut compiler = Compiler::new(&context, &builder, &module, safety_mode);
     compiler.compile_program(&program);
-
-    if !compiler.errors.is_empty() {
-        report_errors(&compiler.errors, &sources);
-        return Err(CompileError::Unknown);
-    }
+    check_errors(&compiler.errors)?;
 
     module.verify()?;
     module.print_to_file(&ir_path)?;
 
-    let (opt_level, debug_flag) = match &safety_mode {
-        SafetyMode::Debug => ("-O0", Some("-g")),
-        SafetyMode::ReleaseSafe => ("-O2", None),
-        SafetyMode::ReleaseFast => ("-O3", None),
-    };
-
-    let mut cmd = Command::new("clang");
-    cmd.arg(&ir_path)
+    let link = Command::new("clang")
+        .arg(&ir_path)
         .arg("-o")
         .arg(&exe_path)
-        .arg(opt_level)
-        .arg("-Wno-override-module");
+        .args(safety_mode.clang_flags())
+        .arg("-Wno-override-module")
+        .status()?;
 
-    if let Some(flag) = debug_flag {
-        cmd.arg(flag);
-    }
-
-    let link = cmd.status()?;
     if !link.success() {
         return Err(CompileError::Link(link));
     }
 
-    let end = start.elapsed().as_millis() as f64 / 1000.0;
+    let end = start.elapsed().as_secs_f64();
     status(
-        GREEN_FG,
+        GREEN,
         '\u{ef0a}',
         "Finished",
         format_args!("{safety_mode} in {end:.3}s"),
     );
 
     if !force_emit_ir {
-        fs::remove_file(ir_path)?;
+        std::fs::remove_file(ir_path)?;
     } else {
-        status(GREEN_FG, '\u{eaf3}', "IR saved", ir_path.display());
+        status(GREEN, '\u{eaf3}', "IR saved", ir_path.display());
     }
 
     Ok(exe_path)
