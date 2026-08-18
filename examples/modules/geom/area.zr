@@ -1,0 +1,9 @@
+// Imported by ../shapes.zr, which is imported by ../modules_test.zr.
+
+fn rectangle(w: i32, h: i32) i32 {
+    return w * h;
+}
+
+fn scale(value: i32, by: i32) i32 {
+    return value * by;
+}

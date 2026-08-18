@@ -137,6 +137,11 @@ fn main() {
     var bits: u32 = 12;
     if !(bits & 4 == 4) { exit(44); }
 
+    // A brace after a condition opens the body; inside a call or brackets it
+    // still starts a struct literal.
+    if sum3([1, 2, 3]) != 6 { exit(45); }
+    if (Point { x: 3, y: 4 }).sum() != 7 { exit(46); }
+
     // --- pointers ------------------------------------------------------------
     var target: i32 = 41;
     var ptr: *i32 = &target;

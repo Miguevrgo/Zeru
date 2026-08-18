@@ -2,6 +2,7 @@ mod ast;
 mod codegen;
 mod errors;
 mod lexer;
+mod modules;
 mod parser;
 mod resolver;
 mod sema;

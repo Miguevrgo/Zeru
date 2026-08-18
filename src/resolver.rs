@@ -7,10 +7,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::CompileError;
+use crate::ast::Program;
 use crate::codegen::SafetyMode;
 use crate::codegen::compiler::Compiler;
-use crate::errors::report_errors;
+use crate::errors::{Sources, Span, ZeruError, report_errors};
 use crate::lexer::Lexer;
+use crate::modules;
 use crate::parser::Parser;
 use crate::sema::analyzer::SemanticAnalyzer;
 use crate::token::Token;
@@ -33,20 +35,27 @@ fn get_std_path() -> Result<PathBuf, CompileError> {
     Ok(PathBuf::from(home).join(".zeru").join("std"))
 }
 
-fn resolve_std_import(import_path: &str) -> Result<Option<PathBuf>, CompileError> {
-    let parts: Vec<&str> = import_path.split('.').collect();
-    if parts.is_empty() || parts[0] != "std" || parts.len() == 1 {
+/// File a dotted import path names. `std.*` resolves under the installed
+/// library, everything else under `root`, so a path means the same thing
+/// written from any module.
+fn resolve_import(import_path: &str, root: &Path) -> Result<Option<PathBuf>, CompileError> {
+    let mut parts = import_path.split('.').peekable();
+    let base = match parts.peek() {
+        Some(&"std") => {
+            parts.next();
+            get_std_path()?
+        }
+        Some(_) => root.to_path_buf(),
+        None => return Ok(None),
+    };
+
+    let relative: Vec<&str> = parts.collect();
+    if relative.is_empty() {
         return Ok(None);
     }
 
-    let module_file = format!("{}.zr", parts[1..].join("/"));
-    let full_path = get_std_path()?.join(&module_file);
-
-    if full_path.exists() {
-        Ok(Some(full_path))
-    } else {
-        Ok(None)
-    }
+    let full_path = base.join(format!("{}.zr", relative.join("/")));
+    Ok(full_path.exists().then_some(full_path))
 }
 
 fn load_builtin_std() -> String {
@@ -58,70 +67,71 @@ struct ImportInfo {
     symbols: Option<Vec<String>>,
 }
 
-fn extract_imports(code: &str) -> Vec<ImportInfo> {
-    let mut lexer = Lexer::new(code);
-    let mut imports = Vec::new();
+/// Every token with its span, so the rewrites below splice at exact offsets
+/// instead of rescanning characters. String literals and comments are then out
+/// of reach: they never arrive as identifiers.
+fn tokenize(source: &str) -> Vec<(Token, Span)> {
+    let mut lexer = Lexer::new(source);
+    let mut tokens = Vec::new();
 
     loop {
-        let (token, _, _) = lexer.next_token();
+        let (token, _, span) = lexer.next_token();
+        if token == Token::Eof {
+            return tokens;
+        }
+        tokens.push((token, span));
+    }
+}
 
-        match token {
-            Token::Import => {
-                let mut path_parts = Vec::new();
+/// `import a.b;` imports the module, `import a.b::{x, y};` its listed symbols.
+fn extract_imports(source: &str) -> Vec<ImportInfo> {
+    let tokens = tokenize(source);
+    let mut imports = Vec::new();
+    let mut i = 0;
 
-                if let (Token::Identifier(name), _, _) = lexer.next_token() {
-                    path_parts.push(name);
-                } else {
-                    continue;
-                }
+    while i < tokens.len() {
+        if tokens[i].0 != Token::Import {
+            i += 1;
+            continue;
+        }
+        i += 1;
 
-                loop {
-                    let (next, _, _) = lexer.next_token();
-                    if next == Token::Dot {
-                        if let (Token::Identifier(name), _, _) = lexer.next_token() {
-                            path_parts.push(name);
-                        } else {
-                            break;
-                        }
-                    } else if next == Token::DoubleColon {
-                        let (brace, _, _) = lexer.next_token();
-                        if brace != Token::LBrace {
-                            break;
-                        }
-                        let mut symbols = Vec::new();
-                        loop {
-                            let (sym_tok, _, _) = lexer.next_token();
-                            if let Token::Identifier(sym) = sym_tok {
-                                symbols.push(sym);
-                            } else if sym_tok == Token::RBrace {
-                                break;
-                            }
-                            let (comma_or_brace, _, _) = lexer.next_token();
-                            if comma_or_brace == Token::RBrace {
-                                break;
-                            }
-                        }
-                        if !path_parts.is_empty() {
-                            imports.push(ImportInfo {
-                                path: path_parts.join("."),
-                                symbols: Some(symbols),
-                            });
-                        }
-                        break;
-                    } else {
-                        if !path_parts.is_empty() {
-                            imports.push(ImportInfo {
-                                path: path_parts.join("."),
-                                symbols: None,
-                            });
-                        }
-                        break;
-                    }
+        // The dotted path: `std`, `.`, `math`, ...
+        let mut path = Vec::new();
+        while let Some((Token::Identifier(name), _)) = tokens.get(i) {
+            path.push(name.clone());
+            i += 1;
+            if tokens.get(i).map(|(t, _)| t) != Some(&Token::Dot) {
+                break;
+            }
+            i += 1;
+        }
+        if path.is_empty() {
+            continue;
+        }
+
+        // An optional `::{a, b}` selection.
+        let mut symbols = None;
+        if tokens.get(i).map(|(t, _)| t) == Some(&Token::DoubleColon)
+            && tokens.get(i + 1).map(|(t, _)| t) == Some(&Token::LBrace)
+        {
+            i += 2;
+            let mut listed = Vec::new();
+            while let Some((token, _)) = tokens.get(i) {
+                i += 1;
+                match token {
+                    Token::Identifier(name) => listed.push(name.clone()),
+                    Token::RBrace => break,
+                    _ => {}
                 }
             }
-            Token::Eof => break,
-            _ => continue,
+            symbols = Some(listed);
         }
+
+        imports.push(ImportInfo {
+            path: path.join("."),
+            symbols,
+        });
     }
 
     imports
@@ -131,222 +141,74 @@ fn get_module_short_name(import_path: &str) -> String {
     import_path.split('.').next_back().unwrap_or("").to_string()
 }
 
-fn prefix_definitions(content: &str, prefix: &str) -> String {
-    // Pass 1: collect top-level definition names (skip methods inside structs)
-    let mut def_names: HashSet<String> = HashSet::new();
-    {
-        let mut chars = content.chars().peekable();
-        let mut brace_depth: i32 = 0;
-        while let Some(c) = chars.next() {
-            if c == '{' {
-                brace_depth += 1;
-                continue;
-            }
-            if c == '}' {
-                brace_depth -= 1;
-                continue;
-            }
-            // Skip string literals
-            if c == '"' {
-                while let Some(sc) = chars.next() {
-                    if sc == '\\' {
-                        chars.next();
-                    } else if sc == '"' {
-                        break;
-                    }
-                }
-                continue;
-            }
-            // Skip single-line comments
-            if c == '/' && chars.peek() == Some(&'/') {
-                for cc in chars.by_ref() {
-                    if cc == '\n' {
-                        break;
-                    }
-                }
-                continue;
-            }
-            if c.is_alphabetic() || c == '_' {
-                let mut word = String::from(c);
-                while chars
-                    .peek()
-                    .is_some_and(|&nc| nc.is_alphanumeric() || nc == '_')
-                {
-                    word.push(chars.next().unwrap());
-                }
-                if matches!(word.as_str(), "fn" | "struct" | "const") && brace_depth == 0 {
-                    while chars.peek().is_some_and(|&ws| ws.is_whitespace()) {
-                        chars.next();
-                    }
-                    let mut name = String::new();
-                    while chars
-                        .peek()
-                        .is_some_and(|&nc| nc.is_alphanumeric() || nc == '_')
-                    {
-                        name.push(chars.next().unwrap());
-                    }
-                    if !name.is_empty() {
-                        def_names.insert(name);
-                    }
-                }
-            }
-        }
-    }
-
-    // Pass 2: prefix every identifier that matches a top-level definition name
-    let mut result = String::with_capacity(content.len() + def_names.len() * (prefix.len() + 2));
-    let mut chars = content.chars().peekable();
-
-    while let Some(c) = chars.next() {
-        // Copy string literals verbatim
-        if c == '"' {
-            result.push(c);
-            while let Some(sc) = chars.next() {
-                result.push(sc);
-                if sc == '\\' {
-                    if let Some(esc) = chars.next() {
-                        result.push(esc);
-                    }
-                } else if sc == '"' {
-                    break;
-                }
-            }
-            continue;
-        }
-        if c.is_alphabetic() || c == '_' {
-            let mut word = String::from(c);
-            while chars
-                .peek()
-                .is_some_and(|&nc| nc.is_alphanumeric() || nc == '_')
-            {
-                word.push(chars.next().unwrap());
-            }
-            if def_names.contains(&word) {
-                result.push_str(prefix);
-                result.push_str("__");
-            }
-            result.push_str(&word);
-        } else {
-            result.push(c);
-        }
-    }
-    result
-}
-
-fn load_std_modules(
+fn load_modules(
     imports: &[ImportInfo],
+    root: &Path,
     loaded: &mut HashSet<String>,
-    direct_symbols: &mut HashMap<String, String>,
-    module_prefixes: &mut HashSet<String>,
-) -> Result<String, CompileError> {
-    let mut code = String::new();
-
+    aliases: &mut HashMap<String, String>,
+    sources: &mut Sources,
+    program: &mut Program,
+    errors: &mut Vec<ZeruError>,
+) -> Result<(), CompileError> {
     for import in imports {
-        if loaded.contains(&import.path) {
-            if let Some(ref symbols) = import.symbols {
-                let short_name = get_module_short_name(&import.path);
-                for sym in symbols {
-                    direct_symbols.insert(sym.clone(), format!("{}__{}", short_name, sym));
-                }
-            } else {
-                let short_name = get_module_short_name(&import.path);
-                module_prefixes.insert(short_name);
-            }
+        let short_name = get_module_short_name(&import.path);
+
+        // Record how this importer names the module, loaded or not. A plain
+        // import is written `module::name`, which is already how the parser
+        // reads a qualified path, so only a selective import needs an alias.
+        if let Some(listed) = &import.symbols {
+            aliases.extend(
+                listed
+                    .iter()
+                    .map(|sym| (sym.clone(), format!("{short_name}::{sym}"))),
+            );
+        }
+
+        if !loaded.insert(import.path.clone()) {
             continue;
         }
 
-        if import.path.starts_with("std.") {
-            let file_path = resolve_std_import(&import.path)?.ok_or(CompileError::StdNotFound)?;
-            let content = fs::read_to_string(&file_path).map_err(|_| CompileError::StdNotFound)?;
-            let short_name = get_module_short_name(&import.path);
+        let Some(file_path) = resolve_import(&import.path, root)? else {
+            return Err(CompileError::ModuleNotFound(import.path.clone()));
+        };
+        let source = fs::read_to_string(&file_path)
+            .map_err(|_| CompileError::ModuleNotFound(import.path.clone()))?;
 
-            let nested_imports = extract_imports(&content);
-            let nested_code =
-                load_std_modules(&nested_imports, loaded, direct_symbols, module_prefixes)?;
-            code.push_str(&nested_code);
+        // Depth first, in a scope of its own: a module body may only name what
+        // it imports itself, not what a sibling happened to import.
+        let mut inner_aliases = HashMap::new();
+        let inner = extract_imports(&source);
+        load_modules(
+            &inner,
+            root,
+            loaded,
+            &mut inner_aliases,
+            sources,
+            program,
+            errors,
+        )?;
 
-            let prefixed = prefix_definitions(&content, &short_name);
-            code.push_str(&prefixed);
-            code.push('\n');
-
-            if let Some(ref symbols) = import.symbols {
-                for sym in symbols {
-                    direct_symbols.insert(sym.clone(), format!("{}__{}", short_name, sym));
-                }
-            } else {
-                module_prefixes.insert(short_name);
-            }
-        }
+        let mut module = parse_file(file_path.display().to_string(), &source, sources, errors);
+        modules::qualify(&mut module, Some(&short_name), &inner_aliases);
+        program.statements.append(&mut module.statements);
     }
 
-    Ok(code)
+    Ok(())
 }
 
-/// Resolve symbols in code based on import style:
-/// - For selective imports: symbol() -> prefixed__symbol()
-/// - For module imports: module::symbol() -> prefixed__symbol()
-fn resolve_direct_symbols(
-    code: &str,
-    direct_symbols: &HashMap<String, String>,
-    module_prefixes: &HashSet<String>,
-) -> String {
-    if direct_symbols.is_empty() && module_prefixes.is_empty() {
-        return code.to_string();
-    }
-    let mut result = String::with_capacity(code.len() + 50);
-    let mut chars = code.chars().peekable();
-
-    while let Some(c) = chars.next() {
-        if c.is_alphabetic() || c == '_' {
-            let mut ident = String::from(c);
-            while let Some(&next) = chars.peek() {
-                if next.is_alphanumeric() || next == '_' {
-                    ident.push(chars.next().unwrap());
-                } else {
-                    break;
-                }
-            }
-
-            let mut peek_chars = chars.clone();
-            let mut is_module_call = false;
-
-            while peek_chars.peek().is_some_and(|ws| ws.is_whitespace()) {
-                peek_chars.next();
-            }
-
-            if peek_chars.next() == Some(':') && peek_chars.next() == Some(':') {
-                while peek_chars.peek().is_some_and(|ws| ws.is_whitespace()) {
-                    peek_chars.next();
-                }
-
-                let mut sym = String::new();
-                while let Some(&nc) = peek_chars.peek() {
-                    if nc.is_alphanumeric() || nc == '_' {
-                        sym.push(peek_chars.next().unwrap());
-                    } else {
-                        break;
-                    }
-                }
-
-                if module_prefixes.contains(&ident) && !sym.is_empty() {
-                    result.push_str(&format!("{}__{}", ident, sym));
-                    chars = peek_chars;
-                    is_module_call = true;
-                }
-            }
-
-            if !is_module_call {
-                if let Some(qualified) = direct_symbols.get(&ident) {
-                    result.push_str(qualified);
-                } else {
-                    result.push_str(&ident);
-                }
-            }
-        } else {
-            result.push(c);
-        }
-    }
-    result
+/// Parse one file into its own tree, recording it in `sources` so its spans
+/// stay locatable once every file has been merged.
+fn parse_file(
+    name: String,
+    source: &str,
+    sources: &mut Sources,
+    errors: &mut Vec<ZeruError>,
+) -> Program {
+    let start = sources.push(name, source);
+    let mut parser = Parser::new(Lexer::at(source, start));
+    let program = parser.parse_program();
+    errors.append(&mut parser.errors);
+    program
 }
 
 pub fn compile_pipeline(
@@ -384,32 +246,48 @@ pub fn compile_pipeline(
 
     let user_code = fs::read_to_string(path)?;
 
-    let std_builtin = load_builtin_std();
-    let user_imports = extract_imports(&user_code);
-    let mut loaded_modules = HashSet::new();
-    loaded_modules.insert("std.builtin".to_string());
-    let mut direct_symbols: HashMap<String, String> = HashMap::new();
-    let mut module_prefixes: HashSet<String> = HashSet::new();
+    let mut sources = Sources::default();
+    let mut errors = Vec::new();
+    let mut program = Program {
+        statements: Vec::new(),
+    };
 
-    let additional_std = load_std_modules(
-        &user_imports,
-        &mut loaded_modules,
-        &mut direct_symbols,
-        &mut module_prefixes,
+    let builtin = load_builtin_std();
+    let mut prelude = parse_file(
+        "std/builtin.zr".to_string(),
+        &builtin,
+        &mut sources,
+        &mut errors,
+    );
+    program.statements.append(&mut prelude.statements);
+
+    let mut loaded = HashSet::from(["std.builtin".to_string()]);
+    let mut aliases: HashMap<String, String> = HashMap::new();
+
+    // Project imports resolve from the directory of the file being built, so a
+    // path means the same thing written from any module.
+    let root = path.parent().unwrap_or(Path::new("."));
+    load_modules(
+        &extract_imports(&user_code),
+        root,
+        &mut loaded,
+        &mut aliases,
+        &mut sources,
+        &mut program,
+        &mut errors,
     )?;
 
-    let user_code_resolved = resolve_direct_symbols(&user_code, &direct_symbols, &module_prefixes);
-    let offset = std_builtin.len() + 1 + additional_std.len() + 1;
-    let input = format!("{std_builtin}\n{additional_std}\n{user_code_resolved}",);
+    let mut main = parse_file(
+        path.display().to_string(),
+        &user_code,
+        &mut sources,
+        &mut errors,
+    );
+    modules::qualify(&mut main, None, &aliases);
+    program.statements.append(&mut main.statements);
 
-    let lexer = Lexer::new(&input);
-    let mut parser = Parser::new(lexer);
-    let mut program = parser.parse_program();
-
-    let filepath_str = path.to_str().unwrap();
-
-    if !parser.errors.is_empty() {
-        report_errors(&parser.errors, filepath_str, &input, offset);
+    if !errors.is_empty() {
+        report_errors(&errors, &sources);
         return Err(CompileError::Unknown);
     }
 
@@ -417,7 +295,7 @@ pub fn compile_pipeline(
     analyzer.analyze(&mut program);
 
     if !analyzer.errors.is_empty() {
-        report_errors(&analyzer.errors, filepath_str, &input, offset);
+        report_errors(&analyzer.errors, &sources);
         return Err(CompileError::Unknown);
     }
 
@@ -429,7 +307,7 @@ pub fn compile_pipeline(
     compiler.compile_program(&program);
 
     if !compiler.errors.is_empty() {
-        report_errors(&compiler.errors, filepath_str, &input, offset);
+        report_errors(&compiler.errors, &sources);
         return Err(CompileError::Unknown);
     }
 
@@ -455,8 +333,6 @@ pub fn compile_pipeline(
 
     let link = cmd.status()?;
     if !link.success() {
-        // Leave the IR in place: a link failure is almost always something to
-        // go read in there.
         return Err(CompileError::Link(link));
     }
 
@@ -469,7 +345,7 @@ pub fn compile_pipeline(
     );
 
     if !force_emit_ir {
-        let _ = fs::remove_file(ir_path);
+        fs::remove_file(ir_path)?;
     } else {
         status(GREEN_FG, '\u{eaf3}', "IR saved", ir_path.display());
     }

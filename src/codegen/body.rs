@@ -46,7 +46,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let owner = self
             .current_struct_context
             .as_deref()
-            .or_else(|| fn_name.split_once("::").map(|(owner, _)| owner))?;
+            .or_else(|| fn_name.rsplit_once("::").map(|(owner, _)| owner))?;
         self.struct_defs.get(owner).map(|(st, _)| *st)
     }
 
@@ -523,7 +523,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     /// Integer tag of an `Enum::Variant` path, numbered by declaration order.
     fn enum_variant_tag(&self, qualified_name: &str) -> Option<BasicValueEnum<'ctx>> {
-        let (enum_name, variant_name) = qualified_name.split_once("::")?;
+        let (enum_name, variant_name) = qualified_name.rsplit_once("::")?;
         let index = self
             .enum_defs
             .get(enum_name)?

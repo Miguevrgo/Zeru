@@ -20,6 +20,12 @@ pub struct Parser<'a> {
 
     pub errors: Vec<ZeruError>,
     panic_mode: bool,
+
+    /// Set while reading the condition of `if`/`while` or the subject of
+    /// `match`, where a `{` opens the body rather than a struct literal. It is
+    /// cleared inside parentheses, brackets and argument lists, where there is
+    /// nothing to confuse.
+    no_struct_literal: bool,
 }
 
 impl<'a> Parser<'a> {
@@ -34,6 +40,7 @@ impl<'a> Parser<'a> {
             peek_line: 0,
             errors: Vec::new(),
             panic_mode: false,
+            no_struct_literal: false,
         };
 
         p.next_token();
@@ -514,7 +521,7 @@ impl<'a> Parser<'a> {
         let start_span = self.current_span;
         self.next_token();
 
-        let condition = self.parse_expression(Precedence::Lowest)?;
+        let condition = self.parse_condition()?;
 
         if !self.expect_peek(&Token::LBrace) {
             return None;
@@ -564,7 +571,7 @@ impl<'a> Parser<'a> {
         let start_span = self.current_span;
         self.next_token();
 
-        let cond = self.parse_expression(Precedence::Lowest)?;
+        let cond = self.parse_condition()?;
 
         if !self.expect_peek(&Token::LBrace) {
             return None;
@@ -859,9 +866,67 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    /// A name, a qualified path like `module::Name`, or a struct literal when a
+    /// path naming a type is followed by a brace.
+    fn parse_path_or_struct_literal(&mut self, start_span: Span) -> Option<Expression> {
+        let Token::Identifier(first) = &self.current_token else {
+            return None;
+        };
+        let mut path = first.clone();
+
+        // A qualified path travels as one name, which is how `Enum::Variant` and
+        // `module::item` reach the analyser.
+        while self.peek_token_is(&Token::DoubleColon) {
+            self.next_token();
+            self.next_token();
+            let Token::Identifier(segment) = &self.current_token else {
+                return None;
+            };
+            path = format!("{path}::{segment}");
+        }
+
+        let names_a_type = path
+            .rsplit("::")
+            .next()
+            .and_then(|last| last.chars().next())
+            .is_some_and(char::is_uppercase);
+
+        if names_a_type && !self.no_struct_literal && self.peek_token_is(&Token::LBrace) {
+            return self.parse_struct_literal(path, start_span);
+        }
+
+        Some(Expression::new(
+            ExpressionKind::Identifier(path),
+            start_span.merge(self.current_span),
+        ))
+    }
+
+    /// Read the condition of a construct whose body follows in braces.
+    fn parse_condition(&mut self) -> Option<Expression> {
+        let saved = std::mem::replace(&mut self.no_struct_literal, true);
+        let condition = self.parse_expression(Precedence::Lowest);
+        self.no_struct_literal = saved;
+        condition
+    }
+
+    /// Read `parse` with struct literals allowed again, for a context already
+    /// delimited by parentheses, brackets or commas.
+    fn allowing_struct_literals<T>(&mut self, parse: impl FnOnce(&mut Self) -> T) -> T {
+        let saved = std::mem::replace(&mut self.no_struct_literal, false);
+        let parsed = parse(self);
+        self.no_struct_literal = saved;
+        parsed
+    }
+
     fn parse_struct_literal(&mut self, name: String, start_span: Span) -> Option<Expression> {
         self.next_token();
+        let saved = std::mem::replace(&mut self.no_struct_literal, false);
+        let literal = self.parse_struct_fields(name, start_span);
+        self.no_struct_literal = saved;
+        literal
+    }
 
+    fn parse_struct_fields(&mut self, name: String, start_span: Span) -> Option<Expression> {
         let mut fields = Vec::new();
 
         while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
@@ -1031,23 +1096,7 @@ impl<'a> Parser<'a> {
         let start_span = self.current_span;
         let mut left_exp = match &self.current_token {
             Token::LBracket => self.parse_array_literal(),
-            Token::Identifier(name) => {
-                let name_clone = name.clone();
-                // Check the last segment for uppercase (handles module__Struct prefixing)
-                let last_segment = name.rsplit("__").next().unwrap_or(name);
-                let starts_with_upper = last_segment
-                    .chars()
-                    .next()
-                    .is_some_and(|c| c.is_uppercase());
-                if starts_with_upper && self.peek_token_is(&Token::LBrace) {
-                    self.parse_struct_literal(name_clone, start_span)
-                } else {
-                    Some(Expression::new(
-                        ExpressionKind::Identifier(name_clone),
-                        self.current_span,
-                    ))
-                }
-            }
+            Token::Identifier(_) => self.parse_path_or_struct_literal(start_span),
             Token::Int(val) => Some(Expression::new(
                 ExpressionKind::Int(*val),
                 self.current_span,
@@ -1106,7 +1155,13 @@ impl<'a> Parser<'a> {
     fn parse_grouped_expression(&mut self) -> Option<Expression> {
         let start_span = self.current_span;
         self.next_token();
+        let saved = std::mem::replace(&mut self.no_struct_literal, false);
+        let grouped = self.parse_grouped_body(start_span);
+        self.no_struct_literal = saved;
+        grouped
+    }
 
+    fn parse_grouped_body(&mut self, start_span: Span) -> Option<Expression> {
         if self.cur_token_is(&Token::RParen) {
             return Some(Expression::new(
                 ExpressionKind::Tuple(vec![]),
@@ -1154,7 +1209,7 @@ impl<'a> Parser<'a> {
     fn parse_match_expression(&mut self) -> Option<Expression> {
         let start_span = self.current_span;
         self.next_token();
-        let value = self.parse_expression(Precedence::Lowest)?;
+        let value = self.parse_condition()?;
 
         if !self.expect_peek(&Token::LBrace) {
             return None;
@@ -1396,20 +1451,6 @@ impl<'a> Parser<'a> {
             return self.parse_get_expression(left);
         }
 
-        if operator == Token::DoubleColon
-            && let ExpressionKind::Identifier(left_name) = &left.kind
-        {
-            self.next_token();
-            if let Token::Identifier(right_name) = &self.current_token {
-                let qualified = format!("{}::{}", left_name, right_name);
-                let end_span = self.current_span;
-                return Some(Expression::new(
-                    ExpressionKind::Identifier(qualified),
-                    start_span.merge(end_span),
-                ));
-            }
-        }
-
         if operator == Token::As {
             let precedence = token_precedence(&self.current_token);
             self.next_token();
@@ -1473,6 +1514,13 @@ impl<'a> Parser<'a> {
     fn parse_array_literal(&mut self) -> Option<Expression> {
         let start_span = self.current_span;
         self.next_token();
+        let saved = std::mem::replace(&mut self.no_struct_literal, false);
+        let literal = self.parse_array_body(start_span);
+        self.no_struct_literal = saved;
+        literal
+    }
+
+    fn parse_array_body(&mut self, start_span: Span) -> Option<Expression> {
         let mut elements = Vec::new();
 
         if self.cur_token_is(&Token::RBracket) {
@@ -1534,7 +1582,8 @@ impl<'a> Parser<'a> {
     fn parse_index_expression(&mut self, left: Expression) -> Option<Expression> {
         let start_span = left.span;
         self.next_token();
-        let index = self.parse_expression(Precedence::Lowest)?;
+        let index =
+            self.allowing_struct_literals(|parser| parser.parse_expression(Precedence::Lowest))?;
 
         if !self.expect_peek(&Token::RBracket) {
             return None;
@@ -1552,7 +1601,7 @@ impl<'a> Parser<'a> {
     fn parse_call_expression(&mut self, function: Expression) -> Option<Expression> {
         let start_span = function.span;
         self.next_token();
-        let arguments = self.parse_call_arguments();
+        let arguments = self.allowing_struct_literals(Self::parse_call_arguments);
         let end_span = self.current_span;
 
         Some(Expression::new(
@@ -1774,6 +1823,66 @@ mod tests {
             ExpressionKind::Int(v) => v.to_string(),
             ExpressionKind::Identifier(name) => name.clone(),
             other => format!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_qualified_path_is_one_name() {
+        let program = parse_input("fn main() { var t = module::item; }");
+        let body = get_function_body(&program.statements[0]);
+        let StatementKind::Var { value, .. } = &body[0].kind else {
+            panic!("Expected a var statement");
+        };
+        assert_eq!(shape(value), "module::item");
+    }
+
+    #[test]
+    fn test_qualified_struct_literal() {
+        let program = parse_input("fn main() { var t = shapes::Rect { w: 1, h: 2 }; }");
+        let body = get_function_body(&program.statements[0]);
+        let StatementKind::Var { value, .. } = &body[0].kind else {
+            panic!("Expected a var statement");
+        };
+        let ExpressionKind::StructLiteral { name, fields } = &value.kind else {
+            panic!("Expected a struct literal, got {:?}", value.kind);
+        };
+        assert_eq!(name, "shapes::Rect");
+        assert_eq!(fields.len(), 2);
+    }
+
+    #[test]
+    fn test_a_condition_brace_opens_the_body() {
+        // `Color::Red` names a variant, so the brace after it is the `if` body.
+        // Reading it as a struct literal swallowed the block.
+        let program = parse_input("fn main() { if c == Color::Red { var inside = 1; } }");
+        let body = get_function_body(&program.statements[0]);
+        let StatementKind::If {
+            condition,
+            then_branch,
+            ..
+        } = &body[0].kind
+        else {
+            panic!("Expected an if statement, got {:?}", body[0].kind);
+        };
+        assert_eq!(shape(condition), "(c Eq Color::Red)");
+        assert!(matches!(then_branch.kind, StatementKind::Block(ref b) if b.len() == 1));
+    }
+
+    #[test]
+    fn test_a_delimited_brace_is_still_a_literal() {
+        // Inside a call, brackets or another literal there is nothing to confuse,
+        // so a struct literal is allowed even in condition position.
+        for input in [
+            "fn main() { if take(P { x: 1 }) { } }",
+            "fn main() { if list[P { x: 1 }] { } }",
+            "fn main() { if (P { x: 1 }).x { } }",
+        ] {
+            let program = parse_input(input);
+            let body = get_function_body(&program.statements[0]);
+            assert!(
+                matches!(body[0].kind, StatementKind::If { .. }),
+                "{input} did not parse as an if"
+            );
         }
     }
 

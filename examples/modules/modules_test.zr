@@ -1,0 +1,16 @@
+// Multi-file project: paths resolve from this file's directory, so `geom.area`
+// means the same thing here and inside shapes.zr, which also imports it.
+import geom.area;
+import shapes;
+
+fn main() {
+    if area::rectangle(3, 4) != 12 { exit(1); }
+    if area::scale(5, 3) != 15 { exit(2); }
+
+    var r = shapes::Rect { w: 2, h: 5 };
+    if r.area() != 10 { exit(3); }
+    if shapes::doubled(r) != 20 { exit(4); }
+
+    println("modules: all tests passed");
+    exit(0);
+}

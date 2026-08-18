@@ -1,0 +1,17 @@
+// A module that imports another module, so the nested case is covered.
+import geom.area;
+
+struct Rect {
+    w: i32,
+    h: i32,
+
+    fn area(self) i32 { return geom_area(self.w, self.h); }
+}
+
+fn geom_area(w: i32, h: i32) i32 {
+    return area::rectangle(w, h);
+}
+
+fn doubled(r: Rect) i32 {
+    return area::scale(r.area(), 2);
+}

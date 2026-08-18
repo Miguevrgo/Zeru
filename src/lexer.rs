@@ -11,10 +11,17 @@ pub struct Lexer<'a> {
 
 impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
+        Self::at(input, 0)
+    }
+
+    /// Lex a slice of a larger buffer, reporting spans as offsets into that
+    /// buffer, so each file can be lexed on its own and still be located in
+    /// the whole program.
+    pub fn at(input: &'a str, start: usize) -> Self {
         Self {
             input: input.chars().peekable(),
             line: 1,
-            pos: 0,
+            pos: start,
         }
     }
 

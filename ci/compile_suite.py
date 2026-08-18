@@ -111,7 +111,11 @@ def main():
     try:
         suite = Suite(mode_flags, workdir)
 
-        examples = sorted((ROOT / "examples").glob("*.zr"))
+        # Top-level examples, plus the entry point of each multi-file project.
+        # A project's other files have no `main` and are reached by import.
+        examples = sorted((ROOT / "examples").glob("*.zr")) + sorted(
+            (ROOT / "examples").glob("*/*_test.zr")
+        )
         for example in examples:
             suite.compile(example.name, example)
 
