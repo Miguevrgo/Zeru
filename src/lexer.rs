@@ -87,12 +87,12 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn operator_or_assign(&mut self, simple: Token, compound: Token) -> Token {
-        if self.peek() == Some(&'=') {
+    fn match_next(&mut self, expected: char, if_match: Token, default: Token) -> Token {
+        if self.peek() == Some(&expected) {
             self.advance();
-            compound
+            if_match
         } else {
-            simple
+            default
         }
     }
 
@@ -119,33 +119,27 @@ impl<'a> Lexer<'a> {
                     Token::Assign
                 }
             }
-            '!' => self.operator_or_assign(Token::Bang, Token::NotEq),
-            '+' => self.operator_or_assign(Token::Plus, Token::PlusEq),
-            '-' => self.operator_or_assign(Token::Minus, Token::MinusEq),
-            '*' => self.operator_or_assign(Token::Star, Token::StarEq),
-            '/' => self.operator_or_assign(Token::Slash, Token::SlashEq),
-            '%' => self.operator_or_assign(Token::Mod, Token::ModEq),
-            '^' => self.operator_or_assign(Token::BitXor, Token::BitXorEq),
+            '!' => self.match_next('=', Token::NotEq, Token::Bang),
+            '+' => self.match_next('=', Token::PlusEq, Token::Plus),
+            '-' => self.match_next('=', Token::MinusEq, Token::Minus),
+            '*' => self.match_next('=', Token::StarEq, Token::Star),
+            '/' => self.match_next('=', Token::SlashEq, Token::Slash),
+            '%' => self.match_next('=', Token::ModEq, Token::Mod),
+            '^' => self.match_next('=', Token::BitXorEq, Token::BitXor),
             '&' => {
                 if self.peek() == Some(&'=') {
                     self.advance();
                     Token::BitAndEq
-                } else if self.peek() == Some(&'&') {
-                    self.advance();
-                    Token::And
                 } else {
-                    Token::BitAnd
+                    self.match_next('&', Token::And, Token::BitAnd)
                 }
             }
             '|' => {
                 if self.peek() == Some(&'=') {
                     self.advance();
                     Token::BitOrEq
-                } else if self.peek() == Some(&'|') {
-                    self.advance();
-                    Token::Or
                 } else {
-                    Token::BitOr
+                    self.match_next('|', Token::Or, Token::BitOr)
                 }
             }
             '<' => {
@@ -154,12 +148,7 @@ impl<'a> Lexer<'a> {
                     Token::Leq
                 } else if self.peek() == Some(&'<') {
                     self.advance();
-                    if self.peek() == Some(&'=') {
-                        self.advance();
-                        Token::BitLShiftEq
-                    } else {
-                        Token::ShiftLeft
-                    }
+                    self.match_next('=', Token::BitLShiftEq, Token::ShiftLeft)
                 } else {
                     Token::Lt
                 }
@@ -170,12 +159,7 @@ impl<'a> Lexer<'a> {
                     Token::Geq
                 } else if self.peek() == Some(&'>') {
                     self.advance();
-                    if self.peek() == Some(&'=') {
-                        self.advance();
-                        Token::BitRShiftEq
-                    } else {
-                        Token::ShiftRight
-                    }
+                    self.match_next('=', Token::BitRShiftEq, Token::ShiftRight)
                 } else {
                     Token::Gt
                 }
@@ -186,14 +170,7 @@ impl<'a> Lexer<'a> {
             '}' => Token::RBrace,
             '[' => Token::LBracket,
             ']' => Token::RBracket,
-            ':' => {
-                if self.peek() == Some(&':') {
-                    self.advance();
-                    Token::DoubleColon
-                } else {
-                    Token::Colon
-                }
-            }
+            ':' => self.match_next(':', Token::DoubleColon, Token::Colon),
             ';' => Token::Semicolon,
             ',' => Token::Comma,
             '.' => Token::Dot,

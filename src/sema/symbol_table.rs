@@ -69,24 +69,15 @@ impl SymbolTable {
         false
     }
 
-    pub fn get_all_scopes(&self) -> &Vec<HashMap<String, Symbol>> {
+    pub fn get_all_scopes(&self) -> &[HashMap<String, Symbol>] {
         &self.scopes
     }
 
     pub fn lookup(&self, name: &str) -> Option<&Symbol> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(symbol) = scope.get(name) {
-                return Some(symbol);
-            }
-        }
-        None
+        self.scopes.iter().rev().find_map(|scope| scope.get(name))
     }
 
     pub fn lookup_current_scope(&self, name: &str) -> Option<&Symbol> {
-        if let Some(scope) = self.scopes.last() {
-            scope.get(name)
-        } else {
-            None
-        }
+        self.scopes.last().and_then(|scope| scope.get(name))
     }
 }

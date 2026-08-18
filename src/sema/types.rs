@@ -76,20 +76,17 @@ pub enum Type {
 impl Type {
     pub fn has_move_semantics(&self) -> bool {
         match self {
-            Type::Integer { .. } | Type::Float(_) | Type::Bool | Type::Void => false,
-            Type::Vec { .. } => true,
-            Type::Struct { .. } => true,
-            Type::Enum { .. } => false,
-            Type::Array { .. } => true,
-            Type::Pointer(_) => false,
-            Type::Ref(_) | Type::RefMut(_) => false,
+            Type::Vec { .. }
+            | Type::Struct { .. }
+            | Type::Array { .. }
+            | Type::ParamType(_)
+            | Type::Unknown => true,
             Type::Tuple(types) => types.iter().any(|t| t.has_move_semantics()),
             Type::Optional(inner) => inner.has_move_semantics(),
             Type::Result { ok_type, err_type } => {
                 ok_type.has_move_semantics() || err_type.has_move_semantics()
             }
-            Type::Slice { .. } => false,
-            Type::ParamType(_) | Type::Unknown => true,
+            _ => false,
         }
     }
 
@@ -166,39 +163,35 @@ impl std::fmt::Display for Type {
                     IntWidth::W64 => "64",
                     IntWidth::WSize => "size",
                 };
-                write!(f, "{}{}", s, w)
+                write!(f, "{s}{w}")
             }
-            Type::Float(w) => write!(
-                f,
-                "f{}",
-                match w {
-                    FloatWidth::W32 => "32",
-                    FloatWidth::W64 => "64",
-                }
-            ),
+            Type::Float(w) => match w {
+                FloatWidth::W32 => write!(f, "f32"),
+                FloatWidth::W64 => write!(f, "f64"),
+            },
             Type::Bool => write!(f, "bool"),
             Type::Void => write!(f, "void"),
-            Type::Struct { name, .. } => write!(f, "{}", name),
-            Type::Enum { name, .. } => write!(f, "{}", name),
-            Type::Array { elem_type, len } => write!(f, "[{}; {}]", elem_type, len),
-            Type::Pointer(elem_type) => write!(f, "*{}", elem_type),
-            Type::Optional(elem_type) => write!(f, "{}?", elem_type),
-            Type::Result { ok_type, err_type } => write!(f, "Result<{}, {}>", ok_type, err_type),
-            Type::Slice { elem_type } => write!(f, "&[{}]", elem_type),
-            Type::Vec { elem_type } => write!(f, "Vec<{}>", elem_type),
-            Type::Ref(elem_type) => write!(f, "&{}", elem_type),
-            Type::RefMut(elem_type) => write!(f, "&var {}", elem_type),
+            Type::Struct { name, .. } | Type::Enum { name, .. } | Type::ParamType(name) => {
+                write!(f, "{name}")
+            }
+            Type::Array { elem_type, len } => write!(f, "[{elem_type}; {len}]"),
+            Type::Pointer(elem_type) => write!(f, "*{elem_type}"),
+            Type::Optional(elem_type) => write!(f, "{elem_type}?"),
+            Type::Result { ok_type, err_type } => write!(f, "Result<{ok_type}, {err_type}>"),
+            Type::Slice { elem_type } => write!(f, "&[{elem_type}]"),
+            Type::Vec { elem_type } => write!(f, "Vec<{elem_type}>"),
+            Type::Ref(elem_type) => write!(f, "&{elem_type}"),
+            Type::RefMut(elem_type) => write!(f, "&var {elem_type}"),
             Type::Tuple(types) => {
                 write!(f, "(")?;
                 for (i, t) in types.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", t)?;
+                    write!(f, "{t}")?;
                 }
                 write!(f, ")")
             }
-            Type::ParamType(name) => write!(f, "{}", name),
             Type::Unknown => write!(f, "<unknown>"),
         }
     }

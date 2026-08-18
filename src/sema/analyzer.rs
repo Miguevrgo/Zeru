@@ -50,10 +50,9 @@ impl SemanticAnalyzer {
             }),
         };
 
-        symbols.insert_fn("print".to_string(), vec![str_type.clone()], Type::Void);
-        symbols.insert_fn("println".to_string(), vec![str_type.clone()], Type::Void);
-        symbols.insert_fn("eprint".to_string(), vec![str_type.clone()], Type::Void);
-        symbols.insert_fn("eprintln".to_string(), vec![str_type], Type::Void);
+        for name in ["print", "println", "eprint", "eprintln"] {
+            symbols.insert_fn(name.to_string(), vec![str_type.clone()], Type::Void);
+        }
 
         Self {
             errors: Vec::new(),

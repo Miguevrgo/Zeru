@@ -29,7 +29,7 @@ pub enum TypeSpec {
     RefMut(Box<TypeSpec>), // &var T - mutable reference
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Program {
     pub statements: Vec<Statement>,
 }

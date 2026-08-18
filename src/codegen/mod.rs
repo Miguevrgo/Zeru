@@ -8,7 +8,7 @@ pub mod types;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub enum SafetyMode {
     #[default]
     Debug,
@@ -30,15 +30,22 @@ impl SafetyMode {
             Self::Debug
         }
     }
+
+    pub const fn clang_flags(&self) -> &[&str] {
+        match self {
+            Self::Debug => &["-O0", "-g"],
+            Self::ReleaseSafe => &["-O2"],
+            Self::ReleaseFast => &["-O3"],
+        }
+    }
 }
 
 impl std::fmt::Display for SafetyMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let str = match self {
+        f.write_str(match self {
             Self::Debug => "unoptimized + debug info",
             Self::ReleaseSafe => "safely optimized",
             Self::ReleaseFast => "optimized",
-        };
-        write!(f, "{str}")
+        })
     }
 }
