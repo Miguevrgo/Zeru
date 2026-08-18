@@ -16,6 +16,13 @@ struct Wrapper {
     n: i32,
 }
 
+struct Bag {
+    items: Vec<i64>,
+
+    fn add(var self, v: i64) { self.items.push(v); }
+    fn count(self) usize { return self.items.len(); }
+}
+
 struct Chain {
     v: i32,
     fn point(self) Point { return Point { x: self.v, y: self.v }; }
@@ -262,6 +269,18 @@ fn main() {
     if list.len() != 19 { exit(115); }
     list.clear();
     if !list.is_empty() { exit(116); }
+
+    // A Vec is mutable wherever it lives, not only in a variable.
+    var bag = Bag { items: Vec.new() };
+    bag.add(4);
+    bag.items.push(5);
+    if bag.count() != 2 { exit(130); }
+    if bag.items.get(1).unwrap() != 5 { exit(131); }
+
+    var bags: Array<Vec<i64>, 2> = [Vec.new(), Vec.new()];
+    bags[0].push(1);
+    if bags[0].len() != 1 { exit(132); }
+    if bags[1].len() != 0 { exit(133); }
 
     println("lang: all tests passed");
     exit(0);

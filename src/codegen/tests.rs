@@ -1336,3 +1336,24 @@ fn test_pointer_arithmetic_steps_by_element() {
     ";
     assert_ir_contains(input, &["getelementptr i32"]);
 }
+
+#[test]
+fn test_vec_mutation_reaches_any_place() {
+    // A mutating method needs the storage, which is wherever the Vec lives:
+    // a field, a field of a field, or an array slot, not only a variable.
+    let input = "
+        struct Bag { items: Vec<i64> }
+        struct Nested { bag: Bag }
+        fn main() {
+            var b = Bag { items: Vec.new() };
+            b.items.push(1);
+            var n = Nested { bag: Bag { items: Vec.new() } };
+            n.bag.items.push(2);
+            var many: Array<Vec<i64>, 2> = [Vec.new(), Vec.new()];
+            many[0].push(3);
+            var p: *Bag = &b;
+            p.items.push(4);
+        }
+    ";
+    assert_compiles(input);
+}

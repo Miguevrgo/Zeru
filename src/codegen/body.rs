@@ -1134,13 +1134,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
 
         // Mutating methods need the storage, not a loaded copy of the header.
+        let elem_type = self.vec_element_type(object);
         if let Some(vec_ptr) = self.vec_storage_of(object)
-            && let Some(result) = self.compile_vec_method_mut(
-                method_name,
-                vec_ptr,
-                arguments,
-                self.vec_element_type(object),
-            )
+            && let Some(result) =
+                self.compile_vec_method_mut(method_name, vec_ptr, arguments, elem_type)
         {
             return MethodCallOutcome::Done(result);
         }
@@ -1213,14 +1210,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         .unwrap_or_else(|| self.usize_type().into())
     }
 
-    /// Storage behind `object` when it is a variable holding a builtin `Vec`.
-    fn vec_storage_of(&self, object: &Expression) -> Option<PointerValue<'ctx>> {
-        let ExpressionKind::Identifier(var_name) = &object.kind else {
-            return None;
-        };
-        let (ptr, ty, _) = self.variables.get(var_name)?;
+    /// Storage behind `object` when it holds a builtin `Vec`. A temporary has
+    /// no storage, so a mutating method has nothing to reach through.
+    fn vec_storage_of(&mut self, object: &Expression) -> Option<PointerValue<'ctx>> {
+        let (ptr, ty) = self.compile_lvalue(object)?;
         match ty {
-            BasicTypeEnum::StructType(st) if self.is_vec_layout(*st) => Some(*ptr),
+            BasicTypeEnum::StructType(st) if self.is_vec_layout(st) => Some(ptr),
             _ => None,
         }
     }
