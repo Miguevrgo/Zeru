@@ -8,14 +8,11 @@ mod resolver;
 mod sema;
 mod token;
 
-use crate::codegen::SafetyMode;
-use crate::errors::CompileError;
-use crate::resolver::{GREEN_FG, RED_FG, RESET, compile_pipeline, status};
+use crate::resolver::{GREEN, RED, RESET, compile_pipeline, status};
+use crate::{codegen::SafetyMode, errors::CompileError};
 use clap::{Parser, Subcommand};
-use std::fs;
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 #[derive(Parser)]
 #[command(version)]
@@ -63,8 +60,8 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
         } => {
             let safety_mode = SafetyMode::from_flags(release_fast, release_safe);
             let executable_path = compile_pipeline(&file, safety_mode, false)?;
-            status(GREEN_FG, '\u{e7d5}', "Running", executable_path.display());
-            let status = Command::new(&executable_path).status()?;
+            status(GREEN, '\u{e7d5}', "Running", executable_path.display());
+            let status = std::process::Command::new(&executable_path).status()?;
             std::process::exit(
                 status
                     .code()
@@ -74,8 +71,8 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
         Commands::Clean => {
             let build_dir = Path::new("build");
             if build_dir.exists() {
-                fs::remove_dir_all(build_dir)?;
-                status(GREEN_FG, '\u{ea81}', "Cleaned", build_dir.display());
+                std::fs::remove_dir_all(build_dir)?;
+                status(GREEN, '\u{ea81}', "Cleaned", build_dir.display());
             }
         }
     }
@@ -84,7 +81,7 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
 
 fn main() {
     if let Err(err) = run_compiler(Cli::parse()) {
-        eprintln!("{RED_FG}[-] Error: {err}{RESET}");
+        eprintln!("{RED}[-] Error: {err}{RESET}");
         std::process::exit(1);
     }
 }
