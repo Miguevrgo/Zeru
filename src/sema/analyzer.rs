@@ -928,12 +928,31 @@ impl SemanticAnalyzer {
         }
     }
 
+    /// Whether a write can reach `expr`. Only a place rooted in a variable or a
+    /// dereference has storage; a call result or a literal is a temporary, and
+    /// assigning to one would write somewhere nothing reads again.
+    fn is_assignable(expr: &Expression) -> bool {
+        match &expr.kind {
+            ExpressionKind::Identifier(_) | ExpressionKind::Dereference(_) => true,
+            ExpressionKind::Get { object, .. } => Self::is_assignable(object),
+            ExpressionKind::Index { left, .. } => Self::is_assignable(left),
+            _ => false,
+        }
+    }
+
     fn check_assign(
         &mut self,
         target: &mut Expression,
         value: &mut Expression,
         span: Span,
     ) -> Type {
+        if !Self::is_assignable(target) {
+            self.error(
+                "Cannot assign to a temporary value".to_string(),
+                target.span,
+            );
+        }
+
         let target_type = if let ExpressionKind::Identifier(name) = &target.kind {
             if let Some(super::symbol_table::Symbol::Var {
                 is_const,

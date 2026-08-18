@@ -2294,3 +2294,42 @@ fn test_constant_index_out_of_range_is_rejected() {
         "got: {errors:?}"
     );
 }
+
+#[test]
+fn test_assigning_to_a_temporary_is_rejected() {
+    // Nothing reads a temporary again, so the write would go nowhere. Codegen
+    // used to catch this only where it happened to lack a pointer.
+    let cases = [
+        "fn make() Array<i32,2> { return [1,2]; } fn main() { make()[0] = 5; }",
+        "struct S { a: i32 } fn make() S { return S{a:1}; } fn main() { make().a = 5; }",
+        "struct S { a: i32 } fn main() { S{a:1}.a = 5; }",
+        "fn main() { 1 + 2 = 3; }",
+    ];
+    for input in cases {
+        let errors = analyze(input);
+        assert!(
+            errors.iter().any(|e| e.contains("temporary")),
+            "{input} -> {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn test_every_real_place_stays_assignable() {
+    let cases = [
+        "fn main() { var x: i32 = 0; x = 5; }",
+        "struct S { a: i32 } fn main() { var s = S{a:1}; s.a = 5; }",
+        "fn main() { var a: Array<i32,2> = [1,2]; a[0] = 5; }",
+        "fn main() { var x: i32 = 1; var p: *i32 = &x; *p = 5; }",
+        "struct S { a: i32 } fn f(p: *S) { p.a = 5; }",
+        "struct S { d: Array<i32,2> } fn main() { var s = S{d:[1,2]}; s.d[1] = 5; }",
+        "struct S { a: i32, fn m(var self) { self.a = 5; } }",
+    ];
+    for input in cases {
+        let errors = analyze(&format!("{input} fn main2() {{ }}"));
+        assert!(
+            !errors.iter().any(|e| e.contains("temporary")),
+            "{input} -> {errors:?}"
+        );
+    }
+}

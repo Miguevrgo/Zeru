@@ -1288,16 +1288,19 @@ fn test_constant_index_needs_no_bounds_check() {
 }
 
 #[test]
-fn test_indexing_a_temporary() {
-    // A call result has no storage to index, so it is spilled to a slot first.
+fn test_reading_through_a_temporary() {
+    // A call result has no storage, so it is spilled to a slot and read from
+    // there, whatever the shape of the access.
     let input = "
-        struct Holder { data: Array<i32, 3> }
+        struct Inner { n: i32 }
+        struct Holder { data: Array<i32, 3>, inner: Inner }
         fn make() Array<i32, 3> { return [1, 2, 3]; }
-        fn wrap() Holder { return Holder { data: [1, 2, 3] }; }
+        fn wrap() Holder { return Holder { data: [1, 2, 3], inner: Inner { n: 7 } }; }
         fn main() {
             var first: i32 = make()[0];
             var i: usize = 1;
             var dynamic: i32 = make()[i];
+            var field: i32 = wrap().inner.n;
             var nested: i32 = wrap().data[2];
         }
     ";

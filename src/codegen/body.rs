@@ -558,7 +558,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
 
             ExpressionKind::Index { left, index } => {
-                let (ptr, BasicTypeEnum::ArrayType(array_ty)) = self.array_place(left)? else {
+                let (ptr, BasicTypeEnum::ArrayType(array_ty)) = self.place_of(left)? else {
                     return None;
                 };
                 let usize_type = self.usize_type();
@@ -601,12 +601,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    /// Storage holding the array `expr` denotes. A temporary has no place of
-    /// its own, so it is spilled to a slot first and `f()[0]` reads from that.
-    fn array_place(
-        &mut self,
-        expr: &Expression,
-    ) -> Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)> {
+    /// Where `expr` lives. A temporary has no place of its own, so it is spilled
+    /// to a slot; the analyser already refuses to write to one, so this only
+    /// serves reads like `f()[0]` and `f().field`.
+    fn place_of(&mut self, expr: &Expression) -> Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)> {
         if let Some(place) = self.compile_lvalue(expr) {
             return Some(place);
         }
@@ -618,18 +616,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         Some((slot, value.get_type()))
     }
 
-    /// Storage holding the struct `object` denotes, following one pointer hop
-    /// so `p.field` and `self.field` read through the pointer, as the analyser
-    /// resolves them.
+    /// Where the struct `expr` denotes lives, following one pointer hop so
+    /// `p.field` and `self.field` read through the pointer.
     fn struct_place(
         &mut self,
-        object: &Expression,
+        expr: &Expression,
     ) -> Option<(PointerValue<'ctx>, StructType<'ctx>)> {
-        let (ptr, ty) = self.compile_lvalue(object)?;
-        match ty {
-            BasicTypeEnum::StructType(st) => Some((ptr, st)),
-            BasicTypeEnum::PointerType(_) => {
-                let BasicTypeEnum::StructType(st) = self.pointee_type_of(object)? else {
+        match self.place_of(expr)? {
+            (ptr, BasicTypeEnum::StructType(st)) => Some((ptr, st)),
+            (ptr, BasicTypeEnum::PointerType(_)) => {
+                let BasicTypeEnum::StructType(st) = self.pointee_type_of(expr)? else {
                     return None;
                 };
                 let ptr_type = self.ptr_type();
@@ -833,8 +829,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.dummy_val()
     }
 
-    /// Read a field or element: as an enum tag, through its storage, or by
-    /// extracting it out of a temporary that has none.
+    /// Read a field or element, as an enum tag or through its storage.
     fn lower_place_read(&mut self, expr: &Expression) -> BasicValueEnum<'ctx> {
         if let ExpressionKind::Get { object, name } = &expr.kind
             && let ExpressionKind::Identifier(enum_name) = &object.kind
@@ -849,13 +844,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 _ => "elem",
             };
             return self.load(ty, ptr, &format!("{label}_load"));
-        }
-
-        if let ExpressionKind::Get { object, name } = &expr.kind
-            && let BasicValueEnum::StructValue(sv) = self.compile_expression(object, None)
-            && let Some(index) = self.struct_field_index(sv.get_type(), name)
-        {
-            return self.extract(sv, index, "field");
         }
 
         self.error(format!("Cannot read {:?}", expr.kind), expr.span);
