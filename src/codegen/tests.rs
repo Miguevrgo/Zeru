@@ -1357,3 +1357,23 @@ fn test_vec_mutation_reaches_any_place() {
     ";
     assert_compiles(input);
 }
+
+#[test]
+fn test_assignment_is_right_associative() {
+    // `a = b = 5` groups as `a = (b = 5)`, so the inner assignment is the one
+    // that has to typecheck against `a`, not the other way round.
+    let input = "
+        fn main() {
+            var a: i32 = 0;
+            var b: i32 = 0;
+            a = b = 5;
+        }
+    ";
+    let errors = compile_to_ir(input).expect_err("an assignment produces no value");
+    assert!(
+        errors
+            .replace('\\', "")
+            .contains(r#"Expected "i32", got "void""#),
+        "unexpected error: {errors}"
+    );
+}

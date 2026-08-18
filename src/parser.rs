@@ -1406,7 +1406,13 @@ impl<'a> Parser<'a> {
             _ => {}
         }
 
-        let precedence = token_precedence(&operator);
+        // Assignment is the one right associative operator: `a = b = 5` reads
+        // as `a = (b = 5)`, so its right side takes everything that follows.
+        let precedence = if Self::is_assignment(&operator) {
+            Precedence::Lowest
+        } else {
+            token_precedence(&operator)
+        };
         self.next_token();
         let right = self.parse_expression(precedence)?;
         let span = start_span.merge(right.span);
