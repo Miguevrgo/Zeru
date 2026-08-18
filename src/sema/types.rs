@@ -1,3 +1,5 @@
+use crate::ast::TypeSpec;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum IntWidth {
     W8,
@@ -144,6 +146,38 @@ impl Type {
                 },
             ) => l1 == l2 && e1.accepts(e2),
             _ => false,
+        }
+    }
+    /// The way this type is written in source, which is what substituting a
+    /// type parameter needs.
+    pub fn to_spec(&self) -> TypeSpec {
+        let boxed = |inner: &Type| Box::new(inner.to_spec());
+
+        match self {
+            Type::Struct { name, .. } | Type::Enum { name, .. } | Type::ParamType(name) => {
+                TypeSpec::Named(name.clone())
+            }
+            Type::Integer { .. } | Type::Float(_) | Type::Bool | Type::Void | Type::Unknown => {
+                TypeSpec::Named(self.to_string())
+            }
+            Type::Array { elem_type, len } => TypeSpec::Generic {
+                name: "Array".into(),
+                args: vec![elem_type.to_spec(), TypeSpec::IntLiteral(*len as i64)],
+            },
+            Type::Vec { elem_type } => TypeSpec::Generic {
+                name: "Vec".into(),
+                args: vec![elem_type.to_spec()],
+            },
+            Type::Result { ok_type, err_type } => TypeSpec::Generic {
+                name: "Result".into(),
+                args: vec![ok_type.to_spec(), err_type.to_spec()],
+            },
+            Type::Pointer(inner) => TypeSpec::Pointer(boxed(inner)),
+            Type::Optional(inner) => TypeSpec::Optional(boxed(inner)),
+            Type::Slice { elem_type } => TypeSpec::Slice(boxed(elem_type)),
+            Type::Ref(inner) => TypeSpec::Ref(boxed(inner)),
+            Type::RefMut(inner) => TypeSpec::RefMut(boxed(inner)),
+            Type::Tuple(types) => TypeSpec::Tuple(types.iter().map(Type::to_spec).collect()),
         }
     }
 }

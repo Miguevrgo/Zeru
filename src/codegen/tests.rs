@@ -1377,3 +1377,23 @@ fn test_assignment_is_right_associative() {
         "unexpected error: {errors}"
     );
 }
+
+#[test]
+fn test_generic_call_instantiates_for_the_argument_type() {
+    // The argument is a field, not a literal or a plain variable. Guessing from
+    // the shape of the expression reads i32 out of it and then passes an i64
+    // into a function that takes an i32.
+    let input = "
+        struct Wide { first: i64, second: i64 }
+        fn largest<T>(a: T, b: T) T {
+            if a > b { return a; }
+            return b;
+        }
+        fn main() {
+            var w = Wide { first: 100, second: 200 };
+            var big: i64 = largest(w.first, w.second);
+        }
+    ";
+    assert_ir_contains(input, &["largest__i64_"]);
+    assert_ir_lacks(input, &["largest__i32_"]);
+}

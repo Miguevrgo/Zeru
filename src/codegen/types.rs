@@ -40,6 +40,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub(super) fn infer_type_from_expression(&self, expr: &Expression) -> TypeSpec {
         let named = |name: &str| TypeSpec::Named(name.to_string());
 
+        // The analyser already resolved this. Re-deriving it from the shape of
+        // the expression reads i32 out of anything but a literal or a plain
+        // variable, so a field or a call picks the wrong instantiation.
+        if let Some(ty) = &expr.ty
+            && *ty != Type::Unknown
+        {
+            return ty.to_spec();
+        }
+
         match &expr.kind {
             ExpressionKind::Int(_) => named("i32"),
             ExpressionKind::Float(_) => named("f64"),
