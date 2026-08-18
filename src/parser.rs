@@ -26,6 +26,10 @@ pub struct Parser<'a> {
     /// cleared inside parentheses, brackets and argument lists, where there is
     /// nothing to confuse.
     no_struct_literal: bool,
+
+    /// A `>` owed from splitting a `>>` that closed two generic levels at once.
+    /// It is handed out as the next token instead of reading the lexer.
+    pending_gt: bool,
 }
 
 impl<'a> Parser<'a> {
@@ -41,6 +45,7 @@ impl<'a> Parser<'a> {
             errors: Vec::new(),
             panic_mode: false,
             no_struct_literal: false,
+            pending_gt: false,
         };
 
         p.next_token();
@@ -53,6 +58,14 @@ impl<'a> Parser<'a> {
         self.current_token = self.peek_token.clone();
         self.current_span = self.peek_span;
         self.current_line = self.peek_line;
+
+        if self.pending_gt {
+            self.pending_gt = false;
+            self.peek_token = Token::Gt;
+            self.peek_span = Span::new(self.current_span.end, self.current_span.end + 1);
+            return;
+        }
+
         let (tok, line, span) = self.lexer.next_token();
 
         if let Token::Illegal(ref msg) = tok {
@@ -218,127 +231,138 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    /// A type: a pointer, reference, slice, tuple, or a name with optional
+    /// generic arguments and an optional `?` or `!` suffix.
     fn parse_type(&mut self) -> Option<TypeSpec> {
-        if self.current_token == Token::Str {
-            return Some(TypeSpec::Slice(Box::new(TypeSpec::Named("u8".to_string()))));
+        match &self.current_token {
+            // `str` is a slice of bytes.
+            Token::Str => Some(TypeSpec::Slice(Box::new(TypeSpec::Named("u8".to_string())))),
+            Token::Star => {
+                self.next_token();
+                Some(TypeSpec::Pointer(Box::new(self.parse_type()?)))
+            }
+            Token::BitAnd => self.parse_reference_type(),
+            Token::LParen => self.parse_tuple_type(),
+            Token::Identifier(_) => self.parse_named_type(),
+            _ => {
+                self.error_current("Type identifier expected");
+                None
+            }
         }
-        if self.current_token == Token::Star {
+    }
+
+    /// `&[T]` is a slice, `&var T` a mutable reference, `&T` a shared one.
+    fn parse_reference_type(&mut self) -> Option<TypeSpec> {
+        self.next_token();
+
+        if self.current_token == Token::LBracket {
             self.next_token();
-            let inner = self.parse_type()?;
-            return Some(TypeSpec::Pointer(Box::new(inner)));
-        }
-
-        if self.current_token == Token::BitAnd {
-            self.next_token();
-
-            if self.current_token == Token::LBracket {
-                self.next_token();
-                let elem_type = self.parse_type()?;
-                if !self.expect_peek(&Token::RBracket) {
-                    return None;
-                }
-                return Some(TypeSpec::Slice(Box::new(elem_type)));
-            }
-
-            if self.current_token == Token::Var {
-                self.next_token();
-                let inner = self.parse_type()?;
-                return Some(TypeSpec::RefMut(Box::new(inner)));
-            }
-
-            let inner = self.parse_type()?;
-            return Some(TypeSpec::Ref(Box::new(inner)));
-        }
-
-        if self.current_token == Token::LParen {
-            let mut types = Vec::new();
-
-            if self.peek_token_is(&Token::RParen) {
-                self.next_token();
-                return Some(TypeSpec::Tuple(types));
-            }
-
-            self.next_token();
-            types.push(self.parse_type()?);
-
-            while self.peek_token_is(&Token::Comma) {
-                self.next_token();
-                self.next_token();
-                types.push(self.parse_type()?);
-            }
-
-            if !self.expect_peek(&Token::RParen) {
+            let elem_type = self.parse_type()?;
+            if !self.expect_peek(&Token::RBracket) {
                 return None;
             }
-
-            return Some(TypeSpec::Tuple(types));
+            return Some(TypeSpec::Slice(Box::new(elem_type)));
         }
 
-        let mut name = if let Token::Identifier(n) = &self.current_token {
-            n.clone()
-        } else {
+        if self.current_token == Token::Var {
+            self.next_token();
+            return Some(TypeSpec::RefMut(Box::new(self.parse_type()?)));
+        }
+
+        Some(TypeSpec::Ref(Box::new(self.parse_type()?)))
+    }
+
+    fn parse_tuple_type(&mut self) -> Option<TypeSpec> {
+        if self.peek_token_is(&Token::RParen) {
+            self.next_token();
+            return Some(TypeSpec::Tuple(Vec::new()));
+        }
+
+        self.next_token();
+        let mut types = vec![self.parse_type()?];
+
+        while self.peek_token_is(&Token::Comma) {
+            self.next_token();
+            self.next_token();
+            types.push(self.parse_type()?);
+        }
+
+        if !self.expect_peek(&Token::RParen) {
+            return None;
+        }
+        Some(TypeSpec::Tuple(types))
+    }
+
+    /// A possibly qualified name, then generic arguments or a `?`/`!` suffix.
+    fn parse_named_type(&mut self) -> Option<TypeSpec> {
+        let Token::Identifier(first) = &self.current_token else {
             self.error_current("Type identifier expected");
             return None;
         };
+        let mut name = first.clone();
 
         while self.peek_token_is(&Token::DoubleColon) {
             self.next_token();
             self.next_token();
-            if let Token::Identifier(n) = &self.current_token {
-                name.push_str("::");
-                name.push_str(n);
-            } else {
+            let Token::Identifier(segment) = &self.current_token else {
                 self.error_current("Expected type name after '::'");
+                return None;
+            };
+            name.push_str("::");
+            name.push_str(segment);
+        }
+
+        if self.peek_token_is(&Token::Lt) {
+            let args = self.parse_generic_arguments()?;
+            return Some(TypeSpec::Generic { name, args });
+        }
+
+        let named = TypeSpec::Named(name);
+        if self.peek_token_is(&Token::Question) {
+            self.next_token();
+            return Some(TypeSpec::Optional(Box::new(named)));
+        }
+        if self.peek_token_is(&Token::Bang) {
+            self.next_token();
+            return Some(TypeSpec::Result(Box::new(named)));
+        }
+        Some(named)
+    }
+
+    /// The `<..>` of a generic type. An argument is either a type or a length,
+    /// as in `Array<i32, 4>`.
+    fn parse_generic_arguments(&mut self) -> Option<Vec<TypeSpec>> {
+        self.next_token();
+        self.next_token();
+        let mut args = Vec::new();
+
+        while self.current_token != Token::Gt {
+            args.push(match self.current_token {
+                Token::Int(length) => TypeSpec::IntLiteral(length),
+                _ => self.parse_type()?,
+            });
+
+            // `Vec<Vec<i32>>` ends in a single `>>` that has to close two
+            // levels: the first half is taken here, the second is left for the
+            // level above.
+            if self.peek_token_is(&Token::ShiftRight) {
+                self.peek_token = Token::Gt;
+                self.pending_gt = true;
+            }
+
+            if self.peek_token_is(&Token::Comma) {
+                self.next_token();
+                self.next_token();
+            } else if self.peek_token_is(&Token::Gt) {
+                self.next_token();
+                break;
+            } else {
+                self.error_peek("Expected ',' or '>' in generic type");
                 return None;
             }
         }
 
-        if self.peek_token_is(&Token::Lt) {
-            self.next_token();
-            let mut args = Vec::new();
-
-            self.next_token();
-
-            loop {
-                if self.current_token == Token::Gt {
-                    break;
-                }
-
-                if let Token::Int(val) = self.current_token {
-                    args.push(TypeSpec::IntLiteral(val));
-                } else {
-                    let sub_type = self.parse_type()?;
-                    args.push(sub_type);
-                }
-
-                if self.peek_token_is(&Token::Comma) {
-                    self.next_token();
-                    self.next_token();
-                    continue;
-                } else if self.peek_token_is(&Token::Gt) {
-                    self.next_token();
-                    break;
-                } else {
-                    self.error_peek("Expected ',' or '>' in generic type");
-                    return None;
-                }
-            }
-            return Some(TypeSpec::Generic { name, args });
-        }
-
-        let base_type = TypeSpec::Named(name);
-
-        if self.peek_token_is(&Token::Question) {
-            self.next_token();
-            return Some(TypeSpec::Optional(Box::new(base_type)));
-        }
-
-        if self.peek_token_is(&Token::Bang) {
-            self.next_token();
-            return Some(TypeSpec::Result(Box::new(base_type)));
-        }
-
-        Some(base_type)
+        Some(args)
     }
 
     fn parse_return_statement(&mut self) -> Option<Statement> {
@@ -637,10 +661,10 @@ impl<'a> Parser<'a> {
         if !self.expect_peek_identifier() {
             return None;
         }
-        let name = match &self.current_token {
-            Token::Identifier(n) => n.clone(),
-            _ => unreachable!(),
+        let Token::Identifier(name) = &self.current_token else {
+            return None;
         };
+        let name = name.clone();
 
         let type_params = if self.peek_token_is(&Token::Lt) {
             self.next_token();
@@ -655,85 +679,42 @@ impl<'a> Parser<'a> {
 
         let mut fields = Vec::new();
         let mut methods = Vec::new();
-        let mut parsing_methods = false;
+        let mut seen_method = false;
 
         while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
             if self.peek_token_is(&Token::Fn) {
-                parsing_methods = true;
+                seen_method = true;
                 self.next_token();
-
                 if let Some(method) = self.parse_function_statement() {
                     methods.push(method);
                 }
                 continue;
             }
 
-            if parsing_methods {
+            if seen_method {
                 self.error_current(&format!(
-                    "Struct '{}': Fields must be declared before methods.",
-                    name
+                    "Struct '{name}': Fields must be declared before methods."
                 ));
                 return None;
             }
 
-            self.next_token();
-            let field_name = match &self.current_token {
-                Token::Identifier(n) => n.clone(),
-                _ => {
-                    self.error_current("Expected field name");
-                    while !self.peek_token_is(&Token::Comma)
-                        && !self.peek_token_is(&Token::RBrace)
-                        && !self.peek_token_is(&Token::Eof)
-                    {
-                        self.next_token();
-                    }
-                    if self.peek_token_is(&Token::Comma) {
-                        self.next_token();
-                    }
-                    continue;
-                }
-            };
-
-            if !self.expect_peek(&Token::Colon) {
-                while !self.peek_token_is(&Token::Comma)
-                    && !self.peek_token_is(&Token::RBrace)
-                    && !self.peek_token_is(&Token::Eof)
-                {
-                    self.next_token();
-                }
-                if self.peek_token_is(&Token::Comma) {
-                    self.next_token();
-                }
-                continue;
-            }
-            self.next_token();
-
-            let field_type = match self.parse_type() {
-                Some(t) => t,
+            // One malformed field should not swallow the ones after it.
+            match self.parse_struct_field() {
+                Some(field) => fields.push(field),
                 None => {
-                    while !self.peek_token_is(&Token::Comma)
-                        && !self.peek_token_is(&Token::RBrace)
-                        && !self.peek_token_is(&Token::Eof)
-                    {
-                        self.next_token();
-                    }
-                    if self.peek_token_is(&Token::Comma) {
-                        self.next_token();
-                    }
+                    self.skip_to_next_field();
                     continue;
                 }
-            };
-            fields.push((field_name, field_type));
+            }
 
             if self.peek_token_is(&Token::RBrace) {
                 break;
             }
-
-            if !self.peek_token_is(&Token::Comma) {
+            if self.peek_token_is(&Token::Comma) {
+                self.next_token();
+            } else {
                 self.error_peek("Comma");
                 self.panic_mode = false;
-            } else {
-                self.next_token();
             }
         }
 
@@ -750,6 +731,37 @@ impl<'a> Parser<'a> {
             },
             start_span.merge(end_span),
         ))
+    }
+
+    /// One `name: Type` field of a struct.
+    fn parse_struct_field(&mut self) -> Option<(String, TypeSpec)> {
+        self.next_token();
+
+        let Token::Identifier(name) = &self.current_token else {
+            self.error_current("Expected field name");
+            return None;
+        };
+        let name = name.clone();
+
+        if !self.expect_peek(&Token::Colon) {
+            return None;
+        }
+        self.next_token();
+
+        Some((name, self.parse_type()?))
+    }
+
+    /// Run to the start of the next field, so parsing continues past a bad one.
+    fn skip_to_next_field(&mut self) {
+        while !self.peek_token_is(&Token::Comma)
+            && !self.peek_token_is(&Token::RBrace)
+            && !self.peek_token_is(&Token::Eof)
+        {
+            self.next_token();
+        }
+        if self.peek_token_is(&Token::Comma) {
+            self.next_token();
+        }
     }
 
     fn parse_enum_statement(&mut self) -> Option<Statement> {
@@ -1824,6 +1836,30 @@ mod tests {
             ExpressionKind::Identifier(name) => name.clone(),
             other => format!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn test_nested_generic_closes_on_a_single_shift_token() {
+        // The lexer hands `>>` over as one ShiftRight, so both levels have to
+        // close on it. Before, no nested generic type could be written at all.
+        for source in [
+            "fn f(v: Vec<Vec<i32>>) { }",
+            "fn f(v: Vec<Vec<Vec<i32>>>) { }",
+            "fn f(v: Vec<Array<i32, 2>>) { }",
+            "fn f(v: Array<Vec<i32>, 2>) { }",
+        ] {
+            parse_input(source);
+        }
+    }
+
+    #[test]
+    fn test_splitting_a_shift_leaves_the_operator_alone() {
+        let program = parse_input("fn main() { var t = a >> 2; }");
+        let body = get_function_body(&program.statements[0]);
+        let StatementKind::Var { value, .. } = &body[0].kind else {
+            panic!("Expected a var statement");
+        };
+        assert_eq!(shape(value), "(a ShiftRight 2)");
     }
 
     #[test]
