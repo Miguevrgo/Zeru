@@ -190,14 +190,7 @@ impl<'a> Parser<'a> {
     fn parse_var_statement<const CONSTANT: bool>(&mut self) -> Option<Statement> {
         let start_span = self.current_span;
 
-        if !self.expect_peek_identifier() {
-            return None;
-        }
-
-        let name = match &self.current_token {
-            Token::Identifier(n) => n.clone(),
-            _ => unreachable!(),
-        };
+        let name = self.expect_identifier()?;
 
         let mut type_annotation = None;
         if self.peek_token_is(&Token::Colon) {
@@ -392,14 +385,7 @@ impl<'a> Parser<'a> {
     fn parse_function_statement(&mut self) -> Option<Statement> {
         let start_span = self.current_span;
 
-        if !self.expect_peek_identifier() {
-            return None;
-        }
-
-        let name = match &self.current_token {
-            Token::Identifier(n) => n.clone(),
-            _ => unreachable!(),
-        };
+        let name = self.expect_identifier()?;
 
         let type_params = if self.peek_token_is(&Token::Lt) {
             self.next_token();
@@ -624,13 +610,7 @@ impl<'a> Parser<'a> {
     fn parse_for_statement(&mut self) -> Option<Statement> {
         let start_span = self.current_span;
 
-        if !self.expect_peek_identifier() {
-            return None;
-        }
-        let variable = match &self.current_token {
-            Token::Identifier(n) => n.clone(),
-            _ => unreachable!(),
-        };
+        let variable = self.expect_identifier()?;
 
         if !self.expect_peek(&Token::In) {
             return None;
@@ -664,13 +644,7 @@ impl<'a> Parser<'a> {
     fn parse_struct_statement(&mut self) -> Option<Statement> {
         let start_span = self.current_span;
 
-        if !self.expect_peek_identifier() {
-            return None;
-        }
-        let Token::Identifier(name) = &self.current_token else {
-            return None;
-        };
-        let name = name.clone();
+        let name = self.expect_identifier()?;
 
         let type_params = if self.peek_token_is(&Token::Lt) {
             self.next_token();
@@ -773,14 +747,7 @@ impl<'a> Parser<'a> {
     fn parse_enum_statement(&mut self) -> Option<Statement> {
         let start_span = self.current_span;
 
-        if !self.expect_peek_identifier() {
-            return None;
-        }
-
-        let name = match &self.current_token {
-            Token::Identifier(n) => n.clone(),
-            _ => unreachable!(),
-        };
+        let name = self.expect_identifier()?;
 
         if !self.expect_peek(&Token::LBrace) {
             return None;
@@ -819,13 +786,7 @@ impl<'a> Parser<'a> {
         use crate::ast::TraitMethod;
         let start_span = self.current_span;
 
-        if !self.expect_peek_identifier() {
-            return None;
-        }
-        let name = match &self.current_token {
-            Token::Identifier(n) => n.clone(),
-            _ => unreachable!(),
-        };
+        let name = self.expect_identifier()?;
 
         if !self.expect_peek(&Token::LBrace) {
             return None;
@@ -839,13 +800,7 @@ impl<'a> Parser<'a> {
                 return None;
             }
 
-            if !self.expect_peek_identifier() {
-                return None;
-            }
-            let method_name = match &self.current_token {
-                Token::Identifier(n) => n.clone(),
-                _ => unreachable!(),
-            };
+            let method_name = self.expect_identifier()?;
 
             if !self.expect_peek(&Token::LParen) {
                 return None;
@@ -995,62 +950,10 @@ impl<'a> Parser<'a> {
     fn parse_import_statement(&mut self) -> Option<Statement> {
         let start_span = self.current_span;
 
-        let mut path = Vec::new();
-
-        if !self.expect_peek_identifier() {
-            return None;
-        }
-
-        if let Token::Identifier(name) = &self.current_token {
-            path.push(name.clone())
-        }
-
-        while self.peek_token_is(&Token::Dot) {
-            self.next_token();
-
-            if !self.expect_peek_identifier() {
-                return None;
-            }
-
-            if let Token::Identifier(name) = &self.current_token {
-                path.push(name.clone());
-            }
-        }
-
+        let path = self.parse_dotted_path()?;
         let symbols = if self.peek_token_is(&Token::DoubleColon) {
             self.next_token();
-
-            if !self.expect_peek(&Token::LBrace) {
-                return None;
-            }
-
-            let mut items = Vec::new();
-
-            while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
-                self.next_token();
-
-                let name = if let Token::Identifier(n) = &self.current_token {
-                    n.clone()
-                } else {
-                    self.error_current("Expected symbol name in import");
-                    return None;
-                };
-
-                items.push(name);
-
-                if self.peek_token_is(&Token::RBrace) {
-                    break;
-                }
-                if !self.expect_peek(&Token::Comma) {
-                    return None;
-                }
-            }
-
-            if !self.expect_peek(&Token::RBrace) {
-                return None;
-            }
-
-            Some(items)
+            Some(self.parse_import_selection()?)
         } else {
             None
         };
@@ -1064,6 +967,41 @@ impl<'a> Parser<'a> {
             StatementKind::Import { path, symbols },
             start_span.merge(end_span),
         ))
+    }
+
+    /// The `a.b.c` of an import.
+    fn parse_dotted_path(&mut self) -> Option<Vec<String>> {
+        let mut path = vec![self.expect_identifier()?];
+
+        while self.peek_token_is(&Token::Dot) {
+            self.next_token();
+            path.push(self.expect_identifier()?);
+        }
+        Some(path)
+    }
+
+    /// The `{a, b}` of a selective import.
+    fn parse_import_selection(&mut self) -> Option<Vec<String>> {
+        if !self.expect_peek(&Token::LBrace) {
+            return None;
+        }
+
+        let mut items = Vec::new();
+        while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
+            items.push(self.expect_identifier()?);
+
+            if self.peek_token_is(&Token::RBrace) {
+                break;
+            }
+            if !self.expect_peek(&Token::Comma) {
+                return None;
+            }
+        }
+
+        if !self.expect_peek(&Token::RBrace) {
+            return None;
+        }
+        Some(items)
     }
 
     fn parse_break_statement(&mut self) -> Option<Statement> {
@@ -1459,74 +1397,56 @@ impl<'a> Parser<'a> {
         let start_span = left.span;
         let operator = self.current_token.clone();
 
-        if operator == Token::LBracket {
-            return self.parse_index_expression(left);
-        }
-        if operator == Token::LParen {
-            return self.parse_call_expression(left);
-        }
-        if operator == Token::Dot {
-            return self.parse_get_expression(left);
-        }
-
-        if operator == Token::As {
-            let precedence = token_precedence(&self.current_token);
-            self.next_token();
-
-            let target = self.parse_expression(precedence)?;
-            let end_span = self.current_span;
-            return Some(Expression::new(
-                ExpressionKind::Cast {
-                    left: Box::new(left),
-                    target: Box::new(target),
-                },
-                start_span.merge(end_span),
-            ));
-        }
-
+        // These three are postfix rather than infix: they consume their own
+        // brackets instead of a right-hand expression.
         match operator {
-            Token::Assign
-            | Token::PlusEq
-            | Token::MinusEq
-            | Token::StarEq
-            | Token::SlashEq
-            | Token::ModEq
-            | Token::BitAndEq
-            | Token::BitOrEq
-            | Token::BitXorEq
-            | Token::BitLShiftEq
-            | Token::BitRShiftEq => {
-                let precedence = token_precedence(&self.current_token);
-                self.next_token();
-                let value = self.parse_expression(precedence)?;
-                let end_span = self.current_span;
-                return Some(Expression::new(
-                    ExpressionKind::Assign {
-                        target: Box::new(left),
-                        operator,
-                        value: Box::new(value),
-                    },
-                    start_span.merge(end_span),
-                ));
-            }
+            Token::LBracket => return self.parse_index_expression(left),
+            Token::LParen => return self.parse_call_expression(left),
+            Token::Dot => return self.parse_get_expression(left),
             _ => {}
         }
 
-        let precedence = token_precedence(&self.current_token);
+        let precedence = token_precedence(&operator);
         self.next_token();
-        let right = self.parse_expression(precedence);
+        let right = self.parse_expression(precedence)?;
+        let span = start_span.merge(right.span);
 
-        right.map(|right_val| {
-            let end_span = right_val.span;
-            Expression::new(
-                ExpressionKind::Infix {
-                    left: Box::new(left),
-                    operator,
-                    right: Box::new(right_val),
-                },
-                start_span.merge(end_span),
-            )
-        })
+        let kind = match operator {
+            Token::As => ExpressionKind::Cast {
+                left: Box::new(left),
+                target: Box::new(right),
+            },
+            _ if Self::is_assignment(&operator) => ExpressionKind::Assign {
+                target: Box::new(left),
+                operator,
+                value: Box::new(right),
+            },
+            _ => ExpressionKind::Infix {
+                left: Box::new(left),
+                operator,
+                right: Box::new(right),
+            },
+        };
+
+        Some(Expression::new(kind, span))
+    }
+
+    /// The operators that write to their left-hand side.
+    fn is_assignment(token: &Token) -> bool {
+        matches!(
+            token,
+            Token::Assign
+                | Token::PlusEq
+                | Token::MinusEq
+                | Token::StarEq
+                | Token::SlashEq
+                | Token::ModEq
+                | Token::BitAndEq
+                | Token::BitOrEq
+                | Token::BitXorEq
+                | Token::BitLShiftEq
+                | Token::BitRShiftEq
+        )
     }
 
     fn parse_array_literal(&mut self) -> Option<Expression> {
@@ -1705,17 +1625,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expect_peek_identifier(&mut self) -> bool {
-        match &self.peek_token {
-            Token::Identifier(_) => {
-                self.next_token();
-                true
-            }
-            _ => {
-                self.error_peek("Identifier");
-                false
-            }
+    /// Move onto the next token and hand back its name, or report what it was.
+    fn expect_identifier(&mut self) -> Option<String> {
+        if let Token::Identifier(name) = &self.peek_token {
+            let name = name.clone();
+            self.next_token();
+            return Some(name);
         }
+        self.error_peek("Identifier");
+        None
     }
 
     fn error_peek(&mut self, expected: &str) {
