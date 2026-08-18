@@ -1687,7 +1687,7 @@ impl SemanticAnalyzer {
             }
             ExpressionKind::Float(_) => match inner_expected {
                 Some(Type::Float(width)) => Type::Float(*width),
-                _ => Type::Float(FloatWidth::W32),
+                _ => Type::Float(FloatWidth::W64),
             },
             ExpressionKind::Boolean(_) => Type::Bool,
             ExpressionKind::StringLit(_) => Type::Slice {

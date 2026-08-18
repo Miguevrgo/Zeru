@@ -501,7 +501,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ExpressionKind::Float(val) => {
                 let float_type = match annotated {
                     Some(BasicTypeEnum::FloatType(t)) => t,
-                    _ => self.context.f32_type(),
+                    _ => self.context.f64_type(),
                 };
                 float_type.const_float(*val).into()
             }
@@ -700,7 +700,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ExpressionKind::Float(val) => {
                 let float_type = match inner_expected {
                     Some(BasicTypeEnum::FloatType(t)) => t,
-                    _ => self.context.f32_type(),
+                    _ => self.context.f64_type(),
                 };
 
                 float_type.const_float(*val).into()
