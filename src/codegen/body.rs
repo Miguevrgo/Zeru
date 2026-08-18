@@ -558,7 +558,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
 
             ExpressionKind::Index { left, index } => {
-                let (ptr, BasicTypeEnum::ArrayType(array_ty)) = self.compile_lvalue(left)? else {
+                let (ptr, BasicTypeEnum::ArrayType(array_ty)) = self.array_place(left)? else {
                     return None;
                 };
                 let usize_type = self.usize_type();
@@ -599,6 +599,23 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
             _ => None,
         }
+    }
+
+    /// Storage holding the array `expr` denotes. A temporary has no place of
+    /// its own, so it is spilled to a slot first and `f()[0]` reads from that.
+    fn array_place(
+        &mut self,
+        expr: &Expression,
+    ) -> Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)> {
+        if let Some(place) = self.compile_lvalue(expr) {
+            return Some(place);
+        }
+
+        let function = self.current_fn?;
+        let value = self.compile_expression(expr, None);
+        let slot = self.create_entry_block_alloca(function, "temp", value.get_type());
+        self.builder.build_store(slot, value).unwrap();
+        Some((slot, value.get_type()))
     }
 
     /// Storage holding the struct `object` denotes, following one pointer hop

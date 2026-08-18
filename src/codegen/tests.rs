@@ -1286,3 +1286,20 @@ fn test_constant_index_needs_no_bounds_check() {
     ";
     assert_ir_lacks(input, &["bounds_panic"]);
 }
+
+#[test]
+fn test_indexing_a_temporary() {
+    // A call result has no storage to index, so it is spilled to a slot first.
+    let input = "
+        struct Holder { data: Array<i32, 3> }
+        fn make() Array<i32, 3> { return [1, 2, 3]; }
+        fn wrap() Holder { return Holder { data: [1, 2, 3] }; }
+        fn main() {
+            var first: i32 = make()[0];
+            var i: usize = 1;
+            var dynamic: i32 = make()[i];
+            var nested: i32 = wrap().data[2];
+        }
+    ";
+    assert_compiles(input);
+}

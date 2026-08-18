@@ -283,6 +283,9 @@ impl<'a> Parser<'a> {
 
         while self.peek_token_is(&Token::Comma) {
             self.next_token();
+            if self.peek_token_is(&Token::RParen) {
+                break;
+            }
             self.next_token();
             types.push(self.parse_type()?);
         }
@@ -496,6 +499,9 @@ impl<'a> Parser<'a> {
 
         while self.peek_token_is(&Token::Comma) {
             self.next_token();
+            if self.peek_token_is(&Token::RParen) {
+                break;
+            }
             self.next_token();
             params.push(self.parse_parameter());
         }
@@ -1577,6 +1583,9 @@ impl<'a> Parser<'a> {
 
         while self.peek_token_is(&Token::Comma) {
             self.next_token();
+            if self.peek_token_is(&Token::RBracket) {
+                break;
+            }
             self.next_token();
             elements.push(self.parse_expression(Precedence::Lowest)?);
         }
@@ -1661,6 +1670,10 @@ impl<'a> Parser<'a> {
 
         while self.peek_token_is(&Token::Comma) {
             self.next_token();
+            // A trailing comma is allowed, as it already was in a struct literal.
+            if self.peek_token_is(&Token::RParen) {
+                break;
+            }
             self.next_token();
             if let Some(arg) = self.parse_expression(Precedence::Lowest) {
                 args.push(arg);
@@ -1835,6 +1848,21 @@ mod tests {
             ExpressionKind::Int(v) => v.to_string(),
             ExpressionKind::Identifier(name) => name.clone(),
             other => format!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_trailing_comma_everywhere_a_list_ends() {
+        // A struct literal already allowed one, nothing else did, so
+        // reformatting a call or an array across lines broke the parse.
+        for source in [
+            "fn f(a: i32, b: i32,) { }",
+            "fn main() { f(1, 2,); }",
+            "fn main() { var a: Array<i32, 2> = [1, 2,]; }",
+            "fn f(t: (i32, i64,)) { }",
+            "struct S { a: i32, b: i32, }",
+        ] {
+            parse_input(source);
         }
     }
 
