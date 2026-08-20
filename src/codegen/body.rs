@@ -1320,19 +1320,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         named(&receiver.get_type())
     }
 
-    /// Pointer to pass as `self` to a `var self` method. A receiver that is
-    /// itself a pointer (a forwarded `self`) is loaded first.
+    /// Where the receiver of a `var self` method lives, wherever that is: a
+    /// variable, a field, an element, or behind a pointer.
     fn self_pointer_for(&mut self, object: &Expression) -> Option<PointerValue<'ctx>> {
-        let ExpressionKind::Identifier(var_name) = &object.kind else {
-            return None;
-        };
-        let (ptr, _, _) = *self.variables.get(var_name)?;
-
-        if self.pointer_elem_types.contains_key(var_name) {
-            let ptr_type = self.ptr_type();
-            return Some(self.load(ptr_type, ptr, "self_loaded").into_pointer_value());
-        }
-        Some(ptr)
+        self.struct_place(object).map(|(ptr, _)| ptr)
     }
 
     /// Dispatch a binary operator on the operand category (integer, float,

@@ -1,0 +1,130 @@
+// Structs put to work: a shape kind chosen by an enum, shapes held in an
+// array and in a Vec, methods that return and that mutate.
+
+enum Kind { Square, Rectangle, Circle }
+
+struct Shape {
+    kind: Kind,
+    width: i32,
+    height: i32,
+
+    fn area(self) i32 {
+        return match self.kind {
+            Kind::Square => self.width * self.width,
+            Kind::Rectangle => self.width * self.height,
+            // Three times the radius squared, close enough for a whole number.
+            Kind::Circle => 3 * self.width * self.width
+        };
+    }
+
+    fn perimeter(self) i32 {
+        return match self.kind {
+            Kind::Square => 4 * self.width,
+            Kind::Rectangle => 2 * (self.width + self.height),
+            Kind::Circle => 6 * self.width
+        };
+    }
+
+    fn scaled(self, factor: i32) Shape {
+        return Shape {
+            kind: self.kind,
+            width: self.width * factor,
+            height: self.height * factor
+        };
+    }
+
+    fn grow(var self, by: i32) {
+        self.width += by;
+        self.height += by;
+    }
+}
+
+struct Drawing {
+    shapes: Vec<Shape>,
+
+    fn add(var self, shape: Shape) { self.shapes.push(shape); }
+
+    fn total_area(self) i32 {
+        var total: i32 = 0;
+        var i: usize = 0;
+        while i < self.shapes.len() {
+            total += self.shapes[i].area();
+            i += 1;
+        }
+        return total;
+    }
+
+    fn widest(self) Shape? {
+        if self.shapes.is_empty() { return None; }
+        var best: Shape = self.shapes[0];
+        var i: usize = 1;
+        while i < self.shapes.len() {
+            if self.shapes[i].width > best.width { best = self.shapes[i]; }
+            i += 1;
+        }
+        return best;
+    }
+}
+
+fn area_through_pointer(shape: *Shape) i32 { return shape.area(); }
+
+fn main() {
+    var square = Shape { kind: Kind::Square, width: 3, height: 3 };
+    if square.area() != 9 { exit(1); }
+    if square.perimeter() != 12 { exit(2); }
+
+    var rect = Shape { kind: Kind::Rectangle, width: 4, height: 5 };
+    if rect.area() != 20 { exit(3); }
+    if rect.perimeter() != 18 { exit(4); }
+
+    var circle = Shape { kind: Kind::Circle, width: 2, height: 0 };
+    if circle.area() != 12 { exit(5); }
+
+    // A method that returns a new shape leaves the receiver alone.
+    var bigger = square.scaled(2);
+    if bigger.area() != 36 { exit(6); }
+    if square.area() != 9 { exit(7); }
+
+    // One that takes `var self` changes it in place.
+    rect.grow(1);
+    if rect.width != 5 { exit(8); }
+    if rect.area() != 30 { exit(9); }
+
+    if area_through_pointer(&square) != 9 { exit(10); }
+
+    // Shapes in an array, mutated where they sit.
+    var row: Array<Shape, 3> = [
+        Shape { kind: Kind::Square, width: 1, height: 1 },
+        Shape { kind: Kind::Square, width: 2, height: 2 },
+        Shape { kind: Kind::Square, width: 3, height: 3 }
+    ];
+    var sum: i32 = 0;
+    for shape in row {
+        sum += shape.area();
+    }
+    if sum != 14 { exit(11); }
+    row[1].width = 4;
+    if row[1].area() != 16 { exit(12); }
+
+    // And in a Vec, through a struct that owns it.
+    var drawing = Drawing { shapes: Vec.new() };
+    if drawing.total_area() != 0 { exit(13); }
+    if drawing.widest().is_some() { exit(14); }
+
+    drawing.add(Shape { kind: Kind::Square, width: 2, height: 2 });
+    drawing.add(Shape { kind: Kind::Rectangle, width: 10, height: 1 });
+    drawing.add(Shape { kind: Kind::Circle, width: 1, height: 0 });
+    if drawing.shapes.len() != 3 { exit(15); }
+    if drawing.total_area() != 17 { exit(16); }
+
+    var widest = drawing.widest();
+    if !widest.is_some() { exit(17); }
+    if widest.unwrap().width != 10 { exit(18); }
+
+    drawing.shapes[0].grow(3);
+    if drawing.shapes[0].area() != 25 { exit(19); }
+    if drawing.total_area() != 38 { exit(20); }
+
+    println("shapes: all tests passed");
+    exit(0);
+}

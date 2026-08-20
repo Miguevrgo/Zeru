@@ -1557,3 +1557,29 @@ fn test_tuple_literal_takes_the_expected_field_types() {
     assert_ir_contains(input, &["{ i32, i64 }"]);
     assert_ir_lacks(input, &["{ i32, i32 }"]);
 }
+
+#[test]
+fn test_a_mutable_receiver_is_reached_wherever_it_lives() {
+    // `var self` takes the receiver by pointer, and the place it names need not
+    // be a variable: an element or a field has storage just the same.
+    let input = "
+        struct Counter {
+            n: i32,
+            fn bump(var self) { self.n += 1; }
+        }
+        struct Holder { counters: Vec<Counter> }
+        fn main() {
+            var row: Array<Counter, 2> = [Counter { n: 0 }, Counter { n: 0 }];
+            row[1].bump();
+
+            var holder = Holder { counters: Vec.new() };
+            holder.counters.push(Counter { n: 0 });
+            holder.counters[0].bump();
+
+            var single = Counter { n: 0 };
+            var through: *Counter = &single;
+            through.bump();
+        }
+    ";
+    assert_compiles(input);
+}
