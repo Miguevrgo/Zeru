@@ -66,6 +66,46 @@ fn main() {
     }
 
     // All tests passed!
+    // --- traversal and indexing ---------------------------------------------
+    var items: Vec<i64> = Vec.new();
+    var n: i64 = 1;
+    while n <= 4 {
+        items.push(n);
+        n += 1;
+    }
+
+    items[1] = 20;
+    items[2] += 30;
+    if items[1] != 20 { exit(60); }
+    if items[2] != 33 { exit(61); }
+    if items[0] != 1 { exit(62); }
+
+    var walked: i64 = 0;
+    for item in items {
+        walked += item;
+    }
+    if walked != 58 { exit(63); }
+
+    // An empty Vec is nought turns, not one.
+    var empty: Vec<i64> = Vec.new();
+    var turns: i32 = 0;
+    for item in empty {
+        turns += 1;
+    }
+    if turns != 0 { exit(64); }
+
+    // How many turns is settled before the first one.
+    var growing: Vec<i64> = Vec.new();
+    growing.push(1);
+    growing.push(2);
+    var seen: i32 = 0;
+    for item in growing {
+        seen += 1;
+        growing.push(item);
+    }
+    if seen != 2 { exit(65); }
+    if growing.len() != 4 { exit(66); }
+
     println("Vec tests passed!");
     exit(0);
 }

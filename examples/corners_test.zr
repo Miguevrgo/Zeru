@@ -1,0 +1,104 @@
+// Odd corners that are easy to break: constants, mutual recursion, optionals
+// and results carrying aggregates, a large array, and shadowing in a loop.
+
+const LIMIT: i32 = 10;
+const RATIO: f64 = 1.5;
+const ON: bool = true;
+
+struct Small { n: i32 }
+
+struct Maybe { value: i32?, tag: i32 }
+
+fn even(n: i32) bool {
+    if n == 0 { return true; }
+    return odd(n - 1);
+}
+
+fn odd(n: i32) bool {
+    if n == 0 { return false; }
+    return even(n - 1);
+}
+
+fn maybe_small(yes: bool) Small? {
+    if yes { return Small { n: 3 }; }
+    return None;
+}
+
+fn wrapped(yes: bool) Small! {
+    if yes { return Ok(Small { n: 4 }); }
+    return Err(9);
+}
+
+fn first_over(data: Array<i32, 5>, limit: i32) i32? {
+    var i: usize = 0;
+    while i < 5 {
+        if data[i] > limit { return data[i]; }
+        i += 1;
+    }
+    return None;
+}
+
+fn main() {
+    if LIMIT != 10 { exit(1); }
+    if RATIO != 1.5 { exit(2); }
+    if !ON { exit(3); }
+
+    // Two functions that call each other.
+    if !even(8) { exit(4); }
+    if even(7) { exit(5); }
+    if !odd(9) { exit(6); }
+
+    // An optional and a result carrying a struct.
+    var some = maybe_small(true);
+    if !some.is_some() { exit(7); }
+    if some.unwrap().n != 3 { exit(8); }
+    if maybe_small(false).is_some() { exit(9); }
+
+    var ok = wrapped(true);
+    if ok.unwrap().n != 4 { exit(10); }
+    if !wrapped(false).is_err() { exit(11); }
+    if wrapped(false).unwrap_err() != 9 { exit(12); }
+
+    // An optional held in a field.
+    var holder = Maybe { value: 5, tag: 1 };
+    if holder.value.unwrap() != 5 { exit(13); }
+    var blank = Maybe { value: None, tag: 2 };
+    if blank.value.is_some() { exit(14); }
+
+    // An early return out of a loop, and nothing found.
+    var data: Array<i32, 5> = [1, 5, 9, 2, 7];
+    if first_over(data.copy(), 4).unwrap() != 5 { exit(15); }
+    if first_over(data.copy(), 100).is_some() { exit(16); }
+
+    // A larger array, written and then walked.
+    var big: Array<i64, 64> = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                               0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                               0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                               0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    var i: usize = 0;
+    while i < 64 {
+        big[i] = i as i64 * 2;
+        i += 1;
+    }
+    if big[63] != 126 { exit(17); }
+    var total: i64 = 0;
+    for value in big {
+        total += value;
+    }
+    if total != 4032 { exit(18); }
+
+    // A name shadowed inside a loop starts over each turn and leaves the outer
+    // one alone.
+    var counter: i32 = 0;
+    var round: i32 = 0;
+    while round < 3 {
+        var counter: i32 = 10;
+        counter += 1;
+        if counter != 11 { exit(19); }
+        round += 1;
+    }
+    if counter != 0 { exit(20); }
+
+    println("corners: all tests passed");
+    exit(0);
+}

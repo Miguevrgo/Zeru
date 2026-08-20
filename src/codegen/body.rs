@@ -389,14 +389,32 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         iterable: &Expression,
         body: &Statement,
     ) {
-        let Some((arr_ptr, BasicTypeEnum::ArrayType(arr_type))) = self.compile_lvalue(iterable)
-        else {
-            self.error("'for .. in' requires an array", iterable.span);
+        let Some((container, shape)) = self.compile_lvalue(iterable) else {
+            self.error("'for .. in' requires an array or a Vec", iterable.span);
             return;
         };
-
-        let elem_type = arr_type.get_element_type();
         let usize_type = self.usize_type();
+
+        // How many turns is settled before the first one, so pushing inside the
+        // body cannot extend the loop. A Vec's buffer is fetched again each turn
+        // because a push may have moved it.
+        let (elem_type, count) = match shape {
+            BasicTypeEnum::ArrayType(array_type) => (
+                array_type.get_element_type(),
+                usize_type.const_int(array_type.len() as u64, false),
+            ),
+            BasicTypeEnum::StructType(st) if self.is_vec_layout(st) => {
+                let len_field = self.vec_field_ptr(container, VEC_LEN, "len_field");
+                (
+                    self.element_type_of(iterable),
+                    self.load_int(usize_type, len_field, "len"),
+                )
+            }
+            _ => {
+                self.error("'for .. in' requires an array or a Vec", iterable.span);
+                return;
+            }
+        };
 
         // Entry-block allocas: a nested loop must not grow the stack per iteration.
         let index_ptr = self.create_entry_block_alloca(parent_fn, "for_index", usize_type.into());
@@ -418,27 +436,30 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let index = self.load(usize_type, index_ptr, "index").into_int_value();
         let in_range = self
             .builder
-            .build_int_compare(
-                IntPredicate::ULT,
-                index,
-                usize_type.const_int(arr_type.len() as u64, false),
-                "for_cond",
-            )
+            .build_int_compare(IntPredicate::ULT, index, count, "for_cond")
             .unwrap();
         self.builder
             .build_conditional_branch(in_range, body_bb, after_bb)
             .unwrap();
 
         self.builder.position_at_end(body_bb);
-        let elem_gep = unsafe {
-            self.builder
-                .build_in_bounds_gep(
-                    arr_type,
-                    arr_ptr,
-                    &[usize_type.const_zero(), index],
-                    "elem_gep",
-                )
-                .unwrap()
+        let elem_gep = match shape {
+            BasicTypeEnum::ArrayType(array_type) => unsafe {
+                self.builder
+                    .build_in_bounds_gep(
+                        array_type,
+                        container,
+                        &[usize_type.const_zero(), index],
+                        "elem_gep",
+                    )
+                    .unwrap()
+            },
+            _ => {
+                let data_field = self.vec_field_ptr(container, VEC_PTR, "data_field");
+                let ptr_type = self.ptr_type();
+                let data = self.load(ptr_type, data_field, "data").into_pointer_value();
+                self.vec_elem_ptr(data, index, elem_type)
+            }
         };
         let elem_val = self.load(elem_type, elem_gep, "elem_val");
         self.builder.build_store(elem_slot, elem_val).unwrap();

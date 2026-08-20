@@ -905,13 +905,10 @@ impl SemanticAnalyzer {
         let iterable_type = self.check_expression(iterable, None);
 
         let item_type = match iterable_type {
-            Type::Array { elem_type, .. } => *elem_type,
+            Type::Array { elem_type, .. } | Type::Vec { elem_type } => *elem_type,
             Type::Unknown => Type::Unknown,
             _ => {
-                self.error(
-                    format!("Type {:?} is not iterable.", iterable_type),
-                    iter_span,
-                );
+                self.error(format!("{iterable_type} is not iterable"), iter_span);
                 Type::Unknown
             }
         };

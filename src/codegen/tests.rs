@@ -1509,3 +1509,21 @@ fn test_slice_is_indexed_for_reading() {
     ";
     assert_ir_contains(input, &["bounds_panic"]);
 }
+
+#[test]
+fn test_for_in_walks_a_vec() {
+    // A Vec keeps its elements elsewhere and its length in the header, so the
+    // loop counts against the loaded length and fetches the buffer each turn.
+    let input = "
+        struct Item { weight: i32 }
+        fn main() {
+            var items: Vec<Item> = Vec.new();
+            items.push(Item { weight: 2 });
+            var total: i32 = 0;
+            for item in items {
+                total += item.weight;
+            }
+        }
+    ";
+    assert_compiles(input);
+}
