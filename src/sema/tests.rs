@@ -2367,3 +2367,21 @@ fn test_unknown_trait_in_a_bound_is_reported() {
         "expected the trait to be reported: {errors:?}"
     );
 }
+
+#[test]
+fn test_writing_through_a_slice_is_rejected() {
+    let errors = analyze(
+        "
+        fn main() {
+            var text: str = \"abc\";
+            text[0] = 65;
+        }
+    ",
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("Cannot write through a slice")),
+        "expected the write to be refused: {errors:?}"
+    );
+}

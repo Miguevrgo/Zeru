@@ -1,0 +1,59 @@
+// Raw strings, checked byte by byte: a backtick string keeps the backslashes
+// and the quotes it is written with, where a quoted one reads them as escapes.
+
+fn equal(left: str, right: str) bool {
+    if left.len() != right.len() { return false; }
+    var i: usize = 0;
+    while i < left.len() {
+        if left[i] != right[i] { return false; }
+        i += 1;
+    }
+    return true;
+}
+
+fn count(text: str, needle: u8) i32 {
+    var seen: i32 = 0;
+    var i: usize = 0;
+    while i < text.len() {
+        if text[i] == needle { seen += 1; }
+        i += 1;
+    }
+    return seen;
+}
+
+fn main() {
+    // The two spellings of one Windows path: escaped needs doubling, raw does
+    // not, and both hold the same seventeen bytes.
+    var escaped = "C:\\Users\\name.txt";
+    var raw = `C:\Users\name.txt`;
+    if escaped.len() != 17 { exit(1); }
+    if !equal(escaped, raw) { exit(2); }
+    if count(raw, 92) != 2 { exit(3); }
+
+    // A raw string takes a quote without ceremony.
+    var json = `{"name": "Zeru"}`;
+    if count(json, 34) != 4 { exit(4); }
+    if json[0] != 123 { exit(5); }
+
+    // And a backslash that would be an escape elsewhere stays two bytes.
+    var pattern = `\d+\.\d+`;
+    if pattern.len() != 8 { exit(6); }
+    if pattern[0] != 92 { exit(7); }
+    if pattern[1] != 100 { exit(8); }
+
+    // A newline inside a raw string is the newline that was typed.
+    var lines = `first
+second`;
+    if count(lines, 10) != 1 { exit(9); }
+    if lines.len() != 12 { exit(10); }
+
+    // An escaped string still processes its escapes.
+    var tabbed = "a\tb";
+    if tabbed.len() != 3 { exit(11); }
+    if tabbed[1] != 9 { exit(12); }
+
+    println(raw);
+    println(json);
+    println("raw strings: all tests passed");
+    exit(0);
+}

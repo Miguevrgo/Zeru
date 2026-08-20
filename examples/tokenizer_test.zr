@@ -1,0 +1,158 @@
+// A tokeniser and an evaluator for one line of arithmetic, held as bytes.
+// Errors travel as Result, lookahead as Optional.
+
+enum TokenKind { Number, Plus, Minus, Star, End }
+
+struct Token {
+    kind: TokenKind,
+    value: i64,
+}
+
+struct Scanner {
+    text: Vec<u8>,
+    at: usize,
+
+    fn peek(self) u8? {
+        if self.at >= self.text.len() { return None; }
+        return self.text[self.at];
+    }
+
+    fn advance(var self) { self.at += 1; }
+
+    fn skip_spaces(var self) {
+        var seen = self.peek();
+        while seen.is_some() && seen.unwrap() == 32 {
+            self.advance();
+            seen = self.peek();
+        }
+    }
+
+    fn next(var self) Token! {
+        self.skip_spaces();
+        var seen = self.peek();
+        if seen.is_none() { return Ok(Token { kind: TokenKind::End, value: 0 }); }
+
+        var c: u8 = seen.unwrap();
+        if c == 43 {
+            self.advance();
+            return Ok(Token { kind: TokenKind::Plus, value: 0 });
+        }
+        if c == 45 {
+            self.advance();
+            return Ok(Token { kind: TokenKind::Minus, value: 0 });
+        }
+        if c == 42 {
+            self.advance();
+            return Ok(Token { kind: TokenKind::Star, value: 0 });
+        }
+        if c < 48 || c > 57 { return Err(1); }
+
+        var value: i64 = 0;
+        var digit = self.peek();
+        while digit.is_some() && digit.unwrap() >= 48 && digit.unwrap() <= 57 {
+            value = value * 10 + (digit.unwrap() - 48) as i64;
+            self.advance();
+            digit = self.peek();
+        }
+        return Ok(Token { kind: TokenKind::Number, value: value });
+    }
+}
+
+fn scan(text: Vec<u8>) Vec<Token> {
+    var scanner = Scanner { text: text, at: 0 };
+    var tokens: Vec<Token> = Vec.new();
+    var going: bool = true;
+    while going {
+        var token = scanner.next();
+        if token.is_err() { return Vec.new(); }
+        var got: Token = token.unwrap();
+        if got.kind == TokenKind::End { going = false; }
+        tokens.push(got);
+    }
+    return tokens;
+}
+
+// Left to right, with `*` taken before `+` and `-`.
+fn evaluate(tokens: Vec<Token>) i64! {
+    var total: i64 = 0;
+    var pending: i64 = 0;
+    var adding: bool = true;
+    var i: usize = 0;
+
+    while i < tokens.len() {
+        var token: Token = tokens[i];
+        if token.kind == TokenKind::End {
+            if adding { total += pending; } else { total -= pending; }
+            return Ok(total);
+        }
+
+        if token.kind == TokenKind::Number {
+            pending = token.value;
+            i += 1;
+            // A run of factors belongs to the term being built.
+            while i < tokens.len() && tokens[i].kind == TokenKind::Star {
+                if i + 1 >= tokens.len() { return Err(2); }
+                var factor: Token = tokens[i + 1];
+                if factor.kind != TokenKind::Number { return Err(3); }
+                pending = pending * factor.value;
+                i += 2;
+            }
+            continue;
+        }
+
+        if adding { total += pending; } else { total -= pending; }
+        pending = 0;
+        adding = token.kind == TokenKind::Plus;
+        i += 1;
+    }
+    return Err(4);
+}
+
+fn text_of(bytes: Array<u8, 16>, length: usize) Vec<u8> {
+    var out: Vec<u8> = Vec.new();
+    var i: usize = 0;
+    while i < length {
+        out.push(bytes[i]);
+        i += 1;
+    }
+    return out;
+}
+
+fn main() {
+    // "2+3*4" is 14, not 20.
+    var source: Array<u8, 16> = [50, 43, 51, 42, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    var tokens = scan(text_of(source, 5));
+    if tokens.len() != 6 { exit(1); }
+    if tokens[0].kind != TokenKind::Number { exit(2); }
+    if tokens[0].value != 2 { exit(3); }
+    if tokens[1].kind != TokenKind::Plus { exit(4); }
+    if tokens[5].kind != TokenKind::End { exit(5); }
+
+    var result = evaluate(tokens);
+    if !result.is_ok() { exit(6); }
+    if result.unwrap() != 14 { exit(7); }
+
+    // Multi-digit numbers, spaces, and a subtraction.
+    var second: Array<u8, 16> = [49, 48, 32, 45, 32, 51, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    var spaced = evaluate(scan(text_of(second, 6)));
+    if !spaced.is_ok() { exit(8); }
+    if spaced.unwrap() != 7 { exit(9); }
+
+    // A single number is its own answer.
+    var third: Array<u8, 16> = [55, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    var alone = evaluate(scan(text_of(third, 1)));
+    if alone.unwrap() != 7 { exit(10); }
+
+    // A trailing `*` has nothing to multiply by.
+    var broken: Array<u8, 16> = [50, 42, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    var failed = evaluate(scan(text_of(broken, 2)));
+    if !failed.is_err() { exit(11); }
+    if failed.unwrap_err() != 3 { exit(12); }
+
+    // A byte that is no token at all stops the scan.
+    var junk: Array<u8, 16> = [37, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    if scan(text_of(junk, 1)).len() != 0 { exit(13); }
+
+    println("tokenizer: all tests passed");
+    exit(0);
+}

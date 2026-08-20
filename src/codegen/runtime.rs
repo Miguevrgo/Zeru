@@ -57,7 +57,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_load(ty, ptr, name).unwrap()
     }
 
-    fn load_int(&self, ty: IntType<'ctx>, ptr: PointerValue<'ctx>, name: &str) -> IntValue<'ctx> {
+    pub(super) fn load_int(
+        &self,
+        ty: IntType<'ctx>,
+        ptr: PointerValue<'ctx>,
+        name: &str,
+    ) -> IntValue<'ctx> {
         self.load(ty, ptr, name).into_int_value()
     }
 
@@ -98,7 +103,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    fn vec_field_ptr(
+    pub(super) fn vec_field_ptr(
         &self,
         vec_ptr: PointerValue<'ctx>,
         field: u32,
@@ -109,7 +114,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap()
     }
 
-    fn vec_elem_ptr(
+    pub(super) fn vec_elem_ptr(
         &self,
         data_ptr: PointerValue<'ctx>,
         index: IntValue<'ctx>,
@@ -236,6 +241,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             return;
         }
 
+        let len = self.usize_type().const_int(len, false);
+        self.emit_bounds_check_against(index, len, unsigned);
+    }
+
+    /// The same check where the length is only known once it runs, as for a Vec.
+    pub(super) fn emit_bounds_check_against(
+        &mut self,
+        index: IntValue<'ctx>,
+        len: IntValue<'ctx>,
+        unsigned: bool,
+    ) {
+        if !self.safety_mode.emit_safety_checks() {
+            return;
+        }
+
         let usize_type = self.usize_type();
         let index = match index
             .get_type()
@@ -255,12 +275,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         let out_of_range = self
             .builder
-            .build_int_compare(
-                IntPredicate::UGE,
-                index,
-                usize_type.const_int(len, false),
-                "out_of_range",
-            )
+            .build_int_compare(IntPredicate::UGE, index, len, "out_of_range")
             .unwrap();
         self.emit_trap_if(out_of_range, "bounds");
     }

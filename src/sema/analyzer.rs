@@ -1195,6 +1195,19 @@ impl SemanticAnalyzer {
         };
 
         let target_ty = self.check_expression(target, target_type.as_ref());
+
+        // A slice is a borrowed view, and a `str` literal's is of read-only
+        // memory, so an element of one is readable but not writable.
+        if let ExpressionKind::Index { left, .. } = &target.kind
+            && matches!(left.ty, Some(Type::Slice { .. }))
+        {
+            self.error(
+                "Cannot write through a slice, which may point at read-only memory".into(),
+                span,
+            );
+            return Type::Void;
+        }
+
         let resolved_target = target_type.unwrap_or(target_ty);
         let val_type = self.check_expression(value, Some(&resolved_target));
 
@@ -1755,6 +1768,9 @@ impl SemanticAnalyzer {
                 }
                 *elem_type
             }
+            // How many elements a Vec or a slice has is only known once it runs,
+            // so the bounds check is the runtime one.
+            Type::Vec { elem_type } | Type::Slice { elem_type } => *elem_type,
             Type::Unknown => Type::Unknown,
             // A pointer is followed for a field but not for an index. That is
             // parked: the destination is Rust's split, where `&T` does the

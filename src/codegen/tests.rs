@@ -1454,3 +1454,58 @@ fn test_a_cast_applies_to_what_the_prefix_produced() {
     ";
     assert_ir_contains(input, &["load i8"]);
 }
+
+#[test]
+fn test_vec_is_indexed_like_an_array() {
+    // A Vec keeps its elements elsewhere, so an index loads the data pointer
+    // and checks against the length the header carries.
+    let input = "
+        struct Item { id: i32 }
+        fn main() {
+            var v: Vec<i64> = Vec.new();
+            v.push(1);
+            var read: i64 = v[0];
+            v[0] = 2;
+            v[0] += 3;
+
+            var items: Vec<Item> = Vec.new();
+            items.push(Item { id: 7 });
+            items[0].id = 8;
+
+            var grid: Vec<Vec<i64>> = Vec.new();
+            grid.push(v.copy());
+            grid[0][0] = 9;
+        }
+    ";
+    assert_ir_contains(input, &["bounds_panic"]);
+}
+
+#[test]
+fn test_release_fast_drops_the_vec_bounds_check() {
+    let input = "
+        fn main() {
+            var v: Vec<i64> = Vec.new();
+            v.push(1);
+            var read: i64 = v[0];
+        }
+    ";
+    let ir = compile_to_ir_with_mode(input, SafetyMode::ReleaseFast).expect("Compilation failed");
+    assert!(
+        !ir.contains("bounds_panic"),
+        "ReleaseFast should not check bounds:\n{ir}"
+    );
+}
+
+#[test]
+fn test_slice_is_indexed_for_reading() {
+    // A slice is a pointer and a length, so an element is reached the way a
+    // Vec's is; without this there is no way to look inside a str at all.
+    let input = "
+        fn main() {
+            var text: str = \"abc\";
+            var first: u8 = text[0];
+            var last: u8 = text[text.len() - 1];
+        }
+    ";
+    assert_ir_contains(input, &["bounds_panic"]);
+}

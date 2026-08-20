@@ -14,7 +14,7 @@ use crate::{
     ast::{Expression, ExpressionKind, Statement, StatementKind, TypeSpec},
     codegen::{
         compiler::{Compiler, LoopContext, VarBinding},
-        layout::{OPTION_VALUE, SLICE_LEN, SLICE_PTR},
+        layout::{OPTION_VALUE, SLICE_LEN, SLICE_PTR, VEC_LEN, VEC_PTR},
     },
     errors::Span,
     sema::types::Type,
@@ -558,29 +558,51 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
 
             ExpressionKind::Index { left, index } => {
-                let (ptr, BasicTypeEnum::ArrayType(array_ty)) = self.place_of(left)? else {
-                    return None;
-                };
+                let (ptr, container) = self.place_of(left)?;
                 let usize_type = self.usize_type();
+                let unsigned = Self::is_unsigned_expr(index);
                 let offset = self
                     .compile_expression(index, Some(usize_type.into()))
                     .into_int_value();
-                self.emit_bounds_check(
-                    offset,
-                    array_ty.len() as u64,
-                    Self::is_unsigned_expr(index),
-                );
-                let elem_ptr = unsafe {
-                    self.builder
-                        .build_in_bounds_gep(
-                            array_ty,
-                            ptr,
-                            &[usize_type.const_zero(), offset],
-                            "elem_ptr",
-                        )
-                        .ok()?
-                };
-                Some((elem_ptr, array_ty.get_element_type()))
+
+                match container {
+                    BasicTypeEnum::ArrayType(array_ty) => {
+                        self.emit_bounds_check(offset, array_ty.len() as u64, unsigned);
+                        let elem_ptr = unsafe {
+                            self.builder
+                                .build_in_bounds_gep(
+                                    array_ty,
+                                    ptr,
+                                    &[usize_type.const_zero(), offset],
+                                    "elem_ptr",
+                                )
+                                .ok()?
+                        };
+                        Some((elem_ptr, array_ty.get_element_type()))
+                    }
+
+                    // A Vec and a slice both keep their elements elsewhere, and
+                    // how many there are is only known once it runs.
+                    BasicTypeEnum::StructType(shape)
+                        if self.is_vec_layout(shape) || self.is_slice_layout(shape) =>
+                    {
+                        let (data_at, len_at) = if self.is_vec_layout(shape) {
+                            (VEC_PTR, VEC_LEN)
+                        } else {
+                            (SLICE_PTR, SLICE_LEN)
+                        };
+                        let elem_type = self.element_type_of(left);
+                        let ptr_type = self.ptr_type();
+                        let data_field = self.field_ptr(shape, ptr, data_at, "data_field");
+                        let data = self.load(ptr_type, data_field, "data").into_pointer_value();
+                        let len_field = self.field_ptr(shape, ptr, len_at, "len_field");
+                        let len = self.load_int(usize_type, len_field, "len");
+                        self.emit_bounds_check_against(offset, len, unsigned);
+                        Some((self.vec_elem_ptr(data, offset, elem_type), elem_type))
+                    }
+
+                    _ => None,
+                }
             }
 
             ExpressionKind::Dereference(inner) => {
@@ -1124,7 +1146,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         {
             // No receiver to ask, so the element type comes from the call's
             // own resolved type.
-            let elem_type = self.vec_element_type(call);
+            let elem_type = self.element_type_of(call);
             return MethodCallOutcome::Done(self.compile_vec_static_method(
                 method_name,
                 arguments,
@@ -1134,7 +1156,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
 
         // Mutating methods need the storage, not a loaded copy of the header.
-        let elem_type = self.vec_element_type(object);
+        let elem_type = self.element_type_of(object);
         if let Some(vec_ptr) = self.vec_storage_of(object)
             && let Some(result) =
                 self.compile_vec_method_mut(method_name, vec_ptr, arguments, elem_type)
@@ -1200,14 +1222,29 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         MethodCallOutcome::Resolved(func, vec![self_arg])
     }
 
-    /// Element type of the `Vec` `expr` denotes, taken from the type the
-    /// analyser resolved. Falls back to a word when nothing said otherwise.
-    fn vec_element_type(&self, expr: &Expression) -> BasicTypeEnum<'ctx> {
+    /// Element type of the `Vec` or slice `expr` denotes, taken from the type
+    /// the analyser resolved. Falls back to a word when nothing said otherwise.
+    fn element_type_of(&self, expr: &Expression) -> BasicTypeEnum<'ctx> {
         match &expr.ty {
-            Some(Type::Vec { elem_type }) => self.llvm_type_of(elem_type),
+            Some(Type::Vec { elem_type } | Type::Slice { elem_type }) => {
+                self.llvm_type_of(elem_type)
+            }
             _ => None,
         }
         .unwrap_or_else(|| self.usize_type().into())
+    }
+
+    /// Address of one field of an aggregate that lives at `ptr`.
+    fn field_ptr(
+        &self,
+        shape: StructType<'ctx>,
+        ptr: PointerValue<'ctx>,
+        field: u32,
+        name: &str,
+    ) -> PointerValue<'ctx> {
+        self.builder
+            .build_struct_gep(shape, ptr, field, name)
+            .unwrap()
     }
 
     /// Storage behind `object` when it holds a builtin `Vec`. A temporary has
