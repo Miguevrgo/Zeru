@@ -1440,3 +1440,17 @@ fn test_generic_struct_holds_a_parameterised_field() {
     ";
     assert_compiles(input);
 }
+
+#[test]
+fn test_a_cast_applies_to_what_the_prefix_produced() {
+    // `*p as u64` reads the pointer and widens the byte. Grouping it the other
+    // way casts the pointer itself, which is not a thing to dereference.
+    let input = "
+        fn at(p: *u8) u64 { return *p as u64; }
+        fn main() {
+            var bytes: Array<u8, 2> = [7, 8];
+            var value: u64 = at(&bytes[0]);
+        }
+    ";
+    assert_ir_contains(input, &["load i8"]);
+}

@@ -1684,8 +1684,10 @@ enum Precedence {
     Shift,
     Sum,
     Product,
-    Prefix,
+    // A prefix operator binds tighter than a cast, as in Rust and C: `*p as u64`
+    // reads the pointer and then widens, rather than casting the pointer.
     Cast,
+    Prefix,
     Call,
     Index,
 }
