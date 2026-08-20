@@ -1565,9 +1565,12 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         let name = match &self.current_token {
-            Token::Identifier(n) => n.clone(),
+            Token::Identifier(name) => name.clone(),
+            // A tuple's fields are numbered, as in Rust. `p.0.1` needs
+            // parentheses: the lexer reads `0.1` as one number.
+            Token::Int(index) => index.to_string(),
             _ => {
-                self.error_peek("Expected Identifier after '.'");
+                self.error_current("Expected a field name after '.'");
                 return None;
             }
         };

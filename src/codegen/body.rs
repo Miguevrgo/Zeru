@@ -680,6 +680,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     /// Index of field `name` within a named user struct.
     fn struct_field_index(&self, struct_ty: StructType<'ctx>, name: &str) -> Option<u32> {
+        // A tuple has no name and no field names: the number is the index.
+        if let Ok(index) = name.parse::<u32>() {
+            return (index < struct_ty.count_fields()).then_some(index);
+        }
         let struct_name = struct_ty.get_name()?.to_str().ok()?;
         self.struct_defs.get(struct_name)?.1.get(name).copied()
     }
@@ -823,13 +827,27 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
 
             ExpressionKind::Tuple(elements) => {
-                let values: Vec<_> = elements
-                    .iter()
-                    .map(|elem| self.compile_expression(elem, None))
-                    .collect();
-                let field_types: Vec<_> = values.iter().map(|v| v.get_type()).collect();
-                let tuple_type = self.context.struct_type(&field_types, false);
+                // Each element takes its type from the tuple being built, or an
+                // i64 field holding a small literal comes out as an i32.
+                let wanted = match expected_type {
+                    Some(BasicTypeEnum::StructType(shape))
+                        if shape.count_fields() as usize == elements.len() =>
+                    {
+                        Some(shape)
+                    }
+                    _ => None,
+                };
 
+                let mut values = Vec::with_capacity(elements.len());
+                for (at, elem) in elements.iter().enumerate() {
+                    let field = wanted.and_then(|shape| shape.get_field_type_at_index(at as u32));
+                    values.push(self.compile_expression(elem, field));
+                }
+
+                let tuple_type = wanted.unwrap_or_else(|| {
+                    let field_types: Vec<_> = values.iter().map(|v| v.get_type()).collect();
+                    self.context.struct_type(&field_types, false)
+                });
                 self.build_struct(tuple_type, &values, "tuple").into()
             }
             ExpressionKind::Match { value, arms } => self.lower_match(value, arms, expected_type),

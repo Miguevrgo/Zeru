@@ -1499,6 +1499,16 @@ impl SemanticAnalyzer {
             obj_type.clone()
         };
 
+        if let Type::Tuple(types) = &actual_type {
+            return match name.parse::<usize>().ok().and_then(|at| types.get(at)) {
+                Some(ty) => ty.clone(),
+                None => {
+                    self.error(format!("{actual_type} has no field '{name}'"), span);
+                    Type::Unknown
+                }
+            };
+        }
+
         if let Type::Struct {
             name: struct_name, ..
         } = &actual_type

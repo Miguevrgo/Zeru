@@ -1527,3 +1527,33 @@ fn test_for_in_walks_a_vec() {
     ";
     assert_compiles(input);
 }
+
+#[test]
+fn test_tuple_field_is_a_place() {
+    // A tuple has no field names, so the number is the index, and reaching one
+    // goes through the same path a struct field does: it can be written too.
+    let input = "
+        fn main() {
+            var p: (i32, i64) = (3, 4);
+            var read: i64 = p.1;
+            p.0 = 5;
+            p.1 += 6;
+        }
+    ";
+    assert_compiles(input);
+}
+
+#[test]
+fn test_tuple_literal_takes_the_expected_field_types() {
+    // Without the expected type each element is typed on its own, so an i64
+    // field holding a small literal comes out as an i32 the return rejects.
+    let input = "
+        fn make() (i32, i64) { return (7, 8); }
+        fn main() {
+            var got = make();
+            var wide: i64 = got.1;
+        }
+    ";
+    assert_ir_contains(input, &["{ i32, i64 }"]);
+    assert_ir_lacks(input, &["{ i32, i32 }"]);
+}
