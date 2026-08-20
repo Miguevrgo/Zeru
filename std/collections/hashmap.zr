@@ -1,8 +1,5 @@
 // Zeru Standard Library - HashMap (i64 keys, i64 values)
 // Fixed-capacity open-addressing hash map. 256 slots, ~192 usable (75% load).
-//
-// NOTE: Requires module system improvements (resolver.rs) to work via import.
-// Can be copied directly into user programs until then.
 
 const EMPTY: u8 = 0;
 const OCCUPIED: u8 = 1;
@@ -13,6 +10,10 @@ struct HashMap {
     vals: Array<i64, 256>,
     state: Array<u8, 256>,
     len: usize,
+
+    fn new() HashMap {
+        return HashMap { keys: [0; 256], vals: [0; 256], state: [EMPTY; 256], len: 0 };
+    }
 
     fn insert(var self, key: i64, val: i64) bool {
         if self.len >= 192 {

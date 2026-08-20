@@ -1,0 +1,10 @@
+// expect: Use of moved value
+struct Big { cells: Array<i32, 4> }
+
+fn take(b: Big) i32 { return b.cells[0]; }
+
+fn main() {
+    var b = Big { cells: [1, 2, 3, 4] };
+    take(b);
+    take(b);
+}

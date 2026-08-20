@@ -1,0 +1,7 @@
+// expect: write (*p)[i]
+fn first(p: *Array<i32, 4>) i32 { return p[0]; }
+
+fn main() {
+    var a: Array<i32, 4> = [1, 2, 3, 4];
+    if first(&a) != 1 { exit(1); }
+}

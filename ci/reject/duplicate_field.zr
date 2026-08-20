@@ -1,0 +1,6 @@
+// expect: declares field 'x' twice
+struct Point { x: i32, x: i32 }
+
+fn main() {
+    exit(0);
+}

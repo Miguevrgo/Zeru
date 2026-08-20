@@ -1,0 +1,61 @@
+// What a name still holds after it has been handed somewhere else: an aggregate
+// moves, a scalar copies, a pointer only looks, and `copy` keeps both.
+
+struct Point { x: i32, y: i32 }
+
+struct Holder { cells: Array<i32, 3> }
+
+fn consume(p: Point) i32 { return p.x; }
+
+fn peek(p: *Point) i32 { return p.x; }
+
+fn take_array(cells: Array<i32, 3>) i32 { return cells[0]; }
+
+fn take_vec(list: Vec<i64>) usize { return list.len(); }
+
+fn main() {
+    // A scalar is copied, so the source is still there afterwards.
+    var n: i32 = 42;
+    var first: i32 = n;
+    var second: i32 = n;
+    if first != 42 { exit(1); }
+    if second != 42 { exit(2); }
+    if n != 42 { exit(3); }
+
+    // A struct moves on assignment: the copy holds the value.
+    var point = Point { x: 10, y: 20 };
+    var moved = point;
+    if moved.x != 10 { exit(4); }
+    // Reading `point` here would be rejected; ci/reject/moved_value.zr pins that.
+
+    // A pointer looks without taking, so the owner stays usable.
+    var kept = Point { x: 7, y: 8 };
+    if peek(&kept) != 7 { exit(5); }
+    if peek(&kept) != 7 { exit(6); }
+    if kept.y != 8 { exit(7); }
+
+    // `copy` hands over a duplicate and leaves the original alone.
+    var shared = Point { x: 1, y: 2 };
+    if consume(shared.copy()) != 1 { exit(8); }
+    if consume(shared.copy()) != 1 { exit(9); }
+    if shared.x != 1 { exit(10); }
+
+    // The same for an array and for a Vec, which own their contents too.
+    var cells: Array<i32, 3> = [4, 5, 6];
+    if take_array(cells.copy()) != 4 { exit(11); }
+    if cells[0] != 4 { exit(12); }
+
+    var list: Vec<i64> = Vec.new();
+    list.push(1);
+    list.push(2);
+    if take_vec(list.copy()) != 2 { exit(13); }
+    if list.len() != 2 { exit(14); }
+
+    // A field of a moved struct travels with it.
+    var holder = Holder { cells: [7, 8, 9] };
+    var carried = holder;
+    if carried.cells[2] != 9 { exit(15); }
+
+    println("move semantics: all tests passed");
+    exit(0);
+}

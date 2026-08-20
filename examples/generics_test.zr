@@ -44,6 +44,12 @@ fn largest<T>(a: T, b: T) T {
     return b;
 }
 
+fn identity<T>(x: T) T { return x; }
+
+fn first<T, U>(a: T, b: U) T { return a; }
+
+fn second<T, U>(a: T, b: U) U { return b; }
+
 fn make() Pair<i64> { return Pair { first: 10, second: 20 }; }
 
 fn main() {
@@ -90,6 +96,15 @@ fn main() {
     holder.items.push(4);
     if holder.take(1) != 4 { exit(13); }
     if holder.take(99) != -1 { exit(14); }
+
+    // A generic function: one parameter at several types, including a struct,
+    // and two parameters that need not agree.
+    if identity(42) != 42 { exit(17); }
+    if identity(3.14) != 3.14 { exit(18); }
+    if !identity(true) { exit(19); }
+    if identity(Square { side: 4 }).area() != 16 { exit(20); }
+    if first(10, 3.14) != 10 { exit(21); }
+    if second(true, 2.5) != 2.5 { exit(22); }
 
     // A bound met by a struct that has the trait's methods.
     var wrapped = Wrap { inner: Square { side: 3 } };

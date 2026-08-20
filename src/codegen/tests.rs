@@ -1583,3 +1583,20 @@ fn test_a_mutable_receiver_is_reached_wherever_it_lives() {
     ";
     assert_compiles(input);
 }
+
+#[test]
+fn test_static_method_takes_a_dot() {
+    // A type on the left of the dot is a call on the type, which is the same
+    // function `Box::empty()` names.
+    let input = "
+        struct Box {
+            n: i32,
+            fn empty() Box { return Box { n: 0 }; }
+        }
+        fn main() {
+            var byDot = Box.empty();
+            var byPath = Box::empty();
+        }
+    ";
+    assert_compiles(input);
+}

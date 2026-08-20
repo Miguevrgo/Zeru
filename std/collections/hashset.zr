@@ -1,11 +1,14 @@
 // Zeru Standard Library - HashSet (i64 elements)
 // Fixed-capacity open-addressing hash set. 256 slots, ~192 usable (75% load).
-// NOTE: Requires module system improvements for import. Copy into programs for now.
 
 struct HashSet {
     keys: Array<i64, 256>,
     state: Array<u8, 256>,
     len: usize,
+
+    fn new() HashSet {
+        return HashSet { keys: [0; 256], state: [0; 256], len: 0 };
+    }
 
     fn insert(var self, key: i64) bool {
         if self.len >= 192 {

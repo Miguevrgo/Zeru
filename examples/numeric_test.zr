@@ -1,0 +1,140 @@
+// Integer and floating point routines, each checked against a known answer.
+
+fn gcd(a: i64, b: i64) i64 {
+    var x: i64 = a;
+    var y: i64 = b;
+    while y != 0 {
+        var keep: i64 = y;
+        y = x % y;
+        x = keep;
+    }
+    return x;
+}
+
+fn lcm(a: i64, b: i64) i64 { return a / gcd(a, b) * b; }
+
+fn power(base: i64, exponent: i64) i64 {
+    var result: i64 = 1;
+    var b: i64 = base;
+    var e: i64 = exponent;
+    while e > 0 {
+        if e % 2 == 1 { result = result * b; }
+        b = b * b;
+        e = e / 2;
+    }
+    return result;
+}
+
+fn digit_sum(value: i64) i64 {
+    var left: i64 = value;
+    var total: i64 = 0;
+    while left > 0 {
+        total += left % 10;
+        left = left / 10;
+    }
+    return total;
+}
+
+fn ones(value: u64) i32 {
+    var seen: i32 = 0;
+    var left: u64 = value;
+    while left != 0 {
+        if left & 1 == 1 { seen += 1; }
+        left = left >> 1;
+    }
+    return seen;
+}
+
+fn is_power_of_two(value: u64) bool {
+    if value == 0 { return false; }
+    return value & (value - 1) == 0;
+}
+
+// Sieve over a fixed array: mark composites, then count what is left.
+fn count_primes_below(limit: usize) i32 {
+    var composite: Array<bool, 50> = [false, false, false, false, false, false, false, false, false, false,
+                                      false, false, false, false, false, false, false, false, false, false,
+                                      false, false, false, false, false, false, false, false, false, false,
+                                      false, false, false, false, false, false, false, false, false, false,
+                                      false, false, false, false, false, false, false, false, false, false];
+    var found: i32 = 0;
+    var n: usize = 2;
+    while n < limit {
+        if !composite[n] {
+            found += 1;
+            var multiple: usize = n * n;
+            while multiple < limit {
+                composite[multiple] = true;
+                multiple += n;
+            }
+        }
+        n += 1;
+    }
+    return found;
+}
+
+fn abs(x: f64) f64 {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn near(a: f64, b: f64) bool { return abs(a - b) < 0.0001; }
+
+fn sqrt(x: f64) f64 {
+    if x <= 0.0 { return 0.0; }
+    var guess: f64 = x;
+    var step: i32 = 0;
+    while step < 40 {
+        guess = (guess + x / guess) / 2.0;
+        step += 1;
+    }
+    return guess;
+}
+
+fn main() {
+    if gcd(48, 18) != 6 { exit(1); }
+    if gcd(17, 5) != 1 { exit(2); }
+    if gcd(9, 0) != 9 { exit(3); }
+    if lcm(4, 6) != 12 { exit(4); }
+
+    if power(2, 10) != 1024 { exit(5); }
+    if power(3, 0) != 1 { exit(6); }
+    if power(7, 1) != 7 { exit(7); }
+
+    if digit_sum(1234) != 10 { exit(8); }
+    if digit_sum(0) != 0 { exit(9); }
+
+    if ones(255) != 8 { exit(10); }
+    if ones(0) != 0 { exit(11); }
+    if ones(1024) != 1 { exit(12); }
+
+    if !is_power_of_two(64) { exit(13); }
+    if is_power_of_two(63) { exit(14); }
+    if is_power_of_two(0) { exit(15); }
+
+    // 15 primes below 50.
+    if count_primes_below(50) != 15 { exit(16); }
+    if count_primes_below(3) != 1 { exit(17); }
+
+    if !near(sqrt(9.0), 3.0) { exit(20); }
+    if !near(sqrt(2.0), 1.41421356) { exit(21); }
+    if sqrt(0.0) != 0.0 { exit(22); }
+
+    // A float literal is f64, so it keeps its digits.
+    var precise = 3.14159265358979;
+    var annotated: f64 = 3.14159265358979;
+    if precise != annotated { exit(23); }
+
+    var third: f64 = 1.0 / 3.0;
+    if !near(third * 3.0, 1.0) { exit(24); }
+
+    // Truncation goes towards zero, as in C.
+    if 2.9 as i32 != 2 { exit(25); }
+    if -2.9 as i32 != -2 { exit(26); }
+
+    var narrow: f32 = 1.5;
+    if narrow as f64 != 1.5 { exit(27); }
+
+    println("numeric: all tests passed");
+    exit(0);
+}

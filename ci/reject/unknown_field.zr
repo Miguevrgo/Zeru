@@ -1,0 +1,7 @@
+// expect: has no field
+struct Point { x: i32 }
+
+fn main() {
+    var p = Point { x: 1 };
+    var wrong: i32 = p.y;
+}

@@ -1363,6 +1363,17 @@ impl SemanticAnalyzer {
         expected_type: Option<&Type>,
         span: Span,
     ) -> Type {
+        // A type on the left is a call on the type, not on a value: `Box.empty()`
+        // names the same function as `Box::empty()`. A variable of the same name
+        // wins, since that one has something to call a method on.
+        if let ExpressionKind::Get { object, name } = &function.kind
+            && let ExpressionKind::Identifier(type_name) = &object.kind
+            && self.struct_defs.contains_key(type_name)
+            && self.symbols.lookup(type_name).is_none()
+        {
+            function.kind = ExpressionKind::Identifier(format!("{type_name}::{name}"));
+        }
+
         let call_kind = match &function.kind {
             ExpressionKind::Identifier(name) => CallKind::Named(name.clone()),
             ExpressionKind::Get {

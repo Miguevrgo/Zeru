@@ -1,0 +1,5 @@
+// expect: bool
+fn main() {
+    var n: i32 = 1;
+    if n { exit(1); }
+}

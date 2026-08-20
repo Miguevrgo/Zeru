@@ -10,6 +10,10 @@ Used by CI, and runnable by hand:
 Every std module is compiled through a generated `import <module>` wrapper,
 because a library file has no `main` of its own and so cannot be linked alone.
 
+ci/reject holds programs that must NOT compile. Each names the complaint it
+expects on its first line, so a diagnostic that stops being reported, or starts
+saying something else, fails the suite instead of passing quietly.
+
 Exits non-zero when anything fails, so a red suite is actually red.
 """
 
@@ -68,6 +72,20 @@ class Suite:
             # otherwise slip through as a pass.
             self.check(f"compile {label}", exe.is_file(), "no executable produced")
 
+    def reject(self, source):
+        """Require `source` to be refused, with the message it says it expects."""
+        expected = source.read_text().partition("\n")[0].removeprefix("// expect:").strip()
+        result = run(["build", str(source)] + self.mode_flags, cwd=self.workdir)
+
+        if result.returncode == 0:
+            self.check(f"reject  {source.name}", False, "compiled, but should not")
+        else:
+            self.check(
+                f"reject  {source.name}",
+                expected in result.stdout,
+                f"expected {expected!r}, got:\n{result.stdout}",
+            )
+
     def run_example(self, source):
         """Run an example and require a zero exit: they self-check via exit codes."""
         result = run(["run", str(source)], cwd=self.workdir)
@@ -118,6 +136,12 @@ def main():
         )
         for example in examples:
             suite.compile(example.name, example)
+
+        # A rejection comes out of the front end, which the safety mode does not
+        # reach, so checking it once is checking it everywhere.
+        if not mode_flags:
+            for source in sorted((ROOT / "ci" / "reject").glob("*.zr")):
+                suite.reject(source)
 
         for module, path in std_modules():
             wrapper = workdir / f"use_{path.stem}.zr"

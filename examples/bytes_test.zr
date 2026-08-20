@@ -1,0 +1,100 @@
+// Byte buffers reached through pointers: measuring, reversing, comparing.
+
+fn length(buf: *u8, limit: usize) usize {
+    var i: usize = 0;
+    while i < limit {
+        if *(buf + i as i64) == 0 { return i; }
+        i += 1;
+    }
+    return limit;
+}
+
+fn reverse(buf: *u8, length: usize) {
+    if length < 2 { return; }
+    var left: usize = 0;
+    var right: usize = length - 1;
+    while left < right {
+        var keep: u8 = *(buf + left as i64);
+        *(buf + left as i64) = *(buf + right as i64);
+        *(buf + right as i64) = keep;
+        left += 1;
+        right -= 1;
+    }
+}
+
+fn count_byte(buf: *u8, length: usize, needle: u8) i32 {
+    var seen: i32 = 0;
+    var i: usize = 0;
+    while i < length {
+        if *(buf + i as i64) == needle { seen += 1; }
+        i += 1;
+    }
+    return seen;
+}
+
+fn equal(left: *u8, right: *u8, length: usize) bool {
+    var i: usize = 0;
+    while i < length {
+        if *(left + i as i64) != *(right + i as i64) { return false; }
+        i += 1;
+    }
+    return true;
+}
+
+fn upper(buf: *u8, length: usize) {
+    var i: usize = 0;
+    while i < length {
+        var c: u8 = *(buf + i as i64);
+        if c >= 97 && c <= 122 { *(buf + i as i64) = c - 32; }
+        i += 1;
+    }
+}
+
+// Bytes read as a big-endian number, to exercise widening while shifting.
+fn value_of(buf: *u8, length: usize) u64 {
+    var total: u64 = 0;
+    var i: usize = 0;
+    while i < length {
+        total = total * 256 + *(buf + i as i64) as u64;
+        i += 1;
+    }
+    return total;
+}
+
+fn main() {
+    // "abc" then a terminator, with the rest zeroed.
+    var text: Array<u8, 8> = [97, 98, 99, 0, 0, 0, 0, 0];
+    if length(&text[0], 8) != 3 { exit(1); }
+
+    reverse(&text[0], 3);
+    if text[0] != 99 { exit(2); }
+    if text[2] != 97 { exit(3); }
+    if text[3] != 0 { exit(4); }
+
+    reverse(&text[0], 3);
+    if text[0] != 97 { exit(5); }
+
+    if count_byte(&text[0], 8, 0) != 5 { exit(6); }
+    if count_byte(&text[0], 8, 97) != 1 { exit(7); }
+
+    var same: Array<u8, 3> = [97, 98, 99];
+    if !equal(&text[0], &same[0], 3) { exit(8); }
+    same[1] = 0;
+    if equal(&text[0], &same[0], 3) { exit(9); }
+
+    upper(&text[0], 3);
+    if text[0] != 65 { exit(10); }
+    if text[2] != 67 { exit(11); }
+
+    var digits: Array<u8, 3> = [1, 2, 3];
+    if value_of(&digits[0], 3) != 66051 { exit(12); }
+
+    // A buffer of one byte, and of none, must not walk off the end.
+    var single: Array<u8, 1> = [7];
+    reverse(&single[0], 1);
+    if single[0] != 7 { exit(13); }
+    if length(&single[0], 0) != 0 { exit(14); }
+
+    println("bytes: all tests passed");
+    exit(0);
+}

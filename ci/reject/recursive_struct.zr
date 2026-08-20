@@ -1,0 +1,6 @@
+// expect: stores itself
+struct Node { next: Node, value: i32 }
+
+fn main() {
+    exit(0);
+}

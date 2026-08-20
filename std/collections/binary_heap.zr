@@ -1,10 +1,13 @@
 // Zeru Standard Library - BinaryHeap (max-heap, i64 elements)
 // Fixed-capacity array-backed binary max-heap. 1024 elements max.
-// NOTE: Requires module system improvements for import. Copy into programs for now.
 
 struct BinaryHeap {
     data: Array<i64, 1024>,
     len: usize,
+
+    fn new() BinaryHeap {
+        return BinaryHeap { data: [0; 1024], len: 0 };
+    }
 
     fn push(var self, val: i64) bool {
         if self.len >= 1024 {

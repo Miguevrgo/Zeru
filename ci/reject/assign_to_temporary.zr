@@ -1,0 +1,6 @@
+// expect: Cannot assign to a temporary value
+fn make() Array<i32, 3> { return [1, 2, 3]; }
+
+fn main() {
+    make()[0] = 5;
+}

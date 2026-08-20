@@ -1,0 +1,8 @@
+// expect: asks for T: Eq
+struct Pair<T: Eq> { first: T, second: T }
+struct Point { x: i32 }
+
+fn main() {
+    var p = Point { x: 1 };
+    var bad = Pair { first: p, second: p.copy() };
+}

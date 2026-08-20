@@ -66,6 +66,8 @@ jobs:
 
   # End-to-end check: every example and std module has to compile, link, and
   # (for the examples, which self-check through their exit codes) run clean.
+  # The debug run also requires everything under ci/reject to be refused, with
+  # the complaint each of those files says it expects.
   #
   # x86_64 Linux only: std/builtin.zr reaches the kernel through inline `syscall`
   # asm with Linux call numbers, so a Zeru program cannot be built anywhere else

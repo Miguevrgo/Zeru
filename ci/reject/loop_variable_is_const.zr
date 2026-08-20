@@ -1,0 +1,7 @@
+// expect: Cannot reassign constant
+fn main() {
+    var cells: Array<i32, 2> = [1, 2];
+    for item in cells {
+        item = 9;
+    }
+}

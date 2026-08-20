@@ -1,11 +1,14 @@
 // Zeru Standard Library - VecDeque (double-ended queue, i64 elements)
 // Fixed-capacity circular buffer. 1024 elements max. O(1) push/pop both ends.
-// NOTE: Requires module system improvements for import. Copy into programs for now.
 
 struct VecDeque {
     data: Array<i64, 1024>,
     head: usize,
     len: usize,
+
+    fn new() VecDeque {
+        return VecDeque { data: [0; 1024], head: 0, len: 0 };
+    }
 
     fn push_back(var self, val: i64) bool {
         if self.len >= 1024 {

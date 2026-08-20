@@ -1,0 +1,8 @@
+// expect: can finish without returning a value
+fn positive(n: i32) bool {
+    if n > 0 { return true; }
+}
+
+fn main() {
+    if positive(1) { exit(0); }
+}
