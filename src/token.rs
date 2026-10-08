@@ -20,7 +20,7 @@ pub enum Token {
 
     // Literals
     Identifier(String),
-    Int(i64),
+    Int(u64),
     Float(f64),
     StringLit(Vec<u8>),
 

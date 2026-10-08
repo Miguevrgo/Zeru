@@ -5,6 +5,16 @@ const EMPTY: u8 = 0;
 const OCCUPIED: u8 = 1;
 const DELETED: u8 = 2;
 
+// Where probing for `key` starts: the key folded to 32 bits, then the top
+// byte of its product with 2^32 / phi (Fibonacci hashing). A 32-bit value
+// times a 32-bit constant cannot overflow a u64, so no key trips the overflow
+// check.
+fn slot(key: i64) usize {
+    var h: u64 = key as u64;
+    h = (h ^ (h >> 32)) & 4294967295;
+    return (((h * 2654435769) >> 24) & 255) as usize;
+}
+
 struct HashMap {
     keys: Array<i64, 256>,
     vals: Array<i64, 256>,
@@ -20,11 +30,7 @@ struct HashMap {
             return false;
         }
 
-        var h: u64 = key as u64;
-        h = (h ^ (h >> 30)) * 13787848793156543929 as u64;
-        h = (h ^ (h >> 27)) * 10723151780598845931 as u64;
-        h = h ^ (h >> 31);
-        var idx: usize = (h & 255) as usize;
+        var idx: usize = slot(key);
 
         var i: usize = 0;
         while i < 256 {
@@ -46,11 +52,7 @@ struct HashMap {
     }
 
     fn get(self, key: i64) i64? {
-        var h: u64 = key as u64;
-        h = (h ^ (h >> 30)) * 13787848793156543929 as u64;
-        h = (h ^ (h >> 27)) * 10723151780598845931 as u64;
-        h = h ^ (h >> 31);
-        var idx: usize = (h & 255) as usize;
+        var idx: usize = slot(key);
 
         var i: usize = 0;
         while i < 256 {
@@ -67,11 +69,7 @@ struct HashMap {
     }
 
     fn contains(self, key: i64) bool {
-        var h: u64 = key as u64;
-        h = (h ^ (h >> 30)) * 13787848793156543929 as u64;
-        h = (h ^ (h >> 27)) * 10723151780598845931 as u64;
-        h = h ^ (h >> 31);
-        var idx: usize = (h & 255) as usize;
+        var idx: usize = slot(key);
 
         var i: usize = 0;
         while i < 256 {
@@ -88,11 +86,7 @@ struct HashMap {
     }
 
     fn remove(var self, key: i64) bool {
-        var h: u64 = key as u64;
-        h = (h ^ (h >> 30)) * 13787848793156543929 as u64;
-        h = (h ^ (h >> 27)) * 10723151780598845931 as u64;
-        h = h ^ (h >> 31);
-        var idx: usize = (h & 255) as usize;
+        var idx: usize = slot(key);
 
         var i: usize = 0;
         while i < 256 {

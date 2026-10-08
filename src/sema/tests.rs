@@ -2430,3 +2430,72 @@ fn test_writing_through_a_slice_is_rejected() {
         "expected the write to be refused: {errors:?}"
     );
 }
+
+#[test]
+fn test_cast_to_a_pointer_has_a_type() {
+    // The target was only understood when it was a bare name, so a pointer
+    // cast came out untyped and fitted any annotation.
+    let inferred = "fn main() { var x: i64 = 0; var p = x as *u8; var q: *u8 = p; }";
+    assert!(analyze(inferred).is_empty(), "{:?}", analyze(inferred));
+
+    let wrong = "fn main() { var x: i64 = 0; var q: bool = x as *u8; }";
+    let errors = analyze(wrong);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].contains("Type mismatch"), "{errors:?}");
+}
+
+#[test]
+fn test_literal_that_does_not_fit_is_an_error() {
+    // Each of these used to be accepted, and the last two silently wrapped.
+    for (declaration, message) in [
+        ("var x: u64 = -1;", "Literal -1 does not fit in u64"),
+        ("var x: usize = -5;", "Literal -5 does not fit in usize"),
+        ("var x: i8 = -129;", "Literal -129 does not fit in i8"),
+        (
+            "var x: i64 = 18446744073709551615;",
+            "Literal 18446744073709551615 does not fit in i64",
+        ),
+        (
+            "var x = 3000000000;",
+            "Literal 3000000000 does not fit in i32, the type a literal takes",
+        ),
+    ] {
+        let errors = analyze(&format!("fn main() {{ {declaration} }}"));
+        assert_eq!(errors.len(), 1, "{declaration}: {errors:?}");
+        assert!(errors[0].starts_with(message), "{declaration}: {errors:?}");
+    }
+}
+
+#[test]
+fn test_literal_at_the_edge_of_its_type_fits() {
+    let input = "
+        fn main() {
+            var a: u64 = 18446744073709551615;
+            var b: i64 = -9223372036854775808;
+            var c: i8 = -128;
+            var d: u8 = 255;
+            var e = -2147483648;
+            var f: i32? = -5;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty(), "{errors:?}");
+}
+
+#[test]
+fn test_literal_on_the_left_takes_the_type_on_the_right() {
+    // Only a literal on the right used to adapt, so `3 < x` compared an i32
+    // with a u32 and was refused, while `x > 3` was fine.
+    let input = "
+        fn main() {
+            var x: u32 = 5;
+            var below = 3 < x;
+            var f: f32 = 1.5;
+            var doubled: f32 = 2.0 * f;
+            var neg: i64 = 7;
+            var diff = -1 - neg;
+        }
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty(), "{errors:?}");
+}

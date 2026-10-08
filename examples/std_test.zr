@@ -51,6 +51,9 @@ fn main() {
     }
     if map.size() != 100 { exit(35); }
     if map.get(77).unwrap() != 231 { exit(36); }
+    // A negative key hashes like any other: it used to overflow the hash.
+    if !map.insert(-1, 7) { exit(37); }
+    if map.get(-1).unwrap() != 7 { exit(38); }
 
     // --- HashSet -------------------------------------------------------------
     var seen = HashSet.new();

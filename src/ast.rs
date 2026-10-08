@@ -19,7 +19,7 @@ pub struct TraitMethod {
 pub enum TypeSpec {
     Named(String),
     Generic { name: String, args: Vec<TypeSpec> },
-    IntLiteral(i64),
+    IntLiteral(u64),
     Tuple(Vec<TypeSpec>),
     Pointer(Box<TypeSpec>),
     Optional(Box<TypeSpec>), // T?
@@ -104,7 +104,7 @@ pub struct Expression {
 
 #[derive(Debug, Clone)]
 pub enum ExpressionKind {
-    Int(i64),
+    Int(u64),
     Float(f64),
     StringLit(Vec<u8>),
     Boolean(bool),
@@ -149,7 +149,7 @@ pub enum ExpressionKind {
     },
     Cast {
         left: Box<Expression>,
-        target: Box<Expression>,
+        target: TypeSpec,
     },
     Match {
         value: Box<Expression>,

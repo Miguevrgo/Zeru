@@ -162,7 +162,7 @@ impl Type {
             }
             Type::Array { elem_type, len } => TypeSpec::Generic {
                 name: "Array".into(),
-                args: vec![elem_type.to_spec(), TypeSpec::IntLiteral(*len as i64)],
+                args: vec![elem_type.to_spec(), TypeSpec::IntLiteral(*len as u64)],
             },
             Type::Vec { elem_type } => TypeSpec::Generic {
                 name: "Vec".into(),

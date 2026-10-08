@@ -174,7 +174,7 @@ fn rename_expression(expr: &mut Expression, renames: &Renames) {
         }
         ExpressionKind::Cast { left, target } => {
             rename_expression(left, renames);
-            rename_expression(target, renames);
+            rename_type(target, renames);
         }
         ExpressionKind::Match { value, arms } => {
             rename_expression(value, renames);

@@ -128,16 +128,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    pub(super) fn expr_to_typespec(expr: &Expression) -> Option<TypeSpec> {
-        match &expr.kind {
-            ExpressionKind::Identifier(name) => Some(TypeSpec::Named(name.clone())),
-            ExpressionKind::Dereference(inner) => {
-                Self::expr_to_typespec(inner).map(|t| TypeSpec::Pointer(Box::new(t)))
-            }
-            _ => None,
-        }
-    }
-
     pub(super) fn get_llvm_type(&self, spec: &TypeSpec) -> Option<BasicTypeEnum<'ctx>> {
         match spec {
             TypeSpec::Named(name) => match self.current_type_substitutions.get(name) {

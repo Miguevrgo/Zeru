@@ -171,17 +171,9 @@ fn map_all(statements: &mut [Statement], f: &mut impl FnMut(&mut TypeSpec)) {
 
 fn map_expression_types(expr: &mut Expression, f: &mut impl FnMut(&mut TypeSpec)) {
     match &mut expr.kind {
-        // The target of a cast is written as a name, so only a type that is
-        // itself a name can be spelled there.
         ExpressionKind::Cast { left, target } => {
             map_expression_types(left, f);
-            if let ExpressionKind::Identifier(name) = &mut target.kind {
-                let mut spec = TypeSpec::Named(name.clone());
-                f(&mut spec);
-                if let TypeSpec::Named(mapped) = spec {
-                    *name = mapped;
-                }
-            }
+            f(target);
         }
 
         ExpressionKind::StructLiteral { fields, .. } => {

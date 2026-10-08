@@ -288,14 +288,11 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Integer literals are carried as an `i64` bit pattern so the whole `u64`
-    /// range survives; the analyser decides whether the value suits its type.
+    /// An integer literal carries its magnitude: a minus sign is an operator,
+    /// and the analyser decides whether the value suits its type.
     fn int_token(digits: &str, radix: u32) -> Token {
-        if let Ok(value) = i64::from_str_radix(digits, radix) {
-            return Token::Int(value);
-        }
         match u64::from_str_radix(digits, radix) {
-            Ok(value) => Token::Int(value as i64),
+            Ok(value) => Token::Int(value),
             Err(_) => Token::Illegal(format!("Integer literal '{digits}' is out of range")),
         }
     }

@@ -1262,8 +1262,16 @@ impl SemanticAnalyzer {
         }
 
         let operator = operator.clone();
-        let l_ty = self.check_expression(left, expected_type);
-        let r_ty = self.check_expression(right, Some(&l_ty));
+        // A number written out takes the type of the other operand, on either
+        // side: `3 < x` compares at the type of `x`, as `x > 3` does.
+        let (l_ty, r_ty) = if Self::is_number_literal(left) && !Self::is_number_literal(right) {
+            let r_ty = self.check_expression(right, expected_type);
+            (self.check_expression(left, Some(&r_ty)), r_ty)
+        } else {
+            let l_ty = self.check_expression(left, expected_type);
+            let r_ty = self.check_expression(right, Some(&l_ty));
+            (l_ty, r_ty)
+        };
 
         if l_ty == Type::Unknown || r_ty == Type::Unknown {
             return Type::Unknown;
@@ -1293,6 +1301,18 @@ impl SemanticAnalyzer {
             | crate::token::Token::Geq => Type::Bool,
 
             _ => l_ty,
+        }
+    }
+
+    /// A number written in the source, whose type comes from its context.
+    fn is_number_literal(expr: &Expression) -> bool {
+        match &expr.kind {
+            ExpressionKind::Int(_) | ExpressionKind::Float(_) => true,
+            ExpressionKind::Prefix {
+                operator: crate::token::Token::Minus,
+                right,
+            } => Self::is_number_literal(right),
+            _ => false,
         }
     }
 
@@ -1709,25 +1729,12 @@ impl SemanticAnalyzer {
         let operator = operator.clone();
         match &operator {
             crate::token::Token::Minus => {
-                if let ExpressionKind::Int(val) = &right.kind
-                    && let Some(Type::Integer { width, signed }) = expected_type
-                {
-                    let negated = -val;
-                    let width = *width;
-                    let signed = *signed;
-                    if self.fits_in_int(negated, width, signed) {
-                        return Type::Integer { width, signed };
-                    } else {
-                        self.error(
-                            format!(
-                                "Literal {} does not fit in type {:?}",
-                                negated,
-                                expected_type.unwrap()
-                            ),
-                            span,
-                        );
-                        return Type::Integer { width, signed };
-                    }
+                // Checked as one number, so `-128` fits an i8 although `128`
+                // on its own does not.
+                if let ExpressionKind::Int(value) = right.kind {
+                    let ty = self.check_int_literal(value, true, expected_type, span);
+                    right.ty = Some(ty.clone());
+                    return ty;
                 }
 
                 let right_type = self.check_expression(right, expected_type);
@@ -1783,8 +1790,8 @@ impl SemanticAnalyzer {
             Type::Array { elem_type, len } => {
                 // A literal index is settled here rather than left to the
                 // runtime bounds check.
-                if let ExpressionKind::Int(value) = &index.kind
-                    && !(0..len as i64).contains(value)
+                if let ExpressionKind::Int(value) = index.kind
+                    && value >= len as u64
                 {
                     self.error(
                         format!("Index {value} is outside the array's 0..{len}"),
@@ -1965,23 +1972,8 @@ impl SemanticAnalyzer {
         };
 
         match &mut expr.kind {
-            ExpressionKind::Int(val) => {
-                if let Some(Type::Integer { width, signed }) = inner_expected {
-                    if self.fits_in_int(*val, *width, *signed) {
-                        return Type::Integer {
-                            width: *width,
-                            signed: *signed,
-                        };
-                    }
-                    self.error(
-                        format!("Literal {val} does not fit in type {inner_expected:?}"),
-                        span,
-                    );
-                }
-                Type::Integer {
-                    signed: Signedness::Signed,
-                    width: IntWidth::W32,
-                }
+            ExpressionKind::Int(value) => {
+                self.check_int_literal(*value, false, inner_expected, span)
             }
             ExpressionKind::Float(_) => match inner_expected {
                 Some(Type::Float(width)) => Type::Float(*width),
@@ -2051,14 +2043,8 @@ impl SemanticAnalyzer {
             }
 
             ExpressionKind::Cast { left, target } => {
-                let _source_type = self.check_expression(left, None);
-
-                if let ExpressionKind::Identifier(type_name) = &target.kind {
-                    let type_name = type_name.clone();
-                    self.resolve_named_type(&type_name, span)
-                } else {
-                    Type::Unknown
-                }
+                self.check_expression(left, None);
+                self.resolve_spec(target, span)
             }
             ExpressionKind::Index { left, index } => self.check_index(left, index, span),
 
@@ -2378,17 +2364,55 @@ impl SemanticAnalyzer {
         self.errors.push(ZeruError::semantic(msg, span, 0));
     }
 
-    fn fits_in_int(&self, val: i64, width: IntWidth, signed: Signedness) -> bool {
-        let (min, max) = match (width, signed) {
-            (IntWidth::W8, Signedness::Unsigned) => (0, u8::MAX as i64),
-            (IntWidth::W8, Signedness::Signed) => (i8::MIN as i64, i8::MAX as i64),
-            (IntWidth::W16, Signedness::Unsigned) => (0, u16::MAX as i64),
-            (IntWidth::W16, Signedness::Signed) => (i16::MIN as i64, i16::MAX as i64),
-            (IntWidth::W32, Signedness::Unsigned) => (0, u32::MAX as i64),
-            (IntWidth::W32, Signedness::Signed) => (i32::MIN as i64, i32::MAX as i64),
-            _ => (i64::MIN, i64::MAX),
+    /// The type of an integer literal, negated when `negative`: the integer
+    /// type its context expects, or i32 when nothing does. A value that does
+    /// not fit is an error, not a quiet wrap.
+    fn check_int_literal(
+        &mut self,
+        value: u64,
+        negative: bool,
+        expected: Option<&Type>,
+        span: Span,
+    ) -> Type {
+        let expected = match expected {
+            Some(Type::Optional(inner)) => Some(inner.as_ref()),
+            other => other,
         };
-        val >= min && val <= max
+        let (signed, width, by_default) = match expected {
+            Some(Type::Integer { signed, width }) => (*signed, *width, false),
+            _ => (Signedness::Signed, IntWidth::W32, true),
+        };
+        let ty = Type::Integer { signed, width };
+
+        if !Self::fits_in_int(value, negative, width, signed) {
+            let sign = if negative { "-" } else { "" };
+            let hint = if by_default {
+                ", the type a literal takes when nothing says otherwise; annotate a wider type"
+            } else {
+                ""
+            };
+            self.error(
+                format!("Literal {sign}{value} does not fit in {ty}{hint}"),
+                span,
+            );
+        }
+        ty
+    }
+
+    fn fits_in_int(value: u64, negative: bool, width: IntWidth, signed: Signedness) -> bool {
+        let bits = match width {
+            IntWidth::W8 => 8,
+            IntWidth::W16 => 16,
+            IntWidth::W32 => 32,
+            IntWidth::W64 | IntWidth::WSize => 64,
+        };
+        let value = u128::from(value);
+        match (signed, negative) {
+            (Signedness::Unsigned, false) => value < 1 << bits,
+            (Signedness::Unsigned, true) => value == 0,
+            (Signedness::Signed, false) => value < 1 << (bits - 1),
+            (Signedness::Signed, true) => value <= 1 << (bits - 1),
+        }
     }
 
     fn find_similar_variable(&self, name: &str) -> Option<String> {

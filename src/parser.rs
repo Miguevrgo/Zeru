@@ -316,7 +316,9 @@ impl<'a> Parser<'a> {
             name.push_str(segment);
         }
 
-        if self.peek_token_is(&Token::Lt) {
+        // A primitive takes no arguments, so a `<` after one is a comparison,
+        // as in `x as i64 < 0`.
+        if self.peek_token_is(&Token::Lt) && !is_primitive(&name) {
             let args = self.parse_generic_arguments()?;
             return Some(TypeSpec::Generic { name, args });
         }
@@ -1410,12 +1412,19 @@ impl<'a> Parser<'a> {
         let start_span = left.span;
         let operator = self.current_token.clone();
 
-        // These three are postfix rather than infix: they consume their own
-        // brackets instead of a right-hand expression.
+        // These are postfix rather than infix: they consume their own brackets,
+        // or a type, instead of a right-hand expression.
         match operator {
             Token::LBracket => return self.parse_index_expression(left),
             Token::LParen => return self.parse_call_expression(left),
             Token::Dot => return self.parse_get_expression(left),
+            Token::As => {
+                self.next_token();
+                let target = self.parse_type()?;
+                let span = start_span.merge(self.current_span);
+                let left = Box::new(left);
+                return Some(Expression::new(ExpressionKind::Cast { left, target }, span));
+            }
             _ => {}
         }
 
@@ -1431,10 +1440,6 @@ impl<'a> Parser<'a> {
         let span = start_span.merge(right.span);
 
         let kind = match operator {
-            Token::As => ExpressionKind::Cast {
-                left: Box::new(left),
-                target: Box::new(right),
-            },
             _ if Self::is_assignment(&operator) => ExpressionKind::Assign {
                 target: Box::new(left),
                 operator,
@@ -1710,6 +1715,24 @@ enum Precedence {
     Index,
 }
 
+fn is_primitive(name: &str) -> bool {
+    matches!(
+        name,
+        "i8" | "i16"
+            | "i32"
+            | "i64"
+            | "isize"
+            | "u8"
+            | "u16"
+            | "u32"
+            | "u64"
+            | "usize"
+            | "f32"
+            | "f64"
+            | "bool"
+    )
+}
+
 fn token_precedence(token: &Token) -> Precedence {
     match token {
         Token::Assign
@@ -1827,6 +1850,36 @@ mod tests {
                 "{source}"
             );
         }
+    }
+
+    #[test]
+    fn test_cast_target_is_a_type() {
+        // A `<` after a primitive still compares, and a target that is not a
+        // bare name, such as a pointer to a generic type, can be written.
+        let program =
+            parse_input("fn main() { var a = x as i64 < 0; var b = p as *Array<u8, 4>; }");
+        let body = get_function_body(&program.statements[0]);
+
+        let StatementKind::Var { value, .. } = &body[0].kind else {
+            panic!("Expected a var statement");
+        };
+        let ExpressionKind::Infix { left, operator, .. } = &value.kind else {
+            panic!("Expected a comparison, got {:?}", value.kind);
+        };
+        assert_eq!(*operator, Token::Lt);
+        assert!(matches!(left.kind, ExpressionKind::Cast { .. }));
+
+        let StatementKind::Var { value, .. } = &body[1].kind else {
+            panic!("Expected a var statement");
+        };
+        let ExpressionKind::Cast { target, .. } = &value.kind else {
+            panic!("Expected a cast, got {:?}", value.kind);
+        };
+        let array = TypeSpec::Generic {
+            name: "Array".to_string(),
+            args: vec![TypeSpec::Named("u8".to_string()), TypeSpec::IntLiteral(4)],
+        };
+        assert_eq!(*target, TypeSpec::Pointer(Box::new(array)));
     }
 
     #[test]

@@ -517,7 +517,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     Some(BasicTypeEnum::IntType(t)) => t,
                     _ => self.context.i32_type(),
                 };
-                int_type.const_int(*val as u64, false).into()
+                int_type.const_int(*val, false).into()
             }
             ExpressionKind::Float(val) => {
                 let float_type = match annotated {
@@ -735,17 +735,26 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             other => other,
         };
 
+        // A literal's type was settled by the analyser, sometimes from the
+        // other operand of a comparison, which `expected_type` does not carry.
+        let literal_type = || {
+            expr.ty
+                .as_ref()
+                .and_then(|ty| self.llvm_type_of(ty))
+                .or(inner_expected)
+        };
+
         match &expr.kind {
             ExpressionKind::Int(val) => {
-                let int_type = match inner_expected {
+                let int_type = match literal_type() {
                     Some(BasicTypeEnum::IntType(t)) => t,
                     _ => self.context.i32_type(),
                 };
 
-                int_type.const_int(*val as u64, false).into()
+                int_type.const_int(*val, false).into()
             }
             ExpressionKind::Float(val) => {
-                let float_type = match inner_expected {
+                let float_type = match literal_type() {
                     Some(BasicTypeEnum::FloatType(t)) => t,
                     _ => self.context.f64_type(),
                 };
@@ -1539,27 +1548,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn lower_cast(
         &mut self,
         left: &Expression,
-        target: &Expression,
+        target: &TypeSpec,
         span: Span,
     ) -> BasicValueEnum<'ctx> {
         let src_val = self.compile_expression(left, None);
 
-        let target_typespec = match Self::expr_to_typespec(target) {
-            Some(t) => t,
-            None => {
-                self.error(
-                    format!("Cannot use '{:?}' as a cast target type", target.kind),
-                    target.span,
-                );
-                return self.dummy_val();
-            }
-        };
-        let target_type = match self.get_llvm_type(&target_typespec) {
-            Some(t) => t,
-            None => {
-                self.error("Cast to void type is not allowed", target.span);
-                return self.dummy_val();
-            }
+        let Some(target_type) = self.get_llvm_type(target) else {
+            self.error("Cast to void type is not allowed", span);
+            return self.dummy_val();
         };
 
         // An i1 must never sign-extend, or `true as i32` would come out as -1.
@@ -1593,7 +1589,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
             }
             (BasicValueEnum::FloatValue(v), BasicTypeEnum::IntType(t)) => {
-                if Self::is_unsigned_type(&target_typespec) {
+                if Self::is_unsigned_type(target) {
                     self.builder
                         .build_float_to_unsigned_int(v, t, "fptoui")
                         .unwrap()
