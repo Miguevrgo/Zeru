@@ -106,6 +106,13 @@ fn main() {
     if seen != 2 { exit(65); }
     if growing.len() != 4 { exit(66); }
 
+    // Reserved up front: no growth until the capacity is used up.
+    var reserved: Vec<i64> = Vec.with_capacity(4);
+    if reserved.capacity() != 4 { exit(67); }
+    reserved.push(7);
+    if reserved.len() != 1 || reserved[0] != 7 { exit(68); }
+    if reserved.capacity() != 4 { exit(69); }
+
     println("Vec tests passed!");
     exit(0);
 }

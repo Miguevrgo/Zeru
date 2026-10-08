@@ -1,0 +1,8 @@
+// expect: Imports must come before any other code
+fn helper() i32 { return 1; }
+
+import std.math;
+
+fn main() {
+    exit(helper());
+}

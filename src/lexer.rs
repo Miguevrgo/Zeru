@@ -40,7 +40,9 @@ impl<'a> Lexer<'a> {
         ch
     }
 
-    fn skip_whitespace(&mut self) {
+    /// Skip whitespace and comments. `Err` carries where a block comment that
+    /// never closes began.
+    fn skip_whitespace(&mut self) -> Result<(), usize> {
         while let Some(&ch) = self.peek() {
             match ch {
                 ' ' | '\t' | '\n' | '\r' => {
@@ -63,28 +65,28 @@ impl<'a> Lexer<'a> {
                             }
                         }
                         Some('*') => {
+                            let start = self.pos;
                             self.advance();
                             self.advance();
 
                             loop {
                                 match self.advance() {
-                                    Some('*') => {
-                                        if self.peek() == Some(&'/') {
-                                            self.advance();
-                                            break;
-                                        }
+                                    Some('*') if self.peek() == Some(&'/') => {
+                                        self.advance();
+                                        break;
                                     }
-                                    Some(_) => continue,
-                                    None => break,
+                                    Some(_) => {}
+                                    None => return Err(start),
                                 }
                             }
                         }
-                        _ => return,
+                        _ => return Ok(()),
                     }
                 }
-                _ => return,
+                _ => return Ok(()),
             }
         }
+        Ok(())
     }
 
     fn match_next(&mut self, expected: char, if_match: Token, default: Token) -> Token {
@@ -97,7 +99,14 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn next_token(&mut self) -> (Token, usize, Span) {
-        self.skip_whitespace();
+        if let Err(start) = self.skip_whitespace() {
+            let message = "Unterminated block comment".to_string();
+            return (
+                Token::Illegal(message),
+                self.line,
+                Span::new(start, start + 2),
+            );
+        }
 
         let start_line = self.line;
         let start_pos = self.pos;
@@ -182,7 +191,7 @@ impl<'a> Lexer<'a> {
             'a'..='z' | 'A'..='Z' | '_' => self.read_identifier(ch),
             '0'..='9' => self.read_number(ch),
 
-            _ => Token::Illegal(ch.to_string()),
+            _ => Token::Illegal(format!("Unexpected character '{ch}'")),
         };
         (token, start_line, Span::new(start_pos, self.pos))
     }
@@ -293,12 +302,20 @@ impl<'a> Lexer<'a> {
 
     fn read_string(&mut self) -> Token {
         let mut bytes = Vec::new();
+        // Reported once the closing quote is reached, so the rest of the
+        // string is not read as code.
+        let mut unknown_escape = None;
 
         while let Some(&ch) = self.peek() {
             match ch {
                 '"' => {
                     self.advance();
-                    return Token::StringLit(bytes);
+                    return match unknown_escape {
+                        Some(c) => Token::Illegal(format!(
+                            "Unknown escape sequence '\\{c}', expected one of \\n \\t \\r \\\" \\\\"
+                        )),
+                        None => Token::StringLit(bytes),
+                    };
                 }
                 '\\' => {
                     self.advance();
@@ -310,8 +327,7 @@ impl<'a> Lexer<'a> {
                         Some('"') => bytes.push(b'"'),
                         Some('\\') => bytes.push(b'\\'),
                         Some(c) => {
-                            bytes.push(b'\\');
-                            bytes.push(c as u8);
+                            unknown_escape.get_or_insert(c);
                         }
                         None => return Token::Illegal("Unterminated string escape".to_string()),
                     }
@@ -420,6 +436,30 @@ mod tests {
             }
             _ => panic!("Expected StringLit"),
         }
+    }
+
+    #[test]
+    fn test_unterminated_block_comment_is_reported() {
+        let mut lexer = Lexer::new("fn /* never closed");
+        assert_eq!(lexer.next_token().0, Token::Fn);
+        let (token, _, span) = lexer.next_token();
+        assert_eq!(
+            token,
+            Token::Illegal("Unterminated block comment".to_string())
+        );
+        assert_eq!(span, Span::new(3, 5));
+        assert_eq!(lexer.next_token().0, Token::Eof);
+    }
+
+    #[test]
+    fn test_unknown_escape_is_reported_after_the_whole_string() {
+        // The string is read to its end, so `x` after it is still a name.
+        let mut lexer = Lexer::new(r#""a\qb" x"#);
+        let Token::Illegal(message) = lexer.next_token().0 else {
+            panic!("Expected an Illegal token");
+        };
+        assert!(message.contains(r"'\q'"), "{message}");
+        assert_eq!(lexer.next_token().0, Token::Identifier("x".to_string()));
     }
 
     #[test]

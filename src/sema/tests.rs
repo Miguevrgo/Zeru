@@ -1,10 +1,18 @@
+use crate::errors::{Span, ZeruError};
 use crate::parser::Parser;
 use crate::{lexer::Lexer, sema::analyzer::SemanticAnalyzer};
 
 fn analyze(input: &str) -> Vec<String> {
+    analyze_errors(input)
+        .into_iter()
+        .map(|e| e.message)
+        .collect()
+}
+
+fn analyze_errors(input: &str) -> Vec<ZeruError> {
     let lexer = Lexer::new(input);
     let mut parser = Parser::new(lexer);
-    let program = parser.parse_program();
+    let mut program = parser.parse_program();
 
     if !parser.errors.is_empty() {
         panic!(
@@ -14,8 +22,31 @@ fn analyze(input: &str) -> Vec<String> {
     }
 
     let mut analyzer = SemanticAnalyzer::new();
-    analyzer.analyze(&mut program.clone());
-    analyzer.errors.iter().map(|e| e.message.clone()).collect()
+    analyzer.analyze(&mut program);
+    analyzer.errors
+}
+
+#[test]
+fn test_declaration_errors_point_at_their_source() {
+    // Each of these used to come out with no file or line at all.
+    for input in [
+        "fn f(a: Strng) { } fn main() { }",
+        "fn f() { } fn f() { } fn main() { }",
+        "fn f(a: i32, a: i32) { } fn main() { }",
+        "fn main(a: i32) { }",
+        "fn main() i32 { return 0; }",
+        "fn f(a: void) { } fn main() { }",
+        "fn f() i32 { } fn main() { }",
+        "struct S { a: Strng } fn main() { }",
+        "fn main() { var a: Array<i32, i32> = [1]; }",
+        "fn main() { var a: Wrapper<i32> = 1; }",
+    ] {
+        let errors = analyze_errors(input);
+        assert!(!errors.is_empty(), "{input} was accepted");
+        for error in errors {
+            assert_ne!(error.span, Span::default(), "{input}: {}", error.message);
+        }
+    }
 }
 
 #[test]
@@ -2087,6 +2118,20 @@ fn test_type_suggestion_typo() {
     let errors = analyze(input);
     assert!(!errors.is_empty());
     assert!(errors[0].contains("Did you mean") || errors[0].contains("Unknown type"));
+}
+
+#[test]
+fn test_suggestion_does_not_skip_a_prefix_for_free() {
+    // 'Entry' is seven edits from 'HashMapEntry'. Leaving the first row of the
+    // distance table at zero made the leading 'HashMap' cost nothing.
+    let input = "
+        struct HashMapEntry { key: i32 }
+        fn main() {
+            var x: Entry = 10;
+        }
+    ";
+    let errors = analyze(input);
+    assert_eq!(errors, ["Unknown type 'Entry'"]);
 }
 #[test]
 fn test_generic_function_identity() {

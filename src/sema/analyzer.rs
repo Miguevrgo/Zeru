@@ -221,10 +221,14 @@ impl SemanticAnalyzer {
 
     /// Rewrite every written `Pair<i32>` as the name of the struct it became,
     /// so a type written out and an inferred one mean the same from here on.
+    /// Each spec was resolved, and anything wrong with it reported, when it
+    /// was first checked, so resolving it again here adds no errors.
     fn name_instantiations(&mut self, program: &mut Program) {
+        let reported = std::mem::take(&mut self.errors);
         for stmt in &mut program.statements {
             map_types(stmt, &mut |spec| self.name_spec(spec));
         }
+        self.errors = reported;
     }
 
     fn name_spec(&mut self, spec: &mut TypeSpec) {
@@ -239,7 +243,7 @@ impl SemanticAnalyzer {
                 if !self.generic_structs.contains_key(name) {
                     return;
                 }
-                if let Type::Struct { name, .. } = self.resolve_spec(spec) {
+                if let Type::Struct { name, .. } = self.resolve_spec(spec, Span::default()) {
                     *spec = TypeSpec::Named(name);
                 }
             }
@@ -371,9 +375,12 @@ impl SemanticAnalyzer {
                         let param_types: Vec<Type> = method
                             .params
                             .iter()
-                            .map(|(_, ty, _)| self.resolve_spec(ty))
+                            .map(|(_, ty, _)| self.resolve_spec(ty, stmt.span))
                             .collect();
-                        let ret_type = method.return_type.as_ref().map(|t| self.resolve_spec(t));
+                        let ret_type = method
+                            .return_type
+                            .as_ref()
+                            .map(|t| self.resolve_spec(t, stmt.span));
                         trait_methods.push((method.name.clone(), param_types, ret_type));
                     }
                     self.trait_defs.insert(name.clone(), trait_methods);
@@ -401,7 +408,7 @@ impl SemanticAnalyzer {
                 );
                 continue;
             }
-            let ty = self.resolve_spec(spec);
+            let ty = self.resolve_spec(spec, stmt.span);
             resolved.push((field_name.clone(), ty));
         }
 
@@ -420,7 +427,14 @@ impl SemanticAnalyzer {
                     type_params,
                     ..
                 } => {
-                    self.register_function(name.clone(), params, return_type, None, type_params);
+                    self.register_function(
+                        name.clone(),
+                        params,
+                        return_type,
+                        None,
+                        type_params,
+                        stmt.span,
+                    );
                 }
 
                 StatementKind::Struct {
@@ -444,6 +458,7 @@ impl SemanticAnalyzer {
                                 return_type,
                                 Some(struct_name),
                                 type_params,
+                                method.span,
                             );
                         }
                     }
@@ -466,12 +481,10 @@ impl SemanticAnalyzer {
         return_type: &Option<TypeSpec>,
         associated_struct: Option<&str>,
         type_params: &[crate::ast::TypeParameter],
+        span: Span,
     ) {
         if self.symbols.lookup_current_scope(&name).is_some() {
-            self.error(
-                format!("Function '{name}' is already defined"),
-                Span::default(),
-            );
+            self.error(format!("Function '{name}' is already defined"), span);
             return;
         }
 
@@ -480,24 +493,21 @@ impl SemanticAnalyzer {
         {
             self.error(
                 format!("Function '{name}' declares parameter '{dup}' twice"),
-                Span::default(),
+                span,
             );
         }
 
         if name == "main" {
             if !params.is_empty() {
-                self.error(
-                    "Function 'main' must not take arguments".into(),
-                    Span::default(),
-                );
+                self.error("Function 'main' must not take arguments".into(), span);
             }
 
             if let Some(rt_spec) = return_type {
-                let ret_ty = self.resolve_spec(rt_spec);
+                let ret_ty = self.resolve_spec(rt_spec, span);
                 if ret_ty != Type::Void {
                     self.error(
-                        format!("Function 'main' must return void. Found {ret_ty:?}"),
-                        Span::default(),
+                        format!("Function 'main' must return void, not {ret_ty}"),
+                        span,
                     );
                 }
             }
@@ -514,25 +524,26 @@ impl SemanticAnalyzer {
                         param_types.push(ty.clone())
                     } else {
                         param_types.push(Type::Unknown);
-                        self.error(
-                            "Self used in unknown struct context".into(),
-                            Span::default(),
-                        );
+                        self.error("Self used in unknown struct context".into(), span);
                     }
                 } else {
                     self.error(
                         "'self' parameter allowed only in struct methods".into(),
-                        Span::default(),
+                        span,
                     );
                     param_types.push(Type::Unknown);
                 }
             } else {
-                param_types.push(self.resolve_spec(type_spec));
+                let ty = self.resolve_spec(type_spec, span);
+                if ty == Type::Void {
+                    self.error(format!("Parameter '{param_name}' cannot be void"), span);
+                }
+                param_types.push(ty);
             }
         }
 
         let ret_ty = if let Some(rt_spec) = return_type {
-            self.resolve_spec(rt_spec)
+            self.resolve_spec(rt_spec, span)
         } else {
             Type::Void
         };
@@ -555,34 +566,32 @@ impl SemanticAnalyzer {
     }
 
     fn check_statement_top_level(&mut self, stmt: &mut Statement) {
-        match &stmt.kind {
+        let span = stmt.span;
+        match &mut stmt.kind {
             StatementKind::Function {
-                name, type_params, ..
-            } => {
-                let name = name.clone();
-                let type_params = type_params.clone();
-                if let StatementKind::Function { params, body, .. } = &mut stmt.kind {
-                    self.check_function_body(&name, params, body, &type_params);
-                }
-            }
+                name,
+                type_params,
+                params,
+                body,
+                ..
+            } => self.check_function_body(name, params, body, type_params, span),
             StatementKind::Struct {
-                name: struct_name, ..
+                name: struct_name,
+                methods,
+                ..
             } => {
-                let struct_name = struct_name.clone();
-                if let StatementKind::Struct { methods, .. } = &mut stmt.kind {
-                    for method in methods.iter_mut() {
-                        if let StatementKind::Function {
-                            name: method_name,
-                            type_params,
-                            ..
-                        } = &method.kind
-                        {
-                            let full_name = format!("{struct_name}::{}", method_name.clone());
-                            let type_params = type_params.clone();
-                            if let StatementKind::Function { params, body, .. } = &mut method.kind {
-                                self.check_function_body(&full_name, params, body, &type_params);
-                            }
-                        }
+                for method in methods.iter_mut() {
+                    let span = method.span;
+                    if let StatementKind::Function {
+                        name,
+                        type_params,
+                        params,
+                        body,
+                        ..
+                    } = &mut method.kind
+                    {
+                        let full_name = format!("{struct_name}::{name}");
+                        self.check_function_body(&full_name, params, body, type_params, span);
                     }
                 }
             }
@@ -615,6 +624,7 @@ impl SemanticAnalyzer {
         params: &[(String, TypeSpec, bool)],
         body: &mut [Statement],
         type_params: &[crate::ast::TypeParameter],
+        span: Span,
     ) {
         let Some(function_symbol) = self.symbols.lookup(name).cloned() else {
             return;
@@ -647,7 +657,7 @@ impl SemanticAnalyzer {
                 && name != "main"
                 && !Self::always_returns(body)
             {
-                let span = body.last().map(|s| s.span).unwrap_or_default();
+                let span = body.last().map_or(span, |s| s.span);
                 self.error(
                     format!("Function '{name}' can finish without returning a value"),
                     span,
@@ -663,20 +673,17 @@ impl SemanticAnalyzer {
     /// Resolves a TypeSpec from the AST into a concrete Type.
     /// This handles named types (structs, enums), pointers, tuples, optionals, etc.
     /// Returns Type::Unknown if the type cannot be resolved.
-    fn resolve_spec(&mut self, spec: &TypeSpec) -> Type {
+    fn resolve_spec(&mut self, spec: &TypeSpec, span: Span) -> Type {
         match spec {
-            TypeSpec::Named(name) => self.resolve_named_type(name),
+            TypeSpec::Named(name) => self.resolve_named_type(name, span),
             TypeSpec::Generic { name, args } => {
                 if name == "Array" && args.len() == 2 {
-                    let elem_type = self.resolve_spec(&args[0]);
+                    let elem_type = self.resolve_spec(&args[0], span);
 
                     let len = if let TypeSpec::IntLiteral(val) = args[1] {
                         val as usize
                     } else {
-                        self.error(
-                            "Array length must be an integer literal".into(),
-                            Span::default(),
-                        );
+                        self.error("Array length must be an integer literal".into(), span);
                         0
                     };
 
@@ -686,76 +693,74 @@ impl SemanticAnalyzer {
                     };
                 }
                 if name == "Vec" && args.len() == 1 {
-                    let elem_type = self.resolve_spec(&args[0]);
+                    let elem_type = self.resolve_spec(&args[0], span);
                     return Type::Vec {
                         elem_type: Box::new(elem_type),
                     };
                 }
                 if name == "Result" && args.len() == 2 {
-                    let ok_type = self.resolve_spec(&args[0]);
-                    let err_type = self.resolve_spec(&args[1]);
+                    let ok_type = self.resolve_spec(&args[0], span);
+                    let err_type = self.resolve_spec(&args[1], span);
                     return Type::Result {
                         ok_type: Box::new(ok_type),
                         err_type: Box::new(err_type),
                     };
                 }
                 if self.generic_structs.contains_key(name) {
-                    let args: Vec<Type> = args.iter().map(|a| self.resolve_spec(a)).collect();
-                    return match self.instantiate(name, &args, Span::default()) {
+                    let args: Vec<Type> = args.iter().map(|a| self.resolve_spec(a, span)).collect();
+                    return match self.instantiate(name, &args, span) {
                         Some(name) => self.struct_defs[&name].clone(),
                         None => Type::Unknown,
                     };
                 }
                 self.error(
                     format!("Unknown generic type or invalid args: {}", name),
-                    Span::default(),
+                    span,
                 );
                 Type::Unknown
             }
             TypeSpec::IntLiteral(_) => {
-                self.error(
-                    "Unexpected integer literal in type position".into(),
-                    Span::default(),
-                );
+                self.error("Unexpected integer literal in type position".into(), span);
                 Type::Unknown
             }
             TypeSpec::Tuple(types) => {
-                let resolved: Vec<Type> = types.iter().map(|t| self.resolve_spec(t)).collect();
+                let resolved: Vec<Type> =
+                    types.iter().map(|t| self.resolve_spec(t, span)).collect();
                 Type::Tuple(resolved)
             }
             TypeSpec::Pointer(inner) => {
-                let elem_type = self.resolve_spec(inner);
+                let elem_type = self.resolve_spec(inner, span);
                 Type::Pointer(Box::new(elem_type))
             }
             TypeSpec::Optional(inner) => {
-                let elem_type = self.resolve_spec(inner);
+                let elem_type = self.resolve_spec(inner, span);
                 Type::Optional(Box::new(elem_type))
             }
             TypeSpec::Result(inner) => {
-                let ok_type = self.resolve_spec(inner);
+                let ok_type = self.resolve_spec(inner, span);
                 Type::Result {
                     ok_type: Box::new(ok_type),
                     err_type: Box::new(Self::error_type()),
                 }
             }
             TypeSpec::Slice(inner) => {
-                let elem_type = self.resolve_spec(inner);
+                let elem_type = self.resolve_spec(inner, span);
                 Type::Slice {
                     elem_type: Box::new(elem_type),
                 }
             }
             TypeSpec::Ref(inner) => {
-                let elem_type = self.resolve_spec(inner);
+                let elem_type = self.resolve_spec(inner, span);
                 Type::Ref(Box::new(elem_type))
             }
             TypeSpec::RefMut(inner) => {
-                let elem_type = self.resolve_spec(inner);
+                let elem_type = self.resolve_spec(inner, span);
                 Type::RefMut(Box::new(elem_type))
             }
         }
     }
 
-    fn resolve_named_type(&mut self, name: &str) -> Type {
+    fn resolve_named_type(&mut self, name: &str, span: Span) -> Type {
         if self.current_type_params.contains(&name.to_string()) {
             return Type::ParamType(name.to_string());
         }
@@ -809,10 +814,10 @@ impl SemanticAnalyzer {
         if let Some(suggestion) = self.find_closest_match(name, &candidates) {
             self.error(
                 format!("Unknown type '{}'. Did you mean '{}'?", name, suggestion),
-                Span::default(),
+                span,
             );
         } else {
-            self.error(format!("Unknown type '{}'", name), Span::default());
+            self.error(format!("Unknown type '{}'", name), span);
         }
         Type::Unknown
     }
@@ -834,7 +839,9 @@ impl SemanticAnalyzer {
         type_annotation: &Option<TypeSpec>,
         span: Span,
     ) {
-        let expected_type = type_annotation.as_ref().map(|spec| self.resolve_spec(spec));
+        let expected_type = type_annotation
+            .as_ref()
+            .map(|spec| self.resolve_spec(spec, span));
 
         let value_type = self.check_expression(value, expected_type.as_ref());
 
@@ -2048,7 +2055,7 @@ impl SemanticAnalyzer {
 
                 if let ExpressionKind::Identifier(type_name) = &target.kind {
                     let type_name = type_name.clone();
-                    self.resolve_named_type(&type_name)
+                    self.resolve_named_type(&type_name, span)
                 } else {
                     Type::Unknown
                 }
@@ -2403,30 +2410,23 @@ impl SemanticAnalyzer {
         best_match
     }
 
-    fn levenshtein_distance(s1: &str, s2: &str) -> usize {
-        let v1: Vec<char> = s1.chars().collect();
-        let v2: Vec<char> = s2.chars().collect();
-        let l1 = v1.len();
-        let l2 = v2.len();
+    /// Edit distance, one row at a time: `row[j]` is the distance between the
+    /// prefix of `a` read so far and the first `j` characters of `b`.
+    fn levenshtein_distance(a: &str, b: &str) -> usize {
+        let b: Vec<char> = b.chars().collect();
+        let mut row: Vec<usize> = (0..=b.len()).collect();
 
-        let mut d = vec![vec![0; l2 + 1]; l1 + 1];
-
-        for (i, d) in d.iter_mut().enumerate().take(l1 + 1) {
-            d[0] = i;
-        }
-        for (j, d) in d.iter_mut().enumerate().take(l2 + 1) {
-            d[0] = j;
-        }
-
-        for i in 1..=l1 {
-            for j in 1..=l2 {
-                let cost = if v1[i - 1] == v2[j - 1] { 0 } else { 1 };
-                d[i][j] = std::cmp::min(
-                    std::cmp::min(d[i - 1][j] + 1, d[i][j - 1] + 1),
-                    d[i - 1][j - 1] + cost,
-                );
+        for (i, a_char) in a.chars().enumerate() {
+            let mut diagonal = row[0];
+            row[0] = i + 1;
+            for (j, &b_char) in b.iter().enumerate() {
+                let above = row[j + 1];
+                row[j + 1] = (above + 1)
+                    .min(row[j] + 1)
+                    .min(diagonal + usize::from(a_char != b_char));
+                diagonal = above;
             }
         }
-        d[l1][l2]
+        row[b.len()]
     }
 }

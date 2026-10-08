@@ -30,6 +30,10 @@ pub struct Parser<'a> {
     /// A `>` owed from splitting a `>>` that closed two generic levels at once.
     /// It is handed out as the next token instead of reading the lexer.
     pending_gt: bool,
+
+    /// Set by the first top-level item that is not an import: imports come
+    /// before any other code.
+    code_seen: bool,
 }
 
 impl<'a> Parser<'a> {
@@ -46,6 +50,7 @@ impl<'a> Parser<'a> {
             panic_mode: false,
             no_struct_literal: false,
             pending_gt: false,
+            code_seen: false,
         };
 
         p.next_token();
@@ -110,6 +115,9 @@ impl<'a> Parser<'a> {
 
         while self.current_token != Token::Eof {
             self.panic_mode = false;
+            if !matches!(self.current_token, Token::Import | Token::Semicolon) {
+                self.code_seen = true;
+            }
             let stmt = match self.current_token {
                 Token::Const => self.parse_var_statement::<true>(),
                 Token::Fn => self.parse_function_statement(),
@@ -406,12 +414,14 @@ impl<'a> Parser<'a> {
             return_type = self.parse_type();
             return_type.as_ref()?;
         }
+        // The signature, not the body: what is wrong with a declaration as a
+        // whole, such as a bad parameter type, is in the signature.
+        let end_span = self.current_span;
 
         if !self.expect_peek(&Token::LBrace) {
             return None;
         }
         let body = self.parse_block_statement();
-        let end_span = self.current_span;
 
         Some(Statement::new(
             StatementKind::Function {
@@ -949,6 +959,9 @@ impl<'a> Parser<'a> {
 
     fn parse_import_statement(&mut self) -> Option<Statement> {
         let start_span = self.current_span;
+        if self.code_seen {
+            self.error_current("Imports must come before any other code");
+        }
 
         let path = self.parse_dotted_path()?;
         let symbols = if self.peek_token_is(&Token::DoubleColon) {
@@ -1645,8 +1658,10 @@ impl<'a> Parser<'a> {
         None
     }
 
+    // An Illegal token was reported when it was read, so neither of these
+    // complains about it a second time.
     fn error_peek(&mut self, expected: &str) {
-        if self.panic_mode {
+        if self.panic_mode || matches!(self.peek_token, Token::Illegal(_)) {
             return;
         }
         self.panic_mode = true;
@@ -1658,7 +1673,7 @@ impl<'a> Parser<'a> {
     }
 
     fn error_current(&mut self, msg: &str) {
-        if self.panic_mode {
+        if self.panic_mode || matches!(self.current_token, Token::Illegal(_)) {
             return;
         }
         self.panic_mode = true;
@@ -1792,6 +1807,25 @@ mod tests {
             "struct S { a: i32, b: i32, }",
         ] {
             parse_input(source);
+        }
+    }
+
+    #[test]
+    fn test_import_after_code_is_rejected() {
+        // The module loader only looks at the imports a file starts with, so
+        // a later one would otherwise be dropped without a word.
+        for source in [
+            "fn f() { }\nimport std.math;",
+            "fn f() { import std.math; }",
+        ] {
+            let mut parser = Parser::new(Lexer::new(source));
+            parser.parse_program();
+            let messages: Vec<_> = parser.errors.iter().map(|e| &e.message).collect();
+            assert_eq!(
+                messages,
+                ["Imports must come before any other code"],
+                "{source}"
+            );
         }
     }
 

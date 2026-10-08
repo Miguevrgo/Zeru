@@ -28,7 +28,6 @@ use crate::{
 const ALLOC_FN: &str = "__zeru_alloc";
 const REALLOC_FN: &str = "__zeru_realloc";
 const MEMCPY_FN: &str = "__zeru_memcpy";
-const GEN_ALLOC_FN: &str = "mem::gen_alloc";
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub(super) fn error(&mut self, message: impl Into<String>, span: Span) {
@@ -500,7 +499,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 let alloc_size = self.bytes_for(elem_type, cap);
                 let alloc_fn = self.extern_fn(
-                    GEN_ALLOC_FN,
+                    ALLOC_FN,
                     self.ptr_type().fn_type(&[usize_type.into()], false),
                 );
                 let data = self.call_ptr(alloc_fn, &[alloc_size.into()], "vec_alloc");
