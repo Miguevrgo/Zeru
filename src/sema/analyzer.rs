@@ -1292,6 +1292,14 @@ impl SemanticAnalyzer {
             return Type::Unknown;
         }
 
+        if !Self::operator_applies(&operator, &l_ty) {
+            self.error(
+                format!("Operator '{operator:?}' cannot be applied to {l_ty}"),
+                span,
+            );
+            return Type::Unknown;
+        }
+
         match operator {
             crate::token::Token::Eq
             | crate::token::Token::NotEq
@@ -1302,6 +1310,48 @@ impl SemanticAnalyzer {
 
             _ => l_ty,
         }
+    }
+
+    /// Whether `operator` means something for operands of type `ty`. Comparing
+    /// structs or strings, arithmetic on bools and `&&` on numbers used to get
+    /// through to codegen, which crashed on some and miscompiled others.
+    fn operator_applies(operator: &crate::token::Token, ty: &Type) -> bool {
+        use crate::token::Token as T;
+        let number = matches!(ty, Type::Integer { .. } | Type::Float(_));
+        match operator {
+            _ if matches!(ty, Type::ParamType(_)) => true,
+            T::Plus | T::Minus | T::Star | T::Slash | T::Mod => number,
+            T::BitAnd | T::BitOr | T::BitXor => matches!(ty, Type::Integer { .. } | Type::Bool),
+            T::ShiftLeft | T::ShiftRight => matches!(ty, Type::Integer { .. }),
+            T::And | T::Or => *ty == Type::Bool,
+            T::Eq | T::NotEq => {
+                number || matches!(ty, Type::Bool | Type::Enum { .. } | Type::Pointer(_))
+            }
+            T::Lt | T::Gt | T::Leq | T::Geq => {
+                number || matches!(ty, Type::Enum { .. } | Type::Pointer(_))
+            }
+            _ => true,
+        }
+    }
+
+    /// Whether `as` turns a `from` into a `to`. Nothing becomes an enum: a
+    /// number outside its variants would get past an exhaustive `match`.
+    fn castable(from: &Type, to: &Type) -> bool {
+        use Type::*;
+        matches!(
+            (from, to),
+            (Unknown | ParamType(_), _)
+                | (_, Unknown | ParamType(_))
+                | (
+                    Integer { .. } | Float(_) | Bool | Enum { .. },
+                    Integer { .. } | Float(_) | Bool
+                )
+                | (
+                    Pointer(_) | Ref(_) | RefMut(_) | Slice { .. },
+                    Integer { .. } | Pointer(_)
+                )
+                | (Integer { .. }, Pointer(_))
+        )
     }
 
     /// A number written in the source, whose type comes from its context.
@@ -1688,8 +1738,10 @@ impl SemanticAnalyzer {
         value: &mut Expression,
         arms: &mut [(Expression, Expression)],
         expected_type: Option<&Type>,
+        span: Span,
     ) -> Type {
-        let _match_type = self.check_expression(value, None);
+        let subject = self.check_expression(value, None);
+        self.check_patterns(&subject, arms, span);
 
         if arms.is_empty() {
             return Type::Void;
@@ -1717,6 +1769,116 @@ impl SemanticAnalyzer {
         }
 
         first_arm_type
+    }
+
+    /// Each pattern a constant of the subject's type, none of them twice, and
+    /// every value covered: by a `default`, or, for an enum or a bool, by
+    /// listing them all. A value no arm takes has nowhere to go at runtime.
+    fn check_patterns(
+        &mut self,
+        subject: &Type,
+        arms: &mut [(Expression, Expression)],
+        span: Span,
+    ) {
+        let variants = match subject {
+            Type::Unknown => return,
+            Type::Integer { .. } | Type::Bool => None,
+            Type::Enum { variants, .. } => Some(variants.clone()),
+            _ => {
+                self.error(
+                    format!("Cannot match on {subject}, only on an integer, a bool or an enum"),
+                    span,
+                );
+                return;
+            }
+        };
+
+        let mut covered = HashSet::new();
+        let mut has_default = false;
+        for (pattern, _) in arms.iter_mut() {
+            if pattern.is_default_pattern() {
+                if has_default {
+                    self.error("A match has one 'default' arm".into(), pattern.span);
+                }
+                has_default = true;
+                continue;
+            }
+
+            let ty = self.check_expression(pattern, Some(subject));
+            if ty == Type::Unknown {
+                continue;
+            }
+            if !subject.accepts(&ty) {
+                self.error(
+                    format!("A pattern of type {ty} cannot match a value of type {subject}"),
+                    pattern.span,
+                );
+                continue;
+            }
+            match Self::pattern_value(pattern, variants.as_deref()) {
+                None => self.error(
+                    "A pattern must be a literal or an enum variant".into(),
+                    pattern.span,
+                ),
+                Some(value) if !covered.insert(value) => self.error(
+                    "This value is already matched by an earlier arm".into(),
+                    pattern.span,
+                ),
+                Some(_) => {}
+            }
+        }
+
+        if has_default {
+            return;
+        }
+        let missing: Vec<String> = match (subject, &variants) {
+            (Type::Enum { name, .. }, Some(variants)) => variants
+                .iter()
+                .enumerate()
+                .filter(|(at, _)| !covered.contains(&(*at as i128)))
+                .map(|(_, variant)| format!("{name}::{variant}"))
+                .collect(),
+            (Type::Bool, _) => [(1, "true"), (0, "false")]
+                .into_iter()
+                .filter(|(value, _)| !covered.contains(value))
+                .map(|(_, name)| name.to_string())
+                .collect(),
+            _ => {
+                self.error(format!("A match on {subject} needs a 'default' arm"), span);
+                return;
+            }
+        };
+        if !missing.is_empty() {
+            self.error(
+                format!(
+                    "Match does not cover {}; add an arm for each or a 'default' arm",
+                    missing.join(", ")
+                ),
+                span,
+            );
+        }
+    }
+
+    /// What a constant pattern stands for: a number, a bool as 0 or 1, or a
+    /// variant's position among `variants`.
+    fn pattern_value(pattern: &Expression, variants: Option<&[String]>) -> Option<i128> {
+        match &pattern.kind {
+            ExpressionKind::Int(value) => Some(i128::from(*value)),
+            ExpressionKind::Prefix {
+                operator: crate::token::Token::Minus,
+                right,
+            } => match right.kind {
+                ExpressionKind::Int(value) => Some(-i128::from(value)),
+                _ => None,
+            },
+            ExpressionKind::Boolean(value) => Some(i128::from(*value)),
+            ExpressionKind::Identifier(path) => {
+                let (_, variant) = path.rsplit_once("::")?;
+                let at = variants?.iter().position(|v| v == variant)?;
+                Some(at as i128)
+            }
+            _ => None,
+        }
     }
 
     fn check_prefix(
@@ -2035,7 +2197,9 @@ impl SemanticAnalyzer {
                 ty
             }
 
-            ExpressionKind::Match { value, arms } => self.check_match(value, arms, expected_type),
+            ExpressionKind::Match { value, arms } => {
+                self.check_match(value, arms, expected_type, span)
+            }
 
             ExpressionKind::Prefix { operator, right } => {
                 let operator = operator.clone();
@@ -2043,8 +2207,13 @@ impl SemanticAnalyzer {
             }
 
             ExpressionKind::Cast { left, target } => {
-                self.check_expression(left, None);
-                self.resolve_spec(target, span)
+                let from = self.check_expression(left, None);
+                let to = self.resolve_spec(target, span);
+                if !Self::castable(&from, &to) {
+                    self.error(format!("Cannot cast {from} to {to}"), span);
+                    return Type::Unknown;
+                }
+                to
             }
             ExpressionKind::Index { left, index } => self.check_index(left, index, span),
 

@@ -2499,3 +2499,112 @@ fn test_literal_on_the_left_takes_the_type_on_the_right() {
     let errors = analyze(input);
     assert!(errors.is_empty(), "{errors:?}");
 }
+
+#[test]
+fn test_operator_needs_operands_it_applies_to() {
+    // Each of these reached codegen, which crashed on some and miscompiled
+    // the rest: `true < false` compared as signed one-bit numbers.
+    for (expression, operand) in [
+        ("true + true", "bool"),
+        ("1 && 2", "i32"),
+        ("p == q", "P"),
+        ("\"a\" == \"b\"", "&[u8]"),
+        ("true < false", "bool"),
+        ("1.5 & 2.5", "f64"),
+        ("1.5 << 2.5", "f64"),
+    ] {
+        let input = format!(
+            "struct P {{ x: i32 }} fn main() {{ var p = P {{ x: 1 }}; var q = P {{ x: 1 }}; var r = {expression}; }}"
+        );
+        let errors = analyze(&input);
+        let expected = format!("cannot be applied to {operand}");
+        assert!(errors[0].contains(&expected), "{expression}: {errors:?}");
+    }
+}
+
+#[test]
+fn test_cast_needs_a_conversion_that_exists() {
+    for (cast, message) in [
+        ("p as i32", "Cannot cast P to i32"),
+        ("p as *u8", "Cannot cast P to *u8"),
+        ("1 as Color", "Cannot cast i32 to Color"),
+        ("2.5 as Color", "Cannot cast f64 to Color"),
+    ] {
+        let input = format!(
+            "struct P {{ x: i32 }} enum Color {{ Red }} fn main() {{ var p = P {{ x: 1 }}; var r = {cast}; }}"
+        );
+        let errors = analyze(&input);
+        assert!(errors[0].contains(message), "{cast}: {errors:?}");
+    }
+
+    let fine = "
+        enum Color { Red }
+        fn main() {
+            var a: u8 = 7;
+            var b = a as f32;
+            var c = Color::Red as i32;
+            var d = true as i64;
+            var e = 0 as *u8;
+            var f = e as i64;
+            var g = \"text\" as *u8;
+        }
+    ";
+    let errors = analyze(fine);
+    assert!(errors.is_empty(), "{errors:?}");
+}
+
+#[test]
+fn test_match_patterns_are_checked() {
+    // Patterns were never looked at: these reached LLVM, which refused them
+    // with its own messages, or, for the first, compiled to undefined
+    // behaviour for any value no arm named.
+    for (arms, message) in [
+        ("0 => 1, 1 => 2", "needs a 'default' arm"),
+        (
+            "1 => 1, 1 => 2, default => 3",
+            "already matched by an earlier arm",
+        ),
+        (
+            "y => 1, default => 2",
+            "must be a literal or an enum variant",
+        ),
+        (
+            "true => 1, default => 2",
+            "type bool cannot match a value of type i32",
+        ),
+        ("default => 1, default => 2", "one 'default' arm"),
+    ] {
+        let input = format!(
+            "fn main() {{ var x: i32 = 1; var y: i32 = 1; var r = match x {{ {arms} }}; }}"
+        );
+        let errors = analyze(&input);
+        assert_eq!(errors.len(), 1, "{arms}: {errors:?}");
+        assert!(errors[0].contains(message), "{arms}: {errors:?}");
+    }
+}
+
+#[test]
+fn test_match_covers_every_variant_or_has_a_default() {
+    let missing = "
+        enum Color { Red, Green, Blue }
+        fn main() { var c = Color::Red; var r = match c { Color::Red => 1 }; }
+    ";
+    let errors = analyze(missing);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        errors[0].contains("does not cover Color::Green, Color::Blue"),
+        "{errors:?}"
+    );
+
+    let covered = "
+        enum Color { Red, Green }
+        fn main() {
+            var c = Color::Red;
+            var r = match c { Color::Red => 1, Color::Green => 2 };
+            var b = true;
+            var s = match b { true => 1, false => 0 };
+        }
+    ";
+    let errors = analyze(covered);
+    assert!(errors.is_empty(), "{errors:?}");
+}

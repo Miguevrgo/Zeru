@@ -190,4 +190,9 @@ impl Expression {
             ty: None,
         }
     }
+
+    /// The `default` arm of a `match`, which the parser writes as a name.
+    pub fn is_default_pattern(&self) -> bool {
+        matches!(&self.kind, ExpressionKind::Identifier(name) if name == "default")
+    }
 }

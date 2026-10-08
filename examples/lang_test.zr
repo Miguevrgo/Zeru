@@ -233,6 +233,14 @@ fn main() {
     };
     if fallback != 9 { exit(92); }
 
+    // A bool is covered by its two values, and a u8 matches at its own width.
+    var flag = true;
+    var flag_value = match flag { true => 1, false => 0 };
+    if flag_value != 1 { exit(93); }
+    var byte: u8 = 200;
+    var byte_class = match byte { 200 => 1, default => 0 };
+    if byte_class != 1 { exit(94); }
+
     // --- Result --------------------------------------------------------------
     var ok: i32! = divide(10, 2);
     if !ok.is_ok() { exit(100); }

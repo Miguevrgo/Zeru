@@ -1684,7 +1684,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             let block = self.context.append_basic_block(parent_fn, "match_arm");
             arm_bodies.push((block, result));
 
-            if Self::is_default_pattern(pattern) {
+            if pattern.is_default_pattern() {
                 default_bb = Some(block);
             } else if let BasicValueEnum::IntValue(tag) = self.compile_expression(pattern, None) {
                 cases.push((tag, block));
@@ -1742,9 +1742,5 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             phi.add_incoming(&[(value, *block)]);
         }
         phi.as_basic_value()
-    }
-
-    fn is_default_pattern(pattern: &Expression) -> bool {
-        matches!(&pattern.kind, ExpressionKind::Identifier(name) if name == "default")
     }
 }
