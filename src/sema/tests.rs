@@ -692,7 +692,83 @@ fn test_immutable_self_field_modification() {
         ";
     let errors = analyze(input);
     assert!(!errors.is_empty());
-    assert!(errors[0].contains("immutable"));
+    assert!(errors[0].contains("Cannot modify 'self'"));
+}
+
+#[test]
+fn test_writes_need_a_var_root() {
+    for body in [
+        "const p = P { x: 1 }; p.x = 2;",
+        "const a: Array<i32, 2> = [1, 2]; a[0] = 3;",
+        "const v: Vec<i32> = Vec.new(); v.push(1);",
+        "const p = P { x: 1 }; p.bump();",
+        "const p = P { x: 1 }; var r = &var p.x;",
+    ] {
+        let input = format!(
+            "struct P {{ x: i32, fn bump(var self) {{ self.x += 1; }} }}
+             fn main() {{ {body} }}"
+        );
+        let errors = analyze(&input);
+        assert_eq!(errors.len(), 1, "{body}: {errors:?}");
+        assert!(
+            errors[0].contains("not declared 'var'"),
+            "{body}: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn test_writes_through_a_pointer_are_the_pointees() {
+    let input = "
+            struct P { x: i32, fn bump(var self) { self.x += 1; } }
+            fn f(p: *P) { p.x = 2; p.bump(); }
+            fn main() { var p = P { x: 1 }; f(&p); }
+        ";
+    assert!(analyze(input).is_empty());
+}
+
+#[test]
+fn test_borrowed_values_cannot_be_moved() {
+    for (input, name) in [
+        (
+            "struct S { v: Vec<i32>, fn take(self) S { return self; } } fn main() { }",
+            "self",
+        ),
+        (
+            "fn eat(v: Vec<i32>) { }
+             fn main() { var vv: Vec<Vec<i32>> = Vec.new(); for v in vv { eat(v); } }",
+            "v",
+        ),
+    ] {
+        let errors = analyze(input);
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(errors[0].contains(&format!("Cannot move '{name}', which is borrowed")));
+    }
+}
+
+#[test]
+fn test_functions_see_constants_declared_below() {
+    let input = "fn f() i32 { return N; } const N: i32 = 3; fn main() { f(); }";
+    assert!(analyze(input).is_empty());
+}
+
+#[test]
+fn test_f32_does_not_initialise_f64() {
+    let errors = analyze("fn main() { var a: f32 = 1.5; var b: f64 = a; }");
+    assert_eq!(errors.len(), 1);
+    assert!(errors[0].contains("Annotated as f64 but got f32"));
+}
+
+#[test]
+fn test_an_error_is_not_echoed_by_what_uses_it() {
+    for input in [
+        "fn main() { var x = nope(3); }",
+        "fn main() { var x = 1; var y = x.foo(); }",
+        "fn main() { var v: Vec<i32> = Vec.new(); var w = v; v.push(1); }",
+    ] {
+        let errors = analyze(input);
+        assert_eq!(errors.len(), 1, "{input}: {errors:?}");
+    }
 }
 
 #[test]

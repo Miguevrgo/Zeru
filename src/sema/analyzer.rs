@@ -26,6 +26,17 @@ enum CallKind {
     Unknown,
 }
 
+/// The `Vec` methods that change it, so need a receiver declared `var`.
+const VEC_MUTATORS: &[&str] = &[
+    "push",
+    "pop",
+    "clear",
+    "insert",
+    "remove",
+    "reserve",
+    "shrink_to_fit",
+];
+
 pub struct SemanticAnalyzer {
     pub errors: Vec<ZeruError>,
 
@@ -36,6 +47,9 @@ pub struct SemanticAnalyzer {
     trait_defs: HashMap<String, Vec<TraitMethod>>,
     current_fn_return_type: Option<Type>,
     current_type_params: Vec<String>,
+
+    /// Methods that take `var self`, whose receiver has to be writable.
+    mut_self_methods: HashSet<String>,
 
     generic_structs: HashMap<String, Statement>,
     generic_functions: HashMap<String, Statement>,
@@ -68,6 +82,7 @@ impl SemanticAnalyzer {
             trait_defs: HashMap::new(),
             current_fn_return_type: None,
             current_type_params: Vec::new(),
+            mut_self_methods: HashSet::new(),
             generic_structs: HashMap::new(),
             generic_functions: HashMap::new(),
             instantiations: Vec::new(),
@@ -525,6 +540,10 @@ impl SemanticAnalyzer {
             }
         }
 
+        if matches!(params.first(), Some((first, _, true)) if first == "self") {
+            self.mut_self_methods.insert(name.clone());
+        }
+
         let prev_type_params = std::mem::take(&mut self.current_type_params);
         self.current_type_params = type_params.iter().map(|tp| tp.name.clone()).collect();
 
@@ -565,8 +584,12 @@ impl SemanticAnalyzer {
         self.symbols.insert_fn(name.clone(), param_types, ret_ty);
     }
 
+    /// Globals first, so a function may use a constant declared below it.
     fn analyze_bodies(&mut self, stmts: &mut [Statement]) {
-        for stmt in stmts.iter_mut() {
+        let (globals, rest): (Vec<_>, Vec<_>) = stmts
+            .iter_mut()
+            .partition(|stmt| matches!(stmt.kind, StatementKind::Var { .. }));
+        for stmt in globals.into_iter().chain(rest) {
             self.check_statement_top_level(stmt);
         }
     }
@@ -691,8 +714,13 @@ impl SemanticAnalyzer {
             for (i, (param_name, _, is_mut)) in params.iter().enumerate() {
                 let ty = params_type_def.get(i).unwrap_or(&Type::Unknown).clone();
                 let is_const = !is_mut;
-                self.symbols
-                    .insert_var(param_name.clone(), ty, is_const, self.loop_depth);
+                self.symbols.insert_var(
+                    param_name.clone(),
+                    ty,
+                    is_const,
+                    self.loop_depth,
+                    param_name == "self",
+                );
             }
 
             for s in body.iter_mut() {
@@ -891,16 +919,11 @@ impl SemanticAnalyzer {
             .as_ref()
             .map(|spec| self.resolve_spec(spec, span));
 
+        let reported = self.errors.len();
         let value_type = self.check_expression(value, expected_type.as_ref());
 
         let final_type = if let Some(expected) = expected_type {
-            let is_compatible = expected.accepts(&value_type)
-                || matches!(
-                    (&expected, &value_type),
-                    (Type::Float(FloatWidth::W64), Type::Float(FloatWidth::W32))
-                );
-
-            if !is_compatible && value_type != Type::Unknown {
+            if !expected.accepts(&value_type) && value_type != Type::Unknown {
                 self.error(
                     format!(
                         "Type mismatch for variable '{name}'. Annotated as {} but got {}",
@@ -912,7 +935,8 @@ impl SemanticAnalyzer {
 
             expected
         } else {
-            if value_type == Type::Unknown {
+            // Unknown after an error was reported is that error's echo.
+            if value_type == Type::Unknown && self.errors.len() == reported {
                 self.error(
                     format!(
                         "Cannot infer type for variable '{}'. Please add a type annotation.",
@@ -930,6 +954,7 @@ impl SemanticAnalyzer {
             final_type.clone(),
             is_const,
             self.loop_depth,
+            false,
         );
         final_type
     }
@@ -950,7 +975,7 @@ impl SemanticAnalyzer {
         self.loop_depth += 1;
         self.symbols.enter_scope();
         self.symbols
-            .insert_var(variable.to_string(), item_type, true, self.loop_depth);
+            .insert_var(variable.to_string(), item_type, true, self.loop_depth, true);
         self.check_statement(body);
 
         self.symbols.exit_scope();
@@ -1184,25 +1209,14 @@ impl SemanticAnalyzer {
             } else {
                 None
             }
-        } else if let ExpressionKind::Get { object, .. } = &target.kind
-            && let ExpressionKind::Identifier(obj_name) = &object.kind
-            && obj_name == "self"
-            && let Some(super::symbol_table::Symbol::Var { is_const, .. }) =
-                self.symbols.lookup("self")
-        {
-            if *is_const {
-                self.error(
-                    "Cannot modify field of immutable 'self'. Declare 'self' as mutable."
-                        .to_string(),
-                    span,
-                );
-            }
-            None
         } else {
             None
         };
 
         let target_ty = self.check_expression(target, target_type.as_ref());
+        if !matches!(target.kind, ExpressionKind::Identifier(_)) {
+            self.require_mutable(target, span);
+        }
 
         // A slice is a borrowed view, and a `str` literal's is of read-only
         // memory, so an element of one is readable but not writable.
@@ -1235,6 +1249,34 @@ impl SemanticAnalyzer {
         Type::Void
     }
 
+    /// Report a write into `place` when the variable it belongs to is not
+    /// declared `var`. Behind a pointer the storage is the pointee's, which a
+    /// `*T` or `&var T` may write and a `&T` may not.
+    fn require_mutable(&mut self, place: &Expression, span: Span) {
+        if matches!(place.ty, Some(Type::Pointer(_) | Type::RefMut(_))) {
+            return;
+        }
+        match &place.kind {
+            ExpressionKind::Identifier(name) => {
+                if let Some(super::symbol_table::Symbol::Var { is_const: true, .. }) =
+                    self.symbols.lookup(name)
+                {
+                    self.error(
+                        format!("Cannot modify '{name}', which is not declared 'var'"),
+                        span,
+                    );
+                }
+            }
+            ExpressionKind::Get { object, .. } | ExpressionKind::Index { left: object, .. } => {
+                self.require_mutable(object, span)
+            }
+            ExpressionKind::Dereference(inner) if matches!(inner.ty, Some(Type::Ref(_))) => {
+                self.error("Cannot write through a '&' reference".into(), span)
+            }
+            _ => {}
+        }
+    }
+
     /// `expr` is given away by value: to a variable, a call, a field, a
     /// collection or the caller. A variable is moved and may not be used
     /// again. A value inside a field, an element or behind a pointer cannot be
@@ -1246,11 +1288,20 @@ impl SemanticAnalyzer {
         match &expr.kind {
             // A global is a constant, built anew wherever it is used.
             ExpressionKind::Identifier(name) if !self.symbols.is_global(name) => {
-                let declared_at = match self.symbols.lookup(name) {
-                    Some(super::symbol_table::Symbol::Var { loop_depth, .. }) => *loop_depth,
+                let (declared_at, is_borrowed) = match self.symbols.lookup(name) {
+                    Some(super::symbol_table::Symbol::Var {
+                        loop_depth,
+                        is_borrowed,
+                        ..
+                    }) => (*loop_depth, *is_borrowed),
                     _ => return,
                 };
-                if declared_at < self.loop_depth {
+                if is_borrowed {
+                    self.error(
+                        format!("Cannot move '{name}', which is borrowed; call .copy() on it"),
+                        expr.span,
+                    );
+                } else if declared_at < self.loop_depth {
                     self.error(
                         format!(
                             "Cannot move '{name}' inside a loop: the next turn would use it again"
@@ -1517,11 +1568,20 @@ impl SemanticAnalyzer {
                 method_name,
                 is_vec_static: false,
             } => {
-                let obj_type = if let ExpressionKind::Get { object, .. } = &mut function.kind {
-                    self.check_expression(object, None)
-                } else {
+                let ExpressionKind::Get { object, .. } = &mut function.kind else {
                     unreachable!()
                 };
+                let obj_type = self.check_expression(object, None);
+                let mutates = match &obj_type {
+                    Type::Vec { .. } => VEC_MUTATORS.contains(&method_name.as_str()),
+                    Type::Struct(name) => self
+                        .mut_self_methods
+                        .contains(&format!("{name}::{method_name}")),
+                    _ => false,
+                };
+                if mutates {
+                    self.require_mutable(object, span);
+                }
 
                 if method_name == "copy" && arguments.is_empty() {
                     if !obj_type.has_move_semantics() {
@@ -1582,6 +1642,9 @@ impl SemanticAnalyzer {
                 };
 
                 if struct_name.is_empty() {
+                    if obj_type == Type::Unknown {
+                        return Type::Unknown;
+                    }
                     self.error(
                         format!("Cannot call method on non-struct type {}", obj_type),
                         span,
@@ -2085,26 +2148,13 @@ impl SemanticAnalyzer {
         let inner_kind = inner.kind.clone();
         let inner_type = self.check_expression(inner, None);
 
-        if let ExpressionKind::Identifier(name) = &inner_kind {
-            let (is_moved, is_const) = match self.symbols.lookup(name) {
-                Some(super::symbol_table::Symbol::Var {
-                    is_moved, is_const, ..
-                }) => (*is_moved, *is_const),
-                _ => (false, false),
-            };
-
-            if is_moved {
-                self.error(format!("Cannot borrow '{name}': value was moved"), span);
-            }
-            if is_const && kind == Borrow::Mutable {
-                self.error(
-                    format!("Cannot create mutable reference to immutable variable '{name}'"),
-                    span,
-                );
-            }
-        } else if !matches!(
+        if kind == Borrow::Mutable {
+            self.require_mutable(inner, span);
+        }
+        if !matches!(
             inner_kind,
-            ExpressionKind::Get { .. }
+            ExpressionKind::Identifier(_)
+                | ExpressionKind::Get { .. }
                 | ExpressionKind::Index { .. }
                 | ExpressionKind::Dereference(_)
         ) {

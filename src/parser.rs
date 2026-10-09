@@ -80,9 +80,10 @@ impl<'a> Parser<'a> {
     fn synchronize(&mut self) {
         self.panic_mode = false;
 
+        // Stops on the `;` or just before the next statement, so the caller's
+        // step forward lands on that statement.
         while self.current_token != Token::Eof {
             if self.current_token == Token::Semicolon {
-                self.next_token();
                 return;
             }
 
@@ -295,12 +296,12 @@ impl<'a> Parser<'a> {
 
         // A primitive takes no arguments, so a `<` after one is a comparison,
         // as in `x as i64 < 0`.
-        if self.peek_token_is(&Token::Lt) && !is_primitive(&name) {
+        let named = if self.peek_token_is(&Token::Lt) && !is_primitive(&name) {
             let args = self.parse_generic_arguments()?;
-            return Some(TypeSpec::Generic { name, args });
-        }
-
-        let named = TypeSpec::Named(name);
+            TypeSpec::Generic { name, args }
+        } else {
+            TypeSpec::Named(name)
+        };
         if self.peek_token_is(&Token::Question) {
             self.next_token();
             return Some(TypeSpec::Optional(Box::new(named)));
@@ -829,8 +830,10 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         while !self.cur_token_is(&Token::RBrace) && !self.cur_token_is(&Token::Eof) {
-            if let Some(stmt) = self.parse_statement() {
-                block.push(stmt);
+            match self.parse_statement() {
+                Some(stmt) => block.push(stmt),
+                None if self.panic_mode => self.synchronize(),
+                None => {}
             }
             self.next_token();
         }
@@ -1491,6 +1494,27 @@ mod tests {
         let program = parser.parse_program();
         check_parser_errors(&parser);
         program
+    }
+
+    #[test]
+    fn test_generic_type_takes_a_suffix() {
+        let program = parse_input("fn f() Vec<i64>? { } fn g() Vec<Vec<i64>>! { }");
+        let suffixes: Vec<_> = program
+            .statements
+            .iter()
+            .map(|stmt| match &stmt.kind {
+                StatementKind::Function {
+                    return_type: Some(TypeSpec::Optional(_)),
+                    ..
+                } => "?",
+                StatementKind::Function {
+                    return_type: Some(TypeSpec::Result(_)),
+                    ..
+                } => "!",
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(suffixes, ["?", "!"]);
     }
 
     fn check_parser_errors(parser: &Parser) {

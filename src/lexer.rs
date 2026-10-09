@@ -6,6 +6,9 @@ use crate::token::Token;
 pub struct Lexer<'a> {
     input: Peekable<Chars<'a>>,
     pos: usize,
+    /// The last token was a `.`, so a number is a tuple index: `t.1.0` is
+    /// two of them, not `t` and the float `1.0`.
+    after_dot: bool,
 }
 
 impl<'a> Lexer<'a> {
@@ -21,6 +24,7 @@ impl<'a> Lexer<'a> {
         Self {
             input: input.chars().peekable(),
             pos: start,
+            after_dot: false,
         }
     }
 
@@ -180,10 +184,15 @@ impl<'a> Lexer<'a> {
             '`' => self.read_raw_string(),
 
             'a'..='z' | 'A'..='Z' | '_' => self.read_identifier(ch),
+            '0'..='9' if self.after_dot => {
+                let digits = format!("{ch}{}", self.read_digits(|c| c.is_ascii_digit()));
+                Self::int_token(&digits, 10)
+            }
             '0'..='9' => self.read_number(ch),
 
             _ => Token::Illegal(format!("Unexpected character '{ch}'")),
         };
+        self.after_dot = token == Token::Dot;
         (token, Span::new(start_pos, self.pos))
     }
 
@@ -292,16 +301,14 @@ impl<'a> Lexer<'a> {
         let mut bytes = Vec::new();
         // Reported once the closing quote is reached, so the rest of the
         // string is not read as code.
-        let mut unknown_escape = None;
+        let mut problem = None;
 
         while let Some(&ch) = self.peek() {
             match ch {
                 '"' => {
                     self.advance();
-                    return match unknown_escape {
-                        Some(c) => Token::Illegal(format!(
-                            "Unknown escape sequence '\\{c}', expected one of \\n \\t \\r \\\" \\\\"
-                        )),
+                    return match problem {
+                        Some(message) => Token::Illegal(message),
                         None => Token::StringLit(bytes),
                     };
                 }
@@ -315,13 +322,16 @@ impl<'a> Lexer<'a> {
                         Some('"') => bytes.push(b'"'),
                         Some('\\') => bytes.push(b'\\'),
                         Some(c) => {
-                            unknown_escape.get_or_insert(c);
+                            problem.get_or_insert(format!(
+                                "Unknown escape sequence '\\{c}', expected one of \\n \\t \\r \\\" \\\\"
+                            ));
                         }
                         None => return Token::Illegal("Unterminated string escape".to_string()),
                     }
                 }
                 _ if !ch.is_ascii() => {
-                    return Token::Illegal("Non-ASCII character in string".to_string());
+                    self.advance();
+                    problem.get_or_insert("Non-ASCII character in string".to_string());
                 }
                 _ => bytes.push(self.advance().unwrap() as u8),
             }
@@ -332,15 +342,20 @@ impl<'a> Lexer<'a> {
 
     fn read_raw_string(&mut self) -> Token {
         let mut bytes = Vec::new();
+        let mut non_ascii = false;
 
         while let Some(&ch) = self.peek() {
             match ch {
                 '`' => {
                     self.advance();
+                    if non_ascii {
+                        return Token::Illegal("Non-ASCII character in raw string".to_string());
+                    }
                     return Token::StringLit(bytes);
                 }
                 _ if !ch.is_ascii() => {
-                    return Token::Illegal("Non-ASCII character in raw string".to_string());
+                    self.advance();
+                    non_ascii = true;
                 }
                 _ => bytes.push(self.advance().unwrap() as u8),
             }
@@ -448,6 +463,36 @@ mod tests {
         };
         assert!(message.contains(r"'\q'"), "{message}");
         assert_eq!(lexer.next_token().0, Token::Identifier("x".to_string()));
+    }
+
+    #[test]
+    fn test_non_ascii_is_reported_after_the_whole_string() {
+        for source in ["\"h\u{e9}llo\" x", "`h\u{e9}llo` x"] {
+            let mut lexer = Lexer::new(source);
+            assert!(matches!(lexer.next_token().0, Token::Illegal(_)));
+            assert_eq!(lexer.next_token().0, Token::Identifier("x".to_string()));
+        }
+    }
+
+    #[test]
+    fn test_a_number_after_a_dot_is_a_tuple_index() {
+        let mut lexer = Lexer::new("t.1.0 1.5");
+        let tokens: Vec<Token> = std::iter::from_fn(|| match lexer.next_token().0 {
+            Token::Eof => None,
+            token => Some(token),
+        })
+        .collect();
+        assert_eq!(
+            tokens,
+            [
+                Token::Identifier("t".to_string()),
+                Token::Dot,
+                Token::Int(1),
+                Token::Dot,
+                Token::Int(0),
+                Token::Float(1.5),
+            ]
+        );
     }
 
     #[test]

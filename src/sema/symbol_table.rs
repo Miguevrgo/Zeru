@@ -11,6 +11,9 @@ pub enum Symbol {
         /// How many loops enclose the declaration. Moving the variable from a
         /// deeper loop would move it again on every turn.
         loop_depth: usize,
+        /// A view of a value something else owns: `self`, or a `for` loop's
+        /// element. It can be read but not moved.
+        is_borrowed: bool,
     },
     Function {
         params: Vec<Type>,
@@ -41,7 +44,14 @@ impl SymbolTable {
         }
     }
 
-    pub fn insert_var(&mut self, name: String, ty: Type, is_const: bool, loop_depth: usize) {
+    pub fn insert_var(
+        &mut self,
+        name: String,
+        ty: Type,
+        is_const: bool,
+        loop_depth: usize,
+        is_borrowed: bool,
+    ) {
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(
                 name,
@@ -50,6 +60,7 @@ impl SymbolTable {
                     is_const,
                     is_moved: false,
                     loop_depth,
+                    is_borrowed,
                 },
             );
         }
