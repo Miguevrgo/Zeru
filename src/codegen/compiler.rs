@@ -19,7 +19,6 @@ use crate::{
     errors::ZeruError,
 };
 
-/// Lowers a semantically-validated AST to LLVM IR.
 pub struct Compiler<'a, 'ctx> {
     pub context: &'ctx Context,
     pub builder: &'a Builder<'ctx>,
@@ -44,8 +43,6 @@ pub struct Compiler<'a, 'ctx> {
     pub(super) monomorphized: HashMap<String, FunctionValue<'ctx>>,
     pub(super) current_type_substitutions: HashMap<String, TypeSpec>,
 
-    /// One entry per open block, recording what each declaration shadowed so
-    /// the outer binding comes back when the block ends.
     pub(super) scope_stack: Vec<Vec<(String, Option<VarBinding<'ctx>>)>>,
 
     pub errors: Vec<ZeruError>,
@@ -98,15 +95,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    /// Lower a whole program. Each pass depends on the one before it: struct
-    /// bodies can name other structs, signatures any struct, bodies any function.
     pub fn compile_program(&mut self, program: &Program) {
         self.declare_nominal_types(program);
         self.eval_global_constants(program);
         self.lay_out_structs(program);
         self.collect_generic_functions(program);
 
-        // `print` writes through globals that must exist before any caller.
         self.init_builtin_streams();
 
         self.for_each_concrete_fn(program, |this, f| {
@@ -119,8 +113,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.create_builtin_cleanup();
     }
 
-    /// Opaque LLVM type per struct plus the enum variant lists. Bodies come
-    /// later so structs can reference each other.
     fn declare_nominal_types(&mut self, program: &Program) {
         for stmt in &program.statements {
             match &stmt.kind {
@@ -232,7 +224,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 }
 
-/// A non-generic function with its name already mangled.
 struct ConcreteFn<'s> {
     name: String,
     params: &'s [(String, TypeSpec, bool)],
@@ -241,7 +232,6 @@ struct ConcreteFn<'s> {
 }
 
 impl<'s> ConcreteFn<'s> {
-    /// `None` for anything that is not a function, or that is generic.
     fn from_statement(kind: &'s StatementKind, owner: Option<&str>) -> Option<Self> {
         let StatementKind::Function {
             name,
