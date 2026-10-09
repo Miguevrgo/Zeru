@@ -155,20 +155,6 @@ struct OutStream {
 
         return count as i64;
     }
-
-    fn write_str(var self, s: *u8) i64 {
-        return self.write_bytes(s, strlen(s));
-    }
-}
-
-fn strlen(s: *u8) usize {
-    var len: usize = 0;
-    var ptr: *u8 = s;
-    while *ptr != 0 {
-        len += 1;
-        ptr = ptr + 1;
-    }
-    return len;
 }
 
 // =============================================================================

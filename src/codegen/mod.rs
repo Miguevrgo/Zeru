@@ -1,5 +1,6 @@
 pub mod body;
 pub mod compiler;
+mod debug;
 pub mod layout;
 pub mod runtime;
 pub mod types;

@@ -139,6 +139,11 @@ pub enum ExpressionKind {
         name: String,
     },
     ArrayLiteral(Vec<Expression>),
+    /// `[value; count]`: `value` evaluated once per element.
+    ArrayRepeat {
+        value: Box<Expression>,
+        count: u64,
+    },
     Assign {
         target: Box<Expression>,
         operator: Token,
@@ -389,6 +394,7 @@ fn walk_expression(v: &mut impl Visitor, expr: &mut Expression) {
             v.ty(target);
         }
         ExpressionKind::Prefix { right: inner, .. }
+        | ExpressionKind::ArrayRepeat { value: inner, .. }
         // A field's name belongs to its struct.
         | ExpressionKind::Get { object: inner, .. }
         | ExpressionKind::BorrowRef(inner)

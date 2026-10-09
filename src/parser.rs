@@ -1220,21 +1220,18 @@ impl<'a> Parser<'a> {
         )
     }
 
+    /// `[a, b, c]` or `[value; count]`, starting on the `[`.
     fn parse_array_literal(&mut self) -> Option<Expression> {
         let start_span = self.current_span;
-        let elements = self.allowing_struct_literals(Self::parse_array_elements)?;
+        let kind = self.allowing_struct_literals(Self::parse_array_elements)?;
         let span = start_span.merge(self.current_span);
-        Some(Expression::new(
-            ExpressionKind::ArrayLiteral(elements),
-            span,
-        ))
+        Some(Expression::new(kind, span))
     }
 
-    /// `[a, b, c]` or `[value; count]`, starting on the `[`.
-    fn parse_array_elements(&mut self) -> Option<Vec<Expression>> {
+    fn parse_array_elements(&mut self) -> Option<ExpressionKind> {
         if self.peek_token_is(&Token::RBracket) {
             self.next_token();
-            return Some(Vec::new());
+            return Some(ExpressionKind::ArrayLiteral(Vec::new()));
         }
         self.next_token();
         let first = self.parse_expression(Precedence::Lowest)?;
@@ -1249,7 +1246,10 @@ impl<'a> Parser<'a> {
             if !self.expect_peek(&Token::RBracket) {
                 return None;
             }
-            return Some(vec![first; count as usize]);
+            return Some(ExpressionKind::ArrayRepeat {
+                value: Box::new(first),
+                count,
+            });
         }
 
         let mut elements = vec![first];
@@ -1259,7 +1259,7 @@ impl<'a> Parser<'a> {
         } else if !self.expect_peek(&Token::RBracket) {
             return None;
         }
-        Some(elements)
+        Some(ExpressionKind::ArrayLiteral(elements))
     }
 
     fn parse_index_expression(&mut self, left: Expression) -> Option<Expression> {
@@ -2266,18 +2266,10 @@ mod tests {
 
         match &body[1].kind {
             StatementKind::Var { value, .. } => {
-                if let ExpressionKind::ArrayLiteral(elements) = &value.kind {
-                    assert_eq!(elements.len(), 3);
-                    for expr in elements {
-                        if let ExpressionKind::Int(val) = &expr.kind {
-                            assert_eq!(*val, 0);
-                        } else {
-                            panic!("Expected Int(0)");
-                        }
-                    }
-                } else {
-                    panic!("Expected ArrayLiteral");
-                }
+                let ExpressionKind::ArrayRepeat { value, count: 3 } = &value.kind else {
+                    panic!("Expected [0; 3]");
+                };
+                assert!(matches!(value.kind, ExpressionKind::Int(0)));
             }
             _ => panic!("Expected Var c"),
         }

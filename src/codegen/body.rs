@@ -58,9 +58,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let param_types: Vec<_> = params
             .iter()
             .zip(param_types)
-            .filter_map(|((param_name, _, is_mut), ty)| match ty {
-                // `var self` comes in by pointer so writes reach the caller.
-                Type::Struct(_) if param_name == "self" && *is_mut => Some(self.ptr_type().into()),
+            .filter_map(|((param_name, _, _), ty)| match ty {
+                // `self` comes in by pointer: borrowed, not copied, and
+                // `var self` writes reach the caller.
+                Type::Struct(_) if param_name == "self" => Some(self.ptr_type().into()),
                 _ => self.llvm_type_of(ty).map(Into::into),
             })
             .collect();
@@ -80,6 +81,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         name: &str,
         params: &[(String, TypeSpec, bool)],
         body: &[Statement],
+        span: Span,
     ) {
         // Missing means the prototype pass already reported why.
         let Some(function) = self.module.get_function(name) else {
@@ -89,11 +91,24 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         let entry = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry);
+        self.enter_debug_scope(function, span);
         self.variables.clear();
         self.scope_stack.clear();
         self.scope_stack.push(Vec::new());
 
-        for (arg, (param_name, _, _)) in function.get_param_iter().zip(params) {
+        let types = self.types;
+        let param_types = types.signature(name).map_or(&[][..], |(params, _)| params);
+        for ((arg, (param_name, _, _)), ty) in
+            function.get_param_iter().zip(params).zip(param_types)
+        {
+            // `self` already points at where its struct lives.
+            if let (Type::Struct(_), true) = (ty, param_name == "self")
+                && let Some(struct_type) = self.llvm_type_of(ty)
+            {
+                self.variables
+                    .insert(param_name.clone(), (arg.into_pointer_value(), struct_type));
+                continue;
+            }
             let slot_type = arg.get_type();
             let alloca = self.create_entry_block_alloca(function, param_name, slot_type);
             self.builder.build_store(alloca, arg).unwrap();
@@ -132,6 +147,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn compile_statement(&mut self, stmt: &Statement) {
+        let outer_span = std::mem::replace(&mut self.current_span, stmt.span);
+        self.set_debug_location();
+        self.lower_statement(stmt);
+        self.current_span = outer_span;
+        self.set_debug_location();
+    }
+
+    fn lower_statement(&mut self, stmt: &Statement) {
         let Some(parent_fn) = self.current_fn else {
             return;
         };
@@ -515,7 +538,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let BasicValueEnum::PointerValue(ptr) = self.compile_expression(inner, None) else {
                     return None;
                 };
-                self.emit_null_check(ptr, "null pointer dereference in assignment");
+                self.emit_null_check(ptr);
                 Some((ptr, elem_type))
             }
 
@@ -546,13 +569,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) -> Option<(PointerValue<'ctx>, StructType<'ctx>)> {
         match self.place_of(expr)? {
             (ptr, BasicTypeEnum::StructType(st)) => Some((ptr, st)),
-            // Behind a pointer, or `var self`, which holds its struct by one.
             (ptr, BasicTypeEnum::PointerType(_)) => {
-                let pointee = match &expr.ty {
-                    Some(ty @ Type::Struct(_)) => self.llvm_type_of(ty),
-                    _ => self.pointee_type_of(expr),
-                };
-                let BasicTypeEnum::StructType(st) = pointee? else {
+                let BasicTypeEnum::StructType(st) = self.pointee_type_of(expr)? else {
                     return None;
                 };
                 let ptr_type = self.ptr_type();
@@ -636,6 +654,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ExpressionKind::ArrayLiteral(elements) => {
                 self.lower_array_literal(elements, expected_type, expr.span)
             }
+            ExpressionKind::ArrayRepeat { value, count } => {
+                self.lower_array_repeat(value, *count, expr)
+            }
             ExpressionKind::Assign {
                 target,
                 operator,
@@ -693,7 +714,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     return self.dummy_val();
                 };
 
-                self.emit_null_check(ptr, "null pointer dereference");
+                self.emit_null_check(ptr);
                 let load_type = expected_type
                     .or(pointee)
                     .unwrap_or_else(|| self.usize_type().into());
@@ -867,6 +888,37 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .into_array_value();
         }
         array_val.into()
+    }
+
+    /// `[value; count]`: a loop evaluating `value` into each element.
+    fn lower_array_repeat(
+        &mut self,
+        value: &Expression,
+        count: u64,
+        expr: &Expression,
+    ) -> BasicValueEnum<'ctx> {
+        let (Some(function), Some(BasicTypeEnum::ArrayType(array_type))) = (
+            self.current_fn,
+            expr.ty.as_ref().and_then(|ty| self.llvm_type_of(ty)),
+        ) else {
+            self.error("Cannot lay out this array", expr.span);
+            return self.dummy_val();
+        };
+        let elem_type = array_type.get_element_type();
+        let slot = self.create_entry_block_alloca(function, "repeat", array_type.into());
+
+        let usize_type = self.usize_type();
+        self.build_counted_loop(usize_type.const_int(count, false), |this, index| {
+            let elem = this.compile_expression(value, Some(elem_type));
+            let zero = usize_type.const_zero();
+            let elem_ptr = unsafe {
+                this.builder
+                    .build_in_bounds_gep(array_type, slot, &[zero, index], "elem_ptr")
+                    .unwrap()
+            };
+            this.builder.build_store(elem_ptr, elem).unwrap();
+        });
+        self.load(array_type, slot, "repeat")
     }
 
     /// `x += y` and friends: the plain operator applied to the current value.
@@ -1057,36 +1109,35 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ));
         }
 
-        // Mutating methods need the storage, not a loaded copy of the header.
-        // A temporary has none, so only a reading method can apply to it.
-        if matches!(object.ty, Some(Type::Vec { .. }))
-            && let Some((vec_ptr, _)) = self.compile_lvalue(object)
-            && let Some(result) = self.compile_vec_method_mut(
-                method_name,
-                vec_ptr,
-                arguments,
-                self.element_type_of(object),
-            )
-        {
-            return MethodCallOutcome::Done(result);
-        }
+        // Every method works on where its receiver lives. A temporary gets a
+        // slot of its own, so `make_point().len()` evaluates it once.
+        let Some((place, place_type)) = self.place_of(object) else {
+            self.error("Method receiver must be a variable", span);
+            return MethodCallOutcome::Done(self.dummy_val());
+        };
+        let loaded = |this: &mut Self| this.load(place_type, place, "receiver").into_struct_value();
 
-        // Compiled once: `make_point().len()` must not evaluate `make_point()` twice.
-        let receiver = self.compile_expression(object, None);
-
-        if let BasicValueEnum::StructValue(sv) = receiver {
-            let builtin = match &object.ty {
-                Some(Type::Vec { .. }) => self.compile_vec_method(method_name, sv),
-                Some(Type::Result { .. }) => self.compile_result_method(method_name, sv),
-                Some(Type::Optional(_)) => self.compile_option_method(method_name, sv),
-                Some(Type::Slice { .. }) if method_name == "len" => {
-                    Some(self.extract(sv, SLICE_LEN, "slice_len"))
-                }
-                _ => None,
-            };
-            if let Some(result) = builtin {
-                return MethodCallOutcome::Done(result);
+        let builtin = match &object.ty {
+            Some(Type::Vec { .. }) => {
+                let elem_type = self.element_type_of(object);
+                self.compile_vec_method(method_name, place, arguments, elem_type)
             }
+            Some(Type::Result { .. }) => {
+                let result = loaded(self);
+                self.compile_result_method(method_name, result)
+            }
+            Some(Type::Optional(_)) => {
+                let option = loaded(self);
+                self.compile_option_method(method_name, option)
+            }
+            Some(Type::Slice { .. }) if method_name == "len" => {
+                let slice = loaded(self);
+                Some(self.extract(slice, SLICE_LEN, "slice_len"))
+            }
+            _ => None,
+        };
+        if let Some(result) = builtin {
+            return MethodCallOutcome::Done(result);
         }
 
         // A user struct, possibly behind a pointer.
@@ -1109,25 +1160,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             return MethodCallOutcome::Done(self.dummy_val());
         };
 
-        // `var self` takes the receiver by pointer, plain `self` by value.
-        let takes_self_by_pointer =
-            matches!(func.get_nth_param(0), Some(BasicValueEnum::PointerValue(_)));
-
-        let self_arg: Option<BasicMetadataValueEnum> = match (takes_self_by_pointer, receiver) {
-            (true, _) => self.self_pointer_for(object).map(Into::into),
-            // A pointer receiver is loaded for a by-value `self`.
-            (false, BasicValueEnum::PointerValue(_)) => self
-                .struct_place(object)
-                .map(|(ptr, struct_ty)| self.load(struct_ty, ptr, "self_val").into()),
-            (false, value) => Some(value.into()),
+        // Through a pointer, `self` is what it points at.
+        let self_ptr = match place_type {
+            BasicTypeEnum::PointerType(ptr_type) => {
+                self.load(ptr_type, place, "deref").into_pointer_value()
+            }
+            _ => place,
         };
-
-        let Some(self_arg) = self_arg else {
-            self.error("Method receiver must be a variable", span);
-            return MethodCallOutcome::Done(self.dummy_val());
-        };
-
-        MethodCallOutcome::Resolved(func, vec![self_arg])
+        MethodCallOutcome::Resolved(func, vec![self_ptr.into()])
     }
 
     /// Element type of the `Vec` or slice `expr` denotes, taken from the type
@@ -1153,12 +1193,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder
             .build_struct_gep(shape, ptr, field, name)
             .unwrap()
-    }
-
-    /// Where the receiver of a `var self` method lives, wherever that is: a
-    /// variable, a field, an element, or behind a pointer.
-    fn self_pointer_for(&mut self, object: &Expression) -> Option<PointerValue<'ctx>> {
-        self.struct_place(object).map(|(ptr, _)| ptr)
     }
 
     /// Dispatch a binary operator on the operand category (integer, float,

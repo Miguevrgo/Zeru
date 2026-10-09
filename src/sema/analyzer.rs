@@ -660,7 +660,8 @@ impl SemanticAnalyzer {
                     )
             }
             ExpressionKind::Prefix { right: inner, .. }
-            | ExpressionKind::Cast { left: inner, .. } => self.is_constant(inner),
+            | ExpressionKind::Cast { left: inner, .. }
+            | ExpressionKind::ArrayRepeat { value: inner, .. } => self.is_constant(inner),
             ExpressionKind::Infix { left, right, .. } => {
                 self.is_constant(left) && self.is_constant(right)
             }
@@ -2104,6 +2105,30 @@ impl SemanticAnalyzer {
         }
     }
 
+    /// `[value; count]`, the value checked once as every element's.
+    fn check_array_repeat(
+        &mut self,
+        value: &mut Expression,
+        count: u64,
+        expected_type: Option<&Type>,
+    ) -> Type {
+        let elem_hint = match expected_type {
+            Some(Type::Array { elem_type, .. }) => Some(elem_type.as_ref().clone()),
+            _ => None,
+        };
+        let elem_type = self.check_expression(value, elem_hint.as_ref());
+        self.consume(value, &elem_type);
+        // Each element evaluates it again, so a moved variable is used again.
+        if count > 1 && matches!(value.kind, ExpressionKind::Identifier(_)) {
+            self.check_expression(value, elem_hint.as_ref());
+        }
+
+        Type::Array {
+            elem_type: Box::new(elem_type),
+            len: count as usize,
+        }
+    }
+
     fn check_tuple(
         &mut self,
         elements: &mut [Expression],
@@ -2275,6 +2300,9 @@ impl SemanticAnalyzer {
 
             ExpressionKind::ArrayLiteral(elements) => {
                 self.check_array_literal(elements, expected_type)
+            }
+            ExpressionKind::ArrayRepeat { value, count } => {
+                self.check_array_repeat(value, *count, expected_type)
             }
 
             ExpressionKind::BorrowRef(inner) => self.check_borrow(inner, Borrow::Shared, span),

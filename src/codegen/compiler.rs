@@ -16,7 +16,7 @@ use inkwell::{
 use crate::{
     ast::{Expression, Program, Statement, StatementKind, TypeSpec},
     codegen::SafetyMode,
-    errors::ZeruError,
+    errors::{Sources, Span, ZeruError},
     sema::analyzer::SemanticAnalyzer,
 };
 
@@ -26,6 +26,9 @@ pub struct Compiler<'a, 'ctx> {
     pub module: &'a Module<'ctx>,
     /// What the analyser resolved: struct fields, enum variants, signatures.
     pub(super) types: &'a SemanticAnalyzer,
+    pub(super) sources: &'a Sources,
+    /// The statement being lowered, which a panic message points at.
+    pub(super) current_span: Span,
 
     pub(super) variables: HashMap<String, VarBinding<'ctx>>,
     /// Each global constant's value and declared type. It is lowered wherever
@@ -42,6 +45,7 @@ pub struct Compiler<'a, 'ctx> {
     pub(super) stderr_stream: Option<PointerValue<'ctx>>,
 
     pub(super) scope_stack: Vec<Vec<(String, Option<VarBinding<'ctx>>)>>,
+    pub(super) debug: Option<super::debug::Debug<'ctx>>,
 
     pub errors: Vec<ZeruError>,
 }
@@ -60,6 +64,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         builder: &'a Builder<'ctx>,
         module: &'a Module<'ctx>,
         types: &'a SemanticAnalyzer,
+        sources: &'a Sources,
         safety_mode: SafetyMode,
     ) -> Self {
         Self {
@@ -67,6 +72,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             builder,
             module,
             types,
+            sources,
+            current_span: Span::default(),
             variables: HashMap::new(),
             constants: HashMap::new(),
             struct_defs: HashMap::new(),
@@ -77,11 +84,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             stdout_stream: None,
             stderr_stream: None,
             scope_stack: vec![Vec::new()],
+            debug: None,
             errors: Vec::new(),
         }
     }
 
     pub fn compile_program(&mut self, program: &Program) {
+        self.init_debug_info();
         self.declare_structs(program);
         self.collect_global_constants(program);
         self.lay_out_structs(program);
@@ -92,10 +101,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             this.compile_fn_prototype(&f.name, f.params);
         });
         self.for_each_concrete_fn(program, |this, f| {
-            this.compile_fn_body(&f.name, f.params, f.body);
+            this.compile_fn_body(&f.name, f.params, f.body, f.span);
+            this.leave_debug_scope();
         });
 
         self.create_builtin_cleanup();
+        self.finish_debug_info();
     }
 
     fn declare_structs(&mut self, program: &Program) {
@@ -141,7 +152,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         for stmt in &program.statements {
             match &stmt.kind {
                 StatementKind::Function { .. } => {
-                    if let Some(f) = ConcreteFn::from_statement(&stmt.kind, None) {
+                    if let Some(f) = ConcreteFn::from_statement(stmt, None) {
                         emit(self, &f);
                     }
                 }
@@ -151,8 +162,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     ..
                 } => {
                     for method in methods {
-                        if let Some(f) = ConcreteFn::from_statement(&method.kind, Some(struct_name))
-                        {
+                        if let Some(f) = ConcreteFn::from_statement(method, Some(struct_name)) {
                             emit(self, &f);
                         }
                     }
@@ -167,17 +177,18 @@ struct ConcreteFn<'s> {
     name: String,
     params: &'s [(String, TypeSpec, bool)],
     body: &'s [Statement],
+    span: Span,
 }
 
 impl<'s> ConcreteFn<'s> {
-    fn from_statement(kind: &'s StatementKind, owner: Option<&str>) -> Option<Self> {
+    fn from_statement(stmt: &'s Statement, owner: Option<&str>) -> Option<Self> {
         let StatementKind::Function {
             name,
             type_params,
             params,
             body,
             ..
-        } = kind
+        } = &stmt.kind
         else {
             return None;
         };
@@ -191,6 +202,7 @@ impl<'s> ConcreteFn<'s> {
             },
             params,
             body,
+            span: stmt.span,
         })
     }
 }

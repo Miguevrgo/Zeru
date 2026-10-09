@@ -125,6 +125,15 @@ impl Sources {
         start
     }
 
+    /// The file, line and column a span starts at, counting from 1.
+    pub fn position(&self, span: Span) -> Option<(&str, u32, u32)> {
+        let (name, text, range) = self.locate(span)?;
+        let before = &text[..range.start];
+        let line = before.matches('\n').count() + 1;
+        let column = before.len() - before.rfind('\n').map_or(0, |at| at + 1) + 1;
+        Some((name, line as u32, column as u32))
+    }
+
     /// The file a span points into, its text, and the span rebased onto it.
     fn locate(&self, span: Span) -> Option<(&str, &str, Range<usize>)> {
         let file = self

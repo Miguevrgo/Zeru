@@ -1,5 +1,6 @@
 use crate::codegen::SafetyMode;
 use crate::codegen::compiler::Compiler;
+use crate::errors::Sources;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::sema::analyzer::SemanticAnalyzer;
@@ -31,13 +32,25 @@ fn compile_to_ir_with_mode(input: &str, safety_mode: SafetyMode) -> Result<Strin
     let module = context.create_module("test");
     let builder = context.create_builder();
 
-    let mut compiler = Compiler::new(&context, &builder, &module, &analyzer, safety_mode);
+    // Positions resolve, so a debug build carries line tables and a panic
+    // names its line.
+    let mut sources = Sources::default();
+    sources.push("test.zr", input);
+    let mut compiler = Compiler::new(
+        &context,
+        &builder,
+        &module,
+        &analyzer,
+        &sources,
+        safety_mode,
+    );
     compiler.compile_program(&program);
 
     if !compiler.errors.is_empty() {
         let msgs: Vec<_> = compiler.errors.iter().map(|e| e.message.as_str()).collect();
         return Err(format!("Codegen errors: {:?}", msgs));
     }
+    module.verify().map_err(|e| e.to_string())?;
 
     Ok(module.print_to_string().to_string())
 }
@@ -309,7 +322,8 @@ fn test_struct_method() {
         ";
     assert_ir_contains(
         input,
-        &["define internal i32 @\"Counter::get\"(%Counter %0)"],
+        // Borrowed: a pointer to the caller's struct, not a copy of it.
+        &["define internal i32 @\"Counter::get\"(ptr %0)"],
     );
 }
 
@@ -1603,4 +1617,23 @@ fn test_static_method_takes_a_dot() {
         }
     ";
     assert_compiles(input);
+}
+
+#[test]
+fn test_debug_build_has_line_tables() {
+    let ir = compile_to_ir("fn main() {\n    var x = 1;\n}").unwrap();
+    for pattern in [
+        "!DISubprogram(name: \"main\"",
+        "!DILocation(line: 2, column: 5",
+    ] {
+        assert!(ir.contains(pattern), "{pattern} missing:\n{ir}");
+    }
+    let ir = compile_to_ir_with_mode("fn main() { }", SafetyMode::ReleaseSafe).unwrap();
+    assert!(!ir.contains("!DISubprogram"), "{ir}");
+}
+
+#[test]
+fn test_a_panic_says_what_and_where() {
+    let input = "fn main() {\n    var a = [1, 2];\n    var i: usize = 5;\n    var b = a[i];\n}";
+    assert_ir_contains(input, &["panic at test.zr:4:5: index out of bounds\\0A"]);
 }

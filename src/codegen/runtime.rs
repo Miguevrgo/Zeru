@@ -3,6 +3,7 @@
 
 use inkwell::{
     AddressSpace, IntPredicate,
+    attributes::{Attribute, AttributeLoc},
     intrinsics::Intrinsic,
     module::Linkage,
     types::{BasicType, BasicTypeEnum, FunctionType, IntType, PointerType},
@@ -17,8 +18,8 @@ use crate::{
     codegen::{
         compiler::Compiler,
         layout::{
-            OPTION_TAG, OPTION_VALUE, RESULT_ERR, RESULT_TAG, RESULT_VALUE, SLICE_PTR, VEC_CAP,
-            VEC_LEN, VEC_PTR,
+            OPTION_TAG, OPTION_VALUE, RESULT_ERR, RESULT_TAG, RESULT_VALUE, SLICE_LEN, SLICE_PTR,
+            VEC_CAP, VEC_LEN, VEC_PTR,
         },
     },
     errors::{Span, ZeruError},
@@ -172,20 +173,100 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         global.set_initializer(&entries);
     }
 
+    /// Emit the body of `function` through `build`, then put the builder
+    /// back where it was.
+    pub(super) fn in_helper(
+        &mut self,
+        function: FunctionValue<'ctx>,
+        build: impl FnOnce(&mut Self),
+    ) {
+        let block = self.builder.get_insert_block();
+        let outer_fn = self.current_fn.replace(function);
+        let outer_scope = self.swap_debug_scope(None);
+        self.builder.unset_current_debug_location();
+
+        let entry = self.context.append_basic_block(function, "entry");
+        self.builder.position_at_end(entry);
+        build(self);
+
+        self.current_fn = outer_fn;
+        self.swap_debug_scope(outer_scope);
+        if let Some(block) = block {
+            self.builder.position_at_end(block);
+        }
+        self.set_debug_location();
+    }
+
+    /// What every failed check calls: flush what was printed, write the
+    /// message to stderr, abort.
     fn panic_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(f) = self.panic_fn {
             return f;
         }
-        let f = self.extern_fn("abort", self.context.void_type().fn_type(&[], false));
+        let void = self.context.void_type();
+        let f = self.module.add_function(
+            "__zeru_panic",
+            void.fn_type(&[self.ptr_type().into(), self.usize_type().into()], false),
+            Some(Linkage::Internal),
+        );
+        for attribute in ["noreturn", "cold"] {
+            let kind = Attribute::get_named_enum_kind_id(attribute);
+            f.add_attribute(
+                AttributeLoc::Function,
+                self.context.create_enum_attribute(kind, 0),
+            );
+        }
+        let abort_fn = self.extern_fn("abort", void.fn_type(&[], false));
+
+        self.in_helper(f, |this| {
+            if let (Some(out), Some(err), Some(write), Some(flush)) = (
+                this.stdout_stream,
+                this.stderr_stream,
+                this.module.get_function("OutStream::write_bytes"),
+                this.module.get_function("OutStream::flush"),
+            ) {
+                let (text, len) = (f.get_nth_param(0).unwrap(), f.get_nth_param(1).unwrap());
+                let b = this.builder;
+                b.build_call(flush, &[out.into()], "").unwrap();
+                b.build_call(write, &[err.into(), text.into(), len.into()], "")
+                    .unwrap();
+                b.build_call(flush, &[err.into()], "").unwrap();
+            }
+            this.builder.build_call(abort_fn, &[], "").unwrap();
+            this.builder.build_unreachable().unwrap();
+        });
         self.panic_fn = Some(f);
         f
     }
 
-    /// Abort the process, leaving the builder in a fresh unreachable-free block.
-    fn build_panic(&mut self, from: inkwell::basic_block::BasicBlock<'ctx>) {
+    /// Report what went wrong and where, then abort.
+    fn build_panic(&mut self, from: inkwell::basic_block::BasicBlock<'ctx>, label: &str) {
+        let what = match label {
+            "null" => "null pointer dereference",
+            "bounds" => "index out of bounds",
+            "div" => "division by zero, or MIN / -1",
+            "shift" => "shift by the operand's width or more",
+            "overflow" => "arithmetic overflow",
+            "unwrap_none" => "unwrap on None",
+            "unwrap" => "unwrap on Err",
+            "unwrap_err" => "unwrap_err on Ok",
+            _ => label,
+        };
+        let message = match self.sources.position(self.current_span) {
+            Some((file, line, column)) => format!("panic at {file}:{line}:{column}: {what}\n"),
+            None => format!("panic: {what}\n"),
+        };
+
+        let panic_fn = self.panic_fn();
         self.builder.position_at_end(from);
-        let abort_fn = self.panic_fn();
-        self.builder.build_call(abort_fn, &[], "").unwrap();
+        let text = self
+            .builder
+            .build_global_string_ptr(&message, "panic_msg")
+            .unwrap();
+        let len = self.usize_type().const_int(message.len() as u64, false);
+        self.builder
+            .build_call(panic_fn, &[text.as_pointer_value().into(), len.into()], "")
+            .unwrap();
         self.builder.build_unreachable().unwrap();
     }
 
@@ -206,11 +287,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_conditional_branch(condition, panic_bb, ok_bb)
             .unwrap();
 
-        self.build_panic(panic_bb);
+        self.build_panic(panic_bb, label);
         self.builder.position_at_end(ok_bb);
     }
 
-    pub(super) fn emit_null_check(&mut self, ptr: PointerValue<'ctx>, _error_msg: &str) {
+    pub(super) fn emit_null_check(&mut self, ptr: PointerValue<'ctx>) {
         if !self.safety_mode.emit_safety_checks() {
             return;
         }
@@ -374,6 +455,49 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         Some(self.extract(pair, 0, "arith_val"))
     }
 
+    /// Emit `body` once per index in `0..count`, leaving the builder after
+    /// the loop.
+    pub(super) fn build_counted_loop(
+        &mut self,
+        count: IntValue<'ctx>,
+        mut body: impl FnMut(&mut Self, IntValue<'ctx>),
+    ) {
+        let Some(function) = self.current_fn else {
+            return;
+        };
+        let usize_type = self.usize_type();
+        let index_ptr = self.create_entry_block_alloca(function, "i", usize_type.into());
+        self.builder
+            .build_store(index_ptr, usize_type.const_zero())
+            .unwrap();
+
+        let cond_bb = self.context.append_basic_block(function, "count_cond");
+        let body_bb = self.context.append_basic_block(function, "count_body");
+        let after_bb = self.context.append_basic_block(function, "count_after");
+        self.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        self.builder.position_at_end(cond_bb);
+        let index = self.load_int(usize_type, index_ptr, "i");
+        let more = self
+            .builder
+            .build_int_compare(IntPredicate::ULT, index, count, "more")
+            .unwrap();
+        self.builder
+            .build_conditional_branch(more, body_bb, after_bb)
+            .unwrap();
+
+        self.builder.position_at_end(body_bb);
+        body(self, index);
+        let next = self
+            .builder
+            .build_int_add(index, usize_type.const_int(1, false), "next")
+            .unwrap();
+        self.builder.build_store(index_ptr, next).unwrap();
+        self.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        self.builder.position_at_end(after_bb);
+    }
+
     pub(super) fn create_entry_block_alloca(
         &self,
         function: FunctionValue<'ctx>,
@@ -524,33 +648,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub(super) fn compile_vec_method(
         &mut self,
         method_name: &str,
-        vec_struct: StructValue<'ctx>,
-    ) -> Option<BasicValueEnum<'ctx>> {
-        match method_name {
-            "len" => Some(self.extract(vec_struct, VEC_LEN, "vec_len")),
-            "capacity" => Some(self.extract(vec_struct, VEC_CAP, "vec_cap")),
-            "is_empty" => {
-                let len = self
-                    .extract(vec_struct, VEC_LEN, "vec_len")
-                    .into_int_value();
-                let is_empty = self
-                    .builder
-                    .build_int_compare(
-                        IntPredicate::EQ,
-                        len,
-                        len.get_type().const_zero(),
-                        "is_empty",
-                    )
-                    .unwrap();
-                Some(is_empty.into())
-            }
-            _ => None,
-        }
-    }
-
-    pub(super) fn compile_vec_method_mut(
-        &mut self,
-        method_name: &str,
         vec_ptr: PointerValue<'ctx>,
         arguments: &[Expression],
         elem_type: BasicTypeEnum<'ctx>,
@@ -558,14 +655,27 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let usize_type = self.usize_type();
         let unit = self.dummy_val();
 
+        let len_field = self.vec_field_ptr(vec_ptr, VEC_LEN, "len_field");
+        let len = self.load_int(usize_type, len_field, "len");
+
         match method_name {
+            "len" => Some(len.into()),
+            "capacity" => {
+                let cap_field = self.vec_field_ptr(vec_ptr, VEC_CAP, "cap_field");
+                Some(self.load(usize_type, cap_field, "cap"))
+            }
+            "is_empty" => {
+                let zero = usize_type.const_zero();
+                let is_empty =
+                    self.builder
+                        .build_int_compare(IntPredicate::EQ, len, zero, "is_empty");
+                Some(is_empty.unwrap().into())
+            }
             "push" => {
                 self.build_vec_push(vec_ptr, arguments.first()?, elem_type);
                 Some(unit)
             }
             "pop" => {
-                let len_field = self.vec_field_ptr(vec_ptr, VEC_LEN, "len_field");
-                let len = self.load_int(usize_type, len_field, "len");
                 let has_elem = self
                     .builder
                     .build_int_compare(IntPredicate::NE, len, usize_type.const_zero(), "has_elem")
@@ -590,8 +700,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let idx = self
                     .compile_expression(arguments.first()?, Some(usize_type.into()))
                     .into_int_value();
-                let len_field = self.vec_field_ptr(vec_ptr, VEC_LEN, "len_field");
-                let len = self.load_int(usize_type, len_field, "len");
                 let in_bounds = self
                     .builder
                     .build_int_compare(IntPredicate::ULT, idx, len, "in_bounds")
@@ -600,7 +708,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Some(self.build_optional_elem_read("get", in_bounds, |_| idx, vec_ptr, elem_type))
             }
             "clear" => {
-                let len_field = self.vec_field_ptr(vec_ptr, VEC_LEN, "len_field");
                 self.builder
                     .build_store(len_field, usize_type.const_zero())
                     .unwrap();
@@ -891,40 +998,37 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         };
 
         let to_stderr = name.starts_with('e');
-        let newline = name.ends_with("ln");
-        let (Some(stream), Some(write_str_fn)) = (
+        let (Some(stream), Some(write_fn)) = (
             if to_stderr {
                 self.stderr_stream
             } else {
                 self.stdout_stream
             },
-            self.module.get_function("OutStream::write_str"),
+            self.module.get_function("OutStream::write_bytes"),
         ) else {
             return self.dummy_val();
         };
 
-        let str_ptr: BasicMetadataValueEnum = match self.compile_expression(argument, None) {
-            BasicValueEnum::StructValue(slice) => self.extract(slice, SLICE_PTR, "str_ptr").into(),
-            BasicValueEnum::PointerValue(ptr) => ptr.into(),
-            _ => {
-                self.error(format!("'{name}()' expects a string argument"), call_span);
-                return self.dummy_val();
-            }
+        let BasicValueEnum::StructValue(text) = self.compile_expression(argument, None) else {
+            self.error(format!("'{name}()' expects a string argument"), call_span);
+            return self.dummy_val();
         };
-
+        let ptr = self.extract(text, SLICE_PTR, "str_ptr");
+        let len = self.extract(text, SLICE_LEN, "str_len");
         self.builder
-            .build_call(write_str_fn, &[stream.into(), str_ptr], "")
+            .build_call(write_fn, &[stream.into(), ptr.into(), len.into()], "")
             .unwrap();
 
-        if newline {
+        if name.ends_with("ln") {
             let nl = self
                 .builder
                 .build_global_string_ptr("\n", "newline")
                 .unwrap();
+            let one = self.usize_type().const_int(1, false);
             self.builder
                 .build_call(
-                    write_str_fn,
-                    &[stream.into(), nl.as_pointer_value().into()],
+                    write_fn,
+                    &[stream.into(), nl.as_pointer_value().into(), one.into()],
                     "",
                 )
                 .unwrap();
