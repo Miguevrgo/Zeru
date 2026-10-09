@@ -504,44 +504,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.loop_stack.pop();
     }
 
-    pub(super) fn compile_const_expr(
-        &mut self,
-        expr: &Expression,
-        type_annotation: Option<&TypeSpec>,
-    ) -> BasicValueEnum<'ctx> {
-        let annotated = type_annotation.and_then(|ts| self.get_llvm_type(ts));
-
-        match &expr.kind {
-            ExpressionKind::Int(val) => {
-                let int_type = match annotated {
-                    Some(BasicTypeEnum::IntType(t)) => t,
-                    _ => self.context.i32_type(),
-                };
-                int_type.const_int(*val, false).into()
-            }
-            ExpressionKind::Float(val) => {
-                let float_type = match annotated {
-                    Some(BasicTypeEnum::FloatType(t)) => t,
-                    _ => self.context.f64_type(),
-                };
-                float_type.const_float(*val).into()
-            }
-            ExpressionKind::Boolean(val) => self
-                .context
-                .bool_type()
-                .const_int(*val as u64, false)
-                .into(),
-            ExpressionKind::StringLit(s) => self.build_str_slice(s),
-            _ => {
-                self.error(
-                    format!("Unsupported constant expression: {:?}", expr.kind),
-                    expr.span,
-                );
-                self.dummy_val()
-            }
-        }
-    }
-
     /// Integer tag of an `Enum::Variant` path, numbered by declaration order.
     fn enum_variant_tag(&self, qualified_name: &str) -> Option<BasicValueEnum<'ctx>> {
         let (enum_name, variant_name) = qualified_name.rsplit_once("::")?;
@@ -888,11 +850,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn lower_identifier(&mut self, name: &str, span: Span) -> BasicValueEnum<'ctx> {
-        if let Some(const_val) = self.constants.get(name) {
-            return *const_val;
-        }
+        // A local first: it may shadow a constant of the same name.
         if let Some((ptr, ty, _)) = self.variables.get(name) {
             return self.load(*ty, *ptr, &format!("{name}_load"));
+        }
+        if let Some((value, ty)) = self.constants.get(name).cloned() {
+            return self.compile_expression(&value, ty);
         }
         // The parser folds `Enum::Variant` into one qualified identifier.
         if let Some(tag) = self.enum_variant_tag(name) {

@@ -10,11 +10,11 @@ use inkwell::{
     context::Context,
     module::Module,
     types::{BasicTypeEnum, StructType},
-    values::{BasicValueEnum, FunctionValue, PointerValue},
+    values::{FunctionValue, PointerValue},
 };
 
 use crate::{
-    ast::{Program, Statement, StatementKind, TypeSpec},
+    ast::{Expression, Program, Statement, StatementKind, TypeSpec},
     codegen::SafetyMode,
     errors::ZeruError,
 };
@@ -26,7 +26,9 @@ pub struct Compiler<'a, 'ctx> {
 
     pub(super) variables: HashMap<String, VarBinding<'ctx>>,
     pub(super) pointer_elem_types: HashMap<String, BasicTypeEnum<'ctx>>,
-    pub(super) constants: HashMap<String, BasicValueEnum<'ctx>>,
+    /// Each global constant's value and declared type. It is lowered wherever
+    /// the constant is used, inside a function, where LLVM folds it.
+    pub(super) constants: HashMap<String, (Expression, Option<BasicTypeEnum<'ctx>>)>,
     pub(super) struct_defs: HashMap<String, (StructType<'ctx>, HashMap<String, u32>)>,
     pub(super) enum_defs: HashMap<String, Vec<String>>,
     pub(super) current_fn: Option<FunctionValue<'ctx>>,
@@ -97,7 +99,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub fn compile_program(&mut self, program: &Program) {
         self.declare_nominal_types(program);
-        self.eval_global_constants(program);
+        self.collect_global_constants(program);
         self.lay_out_structs(program);
         self.collect_generic_functions(program);
 
@@ -131,7 +133,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    fn eval_global_constants(&mut self, program: &Program) {
+    fn collect_global_constants(&mut self, program: &Program) {
         for stmt in &program.statements {
             if let StatementKind::Var {
                 name,
@@ -140,8 +142,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 type_annotation,
             } = &stmt.kind
             {
-                let const_val = self.compile_const_expr(value, type_annotation.as_ref());
-                self.constants.insert(name.clone(), const_val);
+                let ty = type_annotation
+                    .as_ref()
+                    .and_then(|spec| self.get_llvm_type(spec));
+                self.constants.insert(name.clone(), (value.clone(), ty));
             }
         }
     }

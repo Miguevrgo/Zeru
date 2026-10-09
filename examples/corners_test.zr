@@ -4,6 +4,8 @@
 const LIMIT: i32 = 10;
 const RATIO: f64 = 1.5;
 const ON: bool = true;
+const GREETING: str = "hi";
+const SPAN: i32 = LIMIT * 2 + 1;
 
 struct Small { n: i32 }
 
@@ -42,6 +44,15 @@ fn main() {
     if LIMIT != 10 { exit(1); }
     if RATIO != 1.5 { exit(2); }
     if !ON { exit(3); }
+    // Built from other constants, and a string: both used to fail, the
+    // string by crashing the compiler.
+    if SPAN != 21 { exit(21); }
+    if GREETING.len() != 2 { exit(22); }
+    {
+        // A local shadows a constant; the constant used to win.
+        var LIMIT: i32 = 3;
+        if LIMIT != 3 { exit(23); }
+    }
 
     // Two functions that call each other.
     if !even(8) { exit(4); }

@@ -2608,3 +2608,36 @@ fn test_match_covers_every_variant_or_has_a_default() {
     let errors = analyze(covered);
     assert!(errors.is_empty(), "{errors:?}");
 }
+
+#[test]
+fn test_global_constant_is_made_of_constants() {
+    let fine = "
+        enum Mode { Fast }
+        const BASE: i32 = 4;
+        const SPAN: i64 = (BASE * 2 + 1) as i64;
+        const NAME: str = \"zeru\";
+        const DEFAULT_MODE: Mode = Mode::Fast;
+        fn main() { }
+    ";
+    let errors = analyze(fine);
+    assert!(errors.is_empty(), "{errors:?}");
+
+    let called = "fn base() i32 { return 4; } const BASE: i32 = base(); fn main() { }";
+    let errors = analyze(called);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        errors[0].starts_with("A global constant must be made of"),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn test_global_constant_is_defined_once() {
+    for input in [
+        "const A: i32 = 1; const A: i32 = 2; fn main() { }",
+        "fn A() { } const A: i32 = 2; fn main() { }",
+    ] {
+        let errors = analyze(input);
+        assert_eq!(errors, ["'A' is already defined"], "{input}");
+    }
+}

@@ -595,8 +595,50 @@ impl SemanticAnalyzer {
                     }
                 }
             }
-            StatementKind::Var { .. } => self.check_statement(stmt),
+            StatementKind::Var { name, .. } => {
+                // Unlike a local, a global is not shadowed: a second one with
+                // the same name silently replaced the first.
+                if self.symbols.lookup_current_scope(name).is_some() {
+                    self.error(format!("'{name}' is already defined"), span);
+                }
+                self.check_statement(stmt);
+                if let StatementKind::Var { value, .. } = &stmt.kind
+                    && !self.is_constant(value)
+                {
+                    self.error(
+                        "A global constant must be made of literals, other constants, enum variants and operators on them".into(),
+                        value.span,
+                    );
+                }
+            }
             _ => {}
+        }
+    }
+
+    /// What a global constant may be made of. Codegen lowers its value at each
+    /// use, so a call in it would run once per use instead of once.
+    fn is_constant(&self, expr: &Expression) -> bool {
+        match &expr.kind {
+            ExpressionKind::Int(_)
+            | ExpressionKind::Float(_)
+            | ExpressionKind::Boolean(_)
+            | ExpressionKind::StringLit(_) => true,
+            ExpressionKind::Identifier(name) => {
+                matches!(expr.ty, Some(Type::Enum { .. }))
+                    || matches!(
+                        self.symbols.lookup(name),
+                        Some(super::symbol_table::Symbol::Var { is_const: true, .. })
+                    )
+            }
+            ExpressionKind::Prefix { right: inner, .. }
+            | ExpressionKind::Cast { left: inner, .. } => self.is_constant(inner),
+            ExpressionKind::Infix { left, right, .. } => {
+                self.is_constant(left) && self.is_constant(right)
+            }
+            ExpressionKind::ArrayLiteral(items) | ExpressionKind::Tuple(items) => {
+                items.iter().all(|item| self.is_constant(item))
+            }
+            _ => false,
         }
     }
 

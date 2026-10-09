@@ -1,0 +1,7 @@
+// expect: 'LIMIT' is already defined
+const LIMIT: i32 = 10;
+const LIMIT: i32 = 20;
+
+fn main() {
+    exit(LIMIT);
+}

@@ -54,13 +54,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ExpressionKind::Float(_) => named("f64"),
             ExpressionKind::Boolean(_) => named("bool"),
             ExpressionKind::StringLit(_) => named("str"),
-            ExpressionKind::Identifier(name) => {
-                let llvm_type = match self.variables.get(name) {
-                    Some((_, ty, _)) => Some(*ty),
-                    None => self.constants.get(name).map(|val| val.get_type()),
-                };
-                llvm_type.map_or_else(|| named("i32"), |ty| self.llvm_type_to_type_spec(ty))
-            }
+            ExpressionKind::Identifier(name) => match self.variables.get(name) {
+                Some((_, ty, _)) => self.llvm_type_to_type_spec(*ty),
+                None => named("i32"),
+            },
             _ => named("i32"),
         }
     }
