@@ -193,3 +193,247 @@ impl Expression {
         matches!(&self.kind, ExpressionKind::Identifier(name) if name == "default")
     }
 }
+
+/// What a walk over the tree does where it stops. Every hook does nothing by
+/// default, so a visitor names only what it cares about.
+pub trait Visitor {
+    /// A type written in the source, as a whole.
+    fn ty(&mut self, _spec: &mut TypeSpec) {}
+    /// A name an expression uses: a variable, a function, a path, the type
+    /// of a struct literal.
+    fn name(&mut self, _name: &mut String) {}
+    /// The name a top-level item declares, or a trait named in a bound.
+    fn item(&mut self, _name: &mut String) {}
+    /// A local the statements after it can see, until the scope it is in ends.
+    fn bind(&mut self, _name: &str) {}
+    /// Where the current scope starts, for `leave` to cut back to.
+    fn scope(&self) -> usize {
+        0
+    }
+    fn leave(&mut self, _scope: usize) {}
+}
+
+/// Walk a top-level item: a function, a struct with its methods, an enum, a
+/// trait or a constant.
+pub fn walk_item(v: &mut impl Visitor, statement: &mut Statement) {
+    match &mut statement.kind {
+        StatementKind::Var {
+            name,
+            value,
+            type_annotation,
+            ..
+        } => {
+            v.item(name);
+            walk_expression(v, value);
+            if let Some(spec) = type_annotation {
+                v.ty(spec);
+            }
+        }
+        StatementKind::Function {
+            name,
+            type_params,
+            params,
+            return_type,
+            body,
+        } => {
+            v.item(name);
+            walk_function(v, type_params, params, return_type, body);
+        }
+        StatementKind::Struct {
+            name,
+            type_params,
+            fields,
+            methods,
+        } => {
+            v.item(name);
+            walk_bounds(v, type_params);
+            for (_, spec) in fields.iter_mut() {
+                v.ty(spec);
+            }
+            // A method's name belongs to its struct, not to the items.
+            for method in methods {
+                if let StatementKind::Function {
+                    type_params,
+                    params,
+                    return_type,
+                    body,
+                    ..
+                } = &mut method.kind
+                {
+                    walk_function(v, type_params, params, return_type, body);
+                }
+            }
+        }
+        StatementKind::Enum { name, .. } => v.item(name),
+        StatementKind::Trait { name, methods } => {
+            v.item(name);
+            for method in methods {
+                for (_, spec, _) in method.params.iter_mut() {
+                    v.ty(spec);
+                }
+                if let Some(spec) = &mut method.return_type {
+                    v.ty(spec);
+                }
+            }
+        }
+        _ => walk_statement(v, statement),
+    }
+}
+
+fn walk_function(
+    v: &mut impl Visitor,
+    type_params: &mut [TypeParameter],
+    params: &mut [(String, TypeSpec, bool)],
+    return_type: &mut Option<TypeSpec>,
+    body: &mut [Statement],
+) {
+    walk_bounds(v, type_params);
+    for (_, spec, _) in params.iter_mut() {
+        v.ty(spec);
+    }
+    if let Some(spec) = return_type {
+        v.ty(spec);
+    }
+    let scope = v.scope();
+    for (name, _, _) in params.iter() {
+        v.bind(name);
+    }
+    walk_block(v, body);
+    v.leave(scope);
+}
+
+fn walk_bounds(v: &mut impl Visitor, type_params: &mut [TypeParameter]) {
+    for bound in type_params.iter_mut().filter_map(|p| p.bound.as_mut()) {
+        v.item(bound);
+    }
+}
+
+/// Statements sharing one scope: what they bind is gone after them.
+fn walk_block(v: &mut impl Visitor, statements: &mut [Statement]) {
+    let scope = v.scope();
+    for statement in statements {
+        walk_statement(v, statement);
+    }
+    v.leave(scope);
+}
+
+fn walk_statement(v: &mut impl Visitor, statement: &mut Statement) {
+    match &mut statement.kind {
+        // The value is read before the name exists.
+        StatementKind::Var {
+            name,
+            value,
+            type_annotation,
+            ..
+        } => {
+            walk_expression(v, value);
+            if let Some(spec) = type_annotation {
+                v.ty(spec);
+            }
+            v.bind(name);
+        }
+        StatementKind::Return(value) => {
+            if let Some(value) = value {
+                walk_expression(v, value);
+            }
+        }
+        StatementKind::Expression(expr) => walk_expression(v, expr),
+        StatementKind::Block(body) => walk_block(v, body),
+        StatementKind::While { cond, body } => {
+            walk_expression(v, cond);
+            walk_statement(v, body);
+        }
+        StatementKind::ForIn {
+            variable,
+            iterable,
+            body,
+        } => {
+            walk_expression(v, iterable);
+            let scope = v.scope();
+            v.bind(variable);
+            walk_statement(v, body);
+            v.leave(scope);
+        }
+        StatementKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            walk_expression(v, condition);
+            walk_statement(v, then_branch);
+            if let Some(branch) = else_branch {
+                walk_statement(v, branch);
+            }
+        }
+        StatementKind::Function { .. }
+        | StatementKind::Struct { .. }
+        | StatementKind::Enum { .. }
+        | StatementKind::Trait { .. } => walk_item(v, statement),
+        StatementKind::Break | StatementKind::Continue | StatementKind::Import { .. } => {}
+    }
+}
+
+fn walk_expression(v: &mut impl Visitor, expr: &mut Expression) {
+    match &mut expr.kind {
+        ExpressionKind::Identifier(name) => v.name(name),
+        ExpressionKind::StructLiteral { name, fields } => {
+            v.name(name);
+            for (_, value) in fields.iter_mut() {
+                walk_expression(v, value);
+            }
+        }
+        ExpressionKind::Cast { left, target } => {
+            walk_expression(v, left);
+            v.ty(target);
+        }
+        ExpressionKind::Prefix { right: inner, .. }
+        // A field's name belongs to its struct.
+        | ExpressionKind::Get { object: inner, .. }
+        | ExpressionKind::BorrowRef(inner)
+        | ExpressionKind::BorrowRefMut(inner)
+        | ExpressionKind::Dereference(inner) => walk_expression(v, inner),
+        ExpressionKind::Infix { left, right, .. }
+        | ExpressionKind::Assign {
+            target: left,
+            value: right,
+            ..
+        }
+        | ExpressionKind::Index { left, index: right } => {
+            walk_expression(v, left);
+            walk_expression(v, right);
+        }
+        ExpressionKind::Call {
+            function,
+            arguments,
+        } => {
+            walk_expression(v, function);
+            for argument in arguments {
+                walk_expression(v, argument);
+            }
+        }
+        ExpressionKind::Match { value, arms } => {
+            walk_expression(v, value);
+            for (pattern, result) in arms.iter_mut() {
+                walk_expression(v, pattern);
+                walk_expression(v, result);
+            }
+        }
+        ExpressionKind::ArrayLiteral(elements) | ExpressionKind::Tuple(elements) => {
+            for element in elements {
+                walk_expression(v, element);
+            }
+        }
+        ExpressionKind::InlineAsm {
+            outputs, inputs, ..
+        } => {
+            for operand in outputs.iter_mut().chain(inputs) {
+                walk_expression(v, &mut operand.expr);
+            }
+        }
+        ExpressionKind::Int(_)
+        | ExpressionKind::Float(_)
+        | ExpressionKind::StringLit(_)
+        | ExpressionKind::Boolean(_)
+        | ExpressionKind::None => {}
+    }
+}

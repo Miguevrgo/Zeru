@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use crate::ast::{Expression, ExpressionKind, Statement, StatementKind, TypeParameter, TypeSpec};
+use crate::ast::{Statement, StatementKind, TypeParameter, TypeSpec, Visitor, walk_item};
 
 pub type Substitutions = HashMap<String, TypeSpec>;
 
@@ -84,161 +84,14 @@ pub fn instantiate(decl: &Statement, name: String, subs: &Substitutions) -> Stat
     decl
 }
 
-/// Apply `f` to every type written anywhere in `statement`, including the
-/// bodies of the functions it holds.
+/// Apply `f` to every type written anywhere in `statement`, a top-level item,
+/// including the bodies of the functions it holds.
 pub fn map_types(statement: &mut Statement, f: &mut impl FnMut(&mut TypeSpec)) {
-    match &mut statement.kind {
-        StatementKind::Var {
-            value,
-            type_annotation,
-            ..
-        } => {
-            map_expression_types(value, f);
-            if let Some(spec) = type_annotation {
-                f(spec);
-            }
+    struct MapTypes<F>(F);
+    impl<F: FnMut(&mut TypeSpec)> Visitor for MapTypes<F> {
+        fn ty(&mut self, spec: &mut TypeSpec) {
+            (self.0)(spec);
         }
-
-        StatementKind::Function {
-            params,
-            return_type,
-            body,
-            ..
-        } => {
-            for (_, spec, _) in params.iter_mut() {
-                f(spec);
-            }
-            if let Some(spec) = return_type {
-                f(spec);
-            }
-            map_all(body, f);
-        }
-
-        StatementKind::Struct {
-            fields, methods, ..
-        } => {
-            for (_, spec) in fields.iter_mut() {
-                f(spec);
-            }
-            map_all(methods, f);
-        }
-
-        StatementKind::Trait { methods, .. } => {
-            for method in methods.iter_mut() {
-                for (_, spec, _) in method.params.iter_mut() {
-                    f(spec);
-                }
-                if let Some(spec) = &mut method.return_type {
-                    f(spec);
-                }
-            }
-        }
-
-        StatementKind::Return(value) => {
-            if let Some(value) = value {
-                map_expression_types(value, f);
-            }
-        }
-        StatementKind::Expression(expr) => map_expression_types(expr, f),
-        StatementKind::Block(body) => map_all(body, f),
-        StatementKind::While { cond, body } => {
-            map_expression_types(cond, f);
-            map_types(body, f);
-        }
-        StatementKind::ForIn { iterable, body, .. } => {
-            map_expression_types(iterable, f);
-            map_types(body, f);
-        }
-        StatementKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            map_expression_types(condition, f);
-            map_types(then_branch, f);
-            if let Some(branch) = else_branch {
-                map_types(branch, f);
-            }
-        }
-
-        StatementKind::Enum { .. }
-        | StatementKind::Break
-        | StatementKind::Continue
-        | StatementKind::Import { .. } => {}
     }
-}
-
-fn map_all(statements: &mut [Statement], f: &mut impl FnMut(&mut TypeSpec)) {
-    for statement in statements {
-        map_types(statement, f);
-    }
-}
-
-fn map_expression_types(expr: &mut Expression, f: &mut impl FnMut(&mut TypeSpec)) {
-    match &mut expr.kind {
-        ExpressionKind::Cast { left, target } => {
-            map_expression_types(left, f);
-            f(target);
-        }
-
-        ExpressionKind::StructLiteral { fields, .. } => {
-            for (_, value) in fields.iter_mut() {
-                map_expression_types(value, f);
-            }
-        }
-        ExpressionKind::Prefix { right, .. } => map_expression_types(right, f),
-        ExpressionKind::Infix { left, right, .. } => {
-            map_expression_types(left, f);
-            map_expression_types(right, f);
-        }
-        ExpressionKind::Call {
-            function,
-            arguments,
-        } => {
-            map_expression_types(function, f);
-            map_each(arguments, f);
-        }
-        ExpressionKind::Get { object, .. } => map_expression_types(object, f),
-        ExpressionKind::Assign { target, value, .. } => {
-            map_expression_types(target, f);
-            map_expression_types(value, f);
-        }
-        ExpressionKind::Index { left, index } => {
-            map_expression_types(left, f);
-            map_expression_types(index, f);
-        }
-        ExpressionKind::Match { value, arms } => {
-            map_expression_types(value, f);
-            for (pattern, result) in arms.iter_mut() {
-                map_expression_types(pattern, f);
-                map_expression_types(result, f);
-            }
-        }
-        ExpressionKind::ArrayLiteral(elements) | ExpressionKind::Tuple(elements) => {
-            map_each(elements, f)
-        }
-        ExpressionKind::BorrowRef(inner)
-        | ExpressionKind::BorrowRefMut(inner)
-        | ExpressionKind::Dereference(inner) => map_expression_types(inner, f),
-        ExpressionKind::InlineAsm {
-            outputs, inputs, ..
-        } => {
-            for operand in outputs.iter_mut().chain(inputs) {
-                map_expression_types(&mut operand.expr, f);
-            }
-        }
-
-        ExpressionKind::Identifier(_)
-        | ExpressionKind::Int(_)
-        | ExpressionKind::Float(_)
-        | ExpressionKind::StringLit(_)
-        | ExpressionKind::Boolean(_)
-        | ExpressionKind::None => {}
-    }
-}
-
-fn map_each(expressions: &mut [Expression], f: &mut impl FnMut(&mut TypeSpec)) {
-    for expr in expressions {
-        map_expression_types(expr, f);
-    }
+    walk_item(&mut MapTypes(f), statement);
 }

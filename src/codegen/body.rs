@@ -262,7 +262,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             // Accepted by the parser and analyser but never lowered: skipping it
             // would emit a binary that quietly does less than the source says.
             _ => self.error(
-                format!("Statement is not implemented in codegen: {:?}", stmt.kind),
+                "A declaration inside a function body is not supported",
                 stmt.span,
             ),
         }
@@ -876,7 +876,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             return self.load(ty, ptr, &format!("{label}_load"));
         }
 
-        self.error(format!("Cannot read {:?}", expr.kind), expr.span);
+        self.error("Cannot read this expression", expr.span);
         self.dummy_val()
     }
 
@@ -1413,7 +1413,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn unsupported_operator(&mut self, operator: &Token, span: Span) -> BasicValueEnum<'ctx> {
-        self.error(format!("Operator '{operator:?}' is not implemented"), span);
+        self.error(format!("Operator '{operator}' is not implemented"), span);
         self.dummy_val()
     }
 

@@ -1371,9 +1371,7 @@ fn test_assignment_is_right_associative() {
     ";
     let errors = compile_to_ir(input).expect_err("an assignment produces no value");
     assert!(
-        errors
-            .replace('\\', "")
-            .contains(r#"Expected "i32", got "void""#),
+        errors.contains("Expected i32, got void"),
         "unexpected error: {errors}"
     );
 }

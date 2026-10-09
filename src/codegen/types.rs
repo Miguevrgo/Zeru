@@ -122,7 +122,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             Type::Float(FloatWidth::W32) => self.context.f32_type().into(),
             Type::Float(FloatWidth::W64) => self.context.f64_type().into(),
             Type::Bool => self.context.bool_type().into(),
-            Type::Enum { .. } => self.context.i32_type().into(),
+            Type::Enum(_) => self.context.i32_type().into(),
             Type::Pointer(_) | Type::Ref(_) | Type::RefMut(_) => self.ptr_type().into(),
             Type::Slice { .. } => self.slice_type().into(),
             Type::Vec { .. } => self.vec_type().into(),
@@ -135,7 +135,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let fields: Vec<_> = types.iter().filter_map(|t| self.llvm_type_of(t)).collect();
                 self.context.struct_type(&fields, false).into()
             }
-            Type::Struct { name, .. } => self.struct_defs.get(name)?.0.as_basic_type_enum(),
+            Type::Struct(name) => self.struct_defs.get(name)?.0.as_basic_type_enum(),
             Type::Void | Type::ParamType(_) | Type::Unknown => return None,
         })
     }

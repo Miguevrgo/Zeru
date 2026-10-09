@@ -129,7 +129,7 @@ impl<'a> Parser<'a> {
                     None
                 }
                 _ => {
-                    self.error_current(format!("Unexpected token {:?} at top level. Expected fn, struct, enum, const or import.", self.current_token).as_str());
+                    self.error_current(&format!("Unexpected '{}' at top level, expected fn, struct, enum, trait, const or import", self.current_token));
                     self.synchronize();
                     None
                 }
@@ -339,7 +339,7 @@ impl<'a> Parser<'a> {
                 self.next_token();
                 break;
             } else {
-                self.error_peek("Expected ',' or '>' in generic type");
+                self.error_peek("',' or '>' in generic type");
                 return None;
             }
         }
@@ -568,7 +568,7 @@ impl<'a> Parser<'a> {
             if self.peek_token_is(&Token::Comma) {
                 self.next_token();
             } else {
-                self.error_peek("Comma");
+                self.error_peek("','");
                 self.panic_mode = false;
             }
         }
@@ -874,9 +874,10 @@ impl<'a> Parser<'a> {
             )),
             Token::Asm => self.parse_asm_expression(),
             _ => {
-                self.error_current(
-                    format!("Expected expression, found: {:?}", self.current_token).as_str(),
-                );
+                self.error_current(&format!(
+                    "Expected an expression, found '{}'",
+                    self.current_token
+                ));
                 None
             }
         };
@@ -1039,7 +1040,7 @@ impl<'a> Parser<'a> {
             let constraint = match &self.current_token {
                 Token::StringLit(s) => String::from_utf8(s.clone()).unwrap(),
                 _ => {
-                    self.error_current("Exprected constraint string in assembly operand");
+                    self.error_current("Expected constraint string in assembly operand");
                     return None;
                 }
             };
@@ -1356,7 +1357,7 @@ impl<'a> Parser<'a> {
             self.next_token();
             true
         } else {
-            self.error_peek(format!("{:?}", t).as_str());
+            self.error_peek(&format!("'{t}'"));
             false
         }
     }
@@ -1368,7 +1369,7 @@ impl<'a> Parser<'a> {
             self.next_token();
             return Some(name);
         }
-        self.error_peek("Identifier");
+        self.error_peek("a name");
         None
     }
 
@@ -1380,7 +1381,7 @@ impl<'a> Parser<'a> {
         }
         self.panic_mode = true;
         self.errors.push(ZeruError::syntax(
-            format!("{expected} expected, found: {:?}", self.peek_token),
+            format!("Expected {expected}, found '{}'", self.peek_token),
             self.current_span,
         ));
     }

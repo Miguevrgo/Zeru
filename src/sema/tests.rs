@@ -2508,7 +2508,7 @@ fn test_operator_needs_operands_it_applies_to() {
         ("true + true", "bool"),
         ("1 && 2", "i32"),
         ("p == q", "P"),
-        ("\"a\" == \"b\"", "&[u8]"),
+        ("\"a\" == \"b\"", "str"),
         ("true < false", "bool"),
         ("1.5 & 2.5", "f64"),
         ("1.5 << 2.5", "f64"),

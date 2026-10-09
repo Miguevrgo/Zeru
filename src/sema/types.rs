@@ -36,15 +36,10 @@ pub enum Type {
     Bool,
     Void,
 
-    Struct {
-        name: String,
-        fields: Vec<(String, Type)>,
-    },
-
-    Enum {
-        name: String,
-        variants: Vec<String>,
-    },
+    /// A struct or an enum by name; its fields or variants are looked up in
+    /// the analyser's tables.
+    Struct(String),
+    Enum(String),
 
     Array {
         elem_type: Box<Type>,
@@ -79,7 +74,7 @@ impl Type {
     pub fn has_move_semantics(&self) -> bool {
         match self {
             Type::Vec { .. }
-            | Type::Struct { .. }
+            | Type::Struct(_)
             | Type::Array { .. }
             | Type::ParamType(_)
             | Type::Unknown => true,
@@ -108,8 +103,6 @@ impl Type {
             (t1, t2) if t1 == t2 => true,
             (Type::Unknown, _) | (_, Type::Unknown) => true,
             (Type::ParamType(_), _) | (_, Type::ParamType(_)) => true,
-            (Type::Struct { name: n1, .. }, Type::Struct { name: n2, .. }) => n1 == n2,
-            (Type::Enum { name: n1, .. }, Type::Enum { name: n2, .. }) => n1 == n2,
             (Type::Pointer(e1), Type::Pointer(e2)) => e1.accepts(e2),
             (Type::Optional(e1), Type::Optional(e2)) => e1.accepts(e2),
             (Type::Optional(inner), other) => inner.accepts(other),
@@ -154,7 +147,7 @@ impl Type {
         let boxed = |inner: &Type| Box::new(inner.to_spec());
 
         match self {
-            Type::Struct { name, .. } | Type::Enum { name, .. } | Type::ParamType(name) => {
+            Type::Struct(name) | Type::Enum(name) | Type::ParamType(name) => {
                 TypeSpec::Named(name.clone())
             }
             Type::Integer { .. } | Type::Float(_) | Type::Bool | Type::Void | Type::Unknown => {
@@ -205,13 +198,16 @@ impl std::fmt::Display for Type {
             },
             Type::Bool => write!(f, "bool"),
             Type::Void => write!(f, "void"),
-            Type::Struct { name, .. } | Type::Enum { name, .. } | Type::ParamType(name) => {
+            Type::Struct(name) | Type::Enum(name) | Type::ParamType(name) => {
                 write!(f, "{name}")
             }
-            Type::Array { elem_type, len } => write!(f, "[{elem_type}; {len}]"),
+            Type::Array { elem_type, len } => write!(f, "Array<{elem_type}, {len}>"),
             Type::Pointer(elem_type) => write!(f, "*{elem_type}"),
             Type::Optional(elem_type) => write!(f, "{elem_type}?"),
             Type::Result { ok_type, err_type } => write!(f, "Result<{ok_type}, {err_type}>"),
+            Type::Slice { elem_type } if elem_type.to_spec() == TypeSpec::Named("u8".into()) => {
+                write!(f, "str")
+            }
             Type::Slice { elem_type } => write!(f, "&[{elem_type}]"),
             Type::Vec { elem_type } => write!(f, "Vec<{elem_type}>"),
             Type::Ref(elem_type) => write!(f, "&{elem_type}"),
