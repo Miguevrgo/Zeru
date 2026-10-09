@@ -1,8 +1,5 @@
-//! Layout of the built-in aggregates (`Vec<T>`, `T?`, `T!`, slices).
-//!
-//! They are recognised by shape because they have no nominal LLVM type. User
-//! structs are always named, builtins never are, so that is the first thing
-//! every predicate checks: without it a three-field struct looks like a `Vec`.
+//! Layout of the built-in aggregates (`Vec<T>`, `T?`, `T!`, slices). They have
+//! no nominal LLVM type; which one a value is comes from the analyser's types.
 
 use inkwell::{
     types::{BasicTypeEnum, StructType},
@@ -30,53 +27,6 @@ pub(super) const SLICE_PTR: u32 = 0;
 pub(super) const SLICE_LEN: u32 = 1;
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    fn is_builtin_layout(st: StructType<'ctx>) -> bool {
-        st.get_name().is_none()
-    }
-
-    /// ponytail: a `(*T, usize, usize)` tuple has this shape too and would be
-    /// taken for a `Vec`. Name the runtime types in LLVM if that ever bites.
-    pub(super) fn is_vec_layout(&self, st: StructType<'ctx>) -> bool {
-        Self::is_builtin_layout(st)
-            && st.count_fields() == 3
-            && matches!(
-                st.get_field_type_at_index(VEC_PTR),
-                Some(BasicTypeEnum::PointerType(_))
-            )
-            && self.is_field_int(st, VEC_LEN, 64)
-            && self.is_field_int(st, VEC_CAP, 64)
-    }
-
-    pub(super) fn is_result_layout(&self, st: StructType<'ctx>) -> bool {
-        Self::is_builtin_layout(st)
-            && st.count_fields() == 3
-            && self.is_field_int(st, RESULT_TAG, 1)
-            && self.is_field_int(st, RESULT_ERR, 32)
-    }
-
-    pub(super) fn is_option_layout(&self, st: StructType<'ctx>) -> bool {
-        Self::is_builtin_layout(st)
-            && st.count_fields() == 2
-            && self.is_field_int(st, OPTION_TAG, 1)
-    }
-
-    pub(super) fn is_slice_layout(&self, st: StructType<'ctx>) -> bool {
-        Self::is_builtin_layout(st)
-            && st.count_fields() == 2
-            && matches!(
-                st.get_field_type_at_index(SLICE_PTR),
-                Some(BasicTypeEnum::PointerType(_))
-            )
-            && self.is_field_int(st, SLICE_LEN, 64)
-    }
-
-    fn is_field_int(&self, st: StructType<'ctx>, index: u32, bits: u32) -> bool {
-        matches!(
-            st.get_field_type_at_index(index),
-            Some(BasicTypeEnum::IntType(t)) if t.get_bit_width() == bits
-        )
-    }
-
     /// Build an aggregate value field by field.
     pub(super) fn build_struct(
         &self,

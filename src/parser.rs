@@ -221,6 +221,7 @@ impl<'a> Parser<'a> {
                 is_const: CONSTANT,
                 value,
                 type_annotation,
+                ty: None,
             },
             start_span.merge(end_span),
         ))

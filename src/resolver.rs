@@ -199,7 +199,7 @@ pub fn compile_pipeline(
     let module = context.create_module(filename);
     let builder = context.create_builder();
 
-    let mut compiler = Compiler::new(&context, &builder, &module, safety_mode);
+    let mut compiler = Compiler::new(&context, &builder, &module, &analyzer, safety_mode);
     compiler.compile_program(&program);
     check_errors(&compiler.errors)?;
 

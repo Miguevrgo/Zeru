@@ -75,6 +75,23 @@ impl SemanticAnalyzer {
         }
     }
 
+    /// A struct's fields as resolved, in declaration order.
+    pub fn struct_fields(&self, name: &str) -> &[(String, Type)] {
+        self.struct_defs.get(name).map_or(&[], Vec::as_slice)
+    }
+
+    pub fn enum_variants(&self, name: &str) -> Option<&[String]> {
+        self.enum_defs.get(name).map(Vec::as_slice)
+    }
+
+    /// A function's parameter and return types as resolved.
+    pub fn signature(&self, name: &str) -> Option<(&[Type], &Type)> {
+        match self.symbols.lookup(name)? {
+            super::symbol_table::Symbol::Function { params, ret_type } => Some((params, ret_type)),
+            _ => None,
+        }
+    }
+
     pub fn analyze(&mut self, program: &mut Program) {
         self.take_generics(program);
         self.scan_types(&program.statements);
@@ -869,7 +886,7 @@ impl SemanticAnalyzer {
         value: &mut Expression,
         type_annotation: &Option<TypeSpec>,
         span: Span,
-    ) {
+    ) -> Type {
         let expected_type = type_annotation
             .as_ref()
             .map(|spec| self.resolve_spec(spec, span));
@@ -908,8 +925,13 @@ impl SemanticAnalyzer {
         };
 
         self.consume(value, &final_type);
-        self.symbols
-            .insert_var(name.to_string(), final_type, is_const, self.loop_depth);
+        self.symbols.insert_var(
+            name.to_string(),
+            final_type.clone(),
+            is_const,
+            self.loop_depth,
+        );
+        final_type
     }
 
     fn check_for_in(&mut self, variable: &str, iterable: &mut Expression, body: &mut Statement) {
@@ -943,7 +965,11 @@ impl SemanticAnalyzer {
                 is_const,
                 value,
                 type_annotation,
-            } => self.check_var_declaration(name, *is_const, value, type_annotation, span),
+                ty,
+            } => {
+                *ty =
+                    Some(self.check_var_declaration(name, *is_const, value, type_annotation, span))
+            }
 
             StatementKind::Return(opt_expr) => {
                 let expected = self.current_fn_return_type.clone();

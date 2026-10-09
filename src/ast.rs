@@ -47,6 +47,8 @@ pub enum StatementKind {
         is_const: bool,
         value: Expression,
         type_annotation: Option<TypeSpec>,
+        /// The variable's type, once the analyser has settled it.
+        ty: Option<Type>,
     },
     Return(Option<Expression>),
     Break,

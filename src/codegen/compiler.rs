@@ -17,23 +17,23 @@ use crate::{
     ast::{Expression, Program, Statement, StatementKind, TypeSpec},
     codegen::SafetyMode,
     errors::ZeruError,
+    sema::analyzer::SemanticAnalyzer,
 };
 
 pub struct Compiler<'a, 'ctx> {
     pub context: &'ctx Context,
     pub builder: &'a Builder<'ctx>,
     pub module: &'a Module<'ctx>,
+    /// What the analyser resolved: struct fields, enum variants, signatures.
+    pub(super) types: &'a SemanticAnalyzer,
 
     pub(super) variables: HashMap<String, VarBinding<'ctx>>,
-    pub(super) pointer_elem_types: HashMap<String, BasicTypeEnum<'ctx>>,
     /// Each global constant's value and declared type. It is lowered wherever
     /// the constant is used, inside a function, where LLVM folds it.
     pub(super) constants: HashMap<String, (Expression, Option<BasicTypeEnum<'ctx>>)>,
     pub(super) struct_defs: HashMap<String, (StructType<'ctx>, HashMap<String, u32>)>,
-    pub(super) enum_defs: HashMap<String, Vec<String>>,
     pub(super) current_fn: Option<FunctionValue<'ctx>>,
 
-    pub(super) current_struct_context: Option<String>,
     pub(super) loop_stack: Vec<LoopContext<'ctx>>,
     pub(super) safety_mode: SafetyMode,
     pub(super) panic_fn: Option<FunctionValue<'ctx>>,
@@ -46,8 +46,8 @@ pub struct Compiler<'a, 'ctx> {
     pub errors: Vec<ZeruError>,
 }
 
-/// Where a variable lives, its LLVM type, and whether that type is unsigned.
-pub(super) type VarBinding<'ctx> = (PointerValue<'ctx>, BasicTypeEnum<'ctx>, bool);
+/// Where a variable lives, and its LLVM type.
+pub(super) type VarBinding<'ctx> = (PointerValue<'ctx>, BasicTypeEnum<'ctx>);
 
 pub(super) struct LoopContext<'ctx> {
     pub(super) continue_block: BasicBlock<'ctx>,
@@ -59,19 +59,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         context: &'ctx Context,
         builder: &'a Builder<'ctx>,
         module: &'a Module<'ctx>,
+        types: &'a SemanticAnalyzer,
         safety_mode: SafetyMode,
     ) -> Self {
         Self {
             context,
             builder,
             module,
+            types,
             variables: HashMap::new(),
-            pointer_elem_types: HashMap::new(),
             constants: HashMap::new(),
             struct_defs: HashMap::new(),
-            enum_defs: HashMap::new(),
             current_fn: None,
-            current_struct_context: None,
             loop_stack: Vec::new(),
             safety_mode,
             panic_fn: None,
@@ -83,14 +82,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     pub fn compile_program(&mut self, program: &Program) {
-        self.declare_nominal_types(program);
+        self.declare_structs(program);
         self.collect_global_constants(program);
         self.lay_out_structs(program);
 
         self.init_builtin_streams();
 
         self.for_each_concrete_fn(program, |this, f| {
-            this.compile_fn_prototype(&f.name, f.params, f.return_type);
+            this.compile_fn_prototype(&f.name, f.params);
         });
         self.for_each_concrete_fn(program, |this, f| {
             this.compile_fn_body(&f.name, f.params, f.body);
@@ -99,20 +98,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.create_builtin_cleanup();
     }
 
-    fn declare_nominal_types(&mut self, program: &Program) {
+    fn declare_structs(&mut self, program: &Program) {
         for stmt in &program.statements {
-            match &stmt.kind {
-                StatementKind::Struct {
-                    name, type_params, ..
-                } if type_params.is_empty() => {
-                    let struct_type = self.context.opaque_struct_type(name);
-                    self.struct_defs
-                        .insert(name.clone(), (struct_type, HashMap::new()));
-                }
-                StatementKind::Enum { name, variants } => {
-                    self.enum_defs.insert(name.clone(), variants.clone());
-                }
-                _ => {}
+            if let StatementKind::Struct { name, .. } = &stmt.kind {
+                let struct_type = self.context.opaque_struct_type(name);
+                self.struct_defs
+                    .insert(name.clone(), (struct_type, HashMap::new()));
             }
         }
     }
@@ -123,12 +114,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 name,
                 is_const: true,
                 value,
-                type_annotation,
+                ty,
+                ..
             } = &stmt.kind
             {
-                let ty = type_annotation
-                    .as_ref()
-                    .and_then(|spec| self.get_llvm_type(spec));
+                let ty = ty.as_ref().and_then(|ty| self.llvm_type_of(ty));
                 self.constants.insert(name.clone(), (value.clone(), ty));
             }
         }
@@ -136,23 +126,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     fn lay_out_structs(&mut self, program: &Program) {
         for stmt in &program.statements {
-            if let StatementKind::Struct {
-                name,
-                fields,
-                type_params,
-                ..
-            } = &stmt.kind
-                && type_params.is_empty()
-            {
-                self.current_struct_context = Some(name.clone());
-                self.compile_struct_body(name, fields, stmt.span);
-                self.current_struct_context = None;
+            if let StatementKind::Struct { name, .. } = &stmt.kind {
+                self.compile_struct_body(name);
             }
         }
     }
 
-    /// Run `emit` over every non-generic function: free functions, then each
-    /// struct's methods with `current_struct_context` set so `self` resolves.
+    /// Run `emit` over every function: free functions, then struct methods.
     fn for_each_concrete_fn(
         &mut self,
         program: &Program,
@@ -170,14 +150,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     methods,
                     ..
                 } => {
-                    self.current_struct_context = Some(struct_name.clone());
                     for method in methods {
                         if let Some(f) = ConcreteFn::from_statement(&method.kind, Some(struct_name))
                         {
                             emit(self, &f);
                         }
                     }
-                    self.current_struct_context = None;
                 }
                 _ => {}
             }
@@ -188,7 +166,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 struct ConcreteFn<'s> {
     name: String,
     params: &'s [(String, TypeSpec, bool)],
-    return_type: &'s Option<TypeSpec>,
     body: &'s [Statement],
 }
 
@@ -198,8 +175,8 @@ impl<'s> ConcreteFn<'s> {
             name,
             type_params,
             params,
-            return_type,
             body,
+            ..
         } = kind
         else {
             return None;
@@ -213,7 +190,6 @@ impl<'s> ConcreteFn<'s> {
                 None => name.clone(),
             },
             params,
-            return_type,
             body,
         })
     }

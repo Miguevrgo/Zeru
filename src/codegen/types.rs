@@ -1,34 +1,24 @@
-//! LLVM type mapping, struct/enum layout, and signedness queries.
-
-use std::collections::HashMap;
+//! LLVM types for the analyser's types, struct layout, and signedness queries.
 
 use inkwell::types::{BasicType, BasicTypeEnum};
 
 use crate::{
-    ast::{Expression, ExpressionKind, TypeSpec},
+    ast::Expression,
     codegen::compiler::Compiler,
-    errors::Span,
     sema::types::{FloatWidth, IntWidth, Signedness, Type},
 };
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    pub(super) fn compile_struct_body(
-        &mut self,
-        name: &str,
-        fields: &[(String, TypeSpec)],
-        span: Span,
-    ) {
-        let mut field_types = Vec::with_capacity(fields.len());
-        let mut field_indices = HashMap::with_capacity(fields.len());
-
-        for (i, (field_name, field_spec)) in fields.iter().enumerate() {
-            let Some(ty) = self.get_llvm_type(field_spec) else {
-                self.error(format!("Unknown type in struct field '{field_name}'"), span);
-                return;
-            };
-            field_types.push(ty);
-            field_indices.insert(field_name.clone(), i as u32);
-        }
+    pub(super) fn compile_struct_body(&mut self, name: &str) {
+        let fields = self.types.struct_fields(name);
+        let field_types: Vec<_> = fields
+            .iter()
+            .filter_map(|(_, ty)| self.llvm_type_of(ty))
+            .collect();
+        let field_indices = (0..)
+            .zip(fields)
+            .map(|(at, (field, _))| (field.clone(), at))
+            .collect();
 
         if let Some((struct_type, indices)) = self.struct_defs.get_mut(name) {
             struct_type.set_body(&field_types, false);
@@ -48,66 +38,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub(super) fn is_unsigned_expr(expr: &Expression) -> bool {
         expr.ty.as_ref().is_some_and(Self::is_unsigned)
-    }
-
-    /// Whether `expr` is a signed integer, falling back to the variable table
-    /// when the analyser left no type behind. `None` when nothing is known.
-    pub(super) fn is_signed_integer(&self, expr: &Expression) -> Option<bool> {
-        if let Some(ty) = &expr.ty {
-            return Some(!Self::is_unsigned(ty));
-        }
-        if let ExpressionKind::Identifier(name) = &expr.kind
-            && let Some((_, _, is_unsigned)) = self.variables.get(name)
-        {
-            return Some(!is_unsigned);
-        }
-        None
-    }
-
-    pub(super) fn is_unsigned_type(spec: &TypeSpec) -> bool {
-        match spec {
-            TypeSpec::Named(name) => {
-                matches!(name.as_str(), "u8" | "u16" | "u32" | "u64" | "usize")
-            }
-            TypeSpec::Pointer(inner) | TypeSpec::Ref(inner) | TypeSpec::RefMut(inner) => {
-                Self::is_unsigned_type(inner)
-            }
-            TypeSpec::Generic { args, .. } => args.first().is_some_and(Self::is_unsigned_type),
-            _ => false,
-        }
-    }
-
-    pub(super) fn get_llvm_type(&self, spec: &TypeSpec) -> Option<BasicTypeEnum<'ctx>> {
-        match spec {
-            TypeSpec::Named(name) => self.get_named_llvm_type(name),
-
-            TypeSpec::Generic { name, args } => match (name.as_str(), args.as_slice()) {
-                ("Array", [elem, TypeSpec::IntLiteral(len)]) => {
-                    Some(self.get_llvm_type(elem)?.array_type(*len as u32).into())
-                }
-                ("Vec", [_]) => Some(self.vec_type().into()),
-                // `Result<T, E>` shares the layout of `T!`: the error is always
-                // an i32 code, so `E` carries no representation of its own.
-                ("Result", [ok, _]) => Some(self.result_type(self.get_llvm_type(ok)?).into()),
-                _ => None,
-            },
-
-            TypeSpec::Optional(inner) => Some(self.option_type(self.get_llvm_type(inner)?).into()),
-            TypeSpec::Result(inner) => Some(self.result_type(self.get_llvm_type(inner)?).into()),
-            TypeSpec::Slice(_) => Some(self.slice_type().into()),
-
-            TypeSpec::Tuple(types) => {
-                let fields: Vec<_> = types.iter().filter_map(|t| self.get_llvm_type(t)).collect();
-                Some(self.context.struct_type(&fields, false).into())
-            }
-
-            // References lower to plain pointers until generational checks land.
-            TypeSpec::Pointer(_) | TypeSpec::Ref(_) | TypeSpec::RefMut(_) => {
-                Some(self.ptr_type().into())
-            }
-
-            TypeSpec::IntLiteral(_) => None,
-        }
     }
 
     /// LLVM type for a type the analyser already resolved.
@@ -138,35 +68,5 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             Type::Struct(name) => self.struct_defs.get(name)?.0.as_basic_type_enum(),
             Type::Void | Type::ParamType(_) | Type::Unknown => return None,
         })
-    }
-
-    fn get_named_llvm_type(&self, name: &str) -> Option<BasicTypeEnum<'ctx>> {
-        let primitive = match name {
-            "i8" | "u8" => Some(self.context.i8_type().into()),
-            "i16" | "u16" => Some(self.context.i16_type().into()),
-            "i32" | "u32" => Some(self.context.i32_type().into()),
-            "i64" | "u64" | "isize" | "usize" => Some(self.usize_type().into()),
-            "f32" => Some(self.context.f32_type().into()),
-            "f64" => Some(self.context.f64_type().into()),
-            "bool" => Some(self.context.bool_type().into()),
-            _ => None,
-        };
-        if primitive.is_some() {
-            return primitive;
-        }
-
-        let struct_name = match name {
-            "void" => return None,
-            "self" => self.current_struct_context.as_deref()?,
-            other => other,
-        };
-
-        if let Some((struct_ty, _)) = self.struct_defs.get(struct_name) {
-            return Some(struct_ty.as_basic_type_enum());
-        }
-        // Enum variants are plain tags.
-        self.enum_defs
-            .contains_key(struct_name)
-            .then(|| self.context.i32_type().into())
     }
 }

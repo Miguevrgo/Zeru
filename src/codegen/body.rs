@@ -4,6 +4,7 @@
 use inkwell::{
     FloatPredicate, IntPredicate,
     basic_block::BasicBlock,
+    module::Linkage,
     types::{BasicType, BasicTypeEnum, StructType},
     values::{
         BasicMetadataValueEnum, BasicValueEnum, FunctionValue, IntValue, PointerValue, ValueKind,
@@ -40,66 +41,38 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         .into()
     }
 
-    /// The struct a method belongs to, taken from the current struct context or
-    /// from the `Struct::method` name.
-    fn self_struct_type(&self, fn_name: &str) -> Option<StructType<'ctx>> {
-        let owner = self
-            .current_struct_context
-            .as_deref()
-            .or_else(|| fn_name.rsplit_once("::").map(|(owner, _)| owner))?;
-        self.struct_defs.get(owner).map(|(st, _)| *st)
-    }
-
     pub(super) fn compile_fn_prototype(
         &mut self,
         name: &str,
         params: &[(String, TypeSpec, bool)],
-        return_type: &Option<TypeSpec>,
     ) -> FunctionValue<'ctx> {
-        let ret_type = if name == "main" && return_type.is_none() {
-            Some(self.context.i32_type().as_basic_type_enum())
-        } else {
-            return_type
-                .as_ref()
-                .and_then(|spec| self.get_llvm_type(spec))
+        let types = self.types;
+        let (param_types, ret) = types.signature(name).unwrap_or((&[], &Type::Void));
+
+        // `main` gives the process an exit status even when it returns nothing.
+        let ret_type = match self.llvm_type_of(ret) {
+            None if name == "main" => Some(self.context.i32_type().into()),
+            other => other,
         };
 
-        let mut param_types = Vec::with_capacity(params.len());
-        for (param_name, type_spec, is_mut) in params {
-            let param_type = if param_name == "self" {
-                match self.self_struct_type(name) {
-                    // `var self` comes in by pointer so writes reach the caller.
-                    Some(_) if *is_mut => self.ptr_type().as_basic_type_enum(),
-                    Some(st) => st.as_basic_type_enum(),
-                    None => {
-                        self.error(
-                            format!("'self' parameter outside of a struct in '{name}'"),
-                            Span::default(),
-                        );
-                        continue;
-                    }
-                }
-            } else {
-                match self.get_llvm_type(type_spec) {
-                    Some(ty) => ty,
-                    None => {
-                        self.error(
-                            format!("Function parameter '{param_name}' cannot be void"),
-                            Span::default(),
-                        );
-                        continue;
-                    }
-                }
-            };
-            param_types.push(param_type.into());
-        }
+        let param_types: Vec<_> = params
+            .iter()
+            .zip(param_types)
+            .filter_map(|((param_name, _, is_mut), ty)| match ty {
+                // `var self` comes in by pointer so writes reach the caller.
+                Type::Struct(_) if param_name == "self" && *is_mut => Some(self.ptr_type().into()),
+                _ => self.llvm_type_of(ty).map(Into::into),
+            })
+            .collect();
 
         let fn_type = match ret_type {
             Some(basic_ty) => basic_ty.fn_type(&param_types, false),
             None => self.context.void_type().fn_type(&param_types, false),
         };
 
-        self.module.add_function(name, fn_type, None)
+        // Only `main` is seen from outside, so LLVM may drop what nothing calls.
+        let linkage = (name != "main").then_some(Linkage::Internal);
+        self.module.add_function(name, fn_type, linkage)
     }
 
     pub(super) fn compile_fn_body(
@@ -117,48 +90,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let entry = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry);
         self.variables.clear();
-        self.pointer_elem_types.clear();
         self.scope_stack.clear();
         self.scope_stack.push(Vec::new());
 
-        for (arg, (param_name, param_spec, is_mut)) in function.get_param_iter().zip(params) {
-            let (slot_type, pointee) = if param_name == "self" {
-                let Some(st) = self.self_struct_type(name) else {
-                    self.error("'self' used outside of a struct", Span::default());
-                    return;
-                };
-                if *is_mut {
-                    (
-                        self.ptr_type().as_basic_type_enum(),
-                        Some(st.as_basic_type_enum()),
-                    )
-                } else {
-                    (st.as_basic_type_enum(), None)
-                }
-            } else {
-                let Some(ty) = self.get_llvm_type(param_spec) else {
-                    self.error(
-                        format!("Parameter '{param_name}' has invalid type"),
-                        Span::default(),
-                    );
-                    return;
-                };
-                let pointee = match param_spec {
-                    TypeSpec::Pointer(inner) => self.get_llvm_type(inner),
-                    _ => None,
-                };
-                (ty, pointee)
-            };
-
+        for (arg, (param_name, _, _)) in function.get_param_iter().zip(params) {
+            let slot_type = arg.get_type();
             let alloca = self.create_entry_block_alloca(function, param_name, slot_type);
             self.builder.build_store(alloca, arg).unwrap();
-            self.variables.insert(
-                param_name.clone(),
-                (alloca, slot_type, Self::is_unsigned_type(param_spec)),
-            );
-            if let Some(pointee) = pointee {
-                self.pointer_elem_types.insert(param_name.clone(), pointee);
-            }
+            self.variables
+                .insert(param_name.clone(), (alloca, slot_type));
         }
 
         for stmt in body {
@@ -198,11 +138,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         match &stmt.kind {
             StatementKind::Var {
-                name,
-                value,
-                type_annotation,
-                ..
-            } => self.declare_variable(parent_fn, name, value, type_annotation, stmt.span),
+                name, value, ty, ..
+            } => self.declare_variable(parent_fn, name, value, ty.as_ref()),
 
             StatementKind::Return(Some(expr)) => {
                 let ret_hint = parent_fn.get_type().get_return_type();
@@ -273,33 +210,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         parent_fn: FunctionValue<'ctx>,
         name: &str,
         value: &Expression,
-        type_annotation: &Option<TypeSpec>,
-        span: Span,
+        ty: Option<&Type>,
     ) {
-        let annotated = match type_annotation {
-            Some(spec) => match self.get_llvm_type(spec) {
-                Some(ty) => Some(ty),
-                None => {
-                    self.error(format!("Variable '{name}' cannot have void type"), span);
-                    return;
-                }
-            },
-            None => None,
-        };
-
-        if let Some(TypeSpec::Pointer(inner_spec)) = type_annotation
-            && let Some(elem_type) = self.get_llvm_type(inner_spec)
-        {
-            self.pointer_elem_types.insert(name.to_string(), elem_type);
-        }
-
-        let initial = self.compile_expression(value, annotated);
-        let slot_type = annotated.unwrap_or_else(|| initial.get_type());
+        let declared = ty.and_then(|ty| self.llvm_type_of(ty));
+        let initial = self.compile_expression(value, declared);
+        let slot_type = declared.unwrap_or_else(|| initial.get_type());
         let alloca = self.create_entry_block_alloca(parent_fn, name, slot_type);
         self.builder.build_store(alloca, initial).unwrap();
 
-        let is_unsigned = type_annotation.as_ref().is_some_and(Self::is_unsigned_type);
-        self.bind_variable(name, (alloca, slot_type, is_unsigned));
+        self.bind_variable(name, (alloca, slot_type));
     }
 
     /// Bind `name` in the innermost scope, remembering what it shadowed.
@@ -403,7 +322,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 array_type.get_element_type(),
                 usize_type.const_int(array_type.len() as u64, false),
             ),
-            BasicTypeEnum::StructType(st) if self.is_vec_layout(st) => {
+            _ if matches!(iterable.ty, Some(Type::Vec { .. })) => {
                 let len_field = self.vec_field_ptr(container, VEC_LEN, "len_field");
                 (
                     self.element_type_of(iterable),
@@ -424,7 +343,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap();
 
         self.scope_stack.push(Vec::new());
-        self.bind_variable(variable, (elem_slot, elem_type, false));
+        self.bind_variable(variable, (elem_slot, elem_type));
 
         let cond_bb = self.context.append_basic_block(parent_fn, "for_cond");
         let body_bb = self.context.append_basic_block(parent_fn, "for_body");
@@ -508,8 +427,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn enum_variant_tag(&self, qualified_name: &str) -> Option<BasicValueEnum<'ctx>> {
         let (enum_name, variant_name) = qualified_name.rsplit_once("::")?;
         let index = self
-            .enum_defs
-            .get(enum_name)?
+            .types
+            .enum_variants(enum_name)?
             .iter()
             .position(|v| v == variant_name)?;
         Some(
@@ -526,7 +445,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) -> Option<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)> {
         match &expr.kind {
             ExpressionKind::Identifier(name) => {
-                let (ptr, ty, _) = self.variables.get(name)?;
+                let (ptr, ty) = self.variables.get(name)?;
                 Some((*ptr, *ty))
             }
 
@@ -566,13 +485,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                     // A Vec and a slice both keep their elements elsewhere, and
                     // how many there are is only known once it runs.
-                    BasicTypeEnum::StructType(shape)
-                        if self.is_vec_layout(shape) || self.is_slice_layout(shape) =>
-                    {
-                        let (data_at, len_at) = if self.is_vec_layout(shape) {
-                            (VEC_PTR, VEC_LEN)
-                        } else {
-                            (SLICE_PTR, SLICE_LEN)
+                    BasicTypeEnum::StructType(shape) => {
+                        let (data_at, len_at) = match &left.ty {
+                            Some(Type::Vec { .. }) => (VEC_PTR, VEC_LEN),
+                            Some(Type::Slice { .. }) => (SLICE_PTR, SLICE_LEN),
+                            _ => return None,
                         };
                         let elem_type = self.element_type_of(left);
                         let ptr_type = self.ptr_type();
@@ -629,8 +546,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) -> Option<(PointerValue<'ctx>, StructType<'ctx>)> {
         match self.place_of(expr)? {
             (ptr, BasicTypeEnum::StructType(st)) => Some((ptr, st)),
+            // Behind a pointer, or `var self`, which holds its struct by one.
             (ptr, BasicTypeEnum::PointerType(_)) => {
-                let BasicTypeEnum::StructType(st) = self.pointee_type_of(expr)? else {
+                let pointee = match &expr.ty {
+                    Some(ty @ Type::Struct(_)) => self.llvm_type_of(ty),
+                    _ => self.pointee_type_of(expr),
+                };
+                let BasicTypeEnum::StructType(st) = pointee? else {
                     return None;
                 };
                 let ptr_type = self.ptr_type();
@@ -650,17 +572,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.struct_defs.get(struct_name)?.1.get(name).copied()
     }
 
-    /// What `expr` points at, from the type the analyser resolved. A computed
-    /// pointer such as `p + 1` has no name to look up, and guessing a width
-    /// there reads the wrong number of bytes.
+    /// What `expr` points at, from the type the analyser resolved.
     fn pointee_type_of(&self, expr: &Expression) -> Option<BasicTypeEnum<'ctx>> {
-        if let Some(Type::Pointer(pointee) | Type::Ref(pointee) | Type::RefMut(pointee)) = &expr.ty
-        {
-            return self.llvm_type_of(pointee);
-        }
-
-        match &expr.kind {
-            ExpressionKind::Identifier(name) => self.pointer_elem_types.get(name).copied(),
+        match &expr.ty {
+            Some(Type::Pointer(pointee) | Type::Ref(pointee) | Type::RefMut(pointee)) => {
+                self.llvm_type_of(pointee)
+            }
             _ => None,
         }
     }
@@ -674,9 +591,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     ) -> BasicValueEnum<'ctx> {
         let result = self.compile_expression_inner(expr, expected_type);
 
-        if let Some(BasicTypeEnum::StructType(opt_type)) = expected_type
-            && self.is_option_layout(opt_type)
-            && !matches!(result, BasicValueEnum::StructValue(s) if s.get_type() == opt_type)
+        if let Some(BasicTypeEnum::StructType(expected)) = expected_type
+            && expected == self.option_type(result.get_type())
         {
             return self.build_option_some(result).into();
         }
@@ -689,26 +605,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         expr: &Expression,
         expected_type: Option<BasicTypeEnum<'ctx>>,
     ) -> BasicValueEnum<'ctx> {
-        // Under a `T?` context the sub-expression is typed as the payload `T`.
-        let inner_expected = match expected_type {
-            Some(BasicTypeEnum::StructType(opt_type)) if self.is_option_layout(opt_type) => {
-                opt_type.get_field_type_at_index(OPTION_VALUE)
-            }
-            other => other,
-        };
-
-        // A literal's type was settled by the analyser, sometimes from the
-        // other operand of a comparison, which `expected_type` does not carry.
-        let literal_type = || {
-            expr.ty
-                .as_ref()
-                .and_then(|ty| self.llvm_type_of(ty))
-                .or(inner_expected)
-        };
+        // The type the analyser settled, which for a literal can come from the
+        // other operand of a comparison, something `expected_type` does not carry.
+        let settled_type = || expr.ty.as_ref().and_then(|ty| self.llvm_type_of(ty));
 
         match &expr.kind {
             ExpressionKind::Int(val) => {
-                let int_type = match literal_type() {
+                let int_type = match settled_type() {
                     Some(BasicTypeEnum::IntType(t)) => t,
                     _ => self.context.i32_type(),
                 };
@@ -716,7 +619,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 int_type.const_int(*val, false).into()
             }
             ExpressionKind::Float(val) => {
-                let float_type = match literal_type() {
+                let float_type = match settled_type() {
                     Some(BasicTypeEnum::FloatType(t)) => t,
                     _ => self.context.f64_type(),
                 };
@@ -770,7 +673,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
             }
 
-            ExpressionKind::Cast { left, target } => self.lower_cast(left, target, expr.span),
+            ExpressionKind::Cast { left, .. } => self.lower_cast(left, expr),
 
             // `&x` and `&var x` both lower to the address of the lvalue.
             ExpressionKind::BorrowRef(inner) | ExpressionKind::BorrowRefMut(inner) => {
@@ -823,7 +726,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             ExpressionKind::Match { value, arms } => self.lower_match(value, arms, expected_type),
             ExpressionKind::None => {
-                if let Some(BasicTypeEnum::StructType(opt_type)) = expected_type
+                if let Some(BasicTypeEnum::StructType(opt_type)) = settled_type()
                     && let Some(inner_type) = opt_type.get_field_type_at_index(OPTION_VALUE)
                 {
                     self.build_option_none(inner_type).into()
@@ -851,7 +754,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     fn lower_identifier(&mut self, name: &str, span: Span) -> BasicValueEnum<'ctx> {
         // A local first: it may shadow a constant of the same name.
-        if let Some((ptr, ty, _)) = self.variables.get(name) {
+        if let Some((ptr, ty)) = self.variables.get(name) {
             return self.load(*ty, *ptr, &format!("{name}_load"));
         }
         if let Some((value, ty)) = self.constants.get(name).cloned() {
@@ -897,7 +800,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         } else {
             let current = self.load(ty, ptr, "cur_val");
             let rhs = self.compile_expression(value, Some(ty));
-            let signed = self.is_signed_integer(target).unwrap_or(true);
+            let signed = !Self::is_unsigned_expr(target);
             self.apply_compound_op(current, rhs, operator, signed, span)
         };
 
@@ -1085,8 +988,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 "print" | "println" | "eprint" | "eprintln" => {
                     return self.compile_builtin_print(name, arguments, span);
                 }
-                "Ok" => return self.compile_ok_constructor(arguments, expected_type, span),
-                "Err" => return self.compile_err_constructor(arguments, expected_type, span),
+                "Ok" | "Err" => {
+                    return self.compile_result_constructor(arguments, call, name == "Ok");
+                }
                 _ => match self.module.get_function(name) {
                     Some(func) => (func, Vec::new()),
                     None => {
@@ -1154,10 +1058,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
 
         // Mutating methods need the storage, not a loaded copy of the header.
-        let elem_type = self.element_type_of(object);
-        if let Some(vec_ptr) = self.vec_storage_of(object)
-            && let Some(result) =
-                self.compile_vec_method_mut(method_name, vec_ptr, arguments, elem_type)
+        // A temporary has none, so only a reading method can apply to it.
+        if matches!(object.ty, Some(Type::Vec { .. }))
+            && let Some((vec_ptr, _)) = self.compile_lvalue(object)
+            && let Some(result) = self.compile_vec_method_mut(
+                method_name,
+                vec_ptr,
+                arguments,
+                self.element_type_of(object),
+            )
         {
             return MethodCallOutcome::Done(result);
         }
@@ -1166,31 +1075,32 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let receiver = self.compile_expression(object, None);
 
         if let BasicValueEnum::StructValue(sv) = receiver {
-            let shape = sv.get_type();
-
-            if self.is_vec_layout(shape)
-                && let Some(result) = self.compile_vec_method(method_name, sv)
-            {
+            let builtin = match &object.ty {
+                Some(Type::Vec { .. }) => self.compile_vec_method(method_name, sv),
+                Some(Type::Result { .. }) => self.compile_result_method(method_name, sv),
+                Some(Type::Optional(_)) => self.compile_option_method(method_name, sv),
+                Some(Type::Slice { .. }) if method_name == "len" => {
+                    Some(self.extract(sv, SLICE_LEN, "slice_len"))
+                }
+                _ => None,
+            };
+            if let Some(result) = builtin {
                 return MethodCallOutcome::Done(result);
-            }
-            if self.is_result_layout(shape)
-                && let Some(result) = self.compile_result_method(method_name, sv)
-            {
-                return MethodCallOutcome::Done(result);
-            }
-            if self.is_option_layout(shape)
-                && let Some(result) = self.compile_option_method(method_name, sv)
-            {
-                return MethodCallOutcome::Done(result);
-            }
-            if self.is_slice_layout(shape) && method_name == "len" {
-                return MethodCallOutcome::Done(self.extract(sv, SLICE_LEN, "slice_len"));
             }
         }
 
-        let Some(struct_name) = self.receiver_struct_name(object, receiver) else {
-            self.error("Method call on non-struct value", span);
-            return MethodCallOutcome::Done(self.dummy_val());
+        // A user struct, possibly behind a pointer.
+        let struct_name = match &object.ty {
+            Some(Type::Struct(name)) => name.clone(),
+            Some(Type::Pointer(inner) | Type::Ref(inner) | Type::RefMut(inner))
+                if matches!(inner.as_ref(), Type::Struct(_)) =>
+            {
+                inner.to_string()
+            }
+            _ => {
+                self.error("Method call on non-struct value", span);
+                return MethodCallOutcome::Done(self.dummy_val());
+            }
         };
 
         let mangled = format!("{struct_name}::{method_name}");
@@ -1245,40 +1155,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap()
     }
 
-    /// Storage behind `object` when it holds a builtin `Vec`. A temporary has
-    /// no storage, so a mutating method has nothing to reach through.
-    fn vec_storage_of(&mut self, object: &Expression) -> Option<PointerValue<'ctx>> {
-        let (ptr, ty) = self.compile_lvalue(object)?;
-        match ty {
-            BasicTypeEnum::StructType(st) if self.is_vec_layout(st) => Some(ptr),
-            _ => None,
-        }
-    }
-
-    /// Name of the user struct a call dispatches on, looking through a pointer
-    /// receiver.
-    fn receiver_struct_name(
-        &self,
-        object: &Expression,
-        receiver: BasicValueEnum<'ctx>,
-    ) -> Option<String> {
-        let named = |ty: &BasicTypeEnum<'ctx>| match ty {
-            BasicTypeEnum::StructType(st) => Some(st.get_name()?.to_str().ok()?.to_string()),
-            _ => None,
-        };
-
-        if let ExpressionKind::Identifier(var_name) = &object.kind
-            && let Some((_, ty, _)) = self.variables.get(var_name)
-        {
-            return match ty {
-                BasicTypeEnum::PointerType(_) => named(self.pointer_elem_types.get(var_name)?),
-                _ => named(ty),
-            };
-        }
-
-        named(&receiver.get_type())
-    }
-
     /// Where the receiver of a `var self` method lives, wherever that is: a
     /// variable, a field, an element, or behind a pointer.
     fn self_pointer_for(&mut self, object: &Expression) -> Option<PointerValue<'ctx>> {
@@ -1330,7 +1206,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 } else {
                     expr
                 };
-                let signed = self.is_signed_integer(source).unwrap_or(true);
+                let signed = !Self::is_unsigned_expr(source);
                 self.apply_arith(l.into(), r.into(), operator, signed)
                     .unwrap_or_else(|| self.unsupported_operator(operator, expr.span))
             }
@@ -1483,15 +1359,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     /// Lower an `ExpressionKind::Cast` to the appropriate LLVM conversion.
-    fn lower_cast(
-        &mut self,
-        left: &Expression,
-        target: &TypeSpec,
-        span: Span,
-    ) -> BasicValueEnum<'ctx> {
+    fn lower_cast(&mut self, left: &Expression, cast: &Expression) -> BasicValueEnum<'ctx> {
+        let span = cast.span;
         let src_val = self.compile_expression(left, None);
 
-        let Some(target_type) = self.get_llvm_type(target) else {
+        let Some(target_type) = cast.ty.as_ref().and_then(|ty| self.llvm_type_of(ty)) else {
             self.error("Cast to void type is not allowed", span);
             return self.dummy_val();
         };
@@ -1499,7 +1371,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         // An i1 must never sign-extend, or `true as i32` would come out as -1.
         let src_signed =
             |v: IntValue<'ctx>, signed: bool| v.get_type().get_bit_width() > 1 && signed;
-        let left_signed = self.is_signed_integer(left).unwrap_or(true);
+        let left_signed = !Self::is_unsigned_expr(left);
         let f32_type = self.context.f32_type();
 
         match (src_val, target_type) {
@@ -1527,7 +1399,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
             }
             (BasicValueEnum::FloatValue(v), BasicTypeEnum::IntType(t)) => {
-                if Self::is_unsigned_type(target) {
+                if Self::is_unsigned_expr(cast) {
                     self.builder
                         .build_float_to_unsigned_int(v, t, "fptoui")
                         .unwrap()
@@ -1575,15 +1447,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .into(),
             // A no-op with opaque pointers.
             (BasicValueEnum::PointerValue(v), BasicTypeEnum::PointerType(_)) => v.into(),
-            // `str`/slice keeps its data pointer and drops the length.
-            (BasicValueEnum::StructValue(v), BasicTypeEnum::PointerType(_))
-                if self.is_slice_layout(v.get_type()) =>
-            {
+            // A `str` or other slice, the only aggregate the analyser lets
+            // through, keeps its data pointer and drops the length.
+            (BasicValueEnum::StructValue(v), BasicTypeEnum::PointerType(_)) => {
                 self.extract(v, SLICE_PTR, "str_ptr")
             }
-            (BasicValueEnum::StructValue(v), BasicTypeEnum::IntType(t))
-                if self.is_slice_layout(v.get_type()) =>
-            {
+            (BasicValueEnum::StructValue(v), BasicTypeEnum::IntType(t)) => {
                 let ptr = self.extract(v, SLICE_PTR, "str_ptr").into_pointer_value();
                 self.builder
                     .build_ptr_to_int(ptr, t, "str_ptrtoint")

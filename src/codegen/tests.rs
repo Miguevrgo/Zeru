@@ -31,7 +31,7 @@ fn compile_to_ir_with_mode(input: &str, safety_mode: SafetyMode) -> Result<Strin
     let module = context.create_module("test");
     let builder = context.create_builder();
 
-    let mut compiler = Compiler::new(&context, &builder, &module, safety_mode);
+    let mut compiler = Compiler::new(&context, &builder, &module, &analyzer, safety_mode);
     compiler.compile_program(&program);
 
     if !compiler.errors.is_empty() {
@@ -74,7 +74,7 @@ fn test_function_with_params() {
             }
             fn main() { }
         ";
-    assert_ir_contains(input, &["define i32 @add(i32 %0, i32 %1)"]);
+    assert_ir_contains(input, &["define internal i32 @add(i32 %0, i32 %1)"]);
 }
 
 #[test]
@@ -85,7 +85,10 @@ fn test_void_function() {
         ";
     assert_ir_contains(
         input,
-        &["define void @do_nothing()", "call void @do_nothing()"],
+        &[
+            "define internal void @do_nothing()",
+            "call void @do_nothing()",
+        ],
     );
 }
 
@@ -304,7 +307,10 @@ fn test_struct_method() {
                 var v = c.get();
             }
         ";
-    assert_ir_contains(input, &["define i32 @\"Counter::get\"(%Counter %0)"]);
+    assert_ir_contains(
+        input,
+        &["define internal i32 @\"Counter::get\"(%Counter %0)"],
+    );
 }
 
 #[test]

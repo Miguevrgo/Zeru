@@ -938,76 +938,34 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.dummy_val()
     }
 
-    pub(super) fn compile_ok_constructor(
+    /// `Ok(value)` or `Err(code)`, laid out as the `T!` the analyser typed the
+    /// call as.
+    pub(super) fn compile_result_constructor(
         &mut self,
         arguments: &[Expression],
-        expected_type: Option<BasicTypeEnum<'ctx>>,
-        call_span: Span,
+        call: &Expression,
+        ok: bool,
     ) -> BasicValueEnum<'ctx> {
-        let [argument] = arguments else {
-            self.error("'Ok()' expects exactly 1 argument", call_span);
+        let ([argument], Some(BasicTypeEnum::StructType(result_type))) = (
+            arguments,
+            call.ty.as_ref().and_then(|ty| self.llvm_type_of(ty)),
+        ) else {
+            self.error("'Err()' requires a known Result type context", call.span);
             return self.dummy_val();
         };
 
-        let result_type = match expected_type {
-            Some(BasicTypeEnum::StructType(st)) if self.is_result_layout(st) => st,
-            _ => {
-                let inner_type = self.compile_expression(argument, None).get_type();
-                self.context.struct_type(
-                    &[
-                        self.context.bool_type().into(),
-                        inner_type,
-                        self.context.i32_type().into(),
-                    ],
-                    false,
-                )
-            }
+        let ok_type = result_type.get_field_type_at_index(RESULT_VALUE).unwrap();
+        let code_type = self.context.i32_type();
+        let (value, code) = if ok {
+            let value = self.compile_expression(argument, Some(ok_type));
+            (value, code_type.const_zero())
+        } else {
+            let code = self.compile_expression(argument, Some(code_type.into()));
+            (self.zero_value_for(ok_type), code.into_int_value())
         };
-
-        let inner_type = result_type.get_field_type_at_index(RESULT_VALUE).unwrap();
-        let inner_val = self.compile_expression(argument, Some(inner_type));
-        let is_ok = self.context.bool_type().const_int(1, false);
-        let no_error = self.context.i32_type().const_zero();
-
-        self.build_struct(
-            result_type,
-            &[is_ok.into(), inner_val, no_error.into()],
-            "res_ok",
-        )
-        .into()
-    }
-
-    pub(super) fn compile_err_constructor(
-        &mut self,
-        arguments: &[Expression],
-        expected_type: Option<BasicTypeEnum<'ctx>>,
-        call_span: Span,
-    ) -> BasicValueEnum<'ctx> {
-        let [argument] = arguments else {
-            self.error("'Err()' expects exactly 1 argument", call_span);
-            return self.dummy_val();
-        };
-
-        let Some(BasicTypeEnum::StructType(result_type)) = expected_type
-            .filter(|ty| matches!(ty, BasicTypeEnum::StructType(st) if self.is_result_layout(*st)))
-        else {
-            self.error("'Err()' requires a known Result type context", call_span);
-            return self.dummy_val();
-        };
-
-        let error_code = self
-            .compile_expression(argument, Some(self.context.i32_type().into()))
-            .into_int_value();
-        let is_ok = self.context.bool_type().const_zero();
-        let inner_type = result_type.get_field_type_at_index(RESULT_VALUE).unwrap();
-        let unused_ok = self.zero_value_for(inner_type);
-
-        self.build_struct(
-            result_type,
-            &[is_ok.into(), unused_ok, error_code.into()],
-            "res_err",
-        )
-        .into()
+        let tag = self.context.bool_type().const_int(u64::from(ok), false);
+        self.build_struct(result_type, &[tag.into(), value, code.into()], "result")
+            .into()
     }
 
     /// `T?` queries, mirroring the ones on `T!`.
