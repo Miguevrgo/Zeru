@@ -57,6 +57,9 @@ pub struct SemanticAnalyzer {
 
     /// How many loops enclose what is being checked.
     loop_depth: usize,
+
+    /// Where a variable is given away, so codegen stops owning it there.
+    moves: HashSet<Span>,
 }
 
 impl SemanticAnalyzer {
@@ -87,12 +90,47 @@ impl SemanticAnalyzer {
             generic_functions: HashMap::new(),
             instantiations: Vec::new(),
             loop_depth: 0,
+            moves: HashSet::new(),
         }
     }
 
     /// A struct's fields as resolved, in declaration order.
     pub fn struct_fields(&self, name: &str) -> &[(String, Type)] {
         self.struct_defs.get(name).map_or(&[], Vec::as_slice)
+    }
+
+    /// Whether the variable read at `span` is given away there.
+    pub fn is_moved_at(&self, span: Span) -> bool {
+        self.moves.contains(&span)
+    }
+
+    /// Whether a value of `ty` owns memory or a `drop`, which makes it
+    /// something to free when it goes and to duplicate when it is copied.
+    pub fn owns_heap(&self, ty: &Type) -> bool {
+        self.owns_heap_past(ty, &mut Vec::new())
+    }
+
+    /// `owns_heap`, entering each struct once: one that holds itself is
+    /// reported already, and must not send this round in circles.
+    fn owns_heap_past<'t>(&'t self, ty: &'t Type, seen: &mut Vec<&'t str>) -> bool {
+        match ty {
+            Type::Vec { .. } => true,
+            Type::Struct(name) if !seen.contains(&name.as_str()) => {
+                seen.push(name);
+                self.signature(&format!("{name}::drop")).is_some()
+                    || self
+                        .struct_fields(name)
+                        .iter()
+                        .any(|(_, ty)| self.owns_heap_past(ty, seen))
+            }
+            Type::Tuple(types) => types.iter().any(|ty| self.owns_heap_past(ty, seen)),
+            Type::Array {
+                elem_type: inner, ..
+            }
+            | Type::Optional(inner)
+            | Type::Result { ok_type: inner, .. } => self.owns_heap_past(inner, seen),
+            _ => false,
+        }
     }
 
     pub fn enum_variants(&self, name: &str) -> Option<&[String]> {
@@ -542,6 +580,18 @@ impl SemanticAnalyzer {
 
         if matches!(params.first(), Some((first, _, true)) if first == "self") {
             self.mut_self_methods.insert(name.clone());
+        }
+        // Called for the value as it goes, with nothing else to pass it.
+        if associated_struct.is_some()
+            && name.ends_with("::drop")
+            && (params.len() != 1
+                || !self.mut_self_methods.contains(&name)
+                || return_type.is_some())
+        {
+            self.error(
+                "A 'drop' method takes only 'var self' and returns nothing".into(),
+                span,
+            );
         }
 
         let prev_type_params = std::mem::take(&mut self.current_type_params);
@@ -1311,6 +1361,7 @@ impl SemanticAnalyzer {
                     );
                 }
                 self.symbols.mark_moved(name);
+                self.moves.insert(expr.span);
             }
             ExpressionKind::Get { .. }
             | ExpressionKind::Index { .. }
@@ -1618,6 +1669,14 @@ impl SemanticAnalyzer {
                     }
                     self.error(format!("Slice has no method '{}'", method_name), span);
                     return Type::Unknown;
+                }
+
+                // Unwrapping takes the payload, and with it what the value owns.
+                if method_name == "unwrap"
+                    && matches!(obj_type, Type::Result { .. } | Type::Optional(_))
+                    && self.owns_heap(&obj_type)
+                {
+                    self.consume(object, &obj_type);
                 }
 
                 if let Type::Result { ok_type, .. } = &obj_type {
@@ -2105,6 +2164,26 @@ impl SemanticAnalyzer {
         }
     }
 
+    /// A literal fills a `Vec<T>` as readily as an array: it is checked as an
+    /// array of T, then typed as the Vec.
+    fn check_literal_into(
+        &mut self,
+        expected: Option<&Type>,
+        check: impl FnOnce(&mut Self, Option<&Type>) -> Type,
+    ) -> Type {
+        let Some(Type::Vec { elem_type }) = expected else {
+            return check(self, expected);
+        };
+        let hint = Type::Array {
+            elem_type: elem_type.clone(),
+            len: 0,
+        };
+        match check(self, Some(&hint)) {
+            Type::Array { elem_type, .. } => Type::Vec { elem_type },
+            other => other,
+        }
+    }
+
     /// `[value; count]`, the value checked once as every element's.
     fn check_array_repeat(
         &mut self,
@@ -2298,12 +2377,14 @@ impl SemanticAnalyzer {
             }
             ExpressionKind::Index { left, index } => self.check_index(left, index, span),
 
-            ExpressionKind::ArrayLiteral(elements) => {
-                self.check_array_literal(elements, expected_type)
-            }
-            ExpressionKind::ArrayRepeat { value, count } => {
-                self.check_array_repeat(value, *count, expected_type)
-            }
+            ExpressionKind::ArrayLiteral(elements) => self
+                .check_literal_into(inner_expected, |this, hint| {
+                    this.check_array_literal(elements, hint)
+                }),
+            ExpressionKind::ArrayRepeat { value, count } => self
+                .check_literal_into(inner_expected, |this, hint| {
+                    this.check_array_repeat(value, *count, hint)
+                }),
 
             ExpressionKind::BorrowRef(inner) => self.check_borrow(inner, Borrow::Shared, span),
             ExpressionKind::BorrowRefMut(inner) => self.check_borrow(inner, Borrow::Mutable, span),
@@ -2389,52 +2470,47 @@ impl SemanticAnalyzer {
         // Arity first: every method reports its own count, then checks the one
         // argument it may take.
         let arity = match method_name {
-            "with_capacity" | "push" | "get" => 1,
+            "with_capacity" | "push" | "get" | "remove" | "reserve" => 1,
+            "insert" => 2,
             _ => 0,
         };
         let arity_ok = self.expect_arity(&full_name, arguments, arity, span);
 
+        // A count or an index comes first, the element last.
+        if arity_ok && method_name != "push" && arity > 0 {
+            let arg_type = self.check_expression(&mut arguments[0], Some(&usize_type));
+            if !usize_type.accepts(&arg_type) {
+                self.error(format!("{full_name}() index or count must be usize"), span);
+            }
+        }
+        if arity_ok && matches!(method_name, "push" | "insert") {
+            let item = arguments.last_mut().unwrap();
+            let arg_type = self.check_expression(item, Some(elem_type));
+            self.consume(item, &arg_type);
+            if !elem_type.accepts(&arg_type) {
+                self.error(
+                    format!("{full_name}() expects {elem_type}, got {arg_type}"),
+                    span,
+                );
+            }
+        }
+
         match method_name {
-            "new" => vec_type(),
-            "with_capacity" => {
-                if arity_ok {
-                    let arg_type = self.check_expression(&mut arguments[0], Some(&usize_type));
-                    if !usize_type.accepts(&arg_type) {
-                        self.error(format!("{full_name}() argument must be usize"), span);
-                    }
-                }
-                vec_type()
+            "new" | "with_capacity" => vec_type(),
+            "push" | "insert" | "reserve" | "shrink_to_fit" | "clear" => Type::Void,
+            // A copy of an element that owns memory would be a second owner.
+            "get" if self.owns_heap(elem_type) => {
+                self.error(
+                    format!("Vec::get() cannot copy out a {elem_type}; index it and call .copy()"),
+                    span,
+                );
+                Type::Unknown
             }
-            "push" => {
-                if arity_ok {
-                    let elem = elem_type.clone();
-                    let arg_type = self.check_expression(&mut arguments[0], Some(&elem));
-                    self.consume(&arguments[0], &arg_type);
-                    if !elem_type.accepts(&arg_type) {
-                        self.error(
-                            format!(
-                                "Vec::push() argument type mismatch. Expected {elem_type}, got {arg_type}"
-                            ),
-                            span,
-                        );
-                    }
-                }
-                Type::Void
-            }
-            "get" => {
-                if arity_ok {
-                    let arg_type = self.check_expression(&mut arguments[0], Some(&usize_type));
-                    if !usize_type.accepts(&arg_type) {
-                        self.error("Vec::get() index must be usize".into(), span);
-                    }
-                }
-                Type::Optional(Box::new(elem_type.clone()))
-            }
+            "get" => Type::Optional(Box::new(elem_type.clone())),
+            "remove" => elem_type.clone(),
             "pop" => Type::Optional(Box::new(elem_type.clone())),
             "len" | "capacity" => usize_type,
             "is_empty" => Type::Bool,
-            "clear" => Type::Void,
-            "copy" => vec_type(),
             _ => {
                 self.error(format!("Vec<T> has no method '{method_name}'"), span);
                 Type::Unknown

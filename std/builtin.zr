@@ -205,14 +205,18 @@ fn __zeru_realloc(old_ptr: *u8, old_size: usize, new_size: usize) *u8 {
     return new_ptr;
 }
 
-// Copy n bytes from src to dest.
-fn __zeru_memcpy(dest: *u8, src: *u8, n: usize) {
+// Copy n bytes from src to dest. The two may overlap: copying runs backwards
+// when dest is above src, so nothing is overwritten before it is read.
+fn __zeru_memmove(dest: *u8, src: *u8, n: usize) {
     var i: usize = 0;
     while i < n {
-        var dest_ptr: *u8 = dest + i;
-        var src_ptr: *u8 = src + i;
+        var at: usize = i;
+        if dest > src {
+            at = n - 1 - i;
+        }
+        var dest_ptr: *u8 = dest + at;
+        var src_ptr: *u8 = src + at;
         *dest_ptr = *src_ptr;
         i += 1;
     }
 }
-

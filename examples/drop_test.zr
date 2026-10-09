@@ -1,0 +1,107 @@
+// What owns memory is dropped once, when its owner goes: at the end of its
+// scope, on return, break or continue, when overwritten, or as a temporary at
+// the end of its statement. A move hands that over, so nothing is dropped
+// twice. A `drop` method sees each drop happen.
+
+struct Probe {
+    drops: *i32,
+
+    fn drop(var self) {
+        *self.drops += 1;
+    }
+}
+
+struct Holder {
+    probe: Probe,
+    probes: Vec<Probe>,
+}
+
+fn probe(drops: *i32) Probe {
+    return Probe { drops: drops };
+}
+
+fn consume(p: Probe) { }
+
+fn passed_through(drops: *i32) Probe {
+    var p = probe(drops);
+    return p;
+}
+
+fn leaves_early(drops: *i32, early: bool) {
+    var first = probe(drops);
+    if early {
+        return;
+    }
+    var second = probe(drops);
+}
+
+fn expect(drops: i32, want: i32, code: i32) {
+    if drops != want {
+        exit(code);
+    }
+}
+
+fn main() {
+    var drops: i32 = 0;
+    var at: *i32 = &drops;
+
+    { var p = probe(at); }
+    expect(drops, 1, 1);
+
+    { var p = probe(at); consume(p); expect(drops, 2, 2); }
+    expect(drops, 2, 3);
+
+    // Moved on one path only: whether to drop is settled at runtime.
+    { var p = probe(at); var take = true; if take { consume(p); } }
+    { var p = probe(at); var take = false; if take { consume(p); } }
+    expect(drops, 4, 4);
+
+    { var p = probe(at); p = probe(at); expect(drops, 5, 5); }
+    expect(drops, 6, 6);
+
+    { var p = passed_through(at); expect(drops, 6, 7); }
+    expect(drops, 7, 8);
+
+    leaves_early(at, true);
+    expect(drops, 8, 9);
+    leaves_early(at, false);
+    expect(drops, 10, 10);
+
+    var turn = 0;
+    while turn < 3 {
+        var p = probe(at);
+        turn += 1;
+        if turn == 2 { continue; }
+        if turn == 3 { break; }
+    }
+    expect(drops, 13, 11);
+
+    probe(at);
+    expect(drops, 14, 12);
+
+    { var v: Vec<Probe> = [probe(at), probe(at)]; v.push(probe(at)); }
+    expect(drops, 17, 13);
+
+    { var v: Vec<Probe> = [probe(at), probe(at)]; v.clear(); expect(drops, 19, 14); }
+
+    { var v: Vec<Probe> = [probe(at), probe(at)]; var p = v.pop(); var r = v.remove(0); }
+    expect(drops, 21, 15);
+
+    { var p = probe(at); var twin = p.copy(); }
+    expect(drops, 23, 16);
+
+    // A struct's own drop runs, then its fields are dropped.
+    { var h = Holder { probe: probe(at), probes: [probe(at)] }; h.probe = probe(at); expect(drops, 24, 17); }
+    expect(drops, 26, 18);
+
+    { var some: Probe? = probe(at); var none: Probe? = None; }
+    expect(drops, 27, 19);
+
+    { var some: Probe? = probe(at); var p = some.unwrap(); expect(drops, 27, 20); }
+    expect(drops, 28, 21);
+
+    { var pair = (probe(at), [probe(at), probe(at)]); }
+    expect(drops, 31, 22);
+
+    println("Drop tests passed!");
+}

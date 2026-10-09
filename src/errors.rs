@@ -4,7 +4,7 @@ use std::ops::Range;
 use thiserror::Error;
 
 /// Represents a span in the source code (byte offsets)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Span {
     pub start: usize,
     pub end: usize,

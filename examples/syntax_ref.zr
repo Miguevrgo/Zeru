@@ -53,7 +53,7 @@ struct Vector3 {
     y: f32,
     z: f32,
 
-    // Immutable self method
+    // Immutable self method: `self` is borrowed, not copied
     fn length_squared(self) f32 {
         return self.x * self.x + self.y * self.y + self.z * self.z;
     }
@@ -76,6 +76,15 @@ struct Vector3 {
 struct Point {
     x: i32,
     y: i32,
+}
+
+// What a value owns is freed when its owner goes; a `drop` method runs first.
+struct Handle {
+    fd: i32,
+
+    fn drop(var self) {
+        self.fd = -1;
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -193,6 +202,12 @@ fn main() {
     var popped = items.pop();                // Remove and return last
     var vec_copy = items.copy();             // Deep copy
     items.clear();                           // Remove all elements
+
+    var listed: Vec<i64> = [1, 2, 3];        // From an array literal
+    listed.insert(0, 0);                     // Shift the rest up
+    var second = listed.remove(1);           // Shift the rest down
+    listed.reserve(16);                      // Room for 16 more
+    listed.shrink_to_fit();                  // Capacity down to the length
 
     // -------------------------------------------------------------------------
     // Tuples

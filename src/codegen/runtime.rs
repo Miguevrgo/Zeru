@@ -4,6 +4,7 @@
 use inkwell::{
     AddressSpace, IntPredicate,
     attributes::{Attribute, AttributeLoc},
+    builder::Builder,
     intrinsics::Intrinsic,
     module::Linkage,
     types::{BasicType, BasicTypeEnum, FunctionType, IntType, PointerType},
@@ -23,12 +24,13 @@ use crate::{
         },
     },
     errors::{Span, ZeruError},
+    sema::types::Type,
     token::Token,
 };
 
 const ALLOC_FN: &str = "__zeru_alloc";
 const REALLOC_FN: &str = "__zeru_realloc";
-const MEMCPY_FN: &str = "__zeru_memcpy";
+const MEMMOVE_FN: &str = "__zeru_memmove";
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub(super) fn error(&mut self, message: impl Into<String>, span: Span) {
@@ -128,7 +130,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     /// Bytes taken by `count` elements, as an LLVM constant expression.
-    fn bytes_for(&self, elem_type: BasicTypeEnum<'ctx>, count: IntValue<'ctx>) -> IntValue<'ctx> {
+    pub(super) fn bytes_for(
+        &self,
+        elem_type: BasicTypeEnum<'ctx>,
+        count: IntValue<'ctx>,
+    ) -> IntValue<'ctx> {
         let stride = elem_type
             .size_of()
             .unwrap_or(self.usize_type().const_int(1, false));
@@ -498,21 +504,105 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(after_bb);
     }
 
+    /// A bool slot, set to false in the entry block before anything else runs.
+    pub(super) fn create_entry_flag(&self, function: FunctionValue<'ctx>) -> PointerValue<'ctx> {
+        let bool_type = self.context.bool_type();
+        let builder = self.entry_builder(function);
+        let flag = builder.build_alloca(bool_type, "owns").unwrap();
+        builder.build_store(flag, bool_type.const_zero()).unwrap();
+        flag
+    }
+
+    /// A buffer for `count` elements of `elem_type`.
+    pub(super) fn alloc_buffer(
+        &self,
+        elem_type: BasicTypeEnum<'ctx>,
+        count: IntValue<'ctx>,
+    ) -> PointerValue<'ctx> {
+        let usize_type = self.usize_type();
+        let alloc_fn = self.extern_fn(
+            ALLOC_FN,
+            self.ptr_type().fn_type(&[usize_type.into()], false),
+        );
+        let size = self.bytes_for(elem_type, count);
+        self.call_ptr(alloc_fn, &[size.into()], "buffer")
+    }
+
+    /// Give back a buffer that held `capacity` elements.
+    pub(super) fn free_buffer(
+        &self,
+        data: PointerValue<'ctx>,
+        elem_type: BasicTypeEnum<'ctx>,
+        capacity: IntValue<'ctx>,
+    ) {
+        let size = self.bytes_for(elem_type, capacity);
+        // Resizing to nothing is how the allocator frees.
+        self.resize_buffer(data, size, self.usize_type().const_zero());
+    }
+
+    fn resize_buffer(
+        &self,
+        data: PointerValue<'ctx>,
+        old_size: IntValue<'ctx>,
+        new_size: IntValue<'ctx>,
+    ) -> PointerValue<'ctx> {
+        let ptr_type = self.ptr_type();
+        let usize_type = self.usize_type();
+        let realloc_fn = self.extern_fn(
+            REALLOC_FN,
+            ptr_type.fn_type(
+                &[ptr_type.into(), usize_type.into(), usize_type.into()],
+                false,
+            ),
+        );
+        self.call_ptr(
+            realloc_fn,
+            &[data.into(), old_size.into(), new_size.into()],
+            "resized",
+        )
+    }
+
+    /// Copy `count` elements from `src` to `dst`; the two may overlap.
+    pub(super) fn move_bytes(
+        &self,
+        dst: PointerValue<'ctx>,
+        src: PointerValue<'ctx>,
+        elem_type: BasicTypeEnum<'ctx>,
+        count: IntValue<'ctx>,
+    ) {
+        let ptr_type = self.ptr_type();
+        let memmove_fn = self.extern_fn(
+            MEMMOVE_FN,
+            self.context.void_type().fn_type(
+                &[ptr_type.into(), ptr_type.into(), self.usize_type().into()],
+                false,
+            ),
+        );
+        let size = self.bytes_for(elem_type, count);
+        self.builder
+            .build_call(memmove_fn, &[dst.into(), src.into(), size.into()], "")
+            .unwrap();
+    }
+
     pub(super) fn create_entry_block_alloca(
         &self,
         function: FunctionValue<'ctx>,
         name: &str,
         ty: BasicTypeEnum<'ctx>,
     ) -> PointerValue<'ctx> {
+        self.entry_builder(function).build_alloca(ty, name).unwrap()
+    }
+
+    /// A builder at the top of `function`'s entry block, so what it emits
+    /// comes before anything else.
+    fn entry_builder(&self, function: FunctionValue<'ctx>) -> Builder<'ctx> {
         let builder = self.context.create_builder();
         let entry = function.get_first_basic_block().unwrap();
-
         match entry.get_first_instruction() {
             Some(first_instr) => builder.position_before(&first_instr),
             None => builder.position_at_end(entry),
         }
-
-        builder.build_alloca(ty, name).unwrap()
+        builder
     }
 
     /// Lower an `asm` block: build the constraint string, call the inline asm
@@ -598,21 +688,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         call_span: Span,
     ) -> BasicValueEnum<'ctx> {
         let usize_type = self.usize_type();
-        let vec_type = self.vec_type();
         let zero = usize_type.const_zero();
 
-        match method_name {
-            "new" => self
-                .build_struct(
-                    vec_type,
-                    &[
-                        self.ptr_type().const_null().into(),
-                        zero.into(),
-                        zero.into(),
-                    ],
-                    "vec_new",
-                )
-                .into(),
+        let (data, cap) = match method_name {
+            "new" => (self.ptr_type().const_null(), zero),
             "with_capacity" => {
                 let cap = match arguments.first() {
                     Some(arg) => self
@@ -620,62 +699,134 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .into_int_value(),
                     None => zero,
                 };
-
-                let alloc_size = self.bytes_for(elem_type, cap);
-                let alloc_fn = self.extern_fn(
-                    ALLOC_FN,
-                    self.ptr_type().fn_type(&[usize_type.into()], false),
-                );
-                let data = self.call_ptr(alloc_fn, &[alloc_size.into()], "vec_alloc");
-
-                self.build_struct(
-                    vec_type,
-                    &[data.into(), zero.into(), cap.into()],
-                    "vec_with_cap",
-                )
-                .into()
+                (self.alloc_buffer(elem_type, cap), cap)
             }
             _ => {
                 self.error(
                     format!("Unknown Vec static method '{method_name}'"),
                     call_span,
                 );
-                self.dummy_val()
+                return self.dummy_val();
             }
-        }
+        };
+        self.build_vec(data, zero, cap)
     }
 
+    /// A Vec header over `data`.
+    pub(super) fn build_vec(
+        &self,
+        data: PointerValue<'ctx>,
+        len: IntValue<'ctx>,
+        cap: IntValue<'ctx>,
+    ) -> BasicValueEnum<'ctx> {
+        self.build_struct(
+            self.vec_type(),
+            &[data.into(), len.into(), cap.into()],
+            "vec",
+        )
+        .into()
+    }
+
+    /// A method on the Vec at `vec_ptr`. `elem` is the element type, which
+    /// `clear` needs to drop what it removes.
     pub(super) fn compile_vec_method(
         &mut self,
         method_name: &str,
         vec_ptr: PointerValue<'ctx>,
         arguments: &[Expression],
-        elem_type: BasicTypeEnum<'ctx>,
+        elem: &Type,
     ) -> Option<BasicValueEnum<'ctx>> {
+        let elem_type = self.llvm_type_of(elem)?;
         let usize_type = self.usize_type();
+        let one = usize_type.const_int(1, false);
         let unit = self.dummy_val();
-
         let len_field = self.vec_field_ptr(vec_ptr, VEC_LEN, "len_field");
-        let len = self.load_int(usize_type, len_field, "len");
+        let cap_field = self.vec_field_ptr(vec_ptr, VEC_CAP, "cap_field");
+        let ptr_field = self.vec_field_ptr(vec_ptr, VEC_PTR, "ptr_field");
+        let index_arg = |this: &mut Self| -> Option<IntValue<'ctx>> {
+            let index = this.compile_expression(arguments.first()?, Some(usize_type.into()));
+            Some(index.into_int_value())
+        };
+        let item_arg = |this: &mut Self| -> Option<BasicValueEnum<'ctx>> {
+            Some(this.compile_expression(arguments.last()?, Some(elem_type)))
+        };
 
         match method_name {
-            "len" => Some(len.into()),
-            "capacity" => {
-                let cap_field = self.vec_field_ptr(vec_ptr, VEC_CAP, "cap_field");
-                Some(self.load(usize_type, cap_field, "cap"))
-            }
+            "len" => Some(self.load(usize_type, len_field, "len")),
+            "capacity" => Some(self.load(usize_type, cap_field, "cap")),
             "is_empty" => {
+                let len = self.load_int(usize_type, len_field, "len");
                 let zero = usize_type.const_zero();
                 let is_empty =
                     self.builder
                         .build_int_compare(IntPredicate::EQ, len, zero, "is_empty");
                 Some(is_empty.unwrap().into())
             }
-            "push" => {
-                self.build_vec_push(vec_ptr, arguments.first()?, elem_type);
+            "push" | "insert" => {
+                let at: Option<IntValue> = match method_name {
+                    "insert" => Some(index_arg(self)?),
+                    _ => None,
+                };
+                let item: BasicValueEnum = item_arg(self)?;
+                let len = self.load_int(usize_type, len_field, "len");
+                let grown = self.builder.build_int_add(len, one, "grown").unwrap();
+                let at = match at {
+                    // At the end is a place to insert, past it is not.
+                    Some(at) => {
+                        self.emit_bounds_check_against(at, grown, true);
+                        at
+                    }
+                    None => len,
+                };
+                self.build_vec_reserve(vec_ptr, grown, elem_type);
+
+                let data = self.load_ptr(ptr_field, "data");
+                let slot = self.vec_elem_ptr(data, at, elem_type);
+                if method_name == "insert" {
+                    let next = self.builder.build_int_add(at, one, "next").unwrap();
+                    let after = self.vec_elem_ptr(data, next, elem_type);
+                    let tail = self.builder.build_int_sub(len, at, "tail").unwrap();
+                    self.move_bytes(after, slot, elem_type, tail);
+                }
+                self.builder.build_store(slot, item).unwrap();
+                self.builder.build_store(len_field, grown).unwrap();
+                Some(unit)
+            }
+            "remove" => {
+                let at: IntValue = index_arg(self)?;
+                let len = self.load_int(usize_type, len_field, "len");
+                self.emit_bounds_check_against(at, len, true);
+                let data = self.load_ptr(ptr_field, "data");
+                let slot = self.vec_elem_ptr(data, at, elem_type);
+                let removed = self.load(elem_type, slot, "removed");
+                let next = self.builder.build_int_add(at, one, "next").unwrap();
+                let after = self.vec_elem_ptr(data, next, elem_type);
+                let tail = self.builder.build_int_sub(len, next, "tail").unwrap();
+                self.move_bytes(slot, after, elem_type, tail);
+                let shrunk = self.builder.build_int_sub(len, one, "shrunk").unwrap();
+                self.builder.build_store(len_field, shrunk).unwrap();
+                Some(removed)
+            }
+            "reserve" => {
+                let more: IntValue = index_arg(self)?;
+                let len = self.load_int(usize_type, len_field, "len");
+                let needed = self.builder.build_int_add(len, more, "needed").unwrap();
+                self.build_vec_reserve(vec_ptr, needed, elem_type);
+                Some(unit)
+            }
+            "shrink_to_fit" => {
+                let len = self.load_int(usize_type, len_field, "len");
+                let cap = self.load_int(usize_type, cap_field, "cap");
+                let data = self.load_ptr(ptr_field, "data");
+                let old_size = self.bytes_for(elem_type, cap);
+                let new_size = self.bytes_for(elem_type, len);
+                let resized = self.resize_buffer(data, old_size, new_size);
+                self.builder.build_store(ptr_field, resized).unwrap();
+                self.builder.build_store(cap_field, len).unwrap();
                 Some(unit)
             }
             "pop" => {
+                let len = self.load_int(usize_type, len_field, "len");
                 let has_elem = self
                     .builder
                     .build_int_compare(IntPredicate::NE, len, usize_type.const_zero(), "has_elem")
@@ -685,10 +836,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     "pop",
                     has_elem,
                     move |this| {
-                        let new_len = this
-                            .builder
-                            .build_int_sub(len, usize_type.const_int(1, false), "new_len")
-                            .unwrap();
+                        let new_len = this.builder.build_int_sub(len, one, "new_len").unwrap();
                         this.builder.build_store(len_field, new_len).unwrap();
                         new_len
                     },
@@ -697,9 +845,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 ))
             }
             "get" => {
-                let idx = self
-                    .compile_expression(arguments.first()?, Some(usize_type.into()))
-                    .into_int_value();
+                let idx: IntValue = index_arg(self)?;
+                let len = self.load_int(usize_type, len_field, "len");
                 let in_bounds = self
                     .builder
                     .build_int_compare(IntPredicate::ULT, idx, len, "in_bounds")
@@ -708,149 +855,64 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Some(self.build_optional_elem_read("get", in_bounds, |_| idx, vec_ptr, elem_type))
             }
             "clear" => {
+                if self.types.owns_heap(elem) {
+                    let len = self.load_int(usize_type, len_field, "len");
+                    let data = self.load_ptr(ptr_field, "data");
+                    self.build_counted_loop(len, |this, at| {
+                        let item = this.vec_elem_ptr(data, at, elem_type);
+                        this.call_drop(item, elem);
+                    });
+                }
                 self.builder
                     .build_store(len_field, usize_type.const_zero())
                     .unwrap();
                 Some(unit)
             }
-            "copy" => Some(self.build_vec_copy(vec_ptr, elem_type)),
             _ => None,
         }
     }
 
-    /// Grow the buffer if full, then append one element and bump the length.
-    fn build_vec_push(
+    /// Make room for `needed` elements: half as many again plus eight, or
+    /// `needed` itself if that is more.
+    fn build_vec_reserve(
         &mut self,
         vec_ptr: PointerValue<'ctx>,
-        item: &Expression,
+        needed: IntValue<'ctx>,
         elem_type: BasicTypeEnum<'ctx>,
     ) {
         let usize_type = self.usize_type();
-        let item_val = self.compile_expression(item, Some(elem_type));
-        let Some(current_fn) = self.current_fn else {
-            return;
-        };
-
-        let ptr_field = self.vec_field_ptr(vec_ptr, VEC_PTR, "ptr_field");
-        let len_field = self.vec_field_ptr(vec_ptr, VEC_LEN, "len_field");
         let cap_field = self.vec_field_ptr(vec_ptr, VEC_CAP, "cap_field");
-
-        let data_ptr = self.load_ptr(ptr_field, "data_ptr");
-        let len = self.load_int(usize_type, len_field, "len");
         let cap = self.load_int(usize_type, cap_field, "cap");
-
-        let needs_grow = self
+        let short = self
             .builder
-            .build_int_compare(IntPredicate::UGE, len, cap, "needs_grow")
+            .build_int_compare(IntPredicate::UGT, needed, cap, "short")
             .unwrap();
 
-        let grow_bb = self.context.append_basic_block(current_fn, "vec_grow");
-        let store_bb = self.context.append_basic_block(current_fn, "vec_store");
-        self.builder
-            .build_conditional_branch(needs_grow, grow_bb, store_bb)
-            .unwrap();
+        self.if_then(short, |this| {
+            let b = this.builder;
+            let half = b
+                .build_int_unsigned_div(cap, usize_type.const_int(2, false), "half")
+                .unwrap();
+            let grown = b.build_int_add(cap, half, "grown").unwrap();
+            let grown = b
+                .build_int_add(grown, usize_type.const_int(8, false), "grown")
+                .unwrap();
+            let enough = b
+                .build_int_compare(IntPredicate::UGT, needed, grown, "enough")
+                .unwrap();
+            let new_cap = b
+                .build_select(enough, needed, grown, "new_cap")
+                .unwrap()
+                .into_int_value();
 
-        self.builder.position_at_end(grow_bb);
-        let min_cap = usize_type.const_int(8, false);
-        let half = self
-            .builder
-            .build_int_unsigned_div(cap, usize_type.const_int(2, false), "half_cap")
-            .unwrap();
-        let grown = self
-            .builder
-            .build_int_add(
-                self.builder
-                    .build_int_add(cap, half, "cap_plus_half")
-                    .unwrap(),
-                min_cap,
-                "grown_cap",
-            )
-            .unwrap();
-        let cap_is_zero = self
-            .builder
-            .build_int_compare(IntPredicate::EQ, cap, usize_type.const_zero(), "cap_zero")
-            .unwrap();
-        let new_cap = self
-            .builder
-            .build_select(cap_is_zero, min_cap, grown, "new_cap")
-            .unwrap()
-            .into_int_value();
-
-        let old_size = self.bytes_for(elem_type, cap);
-        let new_size = self.bytes_for(elem_type, new_cap);
-
-        let ptr_type = self.ptr_type();
-        let realloc_fn = self.extern_fn(
-            REALLOC_FN,
-            ptr_type.fn_type(
-                &[ptr_type.into(), usize_type.into(), usize_type.into()],
-                false,
-            ),
-        );
-        let new_ptr = self.call_ptr(
-            realloc_fn,
-            &[data_ptr.into(), old_size.into(), new_size.into()],
-            "new_ptr",
-        );
-
-        self.builder.build_store(ptr_field, new_ptr).unwrap();
-        self.builder.build_store(cap_field, new_cap).unwrap();
-        self.builder.build_unconditional_branch(store_bb).unwrap();
-
-        self.builder.position_at_end(store_bb);
-        let final_ptr = self.load_ptr(ptr_field, "final_ptr");
-        let final_len = self.load_int(usize_type, len_field, "final_len");
-        let elem_ptr = self.vec_elem_ptr(final_ptr, final_len, elem_type);
-        self.builder.build_store(elem_ptr, item_val).unwrap();
-
-        let new_len = self
-            .builder
-            .build_int_add(final_len, usize_type.const_int(1, false), "new_len")
-            .unwrap();
-        self.builder.build_store(len_field, new_len).unwrap();
-    }
-
-    /// Allocate a compacted duplicate of the buffer (capacity trimmed to length).
-    fn build_vec_copy(
-        &mut self,
-        vec_ptr: PointerValue<'ctx>,
-        elem_type: BasicTypeEnum<'ctx>,
-    ) -> BasicValueEnum<'ctx> {
-        let usize_type = self.usize_type();
-        let ptr_type = self.ptr_type();
-
-        let src_ptr = self.load_ptr(self.vec_field_ptr(vec_ptr, VEC_PTR, "ptr_field"), "src_ptr");
-        let len = self.load_int(
-            usize_type,
-            self.vec_field_ptr(vec_ptr, VEC_LEN, "len_field"),
-            "len",
-        );
-        let alloc_size = self.bytes_for(elem_type, len);
-
-        let alloc_fn = self.extern_fn(ALLOC_FN, ptr_type.fn_type(&[usize_type.into()], false));
-        let new_ptr = self.call_ptr(alloc_fn, &[alloc_size.into()], "new_ptr");
-
-        let memcpy_fn = self.extern_fn(
-            MEMCPY_FN,
-            self.context.void_type().fn_type(
-                &[ptr_type.into(), ptr_type.into(), usize_type.into()],
-                false,
-            ),
-        );
-        self.builder
-            .build_call(
-                memcpy_fn,
-                &[new_ptr.into(), src_ptr.into(), alloc_size.into()],
-                "",
-            )
-            .unwrap();
-
-        self.build_struct(
-            self.vec_type(),
-            &[new_ptr.into(), len.into(), len.into()],
-            "vec_copy",
-        )
-        .into()
+            let ptr_field = this.vec_field_ptr(vec_ptr, VEC_PTR, "ptr_field");
+            let data = this.load_ptr(ptr_field, "data");
+            let old_size = this.bytes_for(elem_type, cap);
+            let new_size = this.bytes_for(elem_type, new_cap);
+            let resized = this.resize_buffer(data, old_size, new_size);
+            this.builder.build_store(ptr_field, resized).unwrap();
+            this.builder.build_store(cap_field, new_cap).unwrap();
+        });
     }
 
     /// Branch on `guard`; read element `index_of(..)` as `Some` on the taken

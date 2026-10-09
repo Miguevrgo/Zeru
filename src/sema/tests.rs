@@ -2823,3 +2823,65 @@ fn test_moves_that_are_fine_stay_fine() {
     let errors = analyze(input);
     assert!(errors.is_empty(), "{errors:?}");
 }
+
+#[test]
+fn test_drop_takes_only_var_self() {
+    for method in [
+        "fn drop(self) { }",
+        "fn drop(var self, x: i32) { }",
+        "fn drop(var self) i32 { return 0; }",
+    ] {
+        let errors = analyze(&format!("struct S {{ x: i32, {method} }} fn main() {{ }}"));
+        assert_eq!(errors.len(), 1, "{method}: {errors:?}");
+        assert!(errors[0].contains("A 'drop' method takes only 'var self'"));
+    }
+    assert!(analyze("struct S { x: i32, fn drop(var self) { } } fn main() { }").is_empty());
+}
+
+#[test]
+fn test_get_cannot_copy_out_what_owns_memory() {
+    let errors = analyze("fn main() { var v: Vec<Vec<i32>> = Vec.new(); var x = v.get(0); }");
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].contains("Vec::get() cannot copy out a Vec<i32>"));
+    assert!(analyze("fn main() { var v: Vec<i32> = Vec.new(); var x = v.get(0); }").is_empty());
+}
+
+#[test]
+fn test_unwrap_moves_what_owns_memory() {
+    let errors =
+        analyze("fn main() { var o: Vec<i32>? = None; var a = o.unwrap(); var b = o.is_some(); }");
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].contains("Use of moved value 'o'"));
+    assert!(
+        analyze("fn main() { var o: i32? = 1; var a = o.unwrap(); var b = o.unwrap(); }")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_literal_fills_a_vec() {
+    assert!(
+        analyze(
+            "fn main() { var v: Vec<i64> = [1, 2]; var z: Vec<u8> = [0; 9]; var e: Vec<i32> = []; }"
+        )
+        .is_empty()
+    );
+    let errors = analyze("fn main() { var v: Vec<i64> = [true]; }");
+    assert_eq!(errors.len(), 1, "{errors:?}");
+}
+
+#[test]
+fn test_new_vec_methods() {
+    let input = "
+        fn main() {
+            var v: Vec<i64> = Vec.new();
+            v.insert(0, 1);
+            var x: i64 = v.remove(0);
+            v.reserve(8);
+            v.shrink_to_fit();
+        }
+    ";
+    assert!(analyze(input).is_empty(), "{:?}", analyze(input));
+    let errors = analyze("fn main() { var v: Vec<i64> = Vec.new(); v.insert(true, 1); }");
+    assert_eq!(errors.len(), 1, "{errors:?}");
+}

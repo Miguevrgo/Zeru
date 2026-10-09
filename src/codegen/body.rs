@@ -14,7 +14,7 @@ use inkwell::{
 use crate::{
     ast::{Expression, ExpressionKind, Statement, StatementKind, TypeSpec},
     codegen::{
-        compiler::{Compiler, LoopContext, VarBinding},
+        compiler::{Compiler, LoopContext, Scope, VarBinding},
         layout::{OPTION_VALUE, SLICE_LEN, SLICE_PTR, VEC_LEN, VEC_PTR},
     },
     errors::Span,
@@ -94,7 +94,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.enter_debug_scope(function, span);
         self.variables.clear();
         self.scope_stack.clear();
-        self.scope_stack.push(Vec::new());
+        self.scope_stack.push(Scope::default());
 
         let types = self.types;
         let param_types = types.signature(name).map_or(&[][..], |(params, _)| params);
@@ -114,18 +114,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.builder.build_store(alloca, arg).unwrap();
             self.variables
                 .insert(param_name.clone(), (alloca, slot_type));
+            // Passed by value, so the callee owns it.
+            self.own(alloca, ty);
         }
 
         for stmt in body {
             self.compile_statement(stmt);
         }
 
-        let Some(current_block) = self.builder.get_insert_block() else {
-            return;
-        };
-        if current_block.get_terminator().is_some() {
+        if !self.block_is_open() {
             return;
         }
+        self.drop_scopes_from(0);
 
         match function.get_type().get_return_type() {
             None => self.builder.build_return(None).unwrap(),
@@ -150,6 +150,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let outer_span = std::mem::replace(&mut self.current_span, stmt.span);
         self.set_debug_location();
         self.lower_statement(stmt);
+        self.drop_temporaries();
         self.current_span = outer_span;
         self.set_debug_location();
     }
@@ -167,10 +168,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             StatementKind::Return(Some(expr)) => {
                 let ret_hint = parent_fn.get_type().get_return_type();
                 let val = self.compile_expression(expr, ret_hint);
+                self.drop_temporaries();
+                self.drop_scopes_from(0);
                 self.builder.build_return(Some(&val)).unwrap();
             }
             // `main` returns an implicit exit status even on a bare `return`.
             StatementKind::Return(None) => {
+                self.drop_scopes_from(0);
                 if parent_fn.get_name().to_str() == Ok("main") {
                     let zero = self.context.i32_type().const_zero();
                     self.builder.build_return(Some(&zero)).unwrap();
@@ -180,11 +184,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
 
             StatementKind::Expression(expr) => {
-                self.compile_expression(expr, None);
+                let value = self.compile_expression(expr, None);
+                // A value nobody takes is dropped with the statement.
+                if expr.ty.as_ref().is_some_and(|ty| self.types.owns_heap(ty)) {
+                    self.adopt_temporary(value, expr.ty.as_ref());
+                }
             }
 
             StatementKind::Block(stmts) => {
-                self.scope_stack.push(Vec::new());
+                self.scope_stack.push(Scope::default());
                 for statement in stmts {
                     self.compile_statement(statement);
                 }
@@ -216,6 +224,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 } else {
                     ctx.continue_block
                 };
+                self.drop_scopes_from(ctx.scope_depth);
                 self.builder.build_unconditional_branch(target).unwrap();
             }
 
@@ -242,22 +251,27 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_store(alloca, initial).unwrap();
 
         self.bind_variable(name, (alloca, slot_type));
+        if let Some(ty) = ty {
+            self.own(alloca, ty);
+        }
     }
 
     /// Bind `name` in the innermost scope, remembering what it shadowed.
     fn bind_variable(&mut self, name: &str, binding: VarBinding<'ctx>) {
         let shadowed = self.variables.insert(name.to_string(), binding);
         if let Some(scope) = self.scope_stack.last_mut() {
-            scope.push((name.to_string(), shadowed));
+            scope.shadowed.push((name.to_string(), shadowed));
         }
     }
 
-    /// Close the innermost scope, putting back whatever each name meant outside it.
+    /// Close the innermost scope: drop what it owns, and put back whatever
+    /// each name meant outside it.
     fn pop_scope(&mut self) {
+        self.drop_scopes_from(self.scope_stack.len().saturating_sub(1));
         let Some(scope) = self.scope_stack.pop() else {
             return;
         };
-        for (name, shadowed) in scope.into_iter().rev() {
+        for (name, shadowed) in scope.shadowed.into_iter().rev() {
             match shadowed {
                 Some(outer) => self.variables.insert(name, outer),
                 None => self.variables.remove(&name),
@@ -365,7 +379,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .build_store(index_ptr, usize_type.const_zero())
             .unwrap();
 
-        self.scope_stack.push(Vec::new());
+        self.scope_stack.push(Scope::default());
         self.bind_variable(variable, (elem_slot, elem_type));
 
         let cond_bb = self.context.append_basic_block(parent_fn, "for_cond");
@@ -421,9 +435,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.pop_scope();
     }
 
+    /// A condition, whose temporaries are done with once it is decided.
     fn compile_bool(&mut self, expr: &Expression) -> IntValue<'ctx> {
         let bool_type = self.context.bool_type();
-        match self.compile_expression(expr, Some(bool_type.into())) {
+        let value = self.compile_expression(expr, Some(bool_type.into()));
+        self.drop_temporaries();
+        match value {
             BasicValueEnum::IntValue(v) => v,
             _ => {
                 self.error("Condition must be a boolean", expr.span);
@@ -441,6 +458,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.loop_stack.push(LoopContext {
             continue_block,
             break_block,
+            scope_depth: self.scope_stack.len(),
         });
         self.compile_statement(body);
         self.loop_stack.pop();
@@ -554,10 +572,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             return Some(place);
         }
 
-        let function = self.current_fn?;
         let value = self.compile_expression(expr, None);
-        let slot = self.create_entry_block_alloca(function, "temp", value.get_type());
-        self.builder.build_store(slot, value).unwrap();
+        let slot = self.adopt_temporary(value, expr.ty.as_ref());
         Some((slot, value.get_type()))
     }
 
@@ -644,12 +660,26 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 float_type.const_float(*val).into()
             }
-            ExpressionKind::Identifier(name) => self.lower_identifier(name, expr.span),
+            ExpressionKind::Identifier(name) => {
+                let value = self.lower_identifier(name, expr.span);
+                // Given away here, so the variable no longer drops it.
+                if self.types.is_moved_at(expr.span)
+                    && let Some((slot, _)) = self.variables.get(name)
+                {
+                    self.release(*slot);
+                }
+                value
+            }
             ExpressionKind::Get { .. } | ExpressionKind::Index { .. } => {
                 self.lower_place_read(expr)
             }
             ExpressionKind::StructLiteral { name, fields } => {
                 self.lower_struct_literal(name, fields, expr.span)
+            }
+            ExpressionKind::ArrayLiteral(_) | ExpressionKind::ArrayRepeat { .. }
+                if matches!(expr.ty, Some(Type::Vec { .. })) =>
+            {
+                self.lower_vec_literal(expr)
             }
             ExpressionKind::ArrayLiteral(elements) => {
                 self.lower_array_literal(elements, expected_type, expr.span)
@@ -817,7 +847,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         };
 
         let stored = if *operator == Token::Assign {
-            self.compile_expression(value, Some(ty))
+            let stored = self.compile_expression(value, Some(ty));
+            self.drop_overwritten(target, ptr);
+            stored
         } else {
             let current = self.load(ty, ptr, "cur_val");
             let rhs = self.compile_expression(value, Some(ty));
@@ -827,6 +859,27 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         self.builder.build_store(ptr, stored).unwrap();
         stored
+    }
+
+    /// Drop the value an assignment is about to replace. A variable may have
+    /// given its value away, so its flag decides; a field or an element still
+    /// holds its own. What a raw pointer points at may never have been set.
+    fn drop_overwritten(&mut self, target: &Expression, ptr: PointerValue<'ctx>) {
+        match &target.kind {
+            ExpressionKind::Identifier(_) => {
+                if let Some(owned) = self.owned_at(ptr) {
+                    self.drop_owned(&owned);
+                    let raised = self.context.bool_type().const_int(1, false);
+                    self.builder.build_store(owned.flag, raised).unwrap();
+                }
+            }
+            ExpressionKind::Get { .. } | ExpressionKind::Index { .. } => {
+                if let Some(ty) = target.ty.as_ref().filter(|ty| self.types.owns_heap(ty)) {
+                    self.call_drop(ptr, ty);
+                }
+            }
+            _ => {}
+        }
     }
 
     fn lower_struct_literal(
@@ -888,6 +941,38 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .into_array_value();
         }
         array_val.into()
+    }
+
+    /// `[a, b]` or `[value; count]` where a Vec is wanted: a buffer that
+    /// fits the elements, filled in place.
+    fn lower_vec_literal(&mut self, expr: &Expression) -> BasicValueEnum<'ctx> {
+        let elem_type = self.element_type_of(expr);
+        let usize_type = self.usize_type();
+        let count = match &expr.kind {
+            ExpressionKind::ArrayLiteral(elements) => elements.len() as u64,
+            ExpressionKind::ArrayRepeat { count, .. } => *count,
+            _ => 0,
+        };
+        let count = usize_type.const_int(count, false);
+        let data = self.alloc_buffer(elem_type, count);
+
+        let store = |this: &mut Self, at: IntValue<'ctx>, element: &Expression| {
+            let value = this.compile_expression(element, Some(elem_type));
+            let slot = this.vec_elem_ptr(data, at, elem_type);
+            this.builder.build_store(slot, value).unwrap();
+        };
+        match &expr.kind {
+            ExpressionKind::ArrayLiteral(elements) => {
+                for (at, element) in (0..).zip(elements) {
+                    store(self, usize_type.const_int(at, false), element);
+                }
+            }
+            ExpressionKind::ArrayRepeat { value, .. } => {
+                self.build_counted_loop(count, |this, at| store(this, at, value));
+            }
+            _ => {}
+        }
+        self.build_vec(data, count, count)
     }
 
     /// `[value; count]`: a loop evaluating `value` into each element.
@@ -1092,7 +1177,27 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let span = call.span;
 
         if method_name == "copy" && arguments.is_empty() {
-            return MethodCallOutcome::Done(self.compile_expression(object, expected_type));
+            let copy = match object.ty.as_ref().filter(|ty| self.types.owns_heap(ty)) {
+                // What it owns is duplicated too, so the two stay apart.
+                Some(ty) => self
+                    .place_of(object)
+                    .and_then(|(place, _)| self.copy_value(place, ty)),
+                None => Some(self.compile_expression(object, expected_type)),
+            };
+            return MethodCallOutcome::Done(copy.unwrap_or_else(|| self.dummy_val()));
+        }
+
+        // `unwrap` takes the payload out, so the receiver is read as a value:
+        // a variable gives it away instead of dropping it later.
+        if method_name == "unwrap"
+            && let Some(ty @ (Type::Optional(_) | Type::Result { .. })) = &object.ty
+        {
+            let value = self.compile_expression(object, None).into_struct_value();
+            let payload = match ty {
+                Type::Optional(_) => self.compile_option_method(method_name, value),
+                _ => self.compile_result_method(method_name, value),
+            };
+            return MethodCallOutcome::Done(payload.unwrap_or_else(|| self.dummy_val()));
         }
 
         if let ExpressionKind::Identifier(type_name) = &object.kind
@@ -1118,8 +1223,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let loaded = |this: &mut Self| this.load(place_type, place, "receiver").into_struct_value();
 
         let builtin = match &object.ty {
-            Some(Type::Vec { .. }) => {
-                let elem_type = self.element_type_of(object);
+            Some(Type::Vec { elem_type }) => {
                 self.compile_vec_method(method_name, place, arguments, elem_type)
             }
             Some(Type::Result { .. }) => {

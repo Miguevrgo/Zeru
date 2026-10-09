@@ -17,7 +17,7 @@ use crate::{
     ast::{Expression, Program, Statement, StatementKind, TypeSpec},
     codegen::SafetyMode,
     errors::{Sources, Span, ZeruError},
-    sema::analyzer::SemanticAnalyzer,
+    sema::{analyzer::SemanticAnalyzer, types::Type},
 };
 
 pub struct Compiler<'a, 'ctx> {
@@ -44,7 +44,9 @@ pub struct Compiler<'a, 'ctx> {
     pub(super) stdout_stream: Option<PointerValue<'ctx>>,
     pub(super) stderr_stream: Option<PointerValue<'ctx>>,
 
-    pub(super) scope_stack: Vec<Vec<(String, Option<VarBinding<'ctx>>)>>,
+    pub(super) scope_stack: Vec<Scope<'ctx>>,
+    /// Temporaries that own memory, dropped when their statement is done.
+    pub(super) temporaries: Vec<Owned<'ctx>>,
     pub(super) debug: Option<super::debug::Debug<'ctx>>,
 
     pub errors: Vec<ZeruError>,
@@ -56,6 +58,24 @@ pub(super) type VarBinding<'ctx> = (PointerValue<'ctx>, BasicTypeEnum<'ctx>);
 pub(super) struct LoopContext<'ctx> {
     pub(super) continue_block: BasicBlock<'ctx>,
     pub(super) break_block: BasicBlock<'ctx>,
+    /// How many scopes were open around the loop; leaving it closes the rest.
+    pub(super) scope_depth: usize,
+}
+
+/// One block's bindings: what each name shadowed, and the values it owns.
+#[derive(Default)]
+pub(super) struct Scope<'ctx> {
+    pub(super) shadowed: Vec<(String, Option<VarBinding<'ctx>>)>,
+    pub(super) owned: Vec<Owned<'ctx>>,
+}
+
+/// A value to drop: where it lives, the flag saying it still owns what it
+/// holds (a move lowers it), and its type.
+#[derive(Clone)]
+pub(super) struct Owned<'ctx> {
+    pub(super) slot: PointerValue<'ctx>,
+    pub(super) flag: PointerValue<'ctx>,
+    pub(super) ty: Type,
 }
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
@@ -83,7 +103,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             panic_fn: None,
             stdout_stream: None,
             stderr_stream: None,
-            scope_stack: vec![Vec::new()],
+            scope_stack: vec![Scope::default()],
+            temporaries: Vec::new(),
             debug: None,
             errors: Vec::new(),
         }
