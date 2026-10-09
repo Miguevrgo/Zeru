@@ -29,10 +29,6 @@ const MAP_ANONYMOUS: i64 = 32;
 // mremap flags
 const MREMAP_MAYMOVE: i64 = 1;
 
-const STDIN: i32 = 0;
-const STDOUT: i32 = 1;
-const STDERR: i32 = 2;
-
 fn syscall1(nr: i64, arg1: i64) i64 {
     var result: i64 = 0;
     asm volatile (
@@ -173,20 +169,6 @@ fn strlen(s: *u8) usize {
         ptr = ptr + 1;
     }
     return len;
-}
-
-fn memcpy_ptr(dest: *u8, src: *u8, n: usize) {
-    var i: usize = 0;
-    while i < n {
-        var dest_ptr: *u8 = dest + i;
-        var src_ptr: *u8 = src + i;
-        *dest_ptr = *src_ptr;
-        i += 1;
-    }
-}
-
-fn read_direct(fd: i32, buf: *u8, count: usize) i64 {
-    return syscall3(SYS_READ, fd as i64, buf as i64, count as i64);
 }
 
 // =============================================================================

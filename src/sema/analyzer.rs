@@ -13,7 +13,6 @@ type TraitMethod = (String, Vec<Type>, Option<Type>);
 
 #[derive(PartialEq, Clone, Copy)]
 enum Borrow {
-    Address,
     Shared,
     Mutable,
 }
@@ -565,12 +564,6 @@ impl SemanticAnalyzer {
 
     fn analyze_bodies(&mut self, stmts: &mut [Statement]) {
         for stmt in stmts.iter_mut() {
-            match &stmt.kind {
-                StatementKind::Function { .. }
-                | StatementKind::Struct { .. }
-                | StatementKind::Var { .. } => {}
-                _ => {}
-            }
             self.check_statement_top_level(stmt);
         }
     }
@@ -899,30 +892,11 @@ impl SemanticAnalyzer {
         let value_type = self.check_expression(value, expected_type.as_ref());
 
         let final_type = if let Some(expected) = expected_type {
-            let is_compatible = if expected.accepts(&value_type) {
-                true
-            } else {
-                match (&expected, &value_type) {
-                    (Type::Float(FloatWidth::W64), Type::Float(FloatWidth::W32)) => true,
-                    (
-                        Type::Array {
-                            elem_type: t1,
-                            len: l1,
-                        },
-                        Type::Array {
-                            elem_type: t2,
-                            len: l2,
-                        },
-                    ) => {
-                        if l1 != l2 {
-                            false
-                        } else {
-                            t1.accepts(t2)
-                        }
-                    }
-                    _ => false,
-                }
-            };
+            let is_compatible = expected.accepts(&value_type)
+                || matches!(
+                    (&expected, &value_type),
+                    (Type::Float(FloatWidth::W64), Type::Float(FloatWidth::W32))
+                );
 
             if !is_compatible && value_type != Type::Unknown {
                 self.error(
@@ -1311,28 +1285,6 @@ impl SemanticAnalyzer {
         expected_type: Option<&Type>,
         span: Span,
     ) -> Type {
-        if *operator == crate::token::Token::DoubleColon
-            && let (ExpressionKind::Identifier(enum_name), ExpressionKind::Identifier(variant_name)) =
-                (&left.kind, &right.kind)
-        {
-            let enum_name = enum_name.clone();
-            let variant_name = variant_name.clone();
-            if let Some(Type::Enum { variants, .. }) = self.enum_defs.get(&enum_name) {
-                if variants.contains(&variant_name) {
-                    return self.enum_defs.get(&enum_name).unwrap().clone();
-                } else {
-                    self.error(
-                        format!("Enum '{}' has no variant '{}'", enum_name, variant_name),
-                        span,
-                    );
-                    return Type::Unknown;
-                }
-            } else {
-                self.error(format!("'{}' is not an enum type", enum_name), span);
-                return Type::Unknown;
-            }
-        }
-
         let operator = operator.clone();
         // A number written out takes the type of the other operand, on either
         // side: `3 < x` compares at the type of `x`, as `x > 3` does.
@@ -2163,8 +2115,8 @@ impl SemanticAnalyzer {
         Type::Tuple(result_types)
     }
 
-    /// `ptr(x)`, `&x` and `&var x`: each needs a place rather than a temporary,
-    /// and neither reference form may borrow a moved value.
+    /// `&x` and `&var x`: each needs a place rather than a temporary, and
+    /// neither may borrow a moved value.
     fn check_borrow(&mut self, inner: &mut Expression, kind: Borrow, span: Span) -> Type {
         let inner_kind = inner.kind.clone();
         let inner_type = self.check_expression(inner, None);
@@ -2177,7 +2129,7 @@ impl SemanticAnalyzer {
                 _ => (false, false),
             };
 
-            if is_moved && kind != Borrow::Address {
+            if is_moved {
                 self.error(format!("Cannot borrow '{name}': value was moved"), span);
             }
             if is_const && kind == Borrow::Mutable {
@@ -2194,7 +2146,6 @@ impl SemanticAnalyzer {
         ) {
             self.error(
                 match kind {
-                    Borrow::Address => "Cannot take address of a temporary value".into(),
                     Borrow::Shared => "Cannot create reference to a temporary value".into(),
                     Borrow::Mutable => {
                         "Cannot create mutable reference to a temporary value".to_string()
@@ -2205,7 +2156,6 @@ impl SemanticAnalyzer {
         }
 
         match kind {
-            Borrow::Address => Type::Pointer(Box::new(inner_type)),
             Borrow::Shared => Type::Ref(Box::new(inner_type)),
             Borrow::Mutable => Type::RefMut(Box::new(inner_type)),
         }
@@ -2313,7 +2263,6 @@ impl SemanticAnalyzer {
                 self.check_array_literal(elements, expected_type)
             }
 
-            ExpressionKind::AddressOf(inner) => self.check_borrow(inner, Borrow::Address, span),
             ExpressionKind::BorrowRef(inner) => self.check_borrow(inner, Borrow::Shared, span),
             ExpressionKind::BorrowRefMut(inner) => self.check_borrow(inner, Borrow::Mutable, span),
             ExpressionKind::Dereference(inner) => {
@@ -2693,7 +2642,7 @@ impl SemanticAnalyzer {
     }
 
     fn error(&mut self, msg: String, span: Span) {
-        self.errors.push(ZeruError::semantic(msg, span, 0));
+        self.errors.push(ZeruError::semantic(msg, span));
     }
 
     /// The type of an integer literal, negated when `negative`: the integer

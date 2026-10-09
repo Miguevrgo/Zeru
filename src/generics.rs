@@ -217,8 +217,7 @@ fn map_expression_types(expr: &mut Expression, f: &mut impl FnMut(&mut TypeSpec)
         ExpressionKind::ArrayLiteral(elements) | ExpressionKind::Tuple(elements) => {
             map_each(elements, f)
         }
-        ExpressionKind::AddressOf(inner)
-        | ExpressionKind::BorrowRef(inner)
+        ExpressionKind::BorrowRef(inner)
         | ExpressionKind::BorrowRefMut(inner)
         | ExpressionKind::Dereference(inner) => map_expression_types(inner, f),
         ExpressionKind::InlineAsm {

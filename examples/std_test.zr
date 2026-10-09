@@ -59,6 +59,20 @@ fn main() {
     if !map.insert(-1, 7) { exit(37); }
     if map.get(-1).unwrap() != 7 { exit(38); }
 
+    // Two keys on one probe chain: removing the first must not let the second
+    // be inserted again in its place, as a duplicate.
+    var chained = HashMap.new();
+    var first_key: i64 = 0;
+    var second_key: i64 = 1;
+    while hashmap::slot(second_key) != hashmap::slot(first_key) { second_key += 1; }
+    chained.insert(first_key, 1);
+    chained.insert(second_key, 2);
+    chained.remove(first_key);
+    chained.insert(second_key, 3);
+    if chained.size() != 1 { exit(46); }
+    chained.remove(second_key);
+    if chained.contains(second_key) { exit(47); }
+
     // --- HashSet -------------------------------------------------------------
     var seen = HashSet.new();
     if !seen.insert(5) { exit(40); }

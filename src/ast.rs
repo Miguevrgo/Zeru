@@ -88,7 +88,6 @@ pub enum StatementKind {
         then_branch: Box<Statement>,
         else_branch: Option<Box<Statement>>,
     },
-    #[allow(dead_code)]
     Import {
         path: Vec<String>,
         symbols: Option<Vec<String>>,
@@ -155,8 +154,6 @@ pub enum ExpressionKind {
         value: Box<Expression>,
         arms: Vec<(Expression, Expression)>,
     },
-    #[allow(dead_code)]
-    AddressOf(Box<Expression>),
     BorrowRef(Box<Expression>),
     BorrowRefMut(Box<Expression>),
     Dereference(Box<Expression>),

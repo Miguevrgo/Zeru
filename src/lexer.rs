@@ -5,11 +5,11 @@ use crate::token::Token;
 
 pub struct Lexer<'a> {
     input: Peekable<Chars<'a>>,
-    line: usize,
     pos: usize,
 }
 
 impl<'a> Lexer<'a> {
+    #[cfg(test)]
     pub fn new(input: &'a str) -> Self {
         Self::at(input, 0)
     }
@@ -20,7 +20,6 @@ impl<'a> Lexer<'a> {
     pub fn at(input: &'a str, start: usize) -> Self {
         Self {
             input: input.chars().peekable(),
-            line: 1,
             pos: start,
         }
     }
@@ -33,9 +32,6 @@ impl<'a> Lexer<'a> {
         let ch = self.input.next();
         if let Some(c) = ch {
             self.pos += c.len_utf8();
-            if c == '\n' {
-                self.line += 1;
-            }
         }
         ch
     }
@@ -98,22 +94,17 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn next_token(&mut self) -> (Token, usize, Span) {
+    pub fn next_token(&mut self) -> (Token, Span) {
         if let Err(start) = self.skip_whitespace() {
             let message = "Unterminated block comment".to_string();
-            return (
-                Token::Illegal(message),
-                self.line,
-                Span::new(start, start + 2),
-            );
+            return (Token::Illegal(message), Span::new(start, start + 2));
         }
 
-        let start_line = self.line;
         let start_pos = self.pos;
 
         let ch = match self.advance() {
             Some(c) => c,
-            None => return (Token::Eof, start_line, Span::new(start_pos, self.pos)),
+            None => return (Token::Eof, Span::new(start_pos, self.pos)),
         };
 
         let token = match ch {
@@ -193,7 +184,7 @@ impl<'a> Lexer<'a> {
 
             _ => Token::Illegal(format!("Unexpected character '{ch}'")),
         };
-        (token, start_line, Span::new(start_pos, self.pos))
+        (token, Span::new(start_pos, self.pos))
     }
 
     fn read_identifier(&mut self, ch: char) -> Token {
@@ -366,7 +357,7 @@ mod tests {
     #[test]
     fn test_raw_string_simple() {
         let mut lexer = Lexer::new("`hello world`");
-        let (token, _, _) = lexer.next_token();
+        let (token, _) = lexer.next_token();
         match token {
             Token::StringLit(bytes) => {
                 assert_eq!(String::from_utf8(bytes).unwrap(), "hello world");
@@ -378,7 +369,7 @@ mod tests {
     #[test]
     fn test_raw_string_with_backslashes() {
         let mut lexer = Lexer::new("`C:\\Users\\file.txt`");
-        let (token, _, _) = lexer.next_token();
+        let (token, _) = lexer.next_token();
         match token {
             Token::StringLit(bytes) => {
                 assert_eq!(String::from_utf8(bytes).unwrap(), "C:\\Users\\file.txt");
@@ -390,7 +381,7 @@ mod tests {
     #[test]
     fn test_raw_string_with_quotes() {
         let mut lexer = Lexer::new("`{\"name\": \"value\"}`");
-        let (token, _, _) = lexer.next_token();
+        let (token, _) = lexer.next_token();
         match token {
             Token::StringLit(bytes) => {
                 assert_eq!(String::from_utf8(bytes).unwrap(), "{\"name\": \"value\"}");
@@ -402,7 +393,7 @@ mod tests {
     #[test]
     fn test_raw_string_with_special_chars() {
         let mut lexer = Lexer::new("`\\d+\\.\\d+`");
-        let (token, _, _) = lexer.next_token();
+        let (token, _) = lexer.next_token();
         match token {
             Token::StringLit(bytes) => {
                 assert_eq!(String::from_utf8(bytes).unwrap(), "\\d+\\.\\d+");
@@ -414,7 +405,7 @@ mod tests {
     #[test]
     fn test_raw_string_multiline() {
         let mut lexer = Lexer::new("`Line 1\nLine 2\nLine 3`");
-        let (token, _, _) = lexer.next_token();
+        let (token, _) = lexer.next_token();
         match token {
             Token::StringLit(bytes) => {
                 assert_eq!(String::from_utf8(bytes).unwrap(), "Line 1\nLine 2\nLine 3");
@@ -426,7 +417,7 @@ mod tests {
     #[test]
     fn test_raw_string_empty() {
         let mut lexer = Lexer::new("``");
-        let (token, _, _) = lexer.next_token();
+        let (token, _) = lexer.next_token();
         match token {
             Token::StringLit(bytes) => {
                 assert_eq!(String::from_utf8(bytes).unwrap(), "");
@@ -439,7 +430,7 @@ mod tests {
     fn test_unterminated_block_comment_is_reported() {
         let mut lexer = Lexer::new("fn /* never closed");
         assert_eq!(lexer.next_token().0, Token::Fn);
-        let (token, _, span) = lexer.next_token();
+        let (token, span) = lexer.next_token();
         assert_eq!(
             token,
             Token::Illegal("Unterminated block comment".to_string())
@@ -462,7 +453,7 @@ mod tests {
     #[test]
     fn test_raw_string_unterminated() {
         let mut lexer = Lexer::new("`unterminated");
-        let (token, _, _) = lexer.next_token();
+        let (token, _) = lexer.next_token();
         match token {
             Token::Illegal(msg) => {
                 assert_eq!(msg, "Unterminated raw string");

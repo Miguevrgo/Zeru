@@ -13,10 +13,8 @@ pub struct Parser<'a> {
 
     current_token: Token,
     current_span: Span,
-    current_line: usize,
     peek_token: Token,
     peek_span: Span,
-    peek_line: usize,
 
     pub errors: Vec<ZeruError>,
     panic_mode: bool,
@@ -42,10 +40,8 @@ impl<'a> Parser<'a> {
             lexer,
             current_token: Token::Eof,
             current_span: Span::default(),
-            current_line: 1,
             peek_token: Token::Eof,
             peek_span: Span::default(),
-            peek_line: 0,
             errors: Vec::new(),
             panic_mode: false,
             no_struct_literal: false,
@@ -62,7 +58,6 @@ impl<'a> Parser<'a> {
     fn next_token(&mut self) {
         self.current_token = self.peek_token.clone();
         self.current_span = self.peek_span;
-        self.current_line = self.peek_line;
 
         if self.pending_gt {
             self.pending_gt = false;
@@ -71,15 +66,14 @@ impl<'a> Parser<'a> {
             return;
         }
 
-        let (tok, line, span) = self.lexer.next_token();
+        let (tok, span) = self.lexer.next_token();
 
         if let Token::Illegal(ref msg) = tok {
-            self.errors.push(ZeruError::syntax(msg, span, line));
+            self.errors.push(ZeruError::syntax(msg, span));
             self.panic_mode = true;
         }
 
         self.peek_token = tok;
-        self.peek_line = line;
         self.peek_span = span;
     }
 
@@ -172,9 +166,9 @@ impl<'a> Parser<'a> {
             Token::For => self.parse_for_statement(),
             Token::Struct => self.parse_struct_statement(),
             Token::Enum => self.parse_enum_statement(),
-            Token::Break => self.parse_break_statement(),
-            Token::Continue => self.parse_continue_statement(),
-            Token::LBrace => self.parse_block_statement_wrapper(),
+            Token::Break => self.parse_jump(StatementKind::Break),
+            Token::Continue => self.parse_jump(StatementKind::Continue),
+            Token::LBrace => Some(self.parse_block()),
             Token::Import => self.parse_import_statement(),
             _ => self.parse_expression_statement(),
         }
@@ -274,27 +268,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_tuple_type(&mut self) -> Option<TypeSpec> {
-        if self.peek_token_is(&Token::RParen) {
-            self.next_token();
-            return Some(TypeSpec::Tuple(Vec::new()));
-        }
-
-        self.next_token();
-        let mut types = vec![self.parse_type()?];
-
-        while self.peek_token_is(&Token::Comma) {
-            self.next_token();
-            if self.peek_token_is(&Token::RParen) {
-                break;
-            }
-            self.next_token();
-            types.push(self.parse_type()?);
-        }
-
-        if !self.expect_peek(&Token::RParen) {
-            return None;
-        }
-        Some(TypeSpec::Tuple(types))
+        Some(TypeSpec::Tuple(
+            self.parse_list(&Token::RParen, Self::parse_type)?,
+        ))
     }
 
     /// A possibly qualified name, then generic arguments or a `?`/`!` suffix.
@@ -399,7 +375,7 @@ impl<'a> Parser<'a> {
 
         let type_params = if self.peek_token_is(&Token::Lt) {
             self.next_token();
-            self.parse_type_parameters()
+            self.parse_type_parameters()?
         } else {
             Vec::new()
         };
@@ -408,7 +384,7 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        let params = self.parse_function_parameters();
+        let params = self.parse_function_parameters()?;
         let mut return_type = None;
 
         if !self.peek_token_is(&Token::LBrace) {
@@ -437,112 +413,39 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_type_parameters(&mut self) -> Vec<TypeParameter> {
-        let mut params = Vec::new();
-
-        loop {
-            self.next_token();
-
-            if self.current_token == Token::Gt {
-                break;
-            }
-
-            let name = match &self.current_token {
-                Token::Identifier(n) => n.clone(),
-                _ => {
-                    self.error_current("Expected type parameter name");
-                    break;
-                }
-            };
-
-            let bound = if self.peek_token_is(&Token::Colon) {
-                self.next_token();
-                self.next_token();
-                match &self.current_token {
-                    Token::Identifier(b) => Some(b.clone()),
-                    _ => {
-                        self.error_current("Expected trait bound name");
-                        None
-                    }
-                }
+    fn parse_type_parameters(&mut self) -> Option<Vec<TypeParameter>> {
+        self.parse_list(&Token::Gt, |p| {
+            let name = p.current_identifier("type parameter name")?;
+            let bound = if p.peek_token_is(&Token::Colon) {
+                p.next_token();
+                Some(p.expect_identifier()?)
             } else {
                 None
             };
-
-            params.push(TypeParameter { name, bound });
-
-            if self.peek_token_is(&Token::Comma) {
-                self.next_token();
-            } else if self.peek_token_is(&Token::Gt) {
-                self.next_token();
-                break;
-            } else {
-                self.error_peek("Expected ',' or '>' in type parameters");
-                break;
-            }
-        }
-
-        params
+            Some(TypeParameter { name, bound })
+        })
     }
 
-    fn parse_function_parameters(&mut self) -> Vec<(String, TypeSpec, bool)> {
-        let mut params = Vec::new();
-        if self.peek_token_is(&Token::RParen) {
-            self.next_token();
-            return params;
-        }
-
-        self.next_token();
-        params.push(self.parse_parameter());
-
-        while self.peek_token_is(&Token::Comma) {
-            self.next_token();
-            if self.peek_token_is(&Token::RParen) {
-                break;
-            }
-            self.next_token();
-            params.push(self.parse_parameter());
-        }
-
-        if !self.expect_peek(&Token::RParen) {
-            return Vec::new();
-        }
-        params
+    fn parse_function_parameters(&mut self) -> Option<Vec<(String, TypeSpec, bool)>> {
+        self.parse_list(&Token::RParen, Self::parse_parameter)
     }
 
-    fn parse_parameter(&mut self) -> (String, TypeSpec, bool) {
-        let is_mut = if self.cur_token_is(&Token::Var) {
+    fn parse_parameter(&mut self) -> Option<(String, TypeSpec, bool)> {
+        let is_mut = self.cur_token_is(&Token::Var);
+        if is_mut {
             self.next_token();
-            true
-        } else {
-            false
-        };
-
+        }
         if self.cur_token_is(&Token::SelfTok) {
-            return (
-                "self".to_string(),
-                TypeSpec::Named("self".to_string()),
-                is_mut,
-            );
+            let self_type = TypeSpec::Named("self".to_string());
+            return Some(("self".to_string(), self_type, is_mut));
         }
 
-        let name = match &self.current_token {
-            Token::Identifier(n) => n.clone(),
-            _ => {
-                self.error_current("Expected parameter name");
-                String::new()
-            }
-        };
-
+        let name = self.current_identifier("parameter name")?;
         if !self.expect_peek(&Token::Colon) {
-            return (name, TypeSpec::Named("Unknown".to_string()), is_mut);
+            return None;
         }
         self.next_token();
-
-        let type_spec = self
-            .parse_type()
-            .unwrap_or(TypeSpec::Named("Unknown".to_string()));
-        (name, type_spec, is_mut)
+        Some((name, self.parse_type()?, is_mut))
     }
 
     fn parse_if_statement(&mut self) -> Option<Statement> {
@@ -550,18 +453,10 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         let condition = self.parse_condition()?;
-
         if !self.expect_peek(&Token::LBrace) {
             return None;
         }
-
-        let block_start = self.current_span;
-        let block_stmts = self.parse_block_statement();
-        let block_end = self.current_span;
-        let then_branch = Box::new(Statement::new(
-            StatementKind::Block(block_stmts),
-            block_start.merge(block_end),
-        ));
+        let then_branch = Box::new(self.parse_block());
 
         let else_branch = if self.peek_token_is(&Token::Else) {
             self.next_token();
@@ -572,27 +467,18 @@ impl<'a> Parser<'a> {
                 if !self.expect_peek(&Token::LBrace) {
                     return None;
                 }
-                let else_block_start = self.current_span;
-                let else_block_stmts = self.parse_block_statement();
-                let else_block_end = self.current_span;
-                Some(Box::new(Statement::new(
-                    StatementKind::Block(else_block_stmts),
-                    else_block_start.merge(else_block_end),
-                )))
+                Some(Box::new(self.parse_block()))
             }
         } else {
             None
         };
 
-        let end_span = self.current_span;
-        Some(Statement::new(
-            StatementKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            },
-            start_span.merge(end_span),
-        ))
+        let kind = StatementKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        };
+        Some(Statement::new(kind, start_span.merge(self.current_span)))
     }
 
     fn parse_while_statement(&mut self) -> Option<Statement> {
@@ -600,57 +486,34 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         let cond = self.parse_condition()?;
-
         if !self.expect_peek(&Token::LBrace) {
             return None;
         }
-        let block_start = self.current_span;
-        let block_stmts = self.parse_block_statement();
-        let block_end = self.current_span;
-        let body = Box::new(Statement::new(
-            StatementKind::Block(block_stmts),
-            block_start.merge(block_end),
-        ));
-
-        let end_span = self.current_span;
-        Some(Statement::new(
-            StatementKind::While { cond, body },
-            start_span.merge(end_span),
-        ))
+        let body = Box::new(self.parse_block());
+        let kind = StatementKind::While { cond, body };
+        Some(Statement::new(kind, start_span.merge(self.current_span)))
     }
 
     fn parse_for_statement(&mut self) -> Option<Statement> {
         let start_span = self.current_span;
 
         let variable = self.expect_identifier()?;
-
         if !self.expect_peek(&Token::In) {
             return None;
         }
         self.next_token();
 
         let iterable = self.parse_expression(Precedence::Lowest)?;
-
         if !self.expect_peek(&Token::LBrace) {
             return None;
         }
-        let block_start = self.current_span;
-        let block_stmts = self.parse_block_statement();
-        let block_end = self.current_span;
-        let body = Box::new(Statement::new(
-            StatementKind::Block(block_stmts),
-            block_start.merge(block_end),
-        ));
-
-        let end_span = self.current_span;
-        Some(Statement::new(
-            StatementKind::ForIn {
-                variable,
-                iterable,
-                body,
-            },
-            start_span.merge(end_span),
-        ))
+        let body = Box::new(self.parse_block());
+        let kind = StatementKind::ForIn {
+            variable,
+            iterable,
+            body,
+        };
+        Some(Statement::new(kind, start_span.merge(self.current_span)))
     }
 
     fn parse_struct_statement(&mut self) -> Option<Statement> {
@@ -660,7 +523,7 @@ impl<'a> Parser<'a> {
 
         let type_params = if self.peek_token_is(&Token::Lt) {
             self.next_token();
-            self.parse_type_parameters()
+            self.parse_type_parameters()?
         } else {
             Vec::new()
         };
@@ -760,38 +623,15 @@ impl<'a> Parser<'a> {
         let start_span = self.current_span;
 
         let name = self.expect_identifier()?;
-
         if !self.expect_peek(&Token::LBrace) {
             return None;
         }
+        let variants = self.parse_list(&Token::RBrace, |p| {
+            p.current_identifier("enum variant name")
+        })?;
 
-        let mut variants = Vec::new();
-        while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
-            self.next_token();
-            if let Token::Identifier(v) = &self.current_token {
-                variants.push(v.clone())
-            } else {
-                self.error_current("Expected enum variant name");
-                return None;
-            }
-
-            if self.peek_token_is(&Token::RBrace) {
-                break;
-            }
-            if !self.expect_peek(&Token::Comma) {
-                return None;
-            }
-        }
-
-        if !self.expect_peek(&Token::RBrace) {
-            return None;
-        }
-
-        let end_span = self.current_span;
-        Some(Statement::new(
-            StatementKind::Enum { name, variants },
-            start_span.merge(end_span),
-        ))
+        let kind = StatementKind::Enum { name, variants };
+        Some(Statement::new(kind, start_span.merge(self.current_span)))
     }
 
     fn parse_trait_statement(&mut self) -> Option<Statement> {
@@ -818,7 +658,7 @@ impl<'a> Parser<'a> {
                 return None;
             }
 
-            let params = self.parse_function_parameters();
+            let params = self.parse_function_parameters()?;
             let mut return_type = None;
 
             if !self.peek_token_is(&Token::Semicolon)
@@ -905,58 +745,29 @@ impl<'a> Parser<'a> {
 
     fn parse_struct_literal(&mut self, name: String, start_span: Span) -> Option<Expression> {
         self.next_token();
-        let saved = std::mem::replace(&mut self.no_struct_literal, false);
-        let literal = self.parse_struct_fields(name, start_span);
-        self.no_struct_literal = saved;
-        literal
+        let fields = self.allowing_struct_literals(|p| {
+            p.parse_list(&Token::RBrace, |p| {
+                let field = p.current_identifier("field name")?;
+                if !p.expect_peek(&Token::Colon) {
+                    return None;
+                }
+                p.next_token();
+                Some((field, p.parse_expression(Precedence::Lowest)?))
+            })
+        })?;
+
+        let kind = ExpressionKind::StructLiteral { name, fields };
+        Some(Expression::new(kind, start_span.merge(self.current_span)))
     }
 
-    fn parse_struct_fields(&mut self, name: String, start_span: Span) -> Option<Expression> {
-        let mut fields = Vec::new();
-
-        while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
-            self.next_token();
-            let field_name = match &self.current_token {
-                Token::Identifier(n) => n.clone(),
-                _ => return None,
-            };
-
-            if !self.expect_peek(&Token::Colon) {
-                return None;
-            }
-            self.next_token();
-
-            let value = self.parse_expression(Precedence::Lowest)?;
-            fields.push((field_name, value));
-
-            if self.peek_token_is(&Token::RBrace) {
-                break;
-            }
-
-            if !self.expect_peek(&Token::Comma) {
-                return None;
-            }
-        }
-
-        if !self.expect_peek(&Token::RBrace) {
-            return None;
-        }
-
-        let end_span = self.current_span;
-        Some(Expression::new(
-            ExpressionKind::StructLiteral { name, fields },
-            start_span.merge(end_span),
-        ))
-    }
-
-    fn parse_block_statement_wrapper(&mut self) -> Option<Statement> {
+    /// A `{ .. }` block as one statement, starting on its `{`.
+    fn parse_block(&mut self) -> Statement {
         let start_span = self.current_span;
-        let stmts = self.parse_block_statement();
-        let end_span = self.current_span;
-        Some(Statement::new(
-            StatementKind::Block(stmts),
-            start_span.merge(end_span),
-        ))
+        let statements = self.parse_block_statement();
+        Statement::new(
+            StatementKind::Block(statements),
+            start_span.merge(self.current_span),
+        )
     }
 
     fn parse_import_statement(&mut self) -> Option<Statement> {
@@ -1000,53 +811,16 @@ impl<'a> Parser<'a> {
         if !self.expect_peek(&Token::LBrace) {
             return None;
         }
-
-        let mut items = Vec::new();
-        while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
-            items.push(self.expect_identifier()?);
-
-            if self.peek_token_is(&Token::RBrace) {
-                break;
-            }
-            if !self.expect_peek(&Token::Comma) {
-                return None;
-            }
-        }
-
-        if !self.expect_peek(&Token::RBrace) {
-            return None;
-        }
-        Some(items)
+        self.parse_list(&Token::RBrace, |p| p.current_identifier("imported name"))
     }
 
-    fn parse_break_statement(&mut self) -> Option<Statement> {
+    /// `break` or `continue`, with an optional `;`.
+    fn parse_jump(&mut self, kind: StatementKind) -> Option<Statement> {
         let start_span = self.current_span;
-        self.next_token();
-
         if self.peek_token_is(&Token::Semicolon) {
             self.next_token();
         }
-
-        let end_span = self.current_span;
-        Some(Statement::new(
-            StatementKind::Break,
-            start_span.merge(end_span),
-        ))
-    }
-
-    fn parse_continue_statement(&mut self) -> Option<Statement> {
-        let start_span = self.current_span;
-        self.next_token();
-
-        if self.peek_token_is(&Token::Semicolon) {
-            self.next_token();
-        }
-
-        let end_span = self.current_span;
-        Some(Statement::new(
-            StatementKind::Continue,
-            start_span.merge(end_span),
-        ))
+        Some(Statement::new(kind, start_span.merge(self.current_span)))
     }
 
     fn parse_block_statement(&mut self) -> Vec<Statement> {
@@ -1123,58 +897,26 @@ impl<'a> Parser<'a> {
         left_exp
     }
 
+    /// `(a)` is `a`; `()`, `(a,)` and `(a, b)` are tuples. Starts on the `(`.
     fn parse_grouped_expression(&mut self) -> Option<Expression> {
         let start_span = self.current_span;
-        self.next_token();
-        let saved = std::mem::replace(&mut self.no_struct_literal, false);
-        let grouped = self.parse_grouped_body(start_span);
-        self.no_struct_literal = saved;
-        grouped
-    }
-
-    fn parse_grouped_body(&mut self, start_span: Span) -> Option<Expression> {
-        if self.cur_token_is(&Token::RParen) {
-            return Some(Expression::new(
-                ExpressionKind::Tuple(vec![]),
-                start_span.merge(self.current_span),
-            ));
-        }
-
-        let first = self.parse_expression(Precedence::Lowest)?;
-
-        if self.peek_token_is(&Token::Comma) {
+        self.allowing_struct_literals(|p| {
+            if p.peek_token_is(&Token::RParen) {
+                p.next_token();
+                let span = start_span.merge(p.current_span);
+                return Some(Expression::new(ExpressionKind::Tuple(vec![]), span));
+            }
+            p.next_token();
+            let first = p.parse_expression(Precedence::Lowest)?;
+            if !p.peek_token_is(&Token::Comma) {
+                return p.expect_peek(&Token::RParen).then_some(first);
+            }
+            p.next_token();
             let mut elements = vec![first];
-
-            while self.peek_token_is(&Token::Comma) {
-                self.next_token();
-
-                if self.peek_token_is(&Token::RParen) {
-                    self.next_token();
-                    return Some(Expression::new(
-                        ExpressionKind::Tuple(elements),
-                        start_span.merge(self.current_span),
-                    ));
-                }
-
-                self.next_token();
-                let elem = self.parse_expression(Precedence::Lowest)?;
-                elements.push(elem);
-            }
-
-            if !self.expect_peek(&Token::RParen) {
-                return None;
-            }
-
-            return Some(Expression::new(
-                ExpressionKind::Tuple(elements),
-                start_span.merge(self.current_span),
-            ));
-        }
-
-        if !self.expect_peek(&Token::RParen) {
-            return None;
-        }
-        Some(first)
+            elements.extend(p.parse_expressions(&Token::RParen)?);
+            let span = start_span.merge(p.current_span);
+            Some(Expression::new(ExpressionKind::Tuple(elements), span))
+        })
     }
 
     fn parse_match_expression(&mut self) -> Option<Expression> {
@@ -1475,73 +1217,44 @@ impl<'a> Parser<'a> {
 
     fn parse_array_literal(&mut self) -> Option<Expression> {
         let start_span = self.current_span;
-        self.next_token();
-        let saved = std::mem::replace(&mut self.no_struct_literal, false);
-        let literal = self.parse_array_body(start_span);
-        self.no_struct_literal = saved;
-        literal
+        let elements = self.allowing_struct_literals(Self::parse_array_elements)?;
+        let span = start_span.merge(self.current_span);
+        Some(Expression::new(
+            ExpressionKind::ArrayLiteral(elements),
+            span,
+        ))
     }
 
-    fn parse_array_body(&mut self, start_span: Span) -> Option<Expression> {
-        let mut elements = Vec::new();
-
-        if self.cur_token_is(&Token::RBracket) {
-            let end_span = self.current_span;
+    /// `[a, b, c]` or `[value; count]`, starting on the `[`.
+    fn parse_array_elements(&mut self) -> Option<Vec<Expression>> {
+        if self.peek_token_is(&Token::RBracket) {
             self.next_token();
-            return Some(Expression::new(
-                ExpressionKind::ArrayLiteral(elements),
-                start_span.merge(end_span),
-            ));
+            return Some(Vec::new());
         }
-
-        let first_elem = self.parse_expression(Precedence::Lowest)?;
+        self.next_token();
+        let first = self.parse_expression(Precedence::Lowest)?;
 
         if self.peek_token_is(&Token::Semicolon) {
             self.next_token();
             self.next_token();
-
-            let count = match &self.current_token {
-                Token::Int(n) => *n,
-                _ => {
-                    self.error_current("Array repeat count must be an integer literal");
-                    return None;
-                }
+            let Token::Int(count) = self.current_token else {
+                self.error_current("Array repeat count must be an integer literal");
+                return None;
             };
-
             if !self.expect_peek(&Token::RBracket) {
                 return None;
             }
-
-            for _ in 0..count {
-                elements.push(first_elem.clone());
-            }
-            let end_span = self.current_span;
-            return Some(Expression::new(
-                ExpressionKind::ArrayLiteral(elements),
-                start_span.merge(end_span),
-            ));
+            return Some(vec![first; count as usize]);
         }
 
-        let mut elements = Vec::new();
-        elements.push(first_elem);
-
-        while self.peek_token_is(&Token::Comma) {
+        let mut elements = vec![first];
+        if self.peek_token_is(&Token::Comma) {
             self.next_token();
-            if self.peek_token_is(&Token::RBracket) {
-                break;
-            }
-            self.next_token();
-            elements.push(self.parse_expression(Precedence::Lowest)?);
-        }
-
-        if !self.expect_peek(&Token::RBracket) {
+            elements.extend(self.parse_expressions(&Token::RBracket)?);
+        } else if !self.expect_peek(&Token::RBracket) {
             return None;
         }
-        let end_span = self.current_span;
-        Some(Expression::new(
-            ExpressionKind::ArrayLiteral(elements),
-            start_span.merge(end_span),
-        ))
+        Some(elements)
     }
 
     fn parse_index_expression(&mut self, left: Expression) -> Option<Expression> {
@@ -1565,17 +1278,12 @@ impl<'a> Parser<'a> {
 
     fn parse_call_expression(&mut self, function: Expression) -> Option<Expression> {
         let start_span = function.span;
-        self.next_token();
-        let arguments = self.allowing_struct_literals(Self::parse_call_arguments);
-        let end_span = self.current_span;
-
-        Some(Expression::new(
-            ExpressionKind::Call {
-                function: Box::new(function),
-                arguments,
-            },
-            start_span.merge(end_span),
-        ))
+        let arguments = self.allowing_struct_literals(|p| p.parse_expressions(&Token::RParen))?;
+        let kind = ExpressionKind::Call {
+            function: Box::new(function),
+            arguments,
+        };
+        Some(Expression::new(kind, start_span.merge(self.current_span)))
     }
 
     fn parse_get_expression(&mut self, obj: Expression) -> Option<Expression> {
@@ -1603,35 +1311,36 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_call_arguments(&mut self) -> Vec<Expression> {
-        let mut args = Vec::new();
-
-        // Empty call: ()
-        if self.cur_token_is(&Token::RParen) {
-            return args;
-        }
-
-        if let Some(arg) = self.parse_expression(Precedence::Lowest) {
-            args.push(arg);
-        }
-
-        while self.peek_token_is(&Token::Comma) {
+    /// `item, item, ..` up to `close`, a trailing comma allowed. Starts on the
+    /// token before the first item and ends on `close`.
+    fn parse_list<T>(
+        &mut self,
+        close: &Token,
+        mut item: impl FnMut(&mut Self) -> Option<T>,
+    ) -> Option<Vec<T>> {
+        let mut items = Vec::new();
+        while !self.peek_token_is(close) {
             self.next_token();
-            // A trailing comma is allowed, as it already was in a struct literal.
-            if self.peek_token_is(&Token::RParen) {
-                break;
-            }
-            self.next_token();
-            if let Some(arg) = self.parse_expression(Precedence::Lowest) {
-                args.push(arg);
+            items.push(item(self)?);
+            if !self.peek_token_is(close) && !self.expect_peek(&Token::Comma) {
+                return None;
             }
         }
+        self.next_token();
+        Some(items)
+    }
 
-        if !self.expect_peek(&Token::RParen) {
-            return Vec::new();
+    fn parse_expressions(&mut self, close: &Token) -> Option<Vec<Expression>> {
+        self.parse_list(close, |p| p.parse_expression(Precedence::Lowest))
+    }
+
+    /// The name the current token holds, or a complaint about it.
+    fn current_identifier(&mut self, what: &str) -> Option<String> {
+        if let Token::Identifier(name) = &self.current_token {
+            return Some(name.clone());
         }
-
-        args
+        self.error_current(&format!("Expected {what}"));
+        None
     }
 
     fn cur_token_is(&self, t: &Token) -> bool {
@@ -1673,7 +1382,6 @@ impl<'a> Parser<'a> {
         self.errors.push(ZeruError::syntax(
             format!("{expected} expected, found: {:?}", self.peek_token),
             self.current_span,
-            self.current_line,
         ));
     }
 
@@ -1682,11 +1390,8 @@ impl<'a> Parser<'a> {
             return;
         }
         self.panic_mode = true;
-        self.errors.push(ZeruError::syntax(
-            msg.to_string(),
-            self.current_span,
-            self.current_line,
-        ));
+        self.errors
+            .push(ZeruError::syntax(msg.to_string(), self.current_span));
     }
 }
 
@@ -1764,7 +1469,7 @@ fn token_precedence(token: &Token) -> Precedence {
 
         Token::As => Precedence::Cast,
         Token::LParen => Precedence::Call,
-        Token::Dot | Token::LBracket | Token::DoubleColon => Precedence::Index,
+        Token::Dot | Token::LBracket => Precedence::Index,
         _ => Precedence::Lowest,
     }
 }
@@ -2050,37 +1755,26 @@ mod tests {
 
     #[test]
     fn test_operator_precedence() {
-        let tests = vec![
-            ("5 + 5;", "(5 + 5)"),
-            ("5 - 5;", "(5 - 5)"),
-            ("5 * 5;", "(5 * 5)"),
-            ("5 / 5;", "(5 / 5)"),
-            ("5 % 5;", "(5 % 5)"),
-            ("5 > 5 == 3 < 4;", "((5 > 5) == (3 < 4))"),
-            ("5 < 5 != 3 > 4;", "((5 < 5) != (3 > 4))"),
+        for (input, expected) in [
+            ("5 > 5 == 3 < 4", "((5 Gt 5) Eq (3 Lt 4))"),
+            ("5 < 5 != 3 > 4", "((5 Lt 5) NotEq (3 Gt 4))"),
             (
-                "3 + 4 * 5 == 3 * 1 + 4 * 5;",
-                "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
+                "3 + 4 * 5 == 3 * 1 + 4 * 5",
+                "((3 Plus (4 Star 5)) Eq ((3 Star 1) Plus (4 Star 5)))",
             ),
             (
-                "4 + 5 % 2 == 4 * 1 + 5 % 2;",
-                "((4 + (5 % 2)) == ((4 * 1) + (5 % 2)))",
+                "4 + 5 % 2 == 4 * 1 + 5 % 2",
+                "((4 Plus (5 Mod 2)) Eq ((4 Star 1) Plus (5 Mod 2)))",
             ),
-            ("true;", "true"),
-            ("false;", "false"),
-            ("3 > 5 == false;", "((3 > 5) == false)"),
-            ("(5 + 5) * 2;", "((5 + 5) * 2)"),
-        ];
-
-        for (input, _) in tests {
-            let wrapped_input = format!("fn main() {{ {} }}", input);
-            let lexer = Lexer::new(&wrapped_input);
-            let mut parser = Parser::new(lexer);
-            let program = parser.parse_program();
-            check_parser_errors(&parser);
-
+            ("(5 + 5) * 2", "((5 Plus 5) Star 2)"),
+            ("a - b - c", "((a Minus b) Minus c)"),
+        ] {
+            let program = parse_input(&format!("fn main() {{ var t = {input}; }}"));
             let body = get_function_body(&program.statements[0]);
-            assert_eq!(body.len(), 1);
+            let StatementKind::Var { value, .. } = &body[0].kind else {
+                panic!("Expected a var statement");
+            };
+            assert_eq!(shape(value), expected, "{input}");
         }
     }
 
@@ -2528,9 +2222,6 @@ mod tests {
         }
         ";
         let program = parse_input(input);
-
-        check_parser_errors(&Parser::new(Lexer::new(input)));
-
         let body = get_function_body(&program.statements[0]);
         assert_eq!(body.len(), 2);
 

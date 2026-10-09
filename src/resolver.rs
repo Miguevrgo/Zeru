@@ -5,11 +5,11 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::ast::{Program, StatementKind};
 use crate::codegen::{SafetyMode, compiler::Compiler};
 use crate::errors::{Sources, ZeruError, report_errors};
 use crate::sema::analyzer::SemanticAnalyzer;
-use crate::{CompileError, ast::Program};
-use crate::{lexer::Lexer, modules, parser::Parser, token::Token};
+use crate::{CompileError, lexer::Lexer, modules, parser::Parser};
 
 pub const RED: &str = "\x1b[1;38;2;224;108;117m";
 pub const GREEN: &str = "\x1b[1;38;2;152;195;121m";
@@ -49,67 +49,20 @@ fn resolve_import(import_path: &str, root: &Path) -> Result<Option<PathBuf>, Com
     Ok(full_path.exists().then_some(full_path))
 }
 
-struct ImportInfo {
-    path: String,
-    symbols: Option<Vec<String>>,
-}
-
-/// Extracts imports from the source code, only needs to look
-/// at the beginning as zeru imposes import in the beginning
-fn extract_imports(source: &str) -> Vec<ImportInfo> {
-    let mut lexer = Lexer::new(source);
-    let mut imports = Vec::new();
-    let mut current = lexer.next_token().0;
-
-    while current == Token::Import {
-        let mut path = Vec::new();
-        current = lexer.next_token().0;
-
-        while let Token::Identifier(name) = current {
-            path.push(name);
-            current = lexer.next_token().0;
-            if current == Token::Dot {
-                current = lexer.next_token().0;
-            } else {
-                break;
-            }
-        }
-
-        if path.is_empty() {
-            break;
-        }
-
-        let mut symbols = None;
-        if current == Token::DoubleColon {
-            if lexer.next_token().0 == Token::LBrace {
-                let mut listed = Vec::new();
-                loop {
-                    match lexer.next_token().0 {
-                        Token::Identifier(sym) => listed.push(sym),
-                        Token::RBrace | Token::Eof => break,
-                        _ => {}
-                    }
-                }
-                symbols = Some(listed);
-            }
-            current = lexer.next_token().0;
-        }
-
-        if current == Token::Semicolon {
-            current = lexer.next_token().0;
-        }
-
-        imports.push(ImportInfo {
-            path: path.join("."),
-            symbols,
-        });
-    }
-
-    imports
+/// The `import`s a parsed file opens with, as dotted paths and selections.
+fn imports_of(program: &Program) -> Vec<(String, Option<Vec<String>>)> {
+    program
+        .statements
+        .iter()
+        .filter_map(|statement| match &statement.kind {
+            StatementKind::Import { path, symbols } => Some((path.join("."), symbols.clone())),
+            _ => None,
+        })
+        .collect()
 }
 
 fn load_modules(
-    imports: &[ImportInfo],
+    imports: &[(String, Option<Vec<String>>)],
     root: &Path,
     loaded: &mut HashSet<String>,
     aliases: &mut HashMap<String, String>,
@@ -117,9 +70,9 @@ fn load_modules(
     program: &mut Program,
     errors: &mut Vec<ZeruError>,
 ) -> Result<(), CompileError> {
-    for import in imports {
-        let short_name = import.path.split('.').next_back().unwrap();
-        if let Some(listed) = &import.symbols {
+    for (import_path, symbols) in imports {
+        let short_name = import_path.split('.').next_back().unwrap();
+        if let Some(listed) = symbols {
             aliases.extend(
                 listed
                     .iter()
@@ -127,17 +80,17 @@ fn load_modules(
             );
         }
 
-        if loaded.insert(import.path.clone()) {
-            let Some(file_path) = resolve_import(&import.path, root)? else {
-                return Err(CompileError::ModuleNotFound(import.path.clone()));
+        if loaded.insert(import_path.clone()) {
+            let Some(file_path) = resolve_import(import_path, root)? else {
+                return Err(CompileError::ModuleNotFound(import_path.clone()));
             };
             let source = std::fs::read_to_string(&file_path)
-                .map_err(|_| CompileError::ModuleNotFound(import.path.clone()))?;
+                .map_err(|_| CompileError::ModuleNotFound(import_path.clone()))?;
 
+            let mut module = parse_file(file_path.display().to_string(), &source, sources, errors);
             let mut inner_aliases = HashMap::new();
-            let inner = extract_imports(&source);
             load_modules(
-                &inner,
+                &imports_of(&module),
                 root,
                 loaded,
                 &mut inner_aliases,
@@ -145,8 +98,6 @@ fn load_modules(
                 program,
                 errors,
             )?;
-
-            let mut module = parse_file(file_path.display().to_string(), &source, sources, errors);
             modules::qualify(&mut module, Some(short_name), &inner_aliases);
             program.statements.append(&mut module.statements);
         }
@@ -211,9 +162,15 @@ pub fn compile_pipeline(
     let mut loaded = HashSet::from(["std.builtin".to_string()]);
     let mut aliases: HashMap<String, String> = HashMap::new();
 
+    let mut main = parse_file(
+        path.display().to_string(),
+        &user_code,
+        &mut sources,
+        &mut errors,
+    );
     let root = path.parent().unwrap_or(Path::new("."));
     load_modules(
-        &extract_imports(&user_code),
+        &imports_of(&main),
         root,
         &mut loaded,
         &mut aliases,
@@ -221,13 +178,6 @@ pub fn compile_pipeline(
         &mut program,
         &mut errors,
     )?;
-
-    let mut main = parse_file(
-        path.display().to_string(),
-        &user_code,
-        &mut sources,
-        &mut errors,
-    );
     modules::qualify(&mut main, None, &aliases);
     program.statements.append(&mut main.statements);
 

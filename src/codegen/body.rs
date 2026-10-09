@@ -772,16 +772,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
             ExpressionKind::Cast { left, target } => self.lower_cast(left, target, expr.span),
 
-            // `&x`, `&var x` and `ptr(x)` all lower to the address of the lvalue.
-            ExpressionKind::AddressOf(inner)
-            | ExpressionKind::BorrowRef(inner)
-            | ExpressionKind::BorrowRefMut(inner) => match self.compile_lvalue(inner) {
-                Some((ptr, _)) => ptr.into(),
-                None => {
-                    self.error("Cannot take the address of a temporary", inner.span);
-                    self.dummy_val()
+            // `&x` and `&var x` both lower to the address of the lvalue.
+            ExpressionKind::BorrowRef(inner) | ExpressionKind::BorrowRefMut(inner) => {
+                match self.compile_lvalue(inner) {
+                    Some((ptr, _)) => ptr.into(),
+                    None => {
+                        self.error("Cannot take the address of a temporary", inner.span);
+                        self.dummy_val()
+                    }
                 }
-            },
+            }
 
             ExpressionKind::Dereference(inner) => {
                 let pointee = self.pointee_type_of(inner);
@@ -868,13 +868,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     /// Read a field or element, as an enum tag or through its storage.
     fn lower_place_read(&mut self, expr: &Expression) -> BasicValueEnum<'ctx> {
-        if let ExpressionKind::Get { object, name } = &expr.kind
-            && let ExpressionKind::Identifier(enum_name) = &object.kind
-            && let Some(tag) = self.enum_variant_tag(&format!("{enum_name}::{name}"))
-        {
-            return tag;
-        }
-
         if let Some((ptr, ty)) = self.compile_lvalue(expr) {
             let label = match &expr.kind {
                 ExpressionKind::Get { name, .. } => name.as_str(),
@@ -1293,7 +1286,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     /// Dispatch a binary operator on the operand category (integer, float,
-    /// pointer arithmetic, pointer comparison), plus `::`, `&&` and `||`.
+    /// pointer arithmetic, pointer comparison), plus `&&` and `||`.
     fn lower_infix(
         &mut self,
         left: &Expression,
@@ -1302,18 +1295,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         expected_type: Option<BasicTypeEnum<'ctx>>,
         expr: &Expression,
     ) -> BasicValueEnum<'ctx> {
-        if *operator == Token::DoubleColon
-            && let (ExpressionKind::Identifier(enum_name), ExpressionKind::Identifier(variant_name)) =
-                (&left.kind, &right.kind)
-        {
-            if let Some(tag) = self.enum_variant_tag(&format!("{enum_name}::{variant_name}")) {
-                return tag;
-            }
-
-            self.error("Invalid '::' expression", expr.span);
-            return self.dummy_val();
-        }
-
         if matches!(operator, Token::And | Token::Or) {
             return self.lower_short_circuit(left, operator, right, expr.span);
         }

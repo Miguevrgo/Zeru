@@ -31,7 +31,7 @@ const MEMCPY_FN: &str = "__zeru_memcpy";
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub(super) fn error(&mut self, message: impl Into<String>, span: Span) {
-        self.errors.push(ZeruError::semantic(message, span, 0));
+        self.errors.push(ZeruError::semantic(message, span));
     }
 
     /// Fallback value returned after an error is recorded, so lowering can continue.
@@ -1046,43 +1046,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             "is_ok" => Some(tag().into()),
             "is_err" => Some(self.builder.build_not(tag(), "res_is_err").unwrap().into()),
             "unwrap" => {
-                let tag = tag();
-                self.abort_unless_tag_is(tag, true, "unwrap");
+                let is_err = self.builder.build_not(tag(), "res_is_err").unwrap();
+                self.emit_trap_if(is_err, "unwrap");
                 Some(self.extract(result_val, RESULT_VALUE, "unwrap_val"))
             }
             "unwrap_err" => {
-                let tag = tag();
-                self.abort_unless_tag_is(tag, false, "unwrap_err");
+                self.emit_trap_if(tag(), "unwrap_err");
                 Some(self.extract(result_val, RESULT_ERR, "unwrap_err_val"))
             }
             _ => None,
         }
-    }
-
-    /// Abort when the `T!` tag is not the wanted variant, leaving the builder
-    /// in the surviving block.
-    fn abort_unless_tag_is(&mut self, tag: IntValue<'ctx>, want_ok: bool, label: &str) {
-        let Some(current_fn) = self.current_fn else {
-            return;
-        };
-
-        let keep_bb = self
-            .context
-            .append_basic_block(current_fn, &format!("{label}_ok"));
-        let panic_bb = self
-            .context
-            .append_basic_block(current_fn, &format!("{label}_panic"));
-
-        let (on_true, on_false) = if want_ok {
-            (keep_bb, panic_bb)
-        } else {
-            (panic_bb, keep_bb)
-        };
-        self.builder
-            .build_conditional_branch(tag, on_true, on_false)
-            .unwrap();
-
-        self.build_panic(panic_bb);
-        self.builder.position_at_end(keep_bb);
     }
 }

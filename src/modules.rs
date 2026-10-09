@@ -288,8 +288,7 @@ impl Renamer<'_> {
             ExpressionKind::ArrayLiteral(elements) | ExpressionKind::Tuple(elements) => {
                 self.expressions(elements)
             }
-            ExpressionKind::AddressOf(inner)
-            | ExpressionKind::BorrowRef(inner)
+            ExpressionKind::BorrowRef(inner)
             | ExpressionKind::BorrowRefMut(inner)
             | ExpressionKind::Dereference(inner) => self.expression(inner),
             ExpressionKind::InlineAsm {

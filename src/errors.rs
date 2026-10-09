@@ -40,26 +40,22 @@ pub struct ZeruError {
     pub kind: ErrorKind,
     pub message: String,
     pub span: Span,
-    #[allow(dead_code)]
-    pub line: usize,
 }
 
 impl ZeruError {
-    pub fn syntax(message: impl Into<String>, span: Span, line: usize) -> Self {
+    pub fn syntax(message: impl Into<String>, span: Span) -> Self {
         Self {
             kind: ErrorKind::Syntax,
             message: message.into(),
             span,
-            line,
         }
     }
 
-    pub fn semantic(message: impl Into<String>, span: Span, line: usize) -> Self {
+    pub fn semantic(message: impl Into<String>, span: Span) -> Self {
         Self {
             kind: ErrorKind::Semantic,
             message: message.into(),
             span,
-            line,
         }
     }
 
