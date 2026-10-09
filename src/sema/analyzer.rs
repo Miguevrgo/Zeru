@@ -41,7 +41,8 @@ pub struct SemanticAnalyzer {
     generic_functions: HashMap<String, Statement>,
     instantiations: Vec<Statement>,
 
-    in_loop: bool,
+    /// How many loops enclose what is being checked.
+    loop_depth: usize,
 }
 
 impl SemanticAnalyzer {
@@ -70,7 +71,7 @@ impl SemanticAnalyzer {
             generic_structs: HashMap::new(),
             generic_functions: HashMap::new(),
             instantiations: Vec::new(),
-            in_loop: false,
+            loop_depth: 0,
         }
     }
 
@@ -694,7 +695,8 @@ impl SemanticAnalyzer {
             for (i, (param_name, _, is_mut)) in params.iter().enumerate() {
                 let ty = params_type_def.get(i).unwrap_or(&Type::Unknown).clone();
                 let is_const = !is_mut;
-                self.symbols.insert_var(param_name.clone(), ty, is_const);
+                self.symbols
+                    .insert_var(param_name.clone(), ty, is_const, self.loop_depth);
             }
 
             for s in body.iter_mut() {
@@ -947,15 +949,9 @@ impl SemanticAnalyzer {
             value_type.clone()
         };
 
-        // If initializing from an identifier with move semantics, mark source as moved
-        if final_type.has_move_semantics()
-            && let ExpressionKind::Identifier(source_name) = &value.kind
-        {
-            self.symbols.mark_moved(source_name);
-        }
-
+        self.consume(value, &final_type);
         self.symbols
-            .insert_var(name.to_string(), final_type, is_const);
+            .insert_var(name.to_string(), final_type, is_const, self.loop_depth);
     }
 
     fn check_for_in(&mut self, variable: &str, iterable: &mut Expression, body: &mut Statement) {
@@ -971,16 +967,14 @@ impl SemanticAnalyzer {
             }
         };
 
-        let prev_loop = self.in_loop;
-        self.in_loop = true;
-
+        self.loop_depth += 1;
         self.symbols.enter_scope();
         self.symbols
-            .insert_var(variable.to_string(), item_type, true);
+            .insert_var(variable.to_string(), item_type, true, self.loop_depth);
         self.check_statement(body);
 
         self.symbols.exit_scope();
-        self.in_loop = prev_loop;
+        self.loop_depth -= 1;
     }
 
     fn check_statement(&mut self, stmt: &mut Statement) {
@@ -1003,12 +997,7 @@ impl SemanticAnalyzer {
 
                 let expr_type = if let Some(expr) = opt_expr {
                     let ty = self.check_expression(expr, expected.as_ref());
-
-                    if ty.has_move_semantics()
-                        && let ExpressionKind::Identifier(var_name) = &expr.kind
-                    {
-                        self.symbols.mark_moved(var_name);
-                    }
+                    self.consume(expr, &ty);
                     ty
                 } else {
                     Type::Void
@@ -1077,13 +1066,12 @@ impl SemanticAnalyzer {
                     );
                 }
 
-                let prev_loop = self.in_loop;
-                self.in_loop = true;
+                self.loop_depth += 1;
                 self.check_statement(body);
-                self.in_loop = prev_loop;
+                self.loop_depth -= 1;
             }
 
-            StatementKind::Break | StatementKind::Continue if !self.in_loop => {
+            StatementKind::Break | StatementKind::Continue if self.loop_depth == 0 => {
                 self.error("Break/Continue can only be used inside loops".into(), span);
             }
             StatementKind::Break | StatementKind::Continue => {}
@@ -1205,6 +1193,7 @@ impl SemanticAnalyzer {
                 is_const,
                 ty,
                 is_moved,
+                ..
             }) = self.symbols.lookup(name).cloned()
             {
                 if is_moved {
@@ -1274,7 +1263,44 @@ impl SemanticAnalyzer {
                 span,
             );
         }
+        self.consume(value, &val_type);
         Type::Void
+    }
+
+    /// `expr` is given away by value: to a variable, a call, a field, a
+    /// collection or the caller. A variable is moved and may not be used
+    /// again. A value inside a field, an element or behind a pointer cannot be
+    /// moved out at all: what holds it would keep a second owner of it.
+    fn consume(&mut self, expr: &Expression, ty: &Type) {
+        if *ty == Type::Unknown || !ty.has_move_semantics() {
+            return;
+        }
+        match &expr.kind {
+            // A global is a constant, built anew wherever it is used.
+            ExpressionKind::Identifier(name) if !self.symbols.is_global(name) => {
+                let declared_at = match self.symbols.lookup(name) {
+                    Some(super::symbol_table::Symbol::Var { loop_depth, .. }) => *loop_depth,
+                    _ => return,
+                };
+                if declared_at < self.loop_depth {
+                    self.error(
+                        format!(
+                            "Cannot move '{name}' inside a loop: the next turn would use it again"
+                        ),
+                        expr.span,
+                    );
+                }
+                self.symbols.mark_moved(name);
+            }
+            ExpressionKind::Get { .. }
+            | ExpressionKind::Index { .. }
+            | ExpressionKind::Dereference(_) => self.error(
+                "Cannot move a value out of a field, an element or a pointer; call .copy() on it"
+                    .into(),
+                expr.span,
+            ),
+            _ => {}
+        }
     }
 
     fn check_infix(
@@ -1441,6 +1467,7 @@ impl SemanticAnalyzer {
             _ => None,
         };
         let inner_type = self.check_expression(&mut arguments[0], ok_hint.as_ref());
+        self.consume(&arguments[0], &inner_type);
         Type::Result {
             ok_type: Box::new(inner_type),
             err_type: Box::new(Self::error_type()),
@@ -1757,6 +1784,7 @@ impl SemanticAnalyzer {
                             Some(ty) => ty.clone(),
                             None => self.check_expression(field_expr, Some(def_type)),
                         };
+                        self.consume(field_expr, &expr_type);
                         let types_match = match (def_type, &expr_type) {
                             (Type::Float(_), Type::Integer { .. }) => false,
                             (Type::Integer { .. }, Type::Float(_)) => false,
@@ -1818,6 +1846,14 @@ impl SemanticAnalyzer {
                     ),
                     result.span,
                 );
+            }
+        }
+
+        // Only one arm runs, so the arms give their values away after all of
+        // them are checked: two arms naming one variable is not a reuse.
+        for (_, result) in arms.iter() {
+            if let Some(ty) = result.ty.clone() {
+                self.consume(result, &ty);
             }
         }
 
@@ -2061,12 +2097,14 @@ impl SemanticAnalyzer {
         };
 
         let first_type = self.check_expression(&mut elements[0], elem_hint.as_ref());
+        self.consume(&elements[0], &first_type);
         let len = elements.len();
 
         for (i, elem) in elements.iter_mut().enumerate().skip(1) {
             let first = first_type.clone();
             let elem_span = elem.span;
             let elem_type = self.check_expression(elem, Some(&first));
+            self.consume(elem, &elem_type);
 
             if !first_type.accepts(&elem_type) {
                 self.error(
@@ -2105,6 +2143,7 @@ impl SemanticAnalyzer {
         for (i, elem) in elements.iter_mut().enumerate() {
             let expected = expected_types.as_ref().and_then(|types| types.get(i));
             let elem_type = self.check_expression(elem, expected);
+            self.consume(elem, &elem_type);
             result_types.push(elem_type);
         }
 
@@ -2382,6 +2421,7 @@ impl SemanticAnalyzer {
                 if arity_ok {
                     let elem = elem_type.clone();
                     let arg_type = self.check_expression(&mut arguments[0], Some(&elem));
+                    self.consume(&arguments[0], &arg_type);
                     if !elem_type.accepts(&arg_type) {
                         self.error(
                             format!(
@@ -2528,14 +2568,9 @@ impl SemanticAnalyzer {
                         self.error(format!("Argument {} type mismatch.", i + 1), arg_span);
                     }
 
-                    // If argument is passed by value (not reference) and has move semantics,
-                    // mark the source variable as moved
-                    if !matches!(expected, Type::Ref(_) | Type::RefMut(_))
-                        && arg_type.has_move_semantics()
-                        && let ExpressionKind::Identifier(var_name) = &args[i].kind
-                    {
-                        let var_name = var_name.clone();
-                        self.symbols.mark_moved(&var_name);
+                    // Passed by value unless the parameter borrows it.
+                    if !matches!(expected, Type::Ref(_) | Type::RefMut(_)) {
+                        self.consume(&args[i], &arg_type);
                     }
                 }
             }

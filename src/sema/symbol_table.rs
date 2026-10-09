@@ -8,6 +8,9 @@ pub enum Symbol {
         ty: Type,
         is_const: bool,
         is_moved: bool,
+        /// How many loops enclose the declaration. Moving the variable from a
+        /// deeper loop would move it again on every turn.
+        loop_depth: usize,
     },
     Function {
         params: Vec<Type>,
@@ -38,7 +41,7 @@ impl SymbolTable {
         }
     }
 
-    pub fn insert_var(&mut self, name: String, ty: Type, is_const: bool) {
+    pub fn insert_var(&mut self, name: String, ty: Type, is_const: bool, loop_depth: usize) {
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(
                 name,
@@ -46,9 +49,18 @@ impl SymbolTable {
                     ty,
                     is_const,
                     is_moved: false,
+                    loop_depth,
                 },
             );
         }
+    }
+
+    /// Whether `name` resolves to a global, which no local hides.
+    pub fn is_global(&self, name: &str) -> bool {
+        self.scopes
+            .iter()
+            .rposition(|scope| scope.contains_key(name))
+            == Some(0)
     }
 
     /// A function is always global, wherever the declaration was reached from.

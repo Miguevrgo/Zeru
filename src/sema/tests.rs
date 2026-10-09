@@ -2662,3 +2662,88 @@ fn test_generic_function_is_checked_at_its_types() {
     assert_eq!(errors.len(), 1, "{errors:?}");
     assert!(errors[0].contains("cannot be applied to P"), "{errors:?}");
 }
+
+#[test]
+fn test_every_way_of_giving_a_value_away_moves_it() {
+    // Only a declaration, a return and a call argument used to move: each of
+    // these left two owners of one Vec, and a push through either could
+    // reallocate the buffer under the other.
+    for given_away in [
+        "var s = S { v: a };",
+        "var row = [a];",
+        "var pair = (a, 1);",
+        "var outer: Vec<Vec<i64>> = Vec.new(); outer.push(a);",
+        "var b: Vec<i64> = Vec.new(); b = a;",
+    ] {
+        let input = format!(
+            "struct S {{ v: Vec<i64> }} fn take(v: Vec<i64>) {{ }} fn main() {{ var a: Vec<i64> = Vec.new(); {given_away} take(a); }}"
+        );
+        let errors = analyze(&input);
+        assert_eq!(errors.len(), 1, "{given_away}: {errors:?}");
+        assert!(
+            errors[0].contains("Use of moved value 'a'"),
+            "{given_away}: {errors:?}"
+        );
+    }
+
+    let ok = "
+        struct S { v: Vec<i64> }
+        fn keep(s: S) { }
+        fn main() { var s = S { v: Vec.new() }; var r: S! = Ok(s); keep(s); }
+    ";
+    let errors = analyze(ok);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].contains("Use of moved value 's'"), "{errors:?}");
+}
+
+#[test]
+fn test_moving_out_of_a_place_or_a_loop_is_refused() {
+    for (body, message) in [
+        (
+            "var s = S { v: Vec.new() }; var v = s.v;",
+            "out of a field, an element or a pointer",
+        ),
+        (
+            "var vs: Vec<S> = Vec.new(); var s = vs[0];",
+            "out of a field, an element or a pointer",
+        ),
+        (
+            "var a: Vec<i64> = Vec.new(); while true { var b = a; }",
+            "Cannot move 'a' inside a loop",
+        ),
+    ] {
+        let input = format!("struct S {{ v: Vec<i64> }} fn main() {{ {body} }}");
+        let errors = analyze(&input);
+        assert_eq!(errors.len(), 1, "{body}: {errors:?}");
+        assert!(errors[0].contains(message), "{body}: {errors:?}");
+    }
+}
+
+#[test]
+fn test_moves_that_are_fine_stay_fine() {
+    let input = "
+        struct S { v: Vec<i64> }
+        const ROW: Array<i32, 2> = [1, 2];
+        fn take(row: Array<i32, 2>) { }
+        fn main() {
+            // A copy of a field is a value of its own.
+            var s = S { v: Vec.new() };
+            var v = s.v.copy();
+            // Declared inside the loop, so a new one each turn.
+            while true {
+                var fresh: Vec<i64> = Vec.new();
+                var kept = fresh;
+                break;
+            }
+            // A constant is built anew wherever it is used.
+            take(ROW);
+            take(ROW);
+            // Only one arm runs.
+            var a: Vec<i64> = Vec.new();
+            var c = 1;
+            var picked = match c { 1 => a, default => a };
+        }
+    ";
+    let errors = analyze(input);
+    assert!(errors.is_empty(), "{errors:?}");
+}

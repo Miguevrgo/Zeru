@@ -80,7 +80,7 @@ fn evaluate(tokens: Vec<Token>) i64! {
     var i: usize = 0;
 
     while i < tokens.len() {
-        var token: Token = tokens[i];
+        var token: Token = tokens[i].copy();
         if token.kind == TokenKind::End {
             if adding { total += pending; } else { total -= pending; }
             return Ok(total);
@@ -92,7 +92,7 @@ fn evaluate(tokens: Vec<Token>) i64! {
             // A run of factors belongs to the term being built.
             while i < tokens.len() && tokens[i].kind == TokenKind::Star {
                 if i + 1 >= tokens.len() { return Err(2); }
-                var factor: Token = tokens[i + 1];
+                var factor: Token = tokens[i + 1].copy();
                 if factor.kind != TokenKind::Number { return Err(3); }
                 pending = pending * factor.value;
                 i += 2;
