@@ -432,28 +432,28 @@ C    Zig    Rust    Zeru(fast)    Zeru(safe)    C++    Go    Java
 
 ### Phase 1: Foundation
 
-- [ ] Add `Vec<T>` type to type system
-- [ ] Add `&T` and `&var T` reference types  
-- [ ] Implement move tracking in semantic analyzer
-- [ ] Compile error on use-after-move
+- [x] Add `Vec<T>` type to type system
+- [x] Add `&T` and `&var T` reference types  
+- [x] Implement move tracking in semantic analyzer
+- [x] Compile error on use-after-move
 
 ### Phase 2: Runtime
 
-- [ ] Implement heap allocation (mmap/brk syscalls)
+- [x] Implement heap allocation (mmap/brk syscalls)
 - [ ] Add generational header to allocations
 - [ ] Implement gen-ref checking in codegen
-- [ ] Add compile mode flags
+- [x] Add compile mode flags
 
 ### Phase 3: Vec<T>
 
-- [ ] Implement Vec struct and methods
-- [ ] Index operator codegen
+- [x] Implement Vec struct and methods
+- [x] Index operator codegen
 - [ ] Iterator support
-- [ ] Integration tests
+- [x] Integration tests
 
 ### Phase 4: Polish
 
-- [ ] Error messages for ownership violations
+- [x] Error messages for ownership violations
 - [ ] Documentation and examples
 - [ ] Performance benchmarks vs Rust/Go
 

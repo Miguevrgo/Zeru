@@ -8,26 +8,11 @@ permissions:
   contents: write
 
 jobs:
+  # x86_64 Linux only: std reaches the kernel through Linux syscalls in x86_64
+  # asm, so a compiler built for anything else could not build a program.
   upload-assets:
     name: Build & Upload
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            name: zeru-linux-generic
-            rustflags: ""
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            name: zeru-linux-avx
-            rustflags: "-C target-feature=+avx,+avx2"
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            name: zeru-macos-arm64
-            rustflags: ""
-
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
@@ -35,14 +20,12 @@ jobs:
       - uses: ./.github/actions/setup-llvm
 
       - name: Build Binary
-        env:
-          RUSTFLAGS: ${{ matrix.rustflags }}
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release
 
       - name: Prepare Binary
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/zeru dist/${{ matrix.name }}
+          cp target/release/zeru dist/zeru-linux-generic
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2

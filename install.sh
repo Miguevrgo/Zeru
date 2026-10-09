@@ -27,12 +27,6 @@ info "Setting up ${ZERU_HOME}..."
 mkdir -p "${ZERU_BIN}" "${ZERU_STD}"
 ok "Directories ready"
 
-BINARY="zeru-linux-generic"
-if grep -q avx2 /proc/cpuinfo 2>/dev/null; then
-    BINARY="zeru-linux-avx"
-fi
-info "Binary variant: ${BINARY}"
-
 LATEST=$(curl -fsSL -o /dev/null -w '%{url_effective}' \
     "https://github.com/${REPO}/releases/latest" | sed 's|.*/||') ||
     err "Failed to resolve latest release"
@@ -41,7 +35,7 @@ ok "Latest release: ${LATEST}"
 BASE_URL="https://github.com/${REPO}/releases/download/${LATEST}"
 
 info "Downloading binary..."
-curl -fsSL --progress-bar "${BASE_URL}/${BINARY}" -o "${ZERU_BIN}/zeru" ||
+curl -fsSL --progress-bar "${BASE_URL}/zeru-linux-generic" -o "${ZERU_BIN}/zeru" ||
     err "Failed to download binary"
 chmod +x "${ZERU_BIN}/zeru"
 ok "Binary installed to ${ZERU_BIN}/zeru"
@@ -51,15 +45,6 @@ curl -fsSL --progress-bar "${BASE_URL}/zeru-std.tar.gz" |
     tar -xz -C "${ZERU_STD}" --strip-components=1 ||
     err "Failed to download std library"
 ok "Std library installed to ${ZERU_STD}"
-
-cat >"${ZERU_HOME}/config.toml" <<EOF
-[zeru]
-version = "${LATEST}"
-
-[std]
-path = "${ZERU_STD}"
-EOF
-ok "Config written to ${ZERU_HOME}/config.toml"
 
 echo ""
 echo -e "  ${GREEN}${BOLD}Zeru ${LATEST} installed successfully${RESET}"

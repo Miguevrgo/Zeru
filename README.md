@@ -62,7 +62,7 @@ Currently, Zeru is in active development. To try it out, you need to build the c
 
 ### Building
 
-```rust
+```sh
 git clone git@github.com:Miguevrgo/Zeru.git
 cd Zeru
 
@@ -73,7 +73,7 @@ cargo build --release
 
 Create a file with `.zr` extension and program some code, you may find useful to read the `examples`.
 
-Now you cand compile the and run it:
+Now you can compile and run it:
 
 ```sh
 zeru build file_name.zr

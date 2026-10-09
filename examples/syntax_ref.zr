@@ -8,16 +8,16 @@
 // -----------------------------------------------------------------------------
 // Imports
 // -----------------------------------------------------------------------------
-// NOTE: Imports are parsed but std modules aren't fully implemented yet.
-// import std                       // Import entire std module
-// import std.math                  // Import specific submodule
+// Imports come first in a file. std modules are reached through `std.`:
+// import std.math;                           // math::abs(...)
+// import std.collections.hashmap::{HashMap}; // HashMap used unqualified
 
 // -----------------------------------------------------------------------------
 // Constants
 // -----------------------------------------------------------------------------
 const MAX_RETRIES: u32 = 5;
 const PI: f64 = 3.14159265359;
-// const MESSAGE: str = "Hello";  // TODO: Global string constants not yet working
+const MESSAGE: str = "Hello";
 
 // -----------------------------------------------------------------------------
 // Primitive Types
@@ -139,7 +139,7 @@ fn find_positive(x: i32) i32? {
 }
 
 // -----------------------------------------------------------------------------
-// Traits (definition only - impl not yet supported)
+// Traits: a type meets one by having its methods, and a bound asks for that
 // -----------------------------------------------------------------------------
 
 trait Drawable {
@@ -206,7 +206,6 @@ fn main() {
     // -------------------------------------------------------------------------
     // Structs
     // -------------------------------------------------------------------------
-    // NOTE: Static methods (Struct.method()) only work for built-in types (Vec)
     // For user structs, use literal syntax or factory functions
     var vec_a = Vector3 { x: 1.0, y: 2.0, z: 3.0 };
     var vec_b = Vector3 { x: 5.0, y: 5.0, z: 0.0 };
@@ -353,22 +352,14 @@ Line 3`;
 // Features NOT YET Implemented (for reference)
 // =============================================================================
 //
-// - Static methods for user structs: Struct.new() syntax
-// - Optional methods: maybe.is_none(), maybe.unwrap(), maybe.unwrap_or()
-// - Optional pointers: *T? = None
+// - Optional methods beyond is_some/is_none/unwrap: maybe.unwrap_or()
 // - Range syntax: for i in 0..10 { }
 // - String interpolation: println("Value: {}", x)
-// - Selective imports: import std.math::{abs, PI}
-// - Trait implementations: impl Drawable for Player { }
-// - Trait bounds: fn draw<T: Drawable>(item: T)
-// - Vec.get() with bounds checking
-// - Result<T, E> type
+// - Explicit trait implementations: a type meets a trait by having its methods
 // - Closures/lambdas
 // - Pattern matching with destructuring
-// - Slices
-// - References (&T, &var T) - currently using pointers
+// - Slices other than str
+// - References (&T, &var T) with member access - currently using pointers
 // - String methods (ends_with, starts_with, etc.)
-// - File I/O (std.os)
-// - Collections (HashMap, HashSet)
 //
 // =============================================================================
