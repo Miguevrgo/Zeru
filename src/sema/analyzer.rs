@@ -1,7 +1,7 @@
 use crate::{
     ast::{Expression, ExpressionKind, Program, Statement, StatementKind, TypeSpec},
     errors::{Span, ZeruError},
-    generics::{Substitutions, instantiate_struct, mangle, map_types},
+    generics::{Substitutions, instantiate, mangle, map_types},
     sema::{
         symbol_table::SymbolTable,
         types::{FloatWidth, IntWidth, Signedness, Type},
@@ -38,6 +38,7 @@ pub struct SemanticAnalyzer {
     current_type_params: Vec<String>,
 
     generic_structs: HashMap<String, Statement>,
+    generic_functions: HashMap<String, Statement>,
     instantiations: Vec<Statement>,
 
     in_loop: bool,
@@ -67,16 +68,21 @@ impl SemanticAnalyzer {
             current_fn_return_type: None,
             current_type_params: Vec::new(),
             generic_structs: HashMap::new(),
+            generic_functions: HashMap::new(),
             instantiations: Vec::new(),
             in_loop: false,
         }
     }
 
     pub fn analyze(&mut self, program: &mut Program) {
-        self.take_generic_structs(program);
+        self.take_generics(program);
         self.scan_types(&program.statements);
         self.check_recursive_structs(&program.statements);
         self.scan_functions(&program.statements);
+        // A generic function's signature, its parameters still open, is what
+        // a call reads the type arguments off.
+        let generic_functions: Vec<_> = self.generic_functions.values().cloned().collect();
+        self.scan_functions(&generic_functions);
         self.analyze_bodies(&mut program.statements);
 
         while !self.instantiations.is_empty() {
@@ -85,25 +91,28 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// A generic struct is not a type until its parameters are known, so its
-    /// declaration is set aside and each instantiation takes its place.
-    fn take_generic_structs(&mut self, program: &mut Program) {
+    /// A generic struct is not a type, nor a generic function a function,
+    /// until its parameters are known, so the declaration is set aside and
+    /// each instantiation takes its place, checked at its own types.
+    fn take_generics(&mut self, program: &mut Program) {
         program.statements.retain(|stmt| {
-            let StatementKind::Struct {
-                name, type_params, ..
-            } = &stmt.kind
-            else {
-                return true;
+            let duplicate = match &stmt.kind {
+                StatementKind::Struct {
+                    name, type_params, ..
+                } if !type_params.is_empty() => self
+                    .generic_structs
+                    .insert(name.clone(), stmt.clone())
+                    .map(|_| format!("Type {name} is already defined")),
+                StatementKind::Function {
+                    name, type_params, ..
+                } if !type_params.is_empty() => self
+                    .generic_functions
+                    .insert(name.clone(), stmt.clone())
+                    .map(|_| format!("Function '{name}' is already defined")),
+                _ => return true,
             };
-            if type_params.is_empty() {
-                return true;
-            }
-            if self
-                .generic_structs
-                .insert(name.clone(), stmt.clone())
-                .is_some()
-            {
-                self.error(format!("Type {name} is already defined"), stmt.span);
+            if let Some(message) = duplicate {
+                self.error(message, stmt.span);
             }
             false
         });
@@ -121,7 +130,7 @@ impl SemanticAnalyzer {
 
     /// Register `Pair<i32>` as a struct of its own and queue its declaration.
     /// Returns the name it was given, which is what every reference uses.
-    fn instantiate(&mut self, base: &str, args: &[Type], span: Span) -> Option<String> {
+    fn instantiate_struct(&mut self, base: &str, args: &[Type], span: Span) -> Option<String> {
         let decl = self.generic_structs.get(base)?.clone();
         let StatementKind::Struct { type_params, .. } = &decl.kind else {
             return None;
@@ -165,7 +174,7 @@ impl SemanticAnalyzer {
             },
         );
 
-        let concrete = instantiate_struct(&decl, name.clone(), &subs);
+        let concrete = instantiate(&decl, name.clone(), &subs);
         self.scan_struct_fields(&concrete);
         self.scan_functions(std::slice::from_ref(&concrete));
         self.instantiations.push(concrete);
@@ -750,7 +759,7 @@ impl SemanticAnalyzer {
                 }
                 if self.generic_structs.contains_key(name) {
                     let args: Vec<Type> = args.iter().map(|a| self.resolve_spec(a, span)).collect();
-                    return match self.instantiate(name, &args, span) {
+                    return match self.instantiate_struct(name, &args, span) {
                         Some(name) => self.struct_defs[&name].clone(),
                         None => Type::Unknown,
                     };
@@ -1114,24 +1123,19 @@ impl SemanticAnalyzer {
     }
 
     fn check_identifier(&mut self, name: &str, span: Span) -> Type {
-        if name.contains("::") {
-            let parts: Vec<&str> = name.split("::").collect();
-
-            if parts.len() == 2 {
-                let enum_name = parts[0].to_string();
-                let variant_name = parts[1].to_string();
-                if let Some(Type::Enum { variants, .. }) = self.enum_defs.get(&enum_name) {
-                    if variants.contains(&variant_name) {
-                        return self.enum_defs.get(&enum_name).cloned().unwrap();
-                    } else {
-                        self.error(
-                            format!("Enum '{}' has no variant '{}'", enum_name, variant_name),
-                            span,
-                        );
-                        return Type::Unknown;
-                    }
-                }
+        // The enum is everything before the last `::`, which may itself be a
+        // path into a module, as in `shapes::Color::Red`.
+        if let Some((enum_name, variant)) = name.rsplit_once("::")
+            && let Some(enum_type @ Type::Enum { variants, .. }) = self.enum_defs.get(enum_name)
+        {
+            if variants.iter().any(|v| v == variant) {
+                return enum_type.clone();
             }
+            self.error(
+                format!("Enum '{enum_name}' has no variant '{variant}'"),
+                span,
+            );
+            return Type::Unknown;
         }
 
         if let Some(symbol) = self.symbols.lookup(name).cloned() {
@@ -1516,7 +1520,13 @@ impl SemanticAnalyzer {
             CallKind::Named(name) if name == "Err" => {
                 self.check_err_constructor(arguments, expected_type, span)
             }
-            CallKind::Named(name) => self.check_call_mut(&name, arguments, None, span),
+            CallKind::Named(name) => {
+                let (ty, subs) = self.check_call_mut(&name, arguments, None, span);
+                if let Some(instance) = self.instantiate_function(&name, &subs, span) {
+                    function.kind = ExpressionKind::Identifier(instance);
+                }
+                ty
+            }
             CallKind::Method {
                 method_name,
                 is_vec_static: true,
@@ -1612,6 +1622,7 @@ impl SemanticAnalyzer {
                 }
                 let full_name = format!("{struct_name}::{method_name}");
                 self.check_call_mut(&full_name, arguments, Some(obj_type), span)
+                    .0
             }
             CallKind::Unknown => {
                 self.error("Invalid call expression".into(), span);
@@ -1709,7 +1720,7 @@ impl SemanticAnalyzer {
             args.push(self.check_expression(value, None));
         }
 
-        self.instantiate(base, &args, span)
+        self.instantiate_struct(base, &args, span)
             .unwrap_or_else(|| base.to_string())
     }
 
@@ -2459,13 +2470,15 @@ impl SemanticAnalyzer {
         }
     }
 
+    /// Check a call against the callee's signature. Also returns what each
+    /// type parameter of a generic callee turned out to be.
     fn check_call_mut(
         &mut self,
         name: &str,
         args: &mut [Expression],
         implicit_self: Option<Type>,
         call_span: Span,
-    ) -> Type {
+    ) -> (Type, HashMap<String, Type>) {
         if let Some(super::symbol_table::Symbol::Function { params, ret_type }) =
             self.symbols.lookup(name).cloned()
         {
@@ -2504,15 +2517,12 @@ impl SemanticAnalyzer {
                 );
             } else {
                 for i in 0..args.len() {
-                    let expected = expected_args[i].clone();
+                    // A parameter an earlier argument settled is checked as
+                    // that type, so `largest(wide, 5)` makes the 5 wide too.
+                    let expected = Self::substitute_params(&expected_args[i], &substitutions);
                     let arg_span = args[i].span;
                     let arg_type = self.check_expression(&mut args[i], Some(&expected));
-
-                    // A type parameter takes whatever the argument turned out
-                    // to be, so the return type below is the concrete one.
-                    if let Type::ParamType(param) = &expected {
-                        substitutions.insert(param.clone(), arg_type.clone());
-                    }
+                    Self::bind_params(&expected_args[i], &arg_type, &mut substitutions);
 
                     if !expected.accepts(&arg_type) {
                         self.error(format!("Argument {} type mismatch.", i + 1), arg_span);
@@ -2529,11 +2539,87 @@ impl SemanticAnalyzer {
                     }
                 }
             }
-            return Self::substitute_params(&ret_type, &substitutions);
+            return (
+                Self::substitute_params(&ret_type, &substitutions),
+                substitutions,
+            );
         }
 
         self.error(format!("Function '{name}' not defined."), call_span);
-        Type::Unknown
+        (Type::Unknown, HashMap::new())
+    }
+
+    /// Record what each type parameter in `param` stands for, read off the
+    /// argument's type in the same position: `*T` given a `*i64` makes T i64.
+    fn bind_params(param: &Type, arg: &Type, subs: &mut HashMap<String, Type>) {
+        match (param, arg) {
+            (Type::ParamType(name), _) => {
+                subs.entry(name.clone()).or_insert_with(|| arg.clone());
+            }
+            (Type::Pointer(p), Type::Pointer(a) | Type::Ref(a) | Type::RefMut(a))
+            | (Type::Ref(p), Type::Ref(a) | Type::RefMut(a))
+            | (Type::RefMut(p), Type::RefMut(a))
+            | (Type::Optional(p), Type::Optional(a))
+            | (Type::Slice { elem_type: p }, Type::Slice { elem_type: a })
+            | (Type::Vec { elem_type: p }, Type::Vec { elem_type: a })
+            | (Type::Array { elem_type: p, .. }, Type::Array { elem_type: a, .. })
+            | (Type::Result { ok_type: p, .. }, Type::Result { ok_type: a, .. }) => {
+                Self::bind_params(p, a, subs)
+            }
+            (Type::Tuple(params), Type::Tuple(args)) => {
+                for (p, a) in params.iter().zip(args) {
+                    Self::bind_params(p, a, subs);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Register `largest<i64>` as a function of its own, its body queued to be
+    /// checked at those types, and return the name the call now goes to.
+    /// `None` when `name` is not generic or an argument could not be typed.
+    fn instantiate_function(
+        &mut self,
+        name: &str,
+        subs: &HashMap<String, Type>,
+        span: Span,
+    ) -> Option<String> {
+        let decl = self.generic_functions.get(name)?.clone();
+        let StatementKind::Function { type_params, .. } = &decl.kind else {
+            return None;
+        };
+
+        let mut specs = Substitutions::new();
+        for param in type_params {
+            match subs.get(&param.name) {
+                // Reported already, where the argument went wrong.
+                Some(Type::Unknown) => return None,
+                Some(ty) => {
+                    if let Some(bound) = &param.bound {
+                        self.check_bound(name, &param.name, bound, ty, span);
+                    }
+                    specs.insert(param.name.clone(), ty.to_spec());
+                }
+                None => {
+                    self.error(
+                        format!(
+                            "Cannot tell what '{}' is in this call to '{name}'",
+                            param.name
+                        ),
+                        span,
+                    );
+                    return None;
+                }
+            }
+        }
+
+        let instance = mangle(name, type_params, &specs);
+        if self.symbols.lookup(&instance).is_none() {
+            let concrete = instantiate(&decl, instance.clone(), &specs);
+            self.scan_functions(std::slice::from_ref(&concrete));
+            self.instantiations.push(concrete);
+        }
+        Some(instance)
     }
 
     /// Replace the type parameters of a generic signature with what the call

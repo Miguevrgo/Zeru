@@ -1,6 +1,6 @@
 //! The [`Compiler`] state and the [`Compiler::compile_program`] pass pipeline.
 //! IR emission itself lives in [`super::body`], [`super::types`],
-//! [`super::layout`], [`super::generics`] and [`super::runtime`].
+//! [`super::layout`] and [`super::runtime`].
 
 use std::collections::HashMap;
 
@@ -41,10 +41,6 @@ pub struct Compiler<'a, 'ctx> {
     pub(super) stdout_stream: Option<PointerValue<'ctx>>,
     pub(super) stderr_stream: Option<PointerValue<'ctx>>,
 
-    pub(super) generic_functions: HashMap<String, GenericFunctionDef>,
-    pub(super) monomorphized: HashMap<String, FunctionValue<'ctx>>,
-    pub(super) current_type_substitutions: HashMap<String, TypeSpec>,
-
     pub(super) scope_stack: Vec<Vec<(String, Option<VarBinding<'ctx>>)>>,
 
     pub errors: Vec<ZeruError>,
@@ -52,14 +48,6 @@ pub struct Compiler<'a, 'ctx> {
 
 /// Where a variable lives, its LLVM type, and whether that type is unsigned.
 pub(super) type VarBinding<'ctx> = (PointerValue<'ctx>, BasicTypeEnum<'ctx>, bool);
-
-#[derive(Clone)]
-pub(super) struct GenericFunctionDef {
-    pub(super) type_params: Vec<crate::ast::TypeParameter>,
-    pub(super) params: Vec<(String, TypeSpec, bool)>,
-    pub(super) return_type: Option<TypeSpec>,
-    pub(super) body: Vec<Statement>,
-}
 
 pub(super) struct LoopContext<'ctx> {
     pub(super) continue_block: BasicBlock<'ctx>,
@@ -89,9 +77,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             panic_fn: None,
             stdout_stream: None,
             stderr_stream: None,
-            generic_functions: HashMap::new(),
-            monomorphized: HashMap::new(),
-            current_type_substitutions: HashMap::new(),
             scope_stack: vec![Vec::new()],
             errors: Vec::new(),
         }
@@ -101,7 +86,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.declare_nominal_types(program);
         self.collect_global_constants(program);
         self.lay_out_structs(program);
-        self.collect_generic_functions(program);
 
         self.init_builtin_streams();
 
@@ -163,33 +147,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.current_struct_context = Some(name.clone());
                 self.compile_struct_body(name, fields, stmt.span);
                 self.current_struct_context = None;
-            }
-        }
-    }
-
-    /// Stash generic bodies; [`Compiler::monomorphize_call`] emits them once
-    /// concrete type arguments are known.
-    fn collect_generic_functions(&mut self, program: &Program) {
-        for stmt in &program.statements {
-            if let StatementKind::Function {
-                name,
-                type_params,
-                params,
-                return_type,
-                body,
-                ..
-            } = &stmt.kind
-                && !type_params.is_empty()
-            {
-                self.generic_functions.insert(
-                    name.clone(),
-                    GenericFunctionDef {
-                        type_params: type_params.clone(),
-                        params: params.clone(),
-                        return_type: return_type.clone(),
-                        body: body.clone(),
-                    },
-                );
             }
         }
     }

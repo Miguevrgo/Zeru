@@ -2641,3 +2641,24 @@ fn test_global_constant_is_defined_once() {
         assert_eq!(errors, ["'A' is already defined"], "{input}");
     }
 }
+
+#[test]
+fn test_generic_function_is_checked_at_its_types() {
+    // The body used to be checked once with T standing for anything, and an
+    // instantiation was never checked at all.
+    let input = "
+        struct P { x: i32 }
+        fn bigger<T>(a: T, b: T) T {
+            if a > b { return a; }
+            return b;
+        }
+        fn main() {
+            var p = P { x: 1 };
+            var q = P { x: 2 };
+            var r = bigger(p, q);
+        }
+    ";
+    let errors = analyze(input);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].contains("cannot be applied to P"), "{errors:?}");
+}

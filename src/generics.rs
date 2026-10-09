@@ -62,11 +62,16 @@ pub fn mangle_type(spec: &TypeSpec) -> String {
     }
 }
 
-/// `decl` with every parameter replaced and a name of its own, so it reads as
-/// an ordinary struct declaration.
-pub fn instantiate_struct(decl: &Statement, name: String, subs: &Substitutions) -> Statement {
+/// `decl`, a generic struct or function, with every parameter replaced and a
+/// name of its own, so it reads as an ordinary declaration.
+pub fn instantiate(decl: &Statement, name: String, subs: &Substitutions) -> Statement {
     let mut decl = decl.clone();
     if let StatementKind::Struct {
+        name: decl_name,
+        type_params,
+        ..
+    }
+    | StatementKind::Function {
         name: decl_name,
         type_params,
         ..

@@ -2,6 +2,7 @@
 // means the same thing here and inside shapes.zr, which also imports it.
 import geom.area;
 import shapes;
+import stock;
 
 fn main() {
     if area::rectangle(3, 4) != 12 { exit(1); }
@@ -10,6 +11,14 @@ fn main() {
     var r = shapes::Rect { w: 2, h: 5 };
     if r.area() != 10 { exit(3); }
     if shapes::doubled(r) != 20 { exit(4); }
+
+    var pile = stock::pile_of(7);
+    if pile.first() != 7 { exit(5); }
+    if pile.level() != stock::Level::Low { exit(6); }
+    if stock::capped(500, 20) != 20 { exit(7); }
+    if stock::limit() != 100 { exit(8); }
+    if stock::weigh(12) != 12 { exit(9); }
+    if stock::started() != 2 { exit(10); }
 
     println("modules: all tests passed");
     exit(0);

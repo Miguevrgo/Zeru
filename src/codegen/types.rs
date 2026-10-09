@@ -36,54 +36,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    /// Type argument for a generic call, inferred from the argument expression.
-    pub(super) fn infer_type_from_expression(&self, expr: &Expression) -> TypeSpec {
-        let named = |name: &str| TypeSpec::Named(name.to_string());
-
-        // The analyser already resolved this. Re-deriving it from the shape of
-        // the expression reads i32 out of anything but a literal or a plain
-        // variable, so a field or a call picks the wrong instantiation.
-        if let Some(ty) = &expr.ty
-            && *ty != Type::Unknown
-        {
-            return ty.to_spec();
-        }
-
-        match &expr.kind {
-            ExpressionKind::Int(_) => named("i32"),
-            ExpressionKind::Float(_) => named("f64"),
-            ExpressionKind::Boolean(_) => named("bool"),
-            ExpressionKind::StringLit(_) => named("str"),
-            ExpressionKind::Identifier(name) => match self.variables.get(name) {
-                Some((_, ty, _)) => self.llvm_type_to_type_spec(*ty),
-                None => named("i32"),
-            },
-            _ => named("i32"),
-        }
-    }
-
-    fn llvm_type_to_type_spec(&self, ty: BasicTypeEnum<'ctx>) -> TypeSpec {
-        let named = |name: &str| TypeSpec::Named(name.to_string());
-
-        match ty {
-            BasicTypeEnum::IntType(t) => named(match t.get_bit_width() {
-                1 => "bool",
-                8 => "i8",
-                16 => "i16",
-                64 => "i64",
-                _ => "i32",
-            }),
-            BasicTypeEnum::FloatType(t) if t == self.context.f32_type() => named("f32"),
-            BasicTypeEnum::FloatType(_) => named("f64"),
-            BasicTypeEnum::PointerType(_) => TypeSpec::Pointer(Box::new(named("u8"))),
-            BasicTypeEnum::StructType(st) => match st.get_name().and_then(|n| n.to_str().ok()) {
-                Some(name) => named(name),
-                None => named("i32"),
-            },
-            _ => named("i32"),
-        }
-    }
-
     fn is_unsigned(ty: &Type) -> bool {
         matches!(
             ty,
@@ -127,10 +79,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub(super) fn get_llvm_type(&self, spec: &TypeSpec) -> Option<BasicTypeEnum<'ctx>> {
         match spec {
-            TypeSpec::Named(name) => match self.current_type_substitutions.get(name) {
-                Some(substituted) => self.get_llvm_type(substituted),
-                None => self.get_named_llvm_type(name),
-            },
+            TypeSpec::Named(name) => self.get_named_llvm_type(name),
 
             TypeSpec::Generic { name, args } => match (name.as_str(), args.as_slice()) {
                 ("Array", [elem, TypeSpec::IntLiteral(len)]) => {

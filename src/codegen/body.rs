@@ -1094,19 +1094,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
                 "Ok" => return self.compile_ok_constructor(arguments, expected_type, span),
                 "Err" => return self.compile_err_constructor(arguments, expected_type, span),
-                _ => {
-                    let resolved = match self.generic_functions.contains_key(name) {
-                        true => self.monomorphize_call(name, arguments),
-                        false => self.module.get_function(name),
-                    };
-                    match resolved {
-                        Some(func) => (func, Vec::new()),
-                        None => {
-                            self.error(format!("Unknown function '{name}'"), span);
-                            return self.dummy_val();
-                        }
+                _ => match self.module.get_function(name) {
+                    Some(func) => (func, Vec::new()),
+                    None => {
+                        self.error(format!("Unknown function '{name}'"), span);
+                        return self.dummy_val();
                     }
-                }
+                },
             },
             _ => {
                 self.error("Indirect function calls are not yet supported", span);

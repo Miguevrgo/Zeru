@@ -1,0 +1,54 @@
+// What a module keeps to itself: an enum, a generic struct, a trait used as a
+// bound, static calls on its own types, and names a parameter may shadow.
+
+enum Level { Low, High }
+
+struct Pile<T> {
+    items: Vec<T>,
+
+    fn first(self) T { return self.items[0]; }
+
+    fn level(self) Level {
+        if self.items.len() > 1 { return Level::High; }
+        return Level::Low;
+    }
+}
+
+trait Weighed { fn weight(self) i32; }
+
+struct Crate {
+    kg: i32,
+    fn weight(self) i32 { return self.kg; }
+}
+
+struct Scale<T: Weighed> {
+    item: T,
+    fn read(self) i32 { return self.item.weight(); }
+}
+
+struct Counter {
+    n: i32,
+    fn start() Counter { return Counter { n: 1 }; }
+}
+
+fn pile_of(value: i64) Pile<i64> {
+    var pile: Pile<i64> = Pile { items: Vec.new() };
+    pile.items.push(value);
+    return pile;
+}
+
+fn limit() i32 { return 100; }
+
+// `limit` names both a function of this module and the parameter, and inside
+// the body the parameter is the one meant.
+fn capped(value: i32, limit: i32) i32 {
+    if value > limit { return limit; }
+    return value;
+}
+
+fn weigh(kg: i32) i32 {
+    var scale = Scale { item: Crate { kg: kg } };
+    return scale.read();
+}
+
+fn started() i32 { return Counter::start().n + Counter.start().n; }

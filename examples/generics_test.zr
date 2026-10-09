@@ -106,6 +106,15 @@ fn main() {
     if first(10, 3.14) != 10 { exit(21); }
     if second(true, 2.5) != 2.5 { exit(22); }
 
+    // An instantiation is checked at its own types: u32 compares unsigned, so
+    // three billion is the larger, where a signed compare says it is negative.
+    var big: u32 = 3000000000;
+    var small: u32 = 1;
+    if largest(big, small) != big { exit(23); }
+    // A literal takes the type an earlier argument settled.
+    var wide: i64 = 5000000000;
+    if largest(wide, 7) != wide { exit(24); }
+
     // A bound met by a struct that has the trait's methods.
     var wrapped = Wrap { inner: Square { side: 3 } };
     if wrapped.inner.area() != 9 { exit(15); }

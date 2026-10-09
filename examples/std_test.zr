@@ -21,6 +21,10 @@ fn main() {
     // never negative, unlike `/` and `%`.
     if math::div_euclid(-7, 2) != -4 { exit(9); }
     if math::mod_euclid(-7, 2) != 1 { exit(10); }
+    // At u64, the largest value is not -1.
+    var top: u64 = 18446744073709551615;
+    if math::min(top, 1) != 1 { exit(11); }
+    if math::max(top, 1) != top { exit(12); }
 
     // --- HashMap -------------------------------------------------------------
     var map = HashMap.new();
