@@ -221,7 +221,8 @@ fn main() {
     // -------------------------------------------------------------------------
     // Structs
     // -------------------------------------------------------------------------
-    // For user structs, use literal syntax or factory functions
+    // A struct's own functions are called with '.', as in `Vector3.zero()`;
+    // '::' is for enum variants and modules. Or write a literal:
     var vec_a = Vector3 { x: 1.0, y: 2.0, z: 3.0 };
     var vec_b = Vector3 { x: 5.0, y: 5.0, z: 0.0 };
 
@@ -316,7 +317,8 @@ fn main() {
 
     // Unary operators
     var neg = -42;
-    var not_bool = !true;
+    var not_bool = !true;                    // Logical on a bool
+    var not_bits: u8 = !0x0F;                // Bitwise on an integer
 
     // -------------------------------------------------------------------------
     // Type Casting
@@ -338,6 +340,15 @@ fn main() {
 
     // Pointer arithmetic
     var offset_ptr = ptr + 1 as usize;       // Pointer + offset
+
+    // -------------------------------------------------------------------------
+    // Literals
+    // -------------------------------------------------------------------------
+    var letter: u8 = 'a';                    // An ASCII character's value
+    var escapes = "tab\t nul\0 hex\x41";     // \n \t \r \0 \xNN \' \" \\
+    var million = 1_000_000;                 // Separators anywhere between digits
+    var tiny: f64 = 2.5e-3;                  // Exponents
+    var whole: f64 = 3;                      // A whole number makes a float
 
     // -------------------------------------------------------------------------
     // Raw Strings (backtick syntax)

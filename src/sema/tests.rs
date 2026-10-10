@@ -258,14 +258,13 @@ fn test_float_to_int_mismatch() {
 }
 
 #[test]
-fn test_int_to_float_mismatch() {
-    let input = "
-            fn main() {
-                var x: f32 = 10;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
+fn test_int_literal_makes_a_float_only_when_exact() {
+    assert!(analyze("fn main() { var x: f32 = 10; var y: f64 = -3; var z = 2.5 * 2; }").is_empty());
+    let errors = analyze("fn main() { var x: f32 = 16777217; }");
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].contains("has no exact f32 value"));
+    // A variable is not a literal: its type stays its own.
+    let errors = analyze("fn main() { var i: i32 = 10; var x: f32 = i; }");
     assert!(errors[0].contains("Type mismatch"));
 }
 
@@ -569,7 +568,7 @@ fn test_struct_field_type_mismatch() {
     let input = "
             struct Point { x: f32, y: f32 }
             fn main() {
-                var p = Point { x: 1, y: 2 };
+                var p = Point { x: true, y: 2.0 };
             }
         ";
     let errors = analyze(input);
@@ -596,7 +595,7 @@ fn test_struct_field_assignment_type_mismatch() {
             struct Point { x: f32, y: f32 }
             fn main() {
                 var p = Point { x: 1.0, y: 2.0 };
-                p.x = 5;
+                p.x = false;
             }
         ";
     let errors = analyze(input);
@@ -1239,15 +1238,11 @@ fn test_not_operator() {
 }
 
 #[test]
-fn test_not_operator_on_non_bool() {
-    let input = "
-            fn main() {
-                var x: i32 = 10;
-                var not_x = !x;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
+fn test_not_operator_on_numbers() {
+    // Logical on a bool, bitwise on an integer, nothing else.
+    assert!(analyze("fn main() { var x: u8 = 10; var y: u8 = !x; var b = !true; }").is_empty());
+    let errors = analyze("fn main() { var f = !1.5; }");
+    assert!(errors[0].contains("'!' applies to a bool or an integer, not f64"));
 }
 
 #[test]

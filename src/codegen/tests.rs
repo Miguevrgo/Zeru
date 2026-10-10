@@ -1604,19 +1604,23 @@ fn test_a_mutable_receiver_is_reached_wherever_it_lives() {
 
 #[test]
 fn test_static_method_takes_a_dot() {
-    // A type on the left of the dot is a call on the type, which is the same
-    // function `Box::empty()` names.
-    let input = "
+    // A type on the left of the dot is a call on the type; `::` is not.
+    let struct_box = "
         struct Box {
             n: i32,
             fn empty() Box { return Box { n: 0 }; }
         }
-        fn main() {
-            var byDot = Box.empty();
-            var byPath = Box::empty();
-        }
     ";
-    assert_compiles(input);
+    assert_compiles(&format!(
+        "{struct_box} fn main() {{ var b = Box.empty(); }}"
+    ));
+    let err = compile_to_ir(&format!(
+        "{struct_box} fn main() {{ var b = Box::empty(); }}"
+    ));
+    assert!(
+        err.unwrap_err()
+            .contains("Call a struct's function with '.': Box.empty()")
+    );
 }
 
 #[test]

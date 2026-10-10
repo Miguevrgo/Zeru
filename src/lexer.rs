@@ -181,6 +181,7 @@ impl<'a> Lexer<'a> {
             '?' => Token::Question,
 
             '"' => self.read_string(),
+            '\'' => self.read_char(),
             '`' => self.read_raw_string(),
 
             'a'..='z' | 'A'..='Z' | '_' => self.read_identifier(ch),
@@ -238,20 +239,31 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_digits(&mut self, predicate: fn(char) -> bool) -> String {
+    /// Digits for which `is_digit` holds, skipping the `_` that may separate
+    /// them, as in `1_000_000`.
+    fn read_digits(&mut self, is_digit: fn(char) -> bool) -> String {
         let mut digits = String::new();
         while let Some(&ch) = self.peek() {
-            if predicate(ch) {
-                digits.push(self.advance().unwrap());
-            } else {
+            if is_digit(ch) {
+                digits.push(ch);
+            } else if ch != '_' {
                 break;
             }
+            self.advance();
         }
         digits
     }
 
-    fn read_number(&mut self, ch: char) -> Token {
-        if ch == '0'
+    /// Whether the character after the next one satisfies `is`: `1.5` is a
+    /// float, while `0..n` and `t.0.x` are not.
+    fn second_is(&self, is: fn(char) -> bool) -> bool {
+        let mut ahead = self.input.clone();
+        ahead.next();
+        ahead.peek().is_some_and(|&c| is(c))
+    }
+
+    fn read_number(&mut self, first: char) -> Token {
+        if first == '0'
             && let Some(&ch) = self.peek()
         {
             let (radix, predicate): (u32, fn(char) -> bool) = match ch {
@@ -267,25 +279,34 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        let mut literal = String::from(ch);
-        let mut dot = false;
-
-        while let Some(&ch) = self.peek() {
-            if ch.is_ascii_digit() {
-                literal.push(self.advance().unwrap());
-            } else if ch == '.' && !dot {
-                dot = true;
-                literal.push(self.advance().unwrap())
-            } else {
-                break;
+        let decimal = |c: char| c.is_ascii_digit();
+        let mut literal = format!("{first}{}", self.read_digits(decimal));
+        let mut float = false;
+        if self.peek() == Some(&'.') && self.second_is(decimal) {
+            self.advance();
+            literal = format!("{literal}.{}", self.read_digits(decimal));
+            float = true;
+        }
+        if matches!(self.peek(), Some('e' | 'E'))
+            && self.second_is(|c| c.is_ascii_digit() || c == '-' || c == '+')
+        {
+            self.advance();
+            literal.push('e');
+            if let Some(&sign @ ('-' | '+')) = self.peek() {
+                self.advance();
+                literal.push(sign);
             }
+            literal += &self.read_digits(decimal);
+            float = true;
         }
 
-        if dot {
-            Token::Float(literal.parse::<f64>().unwrap_or(0.0))
-        } else {
-            Self::int_token(&literal, 10)
+        if !float {
+            return Self::int_token(&literal, 10);
         }
+        literal.parse().map_or_else(
+            |_| Token::Illegal(format!("Malformed number '{literal}'")),
+            Token::Float,
+        )
     }
 
     /// An integer literal carries its magnitude: a minus sign is an operator,
@@ -314,19 +335,11 @@ impl<'a> Lexer<'a> {
                 }
                 '\\' => {
                     self.advance();
-
-                    match self.advance() {
-                        Some('n') => bytes.push(b'\n'),
-                        Some('t') => bytes.push(b'\t'),
-                        Some('r') => bytes.push(b'\r'),
-                        Some('"') => bytes.push(b'"'),
-                        Some('\\') => bytes.push(b'\\'),
-                        Some(c) => {
-                            problem.get_or_insert(format!(
-                                "Unknown escape sequence '\\{c}', expected one of \\n \\t \\r \\\" \\\\"
-                            ));
+                    match self.read_escape() {
+                        Ok(byte) => bytes.push(byte),
+                        Err(message) => {
+                            problem.get_or_insert(message);
                         }
-                        None => return Token::Illegal("Unterminated string escape".to_string()),
                     }
                 }
                 _ if !ch.is_ascii() => {
@@ -338,6 +351,55 @@ impl<'a> Lexer<'a> {
         }
 
         Token::Illegal("Unterminated String".to_string())
+    }
+
+    /// The byte an escape stands for, its `\\` already read.
+    fn read_escape(&mut self) -> Result<u8, String> {
+        Ok(match self.advance() {
+            Some('n') => b'\n',
+            Some('t') => b'\t',
+            Some('r') => b'\r',
+            Some('0') => 0,
+            Some('"') => b'"',
+            Some('\'') => b'\'',
+            Some('\\') => b'\\',
+            Some('x') => {
+                let mut value = 0;
+                for _ in 0..2 {
+                    let Some(digit) = self.peek().and_then(|c| c.to_digit(16)) else {
+                        return Err("'\\x' takes two hex digits, as in '\\x41'".to_string());
+                    };
+                    self.advance();
+                    value = value * 16 + digit;
+                }
+                if value > 0x7F {
+                    return Err(format!("'\\x{value:02X}' is not ASCII"));
+                }
+                value as u8
+            }
+            Some(c) => {
+                return Err(format!(
+                    "Unknown escape sequence '\\{c}', expected one of \\n \\t \\r \\0 \\x \\' \\\" \\\\"
+                ));
+            }
+            None => return Err("Unterminated escape".to_string()),
+        })
+    }
+
+    /// `'a'` or `'\\n'`: the value of one ASCII character, typed like any
+    /// other integer literal.
+    fn read_char(&mut self) -> Token {
+        let value = match self.advance() {
+            Some('\\') => self.read_escape(),
+            Some('\'') | None => Err("Empty character literal".to_string()),
+            Some(c) if c.is_ascii() => Ok(c as u8),
+            Some(_) => Err("Non-ASCII character literal".to_string()),
+        };
+        if self.peek() != Some(&'\'') {
+            return Token::Illegal("A character literal holds one character".to_string());
+        }
+        self.advance();
+        value.map_or_else(Token::Illegal, |byte| Token::Int(u64::from(byte)))
     }
 
     fn read_raw_string(&mut self) -> Token {
@@ -493,6 +555,35 @@ mod tests {
                 Token::Float(1.5),
             ]
         );
+    }
+
+    #[test]
+    fn test_numbers_and_characters() {
+        let mut lexer = Lexer::new("1_000 1e9 2.5E-3 0x_ff 'a' '\\x41' '\\0' 0..n");
+        let tokens: Vec<Token> = std::iter::from_fn(|| match lexer.next_token().0 {
+            Token::Eof => None,
+            token => Some(token),
+        })
+        .collect();
+        assert_eq!(
+            tokens[..8],
+            [
+                Token::Int(1000),
+                Token::Float(1e9),
+                Token::Float(2.5e-3),
+                Token::Int(255),
+                Token::Int(97),
+                Token::Int(65),
+                Token::Int(0),
+                Token::Int(0),
+            ]
+        );
+        for bad in ["'ab'", "''", "'\\x80'", "\"\\xZ1\""] {
+            assert!(
+                matches!(Lexer::new(bad).next_token().0, Token::Illegal(_)),
+                "{bad}"
+            );
+        }
     }
 
     #[test]

@@ -178,11 +178,10 @@ impl<'a> Parser<'a> {
     fn parse_expression_statement(&mut self) -> Option<Statement> {
         let start_span = self.current_span;
         let expr = self.parse_expression(Precedence::Lowest)?;
-        let end_span = self.current_span;
-
-        if self.peek_token_is(&Token::Semicolon) {
-            self.next_token();
+        if !self.expect_peek(&Token::Semicolon) {
+            return None;
         }
+        let end_span = self.current_span;
 
         Some(Statement::new(
             StatementKind::Expression(expr),
@@ -356,12 +355,12 @@ impl<'a> Parser<'a> {
         let return_value = if self.cur_token_is(&Token::Semicolon) {
             None
         } else {
-            self.parse_expression(Precedence::Lowest)
+            let value = self.parse_expression(Precedence::Lowest)?;
+            if !self.expect_peek(&Token::Semicolon) {
+                return None;
+            }
+            Some(value)
         };
-
-        if self.peek_token_is(&Token::Semicolon) {
-            self.next_token();
-        }
 
         let end_span = self.current_span;
         Some(Statement::new(
@@ -786,8 +785,8 @@ impl<'a> Parser<'a> {
             None
         };
 
-        if self.peek_token_is(&Token::Semicolon) {
-            self.next_token();
+        if !self.expect_peek(&Token::Semicolon) {
+            return None;
         }
 
         let end_span = self.current_span;
@@ -819,8 +818,8 @@ impl<'a> Parser<'a> {
     /// `break` or `continue`, with an optional `;`.
     fn parse_jump(&mut self, kind: StatementKind) -> Option<Statement> {
         let start_span = self.current_span;
-        if self.peek_token_is(&Token::Semicolon) {
-            self.next_token();
+        if !self.expect_peek(&Token::Semicolon) {
+            return None;
         }
         Some(Statement::new(kind, start_span.merge(self.current_span)))
     }
@@ -1806,7 +1805,7 @@ mod tests {
 
     #[test]
     fn test_if_expression() {
-        let input = "fn main() { if (x < y) { x } else { y } }";
+        let input = "fn main() { if (x < y) { x; } else { y; } }";
         let program = parse_input(input);
         let body = get_function_body(&program.statements[0]);
 
@@ -2144,7 +2143,7 @@ mod tests {
     fn test_imports() {
         let input = "
             import std.os;
-            import std.math
+            import std.math;
             import std.collections::{Array, HashMap};
         ";
         let program = parse_input(input);

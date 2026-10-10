@@ -1560,9 +1560,21 @@ impl SemanticAnalyzer {
         expected_type: Option<&Type>,
         span: Span,
     ) -> Type {
+        // A struct's functions are called with `.`, like its methods; `::` is
+        // for enum variants and modules.
+        if let ExpressionKind::Identifier(path) = &function.kind
+            && let Some((owner, name)) = path.rsplit_once("::")
+            && (self.struct_defs.contains_key(owner) || self.generic_structs.contains_key(owner))
+        {
+            self.error(
+                format!("Call a struct's function with '.': {owner}.{name}()"),
+                function.span,
+            );
+        }
+
         // A type on the left is a call on the type, not on a value: `Box.empty()`
-        // names the same function as `Box::empty()`. A variable of the same name
-        // wins, since that one has something to call a method on.
+        // names the function `Box::empty`. A variable of the same name wins,
+        // since that one has something to call a method on.
         if let ExpressionKind::Get { object, name } = &function.kind
             && let ExpressionKind::Identifier(type_name) = &object.kind
             && self.struct_defs.contains_key(type_name)
@@ -2047,15 +2059,21 @@ impl SemanticAnalyzer {
                     }
                 }
             }
+            // Logical on a bool, bitwise on an integer.
             crate::token::Token::Bang => {
-                let right_type = self.check_expression(right, None);
-                if right_type != Type::Bool && right_type != Type::Unknown {
-                    self.error(
-                        format!("Logical NOT requires bool, got {}", right_type),
-                        span,
-                    );
+                let right_type = self.check_expression(right, expected_type);
+                match right_type {
+                    Type::Bool | Type::Integer { .. } | Type::ParamType(_) | Type::Unknown => {
+                        right_type
+                    }
+                    _ => {
+                        self.error(
+                            format!("'!' applies to a bool or an integer, not {right_type}"),
+                            span,
+                        );
+                        Type::Unknown
+                    }
                 }
-                Type::Bool
             }
             _ => self.check_expression(right, expected_type),
         }
@@ -2760,6 +2778,20 @@ impl SemanticAnalyzer {
             Some(Type::Optional(inner)) => Some(inner.as_ref()),
             other => other,
         };
+        // A whole number makes a float when the float holds it exactly.
+        if let Some(Type::Float(width)) = expected {
+            let exact = match width {
+                FloatWidth::W32 => (value as f32) as u64 == value,
+                FloatWidth::W64 => (value as f64) as u64 == value,
+            };
+            if !exact {
+                self.error(
+                    format!("Literal {value} has no exact {} value", Type::Float(*width)),
+                    span,
+                );
+            }
+            return Type::Float(*width);
+        }
         let (signed, width, by_default) = match expected {
             Some(Type::Integer { signed, width }) => (*signed, *width, false),
             _ => (Signedness::Signed, IntWidth::W32, true),

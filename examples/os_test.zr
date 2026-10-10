@@ -1,4 +1,4 @@
-import std.os
+import std.os;
 
 fn main() {
     if os::getpid() <= 0 { exit(1); }

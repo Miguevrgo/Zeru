@@ -30,15 +30,10 @@ enum MethodCallOutcome<'ctx> {
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     /// Emit `s` as a global string and pack it into a `{ *u8, usize }` slice.
     fn build_str_slice(&mut self, s: &[u8]) -> BasicValueEnum<'ctx> {
-        let text = std::str::from_utf8(s).unwrap_or_default();
-        let global = self.builder.build_global_string_ptr(text, "str").unwrap();
+        let data = self.const_bytes(s);
         let len = self.usize_type().const_int(s.len() as u64, false);
-        self.build_struct(
-            self.slice_type(),
-            &[global.as_pointer_value().into(), len.into()],
-            "str_slice",
-        )
-        .into()
+        self.build_struct(self.slice_type(), &[data.into(), len.into()], "str_slice")
+            .into()
     }
 
     pub(super) fn compile_fn_prototype(
@@ -644,14 +639,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let settled_type = || expr.ty.as_ref().and_then(|ty| self.llvm_type_of(ty));
 
         match &expr.kind {
-            ExpressionKind::Int(val) => {
-                let int_type = match settled_type() {
-                    Some(BasicTypeEnum::IntType(t)) => t,
-                    _ => self.context.i32_type(),
-                };
-
-                int_type.const_int(*val, false).into()
-            }
+            ExpressionKind::Int(val) => match settled_type() {
+                Some(BasicTypeEnum::FloatType(t)) => t.const_float(*val as f64).into(),
+                Some(BasicTypeEnum::IntType(t)) => t.const_int(*val, false).into(),
+                _ => self.context.i32_type().const_int(*val, false).into(),
+            },
             ExpressionKind::Float(val) => {
                 let float_type = match settled_type() {
                     Some(BasicTypeEnum::FloatType(t)) => t,

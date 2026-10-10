@@ -42,6 +42,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.context.i32_type().const_int(0, false).into()
     }
 
+    /// A read-only global holding `bytes` and a terminating NUL, which a
+    /// syscall taking a C string needs; a `\0` inside is kept as data.
+    pub(super) fn const_bytes(&self, bytes: &[u8]) -> PointerValue<'ctx> {
+        let value = self.context.const_string(bytes, true);
+        let global = self.module.add_global(value.get_type(), None, "str");
+        global.set_initializer(&value);
+        global.set_constant(true);
+        global.set_linkage(Linkage::Private);
+        global.set_unnamed_addr(true);
+        global.as_pointer_value()
+    }
+
     pub(super) fn ptr_type(&self) -> PointerType<'ctx> {
         self.context.ptr_type(AddressSpace::default())
     }
@@ -265,13 +277,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         let panic_fn = self.panic_fn();
         self.builder.position_at_end(from);
-        let text = self
-            .builder
-            .build_global_string_ptr(&message, "panic_msg")
-            .unwrap();
+        let text = self.const_bytes(message.as_bytes());
         let len = self.usize_type().const_int(message.len() as u64, false);
         self.builder
-            .build_call(panic_fn, &[text.as_pointer_value().into(), len.into()], "")
+            .build_call(panic_fn, &[text.into(), len.into()], "")
             .unwrap();
         self.builder.build_unreachable().unwrap();
     }
@@ -1082,17 +1091,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap();
 
         if name.ends_with("ln") {
-            let nl = self
-                .builder
-                .build_global_string_ptr("\n", "newline")
-                .unwrap();
+            let nl = self.const_bytes(b"\n");
             let one = self.usize_type().const_int(1, false);
             self.builder
-                .build_call(
-                    write_fn,
-                    &[stream.into(), nl.as_pointer_value().into(), one.into()],
-                    "",
-                )
+                .build_call(write_fn, &[stream.into(), nl.into(), one.into()], "")
                 .unwrap();
             if let Some(flush_fn) = self.module.get_function("OutStream::flush") {
                 self.builder

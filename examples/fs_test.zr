@@ -1,4 +1,4 @@
-import std.fs
+import std.fs;
 
 fn main() {
     var path: *u8 = "build/test_fs.txt" as *u8;

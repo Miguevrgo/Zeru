@@ -37,7 +37,7 @@ fn process(data: Vec<i32>) {
 }  // data freed here
 
 fn main() {
-    var list: Vec<i32> = Vec::new();
+    var list: Vec<i32> = Vec.new();
     list.push(1);
  
     process(list);       // MOVE: ownership transfers to process()
@@ -265,12 +265,12 @@ All owned values are automatically freed when they go out of scope:
 
 ```rust
 fn process() {
-    var list: Vec<i32> = Vec::new();
+    var list: Vec<i32> = Vec.new();
     list.push(1);
     list.push(2);
  
     if some_condition {
-        var temp: Vec<i32> = Vec::new();
+        var temp: Vec<i32> = Vec.new();
         temp.push(100);
     }  // temp freed here
 
@@ -283,8 +283,8 @@ Variables are dropped in **reverse declaration order**:
 
 ```rust
 fn main() {
-    var a = Resource::new();  // Created first
-    var b = Resource::new();  // Created second
+    var a = Resource.new();  // Created first
+    var b = Resource.new();  // Created second
 }  // b dropped first, then a
 ```
 
@@ -365,8 +365,8 @@ fn iter_mut(self: &var Vec<T>) Iterator<&var T>
 ```rust
 fn main() {
     // Creation
-    var numbers: Vec<i32> = Vec::new();
-    var preallocated: Vec<i32> = Vec::with_capacity(100);
+    var numbers: Vec<i32> = Vec.new();
+    var preallocated: Vec<i32> = Vec.with_capacity(100);
     var from_literal: Vec<i32> = [1, 2, 3, 4, 5];
  
     // Mutation

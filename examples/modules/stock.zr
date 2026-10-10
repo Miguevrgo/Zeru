@@ -51,4 +51,4 @@ fn weigh(kg: i32) i32 {
     return scale.read();
 }
 
-fn started() i32 { return Counter::start().n + Counter.start().n; }
+fn started() i32 { return Counter.start().n + Counter.start().n; }

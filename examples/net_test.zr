@@ -1,8 +1,8 @@
-import std.net
+import std.net;
 
 fn main() {
     // TcpListener: bind + accept-ready
-    var bind_r = net::TcpListener::bind(0, 0);
+    var bind_r = net::TcpListener.bind(0, 0);
     if bind_r.is_err() { exit(1); }
     var listener = net::TcpListener { fd: bind_r.unwrap() };
 
@@ -26,7 +26,7 @@ fn main() {
     if addr[3] != 144 { exit(6); }
 
     // UdpSocket: bind + close
-    var udp_r = net::UdpSocket::bind(0, 0);
+    var udp_r = net::UdpSocket.bind(0, 0);
     if udp_r.is_err() { exit(7); }
     var udp = net::UdpSocket { fd: udp_r.unwrap() };
     udp.close();
