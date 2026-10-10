@@ -2974,3 +2974,70 @@ fn test_loops_count_read_and_write() {
         assert!(errors[0].contains(message), "{body}: {errors:?}");
     }
 }
+
+#[test]
+fn test_print_formats() {
+    assert!(analyze("fn main() { var x: u8 = 1; println(\"{} {} {} {{}}\", x, 2.5, true); print(\"plain\"); }").is_empty());
+    for (body, message) in [
+        (
+            "var s = \"x\"; println(s);",
+            "The format must be a string literal",
+        ),
+        (
+            "println(\"{} {}\", 1);",
+            "The format has 2 '{}' but 1 value(s) follow it",
+        ),
+        ("println(\"{\", 1);", "A brace in a format is"),
+        (
+            "var v: Vec<i32> = Vec.new(); println(\"{}\", v);",
+            "Cannot print Vec<i32>",
+        ),
+    ] {
+        let errors = analyze(&format!("fn main() {{ {body} }}"));
+        assert_eq!(errors.len(), 1, "{body}: {errors:?}");
+        assert!(errors[0].contains(message), "{body}: {errors:?}");
+    }
+}
+
+#[test]
+fn test_errors_propagate_and_fall_back() {
+    let ok = "
+        enum E { A, B }
+        fn f() i32!E { return Err(E::A); }
+        fn g() i32!E { var x = try f(); return Ok(x + 1); }
+        fn o() i32? { return None; }
+        fn main() {
+            var a = g() catch 0;
+            var b = o() orelse 1;
+            var e: E = f().unwrap_err();
+        }
+    ";
+    assert!(analyze(ok).is_empty(), "{:?}", analyze(ok));
+
+    for (input, message) in [
+        (
+            "fn f() i32! { return Ok(1); } fn main() { var x = try f(); }",
+            "'try' passes its i32 error on",
+        ),
+        (
+            "enum E { A } fn f() i32!E { return Err(E::A); } fn g() i32! { var x = try f(); return Ok(x); } fn main() { }",
+            "'try' passes its E error on",
+        ),
+        (
+            "fn f() i32? { return 1; } fn main() { var x = f() catch 0; }",
+            "'catch' takes a T! value, not i32?",
+        ),
+        (
+            "fn f() i32! { return Err(true); } fn main() { }",
+            "Err() takes i32, got bool",
+        ),
+        (
+            "fn f() i32!u8 { return Ok(1); } fn main() { }",
+            "An error type is an enum, not u8",
+        ),
+    ] {
+        let errors = analyze(input);
+        assert_eq!(errors.len(), 1, "{input}: {errors:?}");
+        assert!(errors[0].contains(message), "{input}: {errors:?}");
+    }
+}

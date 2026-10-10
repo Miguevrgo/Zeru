@@ -50,7 +50,7 @@ fn main() {
     if span.range.1 != 5 { exit(15); }
     span.range.0 = 3;
     if span.range.0 != 3 { exit(16); }
-    println(span.label);
+    println("{}", span.label);
 
     // And in a Vec.
     var spans: Vec<(usize, usize)> = Vec.new();

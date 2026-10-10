@@ -249,7 +249,7 @@ Zeru supports three compilation modes with different safety/performance tradeoff
 │ Move checks  │ ✅ Compile    │ ✅ Compile   │ ✅ Compile   │
 │ Gen-refs     │ ✅ Runtime    │ ✅ Runtime   │ ❌ Skipped   │
 │ Bounds check │ ✅ Runtime    │ ✅ Runtime   │ ❌ Skipped   │
-│ Overflow     │ ✅ Runtime    │ ❌ Skipped   │ ❌ Skipped   │
+│ Overflow     │ ✅ Runtime    │ ✅ Runtime   │ ❌ Skipped   │
 ├──────────────┼───────────────┼──────────────┼──────────────┤
 │ Use case     │ Development   │ Production   │ Max perf     │
 │ Performance  │ Slow          │ Fast         │ Fastest      │

@@ -15,7 +15,7 @@ use inkwell::{
 };
 
 use crate::{
-    ast::{AsmOperand, Expression},
+    ast::{AsmOperand, Expression, ExpressionKind, format_pieces},
     codegen::{
         compiler::Compiler,
         layout::{
@@ -24,7 +24,7 @@ use crate::{
         },
     },
     errors::{Span, ZeruError},
-    sema::types::Type,
+    sema::types::{Signedness, Type},
     token::Token,
 };
 
@@ -1057,53 +1057,104 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.register_global_array("llvm.global_dtors", dtor_fn);
     }
 
+    /// `print("x is {}", x)`: the format's text around each `{}` is written
+    /// as it is, each value by the `OutStream` method for its kind.
     pub(super) fn compile_builtin_print(
         &mut self,
         name: &str,
         arguments: &[Expression],
-        call_span: Span,
     ) -> BasicValueEnum<'ctx> {
-        let [argument] = arguments else {
-            self.error(format!("'{name}()' expects exactly 1 argument"), call_span);
-            return self.dummy_val();
+        let unit = self.dummy_val();
+        let stream = if name.starts_with('e') {
+            self.stderr_stream
+        } else {
+            self.stdout_stream
+        };
+        let (Some(stream), Some((format, values))) = (stream, arguments.split_first()) else {
+            return unit;
+        };
+        let ExpressionKind::StringLit(text) = &format.kind else {
+            return unit;
         };
 
-        let to_stderr = name.starts_with('e');
-        let (Some(stream), Some(write_fn)) = (
-            if to_stderr {
-                self.stderr_stream
-            } else {
-                self.stdout_stream
-            },
-            self.module.get_function("OutStream::write_bytes"),
-        ) else {
-            return self.dummy_val();
-        };
-
-        let BasicValueEnum::StructValue(text) = self.compile_expression(argument, None) else {
-            self.error(format!("'{name}()' expects a string argument"), call_span);
-            return self.dummy_val();
-        };
-        let ptr = self.extract(text, SLICE_PTR, "str_ptr");
-        let len = self.extract(text, SLICE_LEN, "str_len");
-        self.builder
-            .build_call(write_fn, &[stream.into(), ptr.into(), len.into()], "")
-            .unwrap();
-
-        if name.ends_with("ln") {
-            let nl = self.const_bytes(b"\n");
-            let one = self.usize_type().const_int(1, false);
-            self.builder
-                .build_call(write_fn, &[stream.into(), nl.into(), one.into()], "")
-                .unwrap();
-            if let Some(flush_fn) = self.module.get_function("OutStream::flush") {
-                self.builder
-                    .build_call(flush_fn, &[stream.into()], "")
-                    .unwrap();
+        let pieces = format_pieces(text).unwrap_or_default();
+        for (at, piece) in pieces.iter().enumerate() {
+            if !piece.is_empty() {
+                let text = self.const_bytes(piece);
+                let len = self.usize_type().const_int(piece.len() as u64, false);
+                self.call_stream("write_bytes", stream, &[text.into(), len.into()]);
+            }
+            if let Some(value) = values.get(at) {
+                self.print_value(stream, value);
             }
         }
 
-        self.dummy_val()
+        if name.ends_with("ln") {
+            let newline = self.const_bytes(b"\n");
+            let one = self.usize_type().const_int(1, false);
+            self.call_stream("write_bytes", stream, &[newline.into(), one.into()]);
+            self.call_stream("flush", stream, &[]);
+        }
+        unit
+    }
+
+    /// Write one value: a `str` as it is, a bool as `true` or `false`, a
+    /// number in decimal.
+    fn print_value(&mut self, stream: PointerValue<'ctx>, value: &Expression) {
+        let compiled = self.compile_expression(value, None);
+        let i64_type = self.context.i64_type();
+        match (&value.ty, compiled) {
+            (Some(Type::Bool), BasicValueEnum::IntValue(flag)) => {
+                let (yes, no) = (self.const_bytes(b"true"), self.const_bytes(b"false"));
+                let text = self
+                    .builder
+                    .build_select(flag, yes, no, "bool_text")
+                    .unwrap();
+                let lens = (i64_type.const_int(4, false), i64_type.const_int(5, false));
+                let len = self
+                    .builder
+                    .build_select(flag, lens.0, lens.1, "bool_len")
+                    .unwrap();
+                self.call_stream("write_bytes", stream, &[text.into(), len.into()]);
+            }
+            (Some(Type::Integer { signed, .. }), BasicValueEnum::IntValue(number)) => {
+                let signed = *signed == Signedness::Signed;
+                let wide = self
+                    .builder
+                    .build_int_cast_sign_flag(number, i64_type, signed, "wide")
+                    .unwrap();
+                let method = if signed { "write_int" } else { "write_uint" };
+                self.call_stream(method, stream, &[wide.into()]);
+            }
+            (Some(Type::Float(_)), BasicValueEnum::FloatValue(number)) => {
+                let wide = self
+                    .builder
+                    .build_float_ext(number, self.context.f64_type(), "wide")
+                    .unwrap();
+                self.call_stream("write_float", stream, &[wide.into()]);
+            }
+            (_, BasicValueEnum::StructValue(text)) => {
+                let ptr = self.extract(text, SLICE_PTR, "str_ptr");
+                let len = self.extract(text, SLICE_LEN, "str_len");
+                self.call_stream("write_bytes", stream, &[ptr.into(), len.into()]);
+            }
+            _ => {}
+        }
+    }
+
+    /// Call `OutStream::<method>` on `stream`, if the prelude defines it.
+    fn call_stream(
+        &self,
+        method: &str,
+        stream: PointerValue<'ctx>,
+        args: &[BasicMetadataValueEnum<'ctx>],
+    ) {
+        let Some(function) = self.module.get_function(&format!("OutStream::{method}")) else {
+            return;
+        };
+        let mut all = vec![stream.into()];
+        all.extend_from_slice(args);
+        self.builder.build_call(function, &all, "").unwrap();
     }
 
     /// `Ok(value)` or `Err(code)`, laid out as the `T!` the analyser typed the

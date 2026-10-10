@@ -88,9 +88,12 @@ impl Visitor for Renamer<'_> {
                 args.iter_mut().for_each(|arg| self.ty(arg));
             }
             TypeSpec::Tuple(types) => types.iter_mut().for_each(|ty| self.ty(ty)),
+            TypeSpec::Result(ok, error) => {
+                self.ty(ok);
+                error.iter_mut().for_each(|error| self.ty(error));
+            }
             TypeSpec::Pointer(inner)
             | TypeSpec::Optional(inner)
-            | TypeSpec::Result(inner)
             | TypeSpec::Slice(inner)
             | TypeSpec::Ref(inner)
             | TypeSpec::RefMut(inner) => self.ty(inner),

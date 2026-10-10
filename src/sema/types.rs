@@ -145,10 +145,10 @@ impl Type {
                 name: "Vec".into(),
                 args: vec![elem_type.to_spec()],
             },
-            Type::Result { ok_type, err_type } => TypeSpec::Generic {
-                name: "Result".into(),
-                args: vec![ok_type.to_spec(), err_type.to_spec()],
-            },
+            Type::Result { ok_type, err_type } => TypeSpec::Result(
+                boxed(ok_type),
+                matches!(**err_type, Type::Enum(_)).then(|| boxed(err_type)),
+            ),
             Type::Pointer(inner) => TypeSpec::Pointer(boxed(inner)),
             Type::Optional(inner) => TypeSpec::Optional(boxed(inner)),
             Type::Slice { elem_type } => TypeSpec::Slice(boxed(elem_type)),
@@ -188,7 +188,10 @@ impl std::fmt::Display for Type {
             Type::Array { elem_type, len } => write!(f, "Array<{elem_type}, {len}>"),
             Type::Pointer(elem_type) => write!(f, "*{elem_type}"),
             Type::Optional(elem_type) => write!(f, "{elem_type}?"),
-            Type::Result { ok_type, err_type } => write!(f, "Result<{ok_type}, {err_type}>"),
+            Type::Result { ok_type, err_type } if matches!(**err_type, Type::Enum(_)) => {
+                write!(f, "{ok_type}!{err_type}")
+            }
+            Type::Result { ok_type, .. } => write!(f, "{ok_type}!"),
             Type::Slice { elem_type } if elem_type.to_spec() == TypeSpec::Named("u8".into()) => {
                 write!(f, "str")
             }

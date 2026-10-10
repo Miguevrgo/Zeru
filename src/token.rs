@@ -17,6 +17,9 @@ pub enum Token {
     Continue,
     As,
     DoubleColon,
+    Try,    // try
+    Catch,  // catch
+    Orelse, // orelse
 
     // Literals
     Identifier(String),
@@ -129,6 +132,9 @@ impl std::fmt::Display for Token {
             Token::Break => "break",
             Token::Continue => "continue",
             Token::As => "as",
+            Token::Try => "try",
+            Token::Catch => "catch",
+            Token::Orelse => "orelse",
             Token::DoubleColon => "::",
             Token::And => "&&",
             Token::Or => "||",

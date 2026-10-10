@@ -155,6 +155,75 @@ struct OutStream {
 
         return count as i64;
     }
+
+    fn write_text(var self, text: str) {
+        self.write_bytes(text as *u8, text.len());
+    }
+
+    // A whole number in decimal.
+    fn write_uint(var self, value: u64) {
+        var digits: Array<u8, 20> = [0; 20];
+        var at: usize = 20;
+        var rest = value;
+        while true {
+            at -= 1;
+            digits[at] = '0' + (rest % 10) as u8;
+            rest /= 10;
+            if rest == 0 {
+                break;
+            }
+        }
+        self.write_bytes(&digits[at], 20 - at);
+    }
+
+    fn write_int(var self, value: i64) {
+        if value < 0 {
+            self.write_text("-");
+            // Wrapping keeps the most negative value, whose magnitude no i64 holds.
+            self.write_uint(0 -% (value as u64));
+            return;
+        }
+        self.write_uint(value as u64);
+    }
+
+    // At most six decimals, rounded, without trailing zeros: 2.5, 0.1, 3.0.
+    // ponytail: not the shortest round-trip form; past 1e18, 1e-6 precision.
+    fn write_float(var self, value: f64) {
+        if value != value {
+            self.write_text("NaN");
+            return;
+        }
+        var rest = value;
+        if rest < 0 {
+            self.write_text("-");
+            rest = -rest;
+        }
+        if rest > 18446744073709551615.0 {
+            self.write_text("inf");
+            return;
+        }
+        var whole = rest as u64;
+        var millionths = ((rest - whole as f64) * 1000000 + 0.5) as u64;
+        if millionths == 1000000 {
+            whole += 1;
+            millionths = 0;
+        }
+        self.write_uint(whole);
+        self.write_text(".");
+
+        var digits: Array<u8, 6> = [0; 6];
+        var at: usize = 6;
+        while at > 0 {
+            at -= 1;
+            digits[at] = '0' + (millionths % 10) as u8;
+            millionths /= 10;
+        }
+        var used: usize = 6;
+        while used > 1 && digits[used - 1] == '0' {
+            used -= 1;
+        }
+        self.write_bytes(&digits[0], used);
+    }
 }
 
 // =============================================================================

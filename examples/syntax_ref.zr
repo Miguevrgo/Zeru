@@ -148,6 +148,27 @@ fn find_positive(x: i32) i32? {
 }
 
 // -----------------------------------------------------------------------------
+// Errors: `T!` fails with an i32 code, `T!E` with a variant of the enum E
+// -----------------------------------------------------------------------------
+
+enum ConfigError {
+    Missing,
+    Invalid
+}
+
+fn port(text: str) u16!ConfigError {
+    if text.len() == 0 {
+        return Err(ConfigError::Missing);
+    }
+    return Ok(8080);
+}
+
+fn port_or_default(text: str) u16!ConfigError {
+    var chosen = try port(text);             // An error returns from here
+    return Ok(chosen);
+}
+
+// -----------------------------------------------------------------------------
 // Traits: a type meets one by having its methods, and a bound asks for that
 // -----------------------------------------------------------------------------
 
@@ -378,6 +399,12 @@ Line 3`;
     println("With newline");
     eprint("Error output");
     eprintln("Error with newline");
+    println("{} items cost {} ({} in stock: {})", 3, 2.5, "all", true);
+    println("{{}} writes braces");
+
+    // Fallbacks: used only when there is no value
+    var listening = port("") catch 80;       // T! without its value
+    var positive = find_positive(-1) orelse 1; // T? without its value
 
     // -------------------------------------------------------------------------
     // Exit
@@ -389,8 +416,6 @@ Line 3`;
 // Features NOT YET Implemented (for reference)
 // =============================================================================
 //
-// - Optional methods beyond is_some/is_none/unwrap: maybe.unwrap_or()
-// - String interpolation: println("Value: {}", x)
 // - Explicit trait implementations: a type meets a trait by having its methods
 // - Closures/lambdas
 // - Pattern matching with destructuring

@@ -307,7 +307,14 @@ impl<'a> Parser<'a> {
         }
         if self.peek_token_is(&Token::Bang) {
             self.next_token();
-            return Some(TypeSpec::Result(Box::new(named)));
+            let error = match self.peek_token {
+                Token::Identifier(_) => {
+                    self.next_token();
+                    Some(Box::new(self.parse_named_type()?))
+                }
+                _ => None,
+            };
+            return Some(TypeSpec::Result(Box::new(named), error));
         }
         Some(named)
     }
@@ -880,6 +887,15 @@ impl<'a> Parser<'a> {
             )),
             Token::LParen => self.parse_grouped_expression(),
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
+            Token::Try => {
+                self.next_token();
+                let operand = self.parse_expression(Precedence::Prefix)?;
+                let span = start_span.merge(operand.span);
+                Some(Expression::new(
+                    ExpressionKind::Try(Box::new(operand)),
+                    span,
+                ))
+            }
             Token::Star => self.parse_dereference_expression(),
             Token::BitAnd => self.parse_borrow_expression(),
             Token::Match => self.parse_match_expression(),
@@ -1421,6 +1437,9 @@ impl<'a> Parser<'a> {
 enum Precedence {
     Lowest,
     Assignment,
+    // `catch` and `orelse` take what is left of the expression as their
+    // fallback: `f() catch 0 + 1` falls back to 1.
+    Fallback,
     LogicalOr,
     LogicalAnd,
     Equals,
@@ -1474,6 +1493,7 @@ fn token_precedence(token: &Token) -> Precedence {
         | Token::MinusWrapEq
         | Token::StarWrapEq => Precedence::Assignment,
 
+        Token::Catch | Token::Orelse => Precedence::Fallback,
         Token::Or => Precedence::LogicalOr,
         Token::And => Precedence::LogicalAnd,
 
@@ -1525,7 +1545,7 @@ mod tests {
                     ..
                 } => "?",
                 StatementKind::Function {
-                    return_type: Some(TypeSpec::Result(_)),
+                    return_type: Some(TypeSpec::Result(..)),
                     ..
                 } => "!",
                 other => panic!("{other:?}"),

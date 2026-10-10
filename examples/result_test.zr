@@ -1,6 +1,26 @@
 // Result type (T!) integration test
-// Tests is_ok, is_err, unwrap, unwrap_err
+// Tests is_ok, is_err, unwrap, unwrap_err, error enums, try, catch and orelse
 // Uses exit codes to verify behavior
+
+enum ParseError { Empty, NotDigit }
+
+fn digit(c: u8) i32!ParseError {
+    if c < '0' || c > '9' { return Err(ParseError::NotDigit); }
+    return Ok((c - '0') as i32);
+}
+
+// `try` hands an error back to the caller as it is.
+fn number(text: str) i32!ParseError {
+    if text.len() == 0 { return Err(ParseError::Empty); }
+    var total = 0;
+    for i in 0..text.len() { total = total * 10 + try digit(text[i]); }
+    return Ok(total);
+}
+
+fn first(items: Vec<i64>) i64? {
+    if items.is_empty() { return None; }
+    return items[0];
+}
 
 fn divide(a: i32, b: i32) i32! {
     if b == 0 {
@@ -73,6 +93,13 @@ fn main() {
     } else {
         exit(12);
     }
+
+    if number("123").unwrap() != 123 { exit(20); }
+    if number("1x").unwrap_err() != ParseError::NotDigit { exit(21); }
+    if number("").unwrap_err() != ParseError::Empty { exit(22); }
+    // The fallback is used only when there is no value.
+    if (number("9z") catch -1) != -1 || (number("42") catch 0) != 42 { exit(23); }
+    if (first(Vec.new()) orelse 5) != 5 || (first([3]) orelse 5) != 3 { exit(24); }
 
     println("result: all tests passed");
     exit(0);

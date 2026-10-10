@@ -52,8 +52,8 @@ second`;
     if tabbed.len() != 3 { exit(11); }
     if tabbed[1] != 9 { exit(12); }
 
-    println(raw);
-    println(json);
+    println("{}", raw);
+    println("{}", json);
     println("raw strings: all tests passed");
     exit(0);
 }

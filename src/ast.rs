@@ -18,12 +18,16 @@ pub struct TraitMethod {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeSpec {
     Named(String),
-    Generic { name: String, args: Vec<TypeSpec> },
+    Generic {
+        name: String,
+        args: Vec<TypeSpec>,
+    },
     IntLiteral(u64),
     Tuple(Vec<TypeSpec>),
     Pointer(Box<TypeSpec>),
     Optional(Box<TypeSpec>), // T?
-    Result(Box<TypeSpec>),   // T!
+    /// `T!` fails with an i32 code, `T!E` with a variant of the enum `E`.
+    Result(Box<TypeSpec>, Option<Box<TypeSpec>>),
     Slice(Box<TypeSpec>),
     Ref(Box<TypeSpec>),    // &T - immutable reference
     RefMut(Box<TypeSpec>), // &var T - mutable reference
@@ -169,6 +173,8 @@ pub enum ExpressionKind {
     BorrowRef(Box<Expression>),
     BorrowRefMut(Box<Expression>),
     Dereference(Box<Expression>),
+    /// `try f()`: the value of a `T!`, or out of the function with its error.
+    Try(Box<Expression>),
     Tuple(Vec<Expression>),
     InlineAsm {
         template: String,
@@ -204,6 +210,30 @@ impl Expression {
     pub fn is_default_pattern(&self) -> bool {
         matches!(&self.kind, ExpressionKind::Identifier(name) if name == "default")
     }
+}
+
+/// The text of a `print` format around each `{}`: one piece more than there
+/// are values. `{{` and `}}` stand for a brace.
+pub fn format_pieces(format: &[u8]) -> Result<Vec<Vec<u8>>, String> {
+    let mut pieces = vec![Vec::new()];
+    let mut bytes = format.iter().copied().peekable();
+    while let Some(byte) = bytes.next() {
+        match (byte, bytes.peek()) {
+            (b'{', Some(b'}')) => {
+                bytes.next();
+                pieces.push(Vec::new());
+            }
+            (b'{', Some(b'{')) | (b'}', Some(b'}')) => {
+                bytes.next();
+                pieces.last_mut().unwrap().push(byte);
+            }
+            (b'{' | b'}', _) => {
+                return Err("A brace in a format is '{}', '{{' or '}}'".to_string());
+            }
+            _ => pieces.last_mut().unwrap().push(byte),
+        }
+    }
+    Ok(pieces)
 }
 
 /// What a walk over the tree does where it stops. Every hook does nothing by
@@ -404,7 +434,8 @@ fn walk_expression(v: &mut impl Visitor, expr: &mut Expression) {
         | ExpressionKind::Get { object: inner, .. }
         | ExpressionKind::BorrowRef(inner)
         | ExpressionKind::BorrowRefMut(inner)
-        | ExpressionKind::Dereference(inner) => walk_expression(v, inner),
+        | ExpressionKind::Dereference(inner)
+        | ExpressionKind::Try(inner) => walk_expression(v, inner),
         ExpressionKind::Infix { left, right, .. }
         | ExpressionKind::Assign {
             target: left,

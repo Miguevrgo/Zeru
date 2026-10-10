@@ -830,7 +830,7 @@ fn test_str_type() {
     let input = "
         fn main() {
             var s: str = \"hello\";
-            println(s);
+            println(\"{}\", s);
         }
     ";
     assert_compiles(input);

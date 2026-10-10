@@ -26,6 +26,10 @@ enum CallKind {
     Unknown,
 }
 
+/// The built-in ways to write text: to stdout or stderr, with or without a
+/// newline after.
+pub const PRINTS: &[&str] = &["print", "println", "eprint", "eprintln"];
+
 /// The `Vec` methods that change it, so need a receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
     "push",
@@ -77,22 +81,9 @@ pub struct SemanticAnalyzer {
 
 impl SemanticAnalyzer {
     pub fn new() -> Self {
-        let mut symbols = SymbolTable::new();
-
-        let str_type = Type::Slice {
-            elem_type: Box::new(Type::Integer {
-                signed: Signedness::Unsigned,
-                width: IntWidth::W8,
-            }),
-        };
-
-        for name in ["print", "println", "eprint", "eprintln"] {
-            symbols.insert_fn(name.to_string(), vec![str_type.clone()], Type::Void);
-        }
-
         Self {
             errors: Vec::new(),
-            symbols,
+            symbols: SymbolTable::new(),
             struct_defs: HashMap::new(),
             enum_defs: HashMap::new(),
             trait_defs: HashMap::new(),
@@ -335,9 +326,12 @@ impl SemanticAnalyzer {
                     *spec = TypeSpec::Named(name);
                 }
             }
+            TypeSpec::Result(ok, error) => {
+                self.name_spec(ok);
+                error.iter_mut().for_each(|error| self.name_spec(error));
+            }
             TypeSpec::Pointer(inner)
             | TypeSpec::Optional(inner)
-            | TypeSpec::Result(inner)
             | TypeSpec::Slice(inner)
             | TypeSpec::Ref(inner)
             | TypeSpec::RefMut(inner) => self.name_spec(inner),
@@ -405,7 +399,7 @@ impl SemanticAnalyzer {
             TypeSpec::Tuple(types) => {
                 types.iter().for_each(|t| Self::value_dependencies(t, out));
             }
-            TypeSpec::Optional(inner) | TypeSpec::Result(inner) => {
+            TypeSpec::Optional(inner) | TypeSpec::Result(inner, _) => {
                 Self::value_dependencies(inner, out);
             }
             TypeSpec::Generic { name, args } if name == "Array" => {
@@ -888,14 +882,6 @@ impl SemanticAnalyzer {
                         elem_type: Box::new(elem_type),
                     };
                 }
-                if name == "Result" && args.len() == 2 {
-                    let ok_type = self.resolve_spec(&args[0], span);
-                    let err_type = self.resolve_spec(&args[1], span);
-                    return Type::Result {
-                        ok_type: Box::new(ok_type),
-                        err_type: Box::new(err_type),
-                    };
-                }
                 if self.generic_structs.contains_key(name) {
                     let args: Vec<Type> = args.iter().map(|a| self.resolve_spec(a, span)).collect();
                     return match self.instantiate_struct(name, &args, span) {
@@ -926,11 +912,21 @@ impl SemanticAnalyzer {
                 let elem_type = self.resolve_spec(inner, span);
                 Type::Optional(Box::new(elem_type))
             }
-            TypeSpec::Result(inner) => {
-                let ok_type = self.resolve_spec(inner, span);
+            TypeSpec::Result(ok, error) => {
+                let ok_type = self.resolve_spec(ok, span);
+                let err_type = match error {
+                    None => Self::error_type(),
+                    Some(error) => match self.resolve_spec(error, span) {
+                        ty @ (Type::Enum(_) | Type::Unknown) => ty,
+                        other => {
+                            self.error(format!("An error type is an enum, not {other}"), span);
+                            Type::Unknown
+                        }
+                    },
+                };
                 Type::Result {
                     ok_type: Box::new(ok_type),
-                    err_type: Box::new(Self::error_type()),
+                    err_type: Box::new(err_type),
                 }
             }
             TypeSpec::Slice(inner) => {
@@ -1643,10 +1639,62 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// The `Error` payload every `T!` carries, which codegen lays out as an
-    /// i32 code.
+    /// What a plain `T!` fails with: an i32 code.
     fn error_type() -> Type {
-        Type::Struct("Error".to_string())
+        Type::Integer {
+            signed: Signedness::Signed,
+            width: IntWidth::W32,
+        }
+    }
+
+    /// `print("x is {}", x)`: a literal format with one `{}` per argument,
+    /// each a number, a bool or a `str`.
+    fn check_print(&mut self, arguments: &mut [Expression], span: Span) -> Type {
+        let Some((format, values)) = arguments.split_first_mut() else {
+            self.error("print takes a format string first".into(), span);
+            return Type::Void;
+        };
+        let ExpressionKind::StringLit(text) = &format.kind else {
+            self.error(
+                "The format must be a string literal, as in print(\"{}\", x)".into(),
+                format.span,
+            );
+            return Type::Void;
+        };
+        match crate::ast::format_pieces(text) {
+            Err(message) => self.error(message, format.span),
+            Ok(pieces) if pieces.len() - 1 != values.len() => self.error(
+                format!(
+                    "The format has {} '{{}}' but {} value(s) follow it",
+                    pieces.len() - 1,
+                    values.len()
+                ),
+                span,
+            ),
+            Ok(_) => {}
+        }
+        for value in values {
+            let ty = self.check_expression(value, None);
+            let printable = matches!(ty, Type::Integer { .. } | Type::Float(_) | Type::Bool)
+                || ty == Self::str_type()
+                || ty == Type::Unknown;
+            if !printable {
+                self.error(
+                    format!("Cannot print {ty}: print takes numbers, bools and str"),
+                    value.span,
+                );
+            }
+        }
+        Type::Void
+    }
+
+    fn str_type() -> Type {
+        Type::Slice {
+            elem_type: Box::new(Type::Integer {
+                signed: Signedness::Unsigned,
+                width: IntWidth::W8,
+            }),
+        }
     }
 
     fn check_ok_constructor(
@@ -1659,15 +1707,17 @@ impl SemanticAnalyzer {
             self.error("Ok() takes exactly one argument".into(), span);
             return Type::Unknown;
         }
-        let ok_hint = match expected_type {
-            Some(Type::Result { ok_type, .. }) => Some(ok_type.as_ref().clone()),
-            _ => None,
+        let (ok_hint, err_type) = match expected_type {
+            Some(Type::Result { ok_type, err_type }) => {
+                (Some(ok_type.as_ref().clone()), err_type.clone())
+            }
+            _ => (None, Box::new(Self::error_type())),
         };
         let inner_type = self.check_expression(&mut arguments[0], ok_hint.as_ref());
         self.consume(&arguments[0], &inner_type);
         Type::Result {
             ok_type: Box::new(inner_type),
-            err_type: Box::new(Self::error_type()),
+            err_type,
         }
     }
 
@@ -1678,29 +1728,80 @@ impl SemanticAnalyzer {
         span: Span,
     ) -> Type {
         if arguments.len() != 1 {
-            self.error("Err() takes exactly one argument (error code)".into(), span);
+            self.error("Err() takes exactly one argument, the error".into(), span);
             return Type::Unknown;
         }
-        let code_type = self.check_expression(
-            &mut arguments[0],
-            Some(&Type::Integer {
-                signed: Signedness::Signed,
-                width: IntWidth::W32,
-            }),
-        );
-        if !matches!(code_type, Type::Integer { .. }) {
-            self.error("Err() code must be an integer".into(), span);
+        let (ok_type, err_type) = match expected_type {
+            Some(Type::Result { ok_type, err_type }) => (ok_type.clone(), err_type.clone()),
+            _ => (Box::new(Type::Unknown), Box::new(Self::error_type())),
+        };
+        let found = self.check_expression(&mut arguments[0], Some(&err_type));
+        if !err_type.accepts(&found) {
+            self.error(format!("Err() takes {err_type}, got {found}"), span);
         }
-        if let Some(Type::Result { ok_type, err_type }) = expected_type {
-            return Type::Result {
-                ok_type: ok_type.clone(),
-                err_type: err_type.clone(),
-            };
+        Type::Result { ok_type, err_type }
+    }
+
+    /// `try value`: the payload of a `T!`, or a return with its error, which
+    /// the function must be able to return.
+    fn check_try(&mut self, value: &mut Expression, span: Span) -> Type {
+        let ty = self.check_expression(value, None);
+        let Type::Result { ok_type, err_type } = &ty else {
+            if ty != Type::Unknown {
+                self.error(format!("'try' takes a T! value, not {ty}"), span);
+            }
+            return Type::Unknown;
+        };
+        match &self.current_fn_return_type {
+            Some(Type::Result {
+                err_type: returned, ..
+            }) if returned == err_type => {}
+            returns => {
+                let returns = returns.clone().unwrap_or(Type::Void);
+                self.error(
+                    format!("'try' passes its {err_type} error on, which a function returning {returns} cannot"),
+                    span,
+                );
+            }
         }
-        Type::Result {
-            ok_type: Box::new(Type::Unknown),
-            err_type: Box::new(Self::error_type()),
+        let ok_type = ok_type.as_ref().clone();
+        self.consume(value, &ty);
+        ok_type
+    }
+
+    /// `value catch fallback` for a `T!`, `value orelse fallback` for a `T?`:
+    /// the payload, or the fallback, evaluated only when there is none.
+    fn check_fallback(
+        &mut self,
+        value: &mut Expression,
+        operator: &crate::token::Token,
+        fallback: &mut Expression,
+        span: Span,
+    ) -> Type {
+        let ty = self.check_expression(value, None);
+        let payload = match (operator, &ty) {
+            (crate::token::Token::Catch, Type::Result { ok_type, .. })
+            | (crate::token::Token::Orelse, Type::Optional(ok_type)) => ok_type.as_ref().clone(),
+            (_, Type::Unknown) => Type::Unknown,
+            _ => {
+                let wants = match operator {
+                    crate::token::Token::Catch => "a T! value",
+                    _ => "a T? value",
+                };
+                self.error(format!("'{operator}' takes {wants}, not {ty}"), span);
+                return Type::Unknown;
+            }
+        };
+        let fallback_type = self.check_expression(fallback, Some(&payload));
+        if !payload.accepts(&fallback_type) {
+            self.error(
+                format!("The fallback must be {payload}, got {fallback_type}"),
+                fallback.span,
+            );
         }
+        self.consume(value, &ty);
+        self.consume(fallback, &fallback_type);
+        payload
     }
 
     fn check_call_expression(
@@ -1750,6 +1851,9 @@ impl SemanticAnalyzer {
         };
 
         match call_kind {
+            CallKind::Named(name) if PRINTS.contains(&name.as_str()) => {
+                self.check_print(arguments, span)
+            }
             CallKind::Named(name) if name == "Ok" => {
                 self.check_ok_constructor(arguments, expected_type, span)
             }
@@ -1838,9 +1942,15 @@ impl SemanticAnalyzer {
                     self.consume(object, &obj_type);
                 }
 
-                if let Type::Result { ok_type, .. } = &obj_type {
-                    let ok_type = ok_type.clone();
-                    return self.check_result_method(&method_name, &ok_type, arguments, span);
+                if let Type::Result { ok_type, err_type } = &obj_type {
+                    let (ok_type, err_type) = (ok_type.clone(), err_type.clone());
+                    return self.check_result_method(
+                        &method_name,
+                        &ok_type,
+                        &err_type,
+                        arguments,
+                        span,
+                    );
                 }
 
                 if let Type::Optional(inner) = &obj_type {
@@ -2467,12 +2577,7 @@ impl SemanticAnalyzer {
                 _ => Type::Float(FloatWidth::W64),
             },
             ExpressionKind::Boolean(_) => Type::Bool,
-            ExpressionKind::StringLit(_) => Type::Slice {
-                elem_type: Box::new(Type::Integer {
-                    signed: Signedness::Unsigned,
-                    width: IntWidth::W8,
-                }),
-            },
+            ExpressionKind::StringLit(_) => Self::str_type(),
             ExpressionKind::None => {
                 if let Some(Type::Optional(inner)) = expected_type {
                     Type::Optional(inner.clone())
@@ -2496,12 +2601,21 @@ impl SemanticAnalyzer {
 
             ExpressionKind::Infix {
                 left,
+                operator: operator @ (crate::token::Token::Catch | crate::token::Token::Orelse),
+                right,
+            } => {
+                let operator = operator.clone();
+                self.check_fallback(left, &operator, right, span)
+            }
+            ExpressionKind::Infix {
+                left,
                 operator,
                 right,
             } => {
                 let operator = operator.clone();
                 self.check_infix(left, &operator, right, expected_type, span)
             }
+            ExpressionKind::Try(value) => self.check_try(value, span),
 
             ExpressionKind::Call {
                 function,
@@ -2708,6 +2822,7 @@ impl SemanticAnalyzer {
         &mut self,
         method_name: &str,
         ok_type: &Type,
+        err_type: &Type,
         arguments: &mut [Expression],
         span: Span,
     ) -> Type {
@@ -2716,10 +2831,7 @@ impl SemanticAnalyzer {
         match method_name {
             "is_ok" | "is_err" => Type::Bool,
             "unwrap" => ok_type.clone(),
-            "unwrap_err" => Type::Integer {
-                signed: Signedness::Signed,
-                width: IntWidth::W32,
-            },
+            "unwrap_err" => err_type.clone(),
             _ => {
                 self.error(format!("Result type has no method '{method_name}'"), span);
                 Type::Unknown

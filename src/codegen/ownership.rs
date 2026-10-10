@@ -89,6 +89,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
+    /// Drop everything the function owns, as a `return` leaves it. The
+    /// temporaries stay listed: a `try` returns on one path only.
+    pub(super) fn drop_all_owned(&mut self) {
+        for owned in self.temporaries.clone().iter().rev() {
+            self.drop_owned(owned);
+        }
+        self.drop_scopes_from(0);
+    }
+
     /// Drop the temporaries of the statement that just finished.
     pub(super) fn drop_temporaries(&mut self) {
         for owned in std::mem::take(&mut self.temporaries).iter().rev() {

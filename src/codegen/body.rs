@@ -15,10 +15,13 @@ use crate::{
     ast::{Expression, ExpressionKind, Statement, StatementKind, TypeSpec},
     codegen::{
         compiler::{Compiler, LoopContext, Scope, VarBinding},
-        layout::{OPTION_VALUE, SLICE_LEN, SLICE_PTR, VEC_LEN, VEC_PTR},
+        layout::{
+            OPTION_TAG, OPTION_VALUE, RESULT_ERR, RESULT_TAG, RESULT_VALUE, SLICE_LEN, SLICE_PTR,
+            VEC_LEN, VEC_PTR,
+        },
     },
     errors::Span,
-    sema::types::Type,
+    sema::{analyzer::PRINTS, types::Type},
     token::Token,
 };
 
@@ -163,8 +166,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             StatementKind::Return(Some(expr)) => {
                 let ret_hint = parent_fn.get_type().get_return_type();
                 let val = self.compile_expression(expr, ret_hint);
-                self.drop_temporaries();
-                self.drop_scopes_from(0);
+                self.drop_all_owned();
                 self.builder.build_return(Some(&val)).unwrap();
             }
             // `main` returns an implicit exit status even on a bare `return`.
@@ -697,6 +699,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ExpressionKind::ArrayRepeat { value, count } => {
                 self.lower_array_repeat(value, *count, expr)
             }
+            ExpressionKind::Try(value) => self.lower_try(value),
             // Only a `for` loop takes one, and lowers it itself.
             ExpressionKind::Range { .. } => {
                 self.error("A range only goes in a 'for' loop", expr.span);
@@ -1141,8 +1144,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
             }
             ExpressionKind::Identifier(name) => match name.as_str() {
-                "print" | "println" | "eprint" | "eprintln" => {
-                    return self.compile_builtin_print(name, arguments, span);
+                _ if PRINTS.contains(&name.as_str()) => {
+                    return self.compile_builtin_print(name, arguments);
                 }
                 "Ok" | "Err" => {
                     return self.compile_result_constructor(arguments, call, name == "Ok");
@@ -1331,6 +1334,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         if matches!(operator, Token::And | Token::Or) {
             return self.lower_short_circuit(left, operator, right, expr.span);
         }
+        if matches!(operator, Token::Catch | Token::Orelse) {
+            return self.lower_fallback(left, right);
+        }
 
         let comparison = Self::compare_predicates(operator);
         // A comparison's operands carry their own type, not the boolean result.
@@ -1436,7 +1442,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         use IntPredicate as I;
         Some(match op {
             Token::Eq => (I::EQ, I::EQ, F::OEQ),
-            Token::NotEq => (I::NE, I::NE, F::ONE),
+            // Unordered: NaN differs from everything, itself included.
+            Token::NotEq => (I::NE, I::NE, F::UNE),
             Token::Lt => (I::SLT, I::ULT, F::OLT),
             Token::Leq => (I::SLE, I::ULE, F::OLE),
             Token::Gt => (I::SGT, I::UGT, F::OGT),
@@ -1448,6 +1455,83 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn unsupported_operator(&mut self, operator: &Token, span: Span) -> BasicValueEnum<'ctx> {
         self.error(format!("Operator '{operator}' is not implemented"), span);
         self.dummy_val()
+    }
+
+    /// `try value`: on an error, return it from the function, dropping what
+    /// the function owns; otherwise go on with the payload.
+    fn lower_try(&mut self, value: &Expression) -> BasicValueEnum<'ctx> {
+        let (Some(function), BasicValueEnum::StructValue(result)) =
+            (self.current_fn, self.compile_expression(value, None))
+        else {
+            return self.dummy_val();
+        };
+        let Some(BasicTypeEnum::StructType(returned)) = function.get_type().get_return_type()
+        else {
+            return self.dummy_val();
+        };
+        let failed_bb = self.context.append_basic_block(function, "try_failed");
+        let ok_bb = self.context.append_basic_block(function, "try_ok");
+        let is_ok = self.extract(result, RESULT_TAG, "is_ok").into_int_value();
+        self.builder
+            .build_conditional_branch(is_ok, ok_bb, failed_bb)
+            .unwrap();
+
+        self.builder.position_at_end(failed_bb);
+        let error = self.extract(result, RESULT_ERR, "error");
+        let payload = returned.get_field_type_at_index(RESULT_VALUE).unwrap();
+        let failure = self.build_struct(
+            returned,
+            &[
+                self.context.bool_type().const_zero().into(),
+                self.zero_value_for(payload),
+                error,
+            ],
+            "failure",
+        );
+        self.drop_all_owned();
+        self.builder.build_return(Some(&failure)).unwrap();
+
+        self.builder.position_at_end(ok_bb);
+        self.extract(result, RESULT_VALUE, "payload")
+    }
+
+    /// `value catch fallback` or `value orelse fallback`: the payload of a
+    /// `T!` or `T?` when it has one, else the fallback, evaluated only then.
+    fn lower_fallback(
+        &mut self,
+        value: &Expression,
+        fallback: &Expression,
+    ) -> BasicValueEnum<'ctx> {
+        let (Some(function), BasicValueEnum::StructValue(held)) =
+            (self.current_fn, self.compile_expression(value, None))
+        else {
+            return self.dummy_val();
+        };
+        // Both keep the tag first and the payload second.
+        let has_payload = self
+            .extract(held, OPTION_TAG, "has_payload")
+            .into_int_value();
+        let payload = self.extract(held, OPTION_VALUE, "payload");
+        let start_bb = self.builder.get_insert_block().unwrap();
+        let fallback_bb = self.context.append_basic_block(function, "fallback");
+        let merge_bb = self.context.append_basic_block(function, "fallback_merge");
+        self.builder
+            .build_conditional_branch(has_payload, merge_bb, fallback_bb)
+            .unwrap();
+
+        self.builder.position_at_end(fallback_bb);
+        let replacement = self.compile_expression(fallback, Some(payload.get_type()));
+        let fallback_end = self.builder.get_insert_block().unwrap();
+        let falls_through = self.block_is_open();
+        self.branch_if_open(merge_bb);
+
+        self.builder.position_at_end(merge_bb);
+        let phi = self.builder.build_phi(payload.get_type(), "or").unwrap();
+        phi.add_incoming(&[(&payload, start_bb)]);
+        if falls_through {
+            phi.add_incoming(&[(&replacement, fallback_end)]);
+        }
+        phi.as_basic_value()
     }
 
     /// Lower `&&`/`||` as a branch plus a phi, leaving the builder at the merge.
