@@ -495,7 +495,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 match container {
                     BasicTypeEnum::ArrayType(array_ty) => {
-                        self.emit_bounds_check(offset, array_ty.len() as u64, unsigned);
+                        let len = usize_type.const_int(array_ty.len() as u64, false);
+                        self.emit_bounds_check(offset, len, unsigned);
                         let elem_ptr = unsafe {
                             self.builder
                                 .build_in_bounds_gep(
@@ -521,7 +522,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         let data = self.load(ptr_type, data_field, "data").into_pointer_value();
                         let len_field = self.field_ptr(shape, ptr, len_at, "len_field");
                         let len = self.load_int(usize_type, len_field, "len");
-                        self.emit_bounds_check_against(offset, len, unsigned);
+                        self.emit_bounds_check(offset, len, unsigned);
                         Some((self.vec_elem_ptr(data, offset, elem_type), elem_type))
                     }
 
@@ -1253,18 +1254,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             _ => None,
         }
         .unwrap_or_else(|| self.usize_type().into())
-    }
-
-    fn field_ptr(
-        &self,
-        shape: StructType<'ctx>,
-        ptr: PointerValue<'ctx>,
-        field: u32,
-        name: &str,
-    ) -> PointerValue<'ctx> {
-        self.builder
-            .build_struct_gep(shape, ptr, field, name)
-            .unwrap()
     }
 
     fn lower_infix(

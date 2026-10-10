@@ -1,6 +1,5 @@
 use crate::{
     ast::{Expression, ExpressionKind, Program, Statement, StatementKind, TypeSpec},
-    codegen::runtime::FLUSH_FN,
     errors::{Span, ZeruError},
     generics::{Substitutions, instantiate, mangle, map_types},
     sema::{
@@ -33,6 +32,9 @@ enum CallKind {
 /// The built-in ways to write text: to stdout or stderr, with or without a
 /// newline after.
 pub const PRINTS: &[&str] = &["print", "println", "eprint", "eprintln"];
+
+/// Writes out what the print streams hold; the compiler emits it.
+pub const FLUSH_FN: &str = "__zeru_flush";
 
 /// The `Vec` methods that change it, so need a receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
@@ -329,36 +331,20 @@ impl SemanticAnalyzer {
     }
 
     fn name_spec(&mut self, spec: &mut TypeSpec) {
-        match spec {
-            TypeSpec::Generic { args, .. } => {
-                for arg in args.iter_mut() {
-                    self.name_spec(arg);
-                }
-                let TypeSpec::Generic { name, .. } = &*spec else {
-                    return;
-                };
-                if !self.generic_structs.contains_key(name) {
-                    return;
-                }
-                if let Type::Struct(name) = self.resolve_spec(spec, Span::default()) {
-                    *spec = TypeSpec::Named(name);
+        for child in spec.children_mut() {
+            self.name_spec(child);
+        }
+        let named = match &*spec {
+            TypeSpec::Generic { name, .. } if self.generic_structs.contains_key(name) => {
+                match self.resolve_spec(spec, Span::default()) {
+                    Type::Struct(name) => Some(name),
+                    _ => None,
                 }
             }
-            TypeSpec::Result(ok, error) => {
-                self.name_spec(ok);
-                error.iter_mut().for_each(|error| self.name_spec(error));
-            }
-            TypeSpec::Pointer(inner)
-            | TypeSpec::Optional(inner)
-            | TypeSpec::Slice(inner)
-            | TypeSpec::Ref(inner)
-            | TypeSpec::RefMut(inner) => self.name_spec(inner),
-            TypeSpec::Tuple(types) => {
-                for ty in types.iter_mut() {
-                    self.name_spec(ty);
-                }
-            }
-            TypeSpec::Named(_) | TypeSpec::IntLiteral(_) => {}
+            _ => None,
+        };
+        if let Some(name) = named {
+            *spec = TypeSpec::Named(name);
         }
     }
 
@@ -1054,10 +1040,8 @@ impl SemanticAnalyzer {
             _ => {}
         }
 
-        let candidates: Vec<&str> = PRIMITIVES
-            .iter()
-            .map(|(n, _, _)| *n)
-            .chain(["f32", "f64", "bool"].iter().copied())
+        let candidates: Vec<&str> = crate::ast::PRIMITIVES
+            .into_iter()
             .chain(self.struct_defs.keys().map(|s| s.as_str()))
             .chain(self.enum_defs.keys().map(|s| s.as_str()))
             .collect();
@@ -1391,8 +1375,15 @@ impl SemanticAnalyzer {
                 }
             }
         } else {
-            let suggestion = self.find_similar_variable(name);
-            if let Some(similar) = suggestion {
+            let variables: Vec<&str> = self
+                .symbols
+                .get_all_scopes()
+                .iter()
+                .flatten()
+                .filter(|(_, symbol)| matches!(symbol, super::symbol_table::Symbol::Var { .. }))
+                .map(|(var_name, _)| var_name.as_str())
+                .collect();
+            if let Some(similar) = self.find_closest_match(name, &variables) {
                 self.error(
                     format!(
                         "Undeclared variable '{}'. Did you mean '{}'?",
@@ -2916,14 +2907,13 @@ impl SemanticAnalyzer {
                 for operand in outputs.iter_mut() {
                     let operand_span = operand.expr.span;
                     let is_ident = matches!(operand.expr.kind, ExpressionKind::Identifier(_));
-                    let ty = self.check_expression(&mut operand.expr, None);
+                    self.check_expression(&mut operand.expr, None);
                     if !is_ident {
                         self.error(
                             "Inline assembly output must be a variable".to_string(),
                             operand_span,
                         );
                     }
-                    let _ = ty;
                 }
                 Type::Integer {
                     signed: Signedness::Signed,
@@ -3319,25 +3309,6 @@ impl SemanticAnalyzer {
             (Signedness::Signed, false) => value < 1 << (bits - 1),
             (Signedness::Signed, true) => value <= 1 << (bits - 1),
         }
-    }
-
-    fn find_similar_variable(&self, name: &str) -> Option<String> {
-        let mut best_match: Option<String> = None;
-        let mut min_dist = usize::MAX;
-
-        for scope in self.symbols.get_all_scopes() {
-            for (var_name, symbol) in scope {
-                if let super::symbol_table::Symbol::Var { .. } = symbol {
-                    let dist = Self::levenshtein_distance(name, var_name);
-                    if dist < min_dist && dist <= 2 {
-                        min_dist = dist;
-                        best_match = Some(var_name.clone());
-                    }
-                }
-            }
-        }
-
-        best_match
     }
 
     /// Edit distance, one row at a time: `row[j]` is the distance between the

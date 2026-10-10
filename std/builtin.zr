@@ -36,6 +36,14 @@ fn syscall1(nr: i64, arg1: i64) i64 {
     return result;
 }
 
+// A raw syscall return as a result: negative values are -errno.
+fn sys_result(r: i64) i64! {
+    if r < 0 {
+        return Err((-r) as i32);
+    }
+    return Ok(r);
+}
+
 // End the process, after writing out what print left buffered.
 fn exit(code: i32) {
     __zeru_flush();

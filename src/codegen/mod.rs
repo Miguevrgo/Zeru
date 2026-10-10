@@ -3,7 +3,7 @@ pub mod compiler;
 mod debug;
 pub mod layout;
 mod ownership;
-pub mod runtime;
+mod runtime;
 pub mod types;
 
 #[cfg(test)]

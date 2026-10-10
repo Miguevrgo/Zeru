@@ -4,6 +4,10 @@ use crate::errors::Span;
 use crate::sema::types::Type;
 use crate::token::Token;
 
+pub const PRIMITIVES: [&str; 13] = [
+    "i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize", "f32", "f64", "bool",
+];
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeParameter {
     pub name: String,
@@ -29,6 +33,26 @@ pub enum TypeSpec {
     Slice(Box<TypeSpec>),
     Ref(Box<TypeSpec>),
     RefMut(Box<TypeSpec>),
+}
+
+impl TypeSpec {
+    /// The types this one is built from.
+    pub fn children_mut(&mut self) -> Vec<&mut TypeSpec> {
+        match self {
+            TypeSpec::Named(_) | TypeSpec::IntLiteral(_) => Vec::new(),
+            TypeSpec::Tuple(types) | TypeSpec::Generic { args: types, .. } => {
+                types.iter_mut().collect()
+            }
+            TypeSpec::Result(ok, error) => std::iter::once(&mut **ok)
+                .chain(error.as_deref_mut())
+                .collect(),
+            TypeSpec::Pointer(inner)
+            | TypeSpec::Optional(inner)
+            | TypeSpec::Slice(inner)
+            | TypeSpec::Ref(inner)
+            | TypeSpec::RefMut(inner) => vec![inner],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]

@@ -1,7 +1,7 @@
 use crate::{
     ast::{
-        AsmOperand, Expression, ExpressionKind, Program, Statement, StatementKind, TypeParameter,
-        TypeSpec,
+        AsmOperand, Expression, ExpressionKind, PRIMITIVES, Program, Statement, StatementKind,
+        TypeParameter, TypeSpec,
     },
     errors::{Span, ZeruError},
     lexer::Lexer,
@@ -301,7 +301,7 @@ impl<'a> Parser<'a> {
             name.push_str(segment);
         }
 
-        if self.peek_token_is(&Token::Lt) && !is_primitive(&name) {
+        if self.peek_token_is(&Token::Lt) && !PRIMITIVES.contains(&name.as_str()) {
             let args = self.parse_generic_arguments()?;
             return Some(TypeSpec::Generic { name, args });
         }
@@ -677,7 +677,6 @@ impl<'a> Parser<'a> {
 
         while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
             if !self.expect_peek(&Token::Fn) {
-                self.error_current("Expected 'fn' in trait definition");
                 return None;
             }
 
@@ -1209,49 +1208,31 @@ impl<'a> Parser<'a> {
             _ => {}
         }
 
-        let precedence = if Self::is_assignment(&operator) {
+        let precedence = token_precedence(&operator);
+        let assigns = precedence == Precedence::Assignment;
+        self.next_token();
+        let right = self.parse_expression(if assigns {
             Precedence::Lowest
         } else {
-            token_precedence(&operator)
-        };
-        self.next_token();
-        let right = self.parse_expression(precedence)?;
+            precedence
+        })?;
         let span = start_span.merge(right.span);
 
-        let kind = match operator {
-            _ if Self::is_assignment(&operator) => ExpressionKind::Assign {
+        let kind = if assigns {
+            ExpressionKind::Assign {
                 target: Box::new(left),
                 operator,
                 value: Box::new(right),
-            },
-            _ => ExpressionKind::Infix {
+            }
+        } else {
+            ExpressionKind::Infix {
                 left: Box::new(left),
                 operator,
                 right: Box::new(right),
-            },
+            }
         };
 
         Some(Expression::new(kind, span))
-    }
-
-    fn is_assignment(token: &Token) -> bool {
-        matches!(
-            token,
-            Token::Assign
-                | Token::PlusEq
-                | Token::MinusEq
-                | Token::StarEq
-                | Token::SlashEq
-                | Token::ModEq
-                | Token::BitAndEq
-                | Token::BitOrEq
-                | Token::BitXorEq
-                | Token::BitLShiftEq
-                | Token::BitRShiftEq
-                | Token::PlusWrapEq
-                | Token::MinusWrapEq
-                | Token::StarWrapEq
-        )
     }
 
     fn parse_array_literal(&mut self) -> Option<Expression> {
@@ -1449,24 +1430,6 @@ enum Precedence {
     Prefix,
     Call,
     Index,
-}
-
-fn is_primitive(name: &str) -> bool {
-    matches!(
-        name,
-        "i8" | "i16"
-            | "i32"
-            | "i64"
-            | "isize"
-            | "u8"
-            | "u16"
-            | "u32"
-            | "u64"
-            | "usize"
-            | "f32"
-            | "f64"
-            | "bool"
-    )
 }
 
 fn token_precedence(token: &Token) -> Precedence {

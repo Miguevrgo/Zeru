@@ -8,9 +8,7 @@ pub fn geteuid() i64 { return syscall1(107, 0); }
 pub fn getegid() i64 { return syscall1(108, 0); }
 
 pub fn getcwd(buf: *u8, size: usize) i64! {
-    var r: i64 = syscall2(79, buf as i64, size as i64);
-    if r < 0 { return Err((-r) as i32); }
-    return Ok(0);
+    return sys_result(syscall2(79, buf as i64, size as i64));
 }
 
 pub fn sleep_ms(ms: i64) {
@@ -31,8 +29,7 @@ pub fn sleep(seconds: i64) {
 
 pub fn clock_ns() i64! {
     var ts: Array<u8, 16> = [0; 16];
-    var r: i64 = syscall2(228, 1, (&ts[0]) as i64);
-    if r < 0 { return Err((-r) as i32); }
+    try sys_result(syscall2(228, 1, (&ts[0]) as i64));
     var sec: *i64 = (&ts[0]) as *i64;
     var nsec: *i64 = (&ts[8]) as *i64;
     return Ok((*sec) * 1000000000 + (*nsec));
@@ -40,16 +37,14 @@ pub fn clock_ns() i64! {
 
 pub fn time() i64! {
     var ts: Array<u8, 16> = [0; 16];
-    var r: i64 = syscall2(228, 0, (&ts[0]) as i64);
-    if r < 0 { return Err((-r) as i32); }
+    try sys_result(syscall2(228, 0, (&ts[0]) as i64));
     var sec: *i64 = (&ts[0]) as *i64;
     return Ok(*sec);
 }
 
 pub fn hostname(buf: *u8, size: usize) i64! {
     var utsname: Array<u8, 390> = [0; 390];
-    var r: i64 = syscall1(63, (&utsname[0]) as i64);
-    if r < 0 { return Err((-r) as i32); }
+    try sys_result(syscall1(63, (&utsname[0]) as i64));
     var i: usize = 0;
     while i < 64 && i < size - 1 {
         var src: *u8 = &utsname[65 + i];

@@ -108,23 +108,11 @@ impl Visitor for Renamer<'_> {
     }
 
     fn ty(&mut self, spec: &mut TypeSpec) {
-        match spec {
-            TypeSpec::Named(name) => self.item(name),
-            TypeSpec::Generic { name, args } => {
-                self.item(name);
-                args.iter_mut().for_each(|arg| self.ty(arg));
-            }
-            TypeSpec::Tuple(types) => types.iter_mut().for_each(|ty| self.ty(ty)),
-            TypeSpec::Result(ok, error) => {
-                self.ty(ok);
-                error.iter_mut().for_each(|error| self.ty(error));
-            }
-            TypeSpec::Pointer(inner)
-            | TypeSpec::Optional(inner)
-            | TypeSpec::Slice(inner)
-            | TypeSpec::Ref(inner)
-            | TypeSpec::RefMut(inner) => self.ty(inner),
-            TypeSpec::IntLiteral(_) => {}
+        if let TypeSpec::Named(name) | TypeSpec::Generic { name, .. } = spec {
+            self.item(name);
+        }
+        for child in spec.children_mut() {
+            self.ty(child);
         }
     }
 

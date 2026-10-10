@@ -10,24 +10,15 @@ use crate::ast::{Statement, StatementKind, TypeParameter, TypeSpec, Visitor, wal
 
 pub type Substitutions = HashMap<String, TypeSpec>;
 
-pub fn substitute(spec: &TypeSpec, subs: &Substitutions) -> TypeSpec {
-    let boxed = |inner: &TypeSpec| Box::new(substitute(inner, subs));
-    let all = |types: &[TypeSpec]| types.iter().map(|t| substitute(t, subs)).collect();
-
-    match spec {
-        TypeSpec::Named(name) => subs.get(name).cloned().unwrap_or_else(|| spec.clone()),
-        TypeSpec::Pointer(inner) => TypeSpec::Pointer(boxed(inner)),
-        TypeSpec::Optional(inner) => TypeSpec::Optional(boxed(inner)),
-        TypeSpec::Result(ok, error) => TypeSpec::Result(boxed(ok), error.as_deref().map(boxed)),
-        TypeSpec::Slice(inner) => TypeSpec::Slice(boxed(inner)),
-        TypeSpec::Ref(inner) => TypeSpec::Ref(boxed(inner)),
-        TypeSpec::RefMut(inner) => TypeSpec::RefMut(boxed(inner)),
-        TypeSpec::Tuple(elems) => TypeSpec::Tuple(all(elems)),
-        TypeSpec::Generic { name, args } => TypeSpec::Generic {
-            name: name.clone(),
-            args: all(args),
-        },
-        TypeSpec::IntLiteral(_) => spec.clone(),
+fn substitute(spec: &mut TypeSpec, subs: &Substitutions) {
+    if let TypeSpec::Named(name) = spec
+        && let Some(concrete) = subs.get(name)
+    {
+        *spec = concrete.clone();
+        return;
+    }
+    for child in spec.children_mut() {
+        substitute(child, subs);
     }
 }
 
@@ -80,7 +71,7 @@ pub fn instantiate(decl: &Statement, name: String, subs: &Substitutions) -> Stat
         *decl_name = name;
         type_params.clear();
     }
-    map_types(&mut decl, &mut |spec| *spec = substitute(spec, subs));
+    map_types(&mut decl, &mut |spec| substitute(spec, subs));
     decl
 }
 

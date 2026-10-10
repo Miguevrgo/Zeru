@@ -7,7 +7,7 @@ use inkwell::{
     builder::Builder,
     intrinsics::Intrinsic,
     module::Linkage,
-    types::{BasicType, BasicTypeEnum, FunctionType, IntType, PointerType},
+    types::{BasicType, BasicTypeEnum, FunctionType, IntType, PointerType, StructType},
     values::{
         BasicMetadataValueEnum, BasicValueEnum, FunctionValue, IntValue, PointerValue, StructValue,
         ValueKind,
@@ -24,14 +24,16 @@ use crate::{
         },
     },
     errors::{Span, ZeruError},
-    sema::types::{Signedness, Type},
+    sema::{
+        analyzer::FLUSH_FN,
+        types::{Signedness, Type},
+    },
     token::Token,
 };
 
 const ALLOC_FN: &str = "__zeru_alloc";
 const REALLOC_FN: &str = "__zeru_realloc";
 const MEMMOVE_FN: &str = "__zeru_memmove";
-pub const FLUSH_FN: &str = "__zeru_flush";
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub(super) fn error(&mut self, message: impl Into<String>, span: Span) {
@@ -118,15 +120,25 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
+    pub(super) fn field_ptr(
+        &self,
+        shape: StructType<'ctx>,
+        ptr: PointerValue<'ctx>,
+        field: u32,
+        name: &str,
+    ) -> PointerValue<'ctx> {
+        self.builder
+            .build_struct_gep(shape, ptr, field, name)
+            .unwrap()
+    }
+
     pub(super) fn vec_field_ptr(
         &self,
         vec_ptr: PointerValue<'ctx>,
         field: u32,
         name: &str,
     ) -> PointerValue<'ctx> {
-        self.builder
-            .build_struct_gep(self.vec_type(), vec_ptr, field, name)
-            .unwrap()
+        self.field_ptr(self.vec_type(), vec_ptr, field, name)
     }
 
     pub(super) fn vec_elem_ptr(
@@ -321,28 +333,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     /// Trap when `index` falls outside `0..len`. One unsigned compare covers
     /// both ends: a negative index wraps to a value above any length.
-    pub(super) fn emit_bounds_check(&mut self, index: IntValue<'ctx>, len: u64, unsigned: bool) {
-        if !self.safety_mode.emit_safety_checks() {
-            return;
-        }
-        if let Some(constant) = index.get_sign_extended_constant()
-            && (0..len as i64).contains(&constant)
-        {
-            return;
-        }
-
-        let len = self.usize_type().const_int(len, false);
-        self.emit_bounds_check_against(index, len, unsigned);
-    }
-
-    /// The same check where the length is only known once it runs, as for a Vec.
-    pub(super) fn emit_bounds_check_against(
+    pub(super) fn emit_bounds_check(
         &mut self,
         index: IntValue<'ctx>,
         len: IntValue<'ctx>,
         unsigned: bool,
     ) {
         if !self.safety_mode.emit_safety_checks() {
+            return;
+        }
+        if let (Some(at), Some(len)) = (
+            index.get_sign_extended_constant(),
+            len.get_zero_extended_constant(),
+        ) && (0..len as i64).contains(&at)
+        {
             return;
         }
 
@@ -766,7 +770,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let grown = self.builder.build_int_add(len, one, "grown").unwrap();
                 let at = match at {
                     Some(at) => {
-                        self.emit_bounds_check_against(at, grown, true);
+                        self.emit_bounds_check(at, grown, true);
                         at
                     }
                     None => len,
@@ -788,7 +792,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             "remove" => {
                 let at: IntValue = index_arg(self)?;
                 let len = self.load_int(usize_type, len_field, "len");
-                self.emit_bounds_check_against(at, len, true);
+                self.emit_bounds_check(at, len, true);
                 let data = self.load_ptr(ptr_field, "data");
                 let slot = self.vec_elem_ptr(data, at, elem_type);
                 let removed = self.load(elem_type, slot, "removed");
@@ -962,62 +966,41 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         phi.as_basic_value()
     }
 
+    /// The stdout and stderr `OutStream` globals: empty, with their fd set.
     pub(super) fn init_builtin_streams(&mut self) {
         let Some(BasicTypeEnum::StructType(stream_type)) =
             self.llvm_type_of(&Type::Struct("OutStream".into()))
         else {
             return;
         };
-        let field = |name: &str| {
-            let fields = self.types.struct_fields("OutStream");
-            fields
-                .iter()
-                .position(|(field, _)| field == name)
-                .map(|at| at as u32)
-        };
-        let (Some(fd_index), Some(index_index)) = (field("fd"), field("index")) else {
+        let Some(fd_index) = self
+            .types
+            .struct_fields("OutStream")
+            .iter()
+            .position(|(field, _)| field == "fd")
+        else {
             return;
         };
 
-        let init_fn = self.module.add_function(
-            "__init_builtin_streams",
-            self.context.void_type().fn_type(&[], false),
-            None,
-        );
-        let entry = self.context.append_basic_block(init_fn, "entry");
-        self.builder.position_at_end(entry);
-
-        let mut stream_ptrs = Vec::with_capacity(2);
-        for (name, fd) in [("__stdout_stream", 1), ("__stderr_stream", 2)] {
-            let global = self
-                .module
-                .add_global(stream_type, Some(AddressSpace::default()), name);
-            global.set_initializer(&stream_type.const_zero());
-            let ptr = global.as_pointer_value();
-
-            let fd_ptr = self
-                .builder
-                .build_struct_gep(stream_type, ptr, fd_index, "fd_ptr")
-                .unwrap();
-            self.builder
-                .build_store(fd_ptr, self.context.i32_type().const_int(fd, false))
-                .unwrap();
-
-            let index_ptr = self
-                .builder
-                .build_struct_gep(stream_type, ptr, index_index, "index_ptr")
-                .unwrap();
-            self.builder
-                .build_store(index_ptr, self.usize_type().const_zero())
-                .unwrap();
-
-            stream_ptrs.push(ptr);
-        }
-        self.builder.build_return(None).unwrap();
-
-        self.stdout_stream = Some(stream_ptrs[0]);
-        self.stderr_stream = Some(stream_ptrs[1]);
-        self.register_global_array("llvm.global_ctors", init_fn);
+        let [stdout, stderr] =
+            [("__stdout_stream", 1), ("__stderr_stream", 2)].map(|(name, fd)| {
+                let fields: Vec<BasicValueEnum> = stream_type
+                    .get_field_types()
+                    .iter()
+                    .enumerate()
+                    .map(|(at, ty)| match at == fd_index {
+                        true => self.context.i32_type().const_int(fd, false).into(),
+                        false => ty.const_zero(),
+                    })
+                    .collect();
+                let global =
+                    self.module
+                        .add_global(stream_type, Some(AddressSpace::default()), name);
+                global.set_initializer(&stream_type.const_named_struct(&fields));
+                global.as_pointer_value()
+            });
+        self.stdout_stream = Some(stdout);
+        self.stderr_stream = Some(stderr);
     }
 
     /// `__zeru_flush`, which writes out what both builtin streams hold: run
