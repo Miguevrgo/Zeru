@@ -26,9 +26,11 @@ This is inspired by Rust (moves), Vale (generational refs), and Zig (simplicity)
 
 ## 1. Ownership Model
 
-### 1.1 Move Semantics (Default)
+### 1.1 Move Semantics
 
-Values are **moved** by default when passed to functions or assigned to new variables.
+A value that owns memory (a `Vec`, or anything holding one, or anything with a
+`drop` method) is **moved** when passed to a function or assigned to a new
+variable. Plain data, a number, a plain struct or an array of them, is copied.
 
 ```rust
 fn process(data: Vec<i32>) {
@@ -43,13 +45,17 @@ fn main() {
     process(list);       // MOVE: ownership transfers to process()
 
     // list.push(2);     // COMPILE ERROR: list was moved
+    list = Vec.new();    // OK: list holds a value again
 }
 ```
 
 **Rules:**
 
 - After a move, the original variable is **invalid** (compile error to use)
+  until it is assigned a new value
 - Moves have **zero runtime cost** (just pointer copy)
+- A move inside a loop is an error unless the loop is left, or the variable
+  assigned again, before the next turn
 - This prevents double-free bugs at compile time
 
 ### 1.2 Explicit Copy

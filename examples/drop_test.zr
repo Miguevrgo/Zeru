@@ -103,5 +103,11 @@ fn main() {
     { var pair = (probe(at), [probe(at), probe(at)]); }
     expect(drops, 31, 22);
 
+    // Moved on the way out of a loop, and given a new value after a move.
+    { var p = probe(at); while true { consume(p); break; } }
+    expect(drops, 32, 23);
+    { var p = probe(at); consume(p); p = probe(at); }
+    expect(drops, 34, 24);
+
     println("Drop tests passed!");
 }

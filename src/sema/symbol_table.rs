@@ -1,16 +1,19 @@
 use std::collections::HashMap;
 
 use super::types::Type;
+use crate::errors::Span;
+
+/// Which variables are moved at some point of a body: the scope each lives
+/// in, its name, and where it was moved.
+pub type Moves = Vec<(usize, String, Span)>;
 
 #[derive(Clone)]
 pub enum Symbol {
     Var {
         ty: Type,
         is_const: bool,
-        is_moved: bool,
-        /// How many loops enclose the declaration. Moving the variable from a
-        /// deeper loop would move it again on every turn.
-        loop_depth: usize,
+        /// Where its value was given away, while it holds none.
+        moved_at: Option<Span>,
         /// A view of a value something else owns: `self`, or a `for` loop's
         /// element. It can be read but not moved.
         is_borrowed: bool,
@@ -44,22 +47,14 @@ impl SymbolTable {
         }
     }
 
-    pub fn insert_var(
-        &mut self,
-        name: String,
-        ty: Type,
-        is_const: bool,
-        loop_depth: usize,
-        is_borrowed: bool,
-    ) {
+    pub fn insert_var(&mut self, name: String, ty: Type, is_const: bool, is_borrowed: bool) {
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(
                 name,
                 Symbol::Var {
                     ty,
                     is_const,
-                    is_moved: false,
-                    loop_depth,
+                    moved_at: None,
                     is_borrowed,
                 },
             );
@@ -79,14 +74,52 @@ impl SymbolTable {
         self.scopes[0].insert(name, Symbol::Function { params, ret_type });
     }
 
-    pub fn mark_moved(&mut self, name: &str) -> bool {
-        for scope in self.scopes.iter_mut().rev() {
-            if let Some(Symbol::Var { is_moved, .. }) = scope.get_mut(name) {
-                *is_moved = true;
-                return true;
+    /// Record that `name` gave its value away at `span`, or with `None`, that
+    /// it holds one again.
+    pub fn set_moved(&mut self, name: &str, span: Option<Span>) {
+        let found = self
+            .scopes
+            .iter_mut()
+            .rev()
+            .find_map(|scope| scope.get_mut(name));
+        if let Some(Symbol::Var { moved_at, .. }) = found {
+            *moved_at = span;
+        }
+    }
+
+    /// The variables moved right now.
+    pub fn moves(&self) -> Moves {
+        let mut moves = Moves::new();
+        for (depth, scope) in self.scopes.iter().enumerate() {
+            for (name, symbol) in scope {
+                if let Symbol::Var {
+                    moved_at: Some(span),
+                    ..
+                } = symbol
+                {
+                    moves.push((depth, name.clone(), *span));
+                }
             }
         }
-        false
+        moves
+    }
+
+    /// Make exactly the variables in `moves` the moved ones.
+    pub fn restore_moves(&mut self, moves: &[(usize, String, Span)]) {
+        for (depth, scope) in self.scopes.iter_mut().enumerate() {
+            for (name, symbol) in scope.iter_mut() {
+                if let Symbol::Var { moved_at, .. } = symbol {
+                    *moved_at = moves
+                        .iter()
+                        .find(|(at, moved, _)| *at == depth && moved == name)
+                        .map(|(_, _, span)| *span);
+                }
+            }
+        }
+    }
+
+    pub fn depth(&self) -> usize {
+        self.scopes.len()
     }
 
     pub fn get_all_scopes(&self) -> &[HashMap<String, Symbol>] {

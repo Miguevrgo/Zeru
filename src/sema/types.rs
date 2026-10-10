@@ -71,22 +71,6 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn has_move_semantics(&self) -> bool {
-        match self {
-            Type::Vec { .. }
-            | Type::Struct(_)
-            | Type::Array { .. }
-            | Type::ParamType(_)
-            | Type::Unknown => true,
-            Type::Tuple(types) => types.iter().any(|t| t.has_move_semantics()),
-            Type::Optional(inner) => inner.has_move_semantics(),
-            Type::Result { ok_type, err_type } => {
-                ok_type.has_move_semantics() || err_type.has_move_semantics()
-            }
-            _ => false,
-        }
-    }
-
     /// Checks if this type can accept a value of another type.
     ///
     /// This is used for type compatibility checking during semantic analysis.

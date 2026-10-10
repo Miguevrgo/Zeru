@@ -2880,3 +2880,52 @@ fn test_new_vec_methods() {
     let errors = analyze("fn main() { var v: Vec<i64> = Vec.new(); v.insert(true, 1); }");
     assert_eq!(errors.len(), 1, "{errors:?}");
 }
+
+#[test]
+fn test_moves_follow_the_control_flow() {
+    let ok = [
+        // Moved, then out of the loop at once.
+        "var v: Vec<i32> = Vec.new(); while true { eat(v); break; }",
+        // Moved, then given a value again before the next turn.
+        "var v: Vec<i32> = Vec.new(); var i = 0; while i < 3 { eat(v); v = Vec.new(); i += 1; }",
+        // The branch that moves it returns, so past the `if` it is still there.
+        "var v: Vec<i32> = Vec.new(); var c = true; if c { eat(v); return; } eat(v);",
+        // Plain data is copied, not moved.
+        "var p = P { x: 1 }; var q = p; var r = p;",
+    ];
+    for body in ok {
+        let input =
+            format!("struct P {{ x: i32 }} fn eat(v: Vec<i32>) {{ }} fn main() {{ {body} }}");
+        assert!(analyze(&input).is_empty(), "{body}: {:?}", analyze(&input));
+    }
+
+    let rejected = [
+        (
+            "var v: Vec<i32> = Vec.new(); while true { eat(v); }",
+            "Cannot move 'v' inside a loop",
+        ),
+        (
+            "var v: Vec<i32> = Vec.new(); var c = true; while c { eat(v); continue; }",
+            "Cannot move 'v' inside a loop",
+        ),
+        (
+            "var v: Vec<i32> = Vec.new(); while true { eat(v); break; } eat(v);",
+            "Use of moved value 'v'",
+        ),
+        (
+            "var v: Vec<i32> = Vec.new(); var c = true; if c { eat(v); } eat(v);",
+            "Use of moved value 'v'",
+        ),
+        (
+            "var p = P { x: 1 }; var q = p.copy();",
+            "P holds no memory of its own",
+        ),
+    ];
+    for (body, message) in rejected {
+        let input =
+            format!("struct P {{ x: i32 }} fn eat(v: Vec<i32>) {{ }} fn main() {{ {body} }}");
+        let errors = analyze(&input);
+        assert_eq!(errors.len(), 1, "{body}: {errors:?}");
+        assert!(errors[0].contains(message), "{body}: {errors:?}");
+    }
+}

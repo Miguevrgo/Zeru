@@ -3,7 +3,7 @@ use crate::{
     errors::{Span, ZeruError},
     generics::{Substitutions, instantiate, mangle, map_types},
     sema::{
-        symbol_table::SymbolTable,
+        symbol_table::{Moves, SymbolTable},
         types::{FloatWidth, IntWidth, Signedness, Type},
     },
 };
@@ -37,6 +37,16 @@ const VEC_MUTATORS: &[&str] = &[
     "shrink_to_fit",
 ];
 
+/// What a loop has to know to check the moves inside it.
+struct LoopFrame {
+    /// Scopes open outside the loop; a variable in one of them outlives a turn.
+    depth: usize,
+    /// What was moved before the first turn.
+    before: Moves,
+    /// What was moved where a `break` or `continue` left the body.
+    exits: Vec<Moves>,
+}
+
 pub struct SemanticAnalyzer {
     pub errors: Vec<ZeruError>,
 
@@ -55,8 +65,8 @@ pub struct SemanticAnalyzer {
     generic_functions: HashMap<String, Statement>,
     instantiations: Vec<Statement>,
 
-    /// How many loops enclose what is being checked.
-    loop_depth: usize,
+    /// The loops enclosing what is being checked, innermost last.
+    loops: Vec<LoopFrame>,
 
     /// Where a variable is given away, so codegen stops owning it there.
     moves: HashSet<Span>,
@@ -89,7 +99,7 @@ impl SemanticAnalyzer {
             generic_structs: HashMap::new(),
             generic_functions: HashMap::new(),
             instantiations: Vec::new(),
-            loop_depth: 0,
+            loops: Vec::new(),
             moves: HashSet::new(),
         }
     }
@@ -722,22 +732,75 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// Whether control always leaves `body` through a `return`. Conservative:
-    /// a loop may run zero times, so only branches that all return count.
-    fn always_returns(body: &[Statement]) -> bool {
+    /// Whether control never falls off the end of `body`: every path ends in a
+    /// `return`, or with `jumps`, in a `break` or `continue` too.
+    /// Conservative: a loop may run zero times, so it never counts.
+    fn always_leaves(body: &[Statement], jumps: bool) -> bool {
         body.iter().any(|stmt| match &stmt.kind {
             StatementKind::Return(_) => true,
-            StatementKind::Block(inner) => Self::always_returns(inner),
+            StatementKind::Break | StatementKind::Continue => jumps,
+            StatementKind::Block(inner) => Self::always_leaves(inner, jumps),
             StatementKind::If {
                 then_branch,
                 else_branch: Some(else_branch),
                 ..
             } => {
-                Self::always_returns(std::slice::from_ref(then_branch))
-                    && Self::always_returns(std::slice::from_ref(else_branch))
+                Self::always_leaves(std::slice::from_ref(then_branch), jumps)
+                    && Self::always_leaves(std::slice::from_ref(else_branch), jumps)
             }
             _ => false,
         })
+    }
+
+    /// Check a loop, `turn` being what runs on every turn and saying whether
+    /// it always leaves. A variable from outside must hold a value again
+    /// wherever the loop goes round, or the next turn would use it moved.
+    fn check_loop(&mut self, turn: impl FnOnce(&mut Self) -> bool) {
+        let before = self.symbols.moves();
+        self.loops.push(LoopFrame {
+            depth: self.symbols.depth(),
+            before: before.clone(),
+            exits: Vec::new(),
+        });
+        let leaves = turn(self);
+        if !leaves {
+            self.check_back_edge();
+        }
+        let frame = self.loops.pop().expect("pushed above");
+
+        // After it, what is moved is what any way out of it left moved.
+        let mut after = before;
+        if !leaves {
+            after.extend(self.symbols.moves());
+        }
+        after.extend(frame.exits.into_iter().flatten());
+        self.symbols.restore_moves(&after);
+    }
+
+    /// Going round again: report each outer variable moved since the loop
+    /// began.
+    fn check_back_edge(&mut self) {
+        let Some(frame) = self.loops.last() else {
+            return;
+        };
+        let repeated: Vec<(String, Span)> = self
+            .symbols
+            .moves()
+            .into_iter()
+            .filter(|(depth, name, _)| {
+                *depth < frame.depth
+                    && !frame.before.iter().any(|(d, n, _)| d == depth && n == name)
+            })
+            .map(|(_, name, span)| (name, span))
+            .collect();
+        for (name, span) in repeated {
+            if !self.errors.iter().any(|error| error.span == span) {
+                self.error(
+                    format!("Cannot move '{name}' inside a loop: the next turn would use it again"),
+                    span,
+                );
+            }
+        }
     }
 
     fn check_function_body(
@@ -765,13 +828,8 @@ impl SemanticAnalyzer {
             for (i, (param_name, _, is_mut)) in params.iter().enumerate() {
                 let ty = params_type_def.get(i).unwrap_or(&Type::Unknown).clone();
                 let is_const = !is_mut;
-                self.symbols.insert_var(
-                    param_name.clone(),
-                    ty,
-                    is_const,
-                    self.loop_depth,
-                    param_name == "self",
-                );
+                self.symbols
+                    .insert_var(param_name.clone(), ty, is_const, param_name == "self");
             }
 
             for s in body.iter_mut() {
@@ -783,7 +841,7 @@ impl SemanticAnalyzer {
             // return register.
             if !matches!(self.current_fn_return_type, Some(Type::Void))
                 && name != "main"
-                && !Self::always_returns(body)
+                && !Self::always_leaves(body, false)
             {
                 let span = body.last().map_or(span, |s| s.span);
                 self.error(
@@ -1000,13 +1058,8 @@ impl SemanticAnalyzer {
         };
 
         self.consume(value, &final_type);
-        self.symbols.insert_var(
-            name.to_string(),
-            final_type.clone(),
-            is_const,
-            self.loop_depth,
-            false,
-        );
+        self.symbols
+            .insert_var(name.to_string(), final_type.clone(), is_const, false);
         final_type
     }
 
@@ -1023,14 +1076,14 @@ impl SemanticAnalyzer {
             }
         };
 
-        self.loop_depth += 1;
-        self.symbols.enter_scope();
-        self.symbols
-            .insert_var(variable.to_string(), item_type, true, self.loop_depth, true);
-        self.check_statement(body);
-
-        self.symbols.exit_scope();
-        self.loop_depth -= 1;
+        self.check_loop(|this| {
+            this.symbols.enter_scope();
+            this.symbols
+                .insert_var(variable.to_string(), item_type, true, true);
+            this.check_statement(body);
+            this.symbols.exit_scope();
+            Self::always_leaves(std::slice::from_ref(body), true)
+        });
     }
 
     fn check_statement(&mut self, stmt: &mut Statement) {
@@ -1098,31 +1151,53 @@ impl SemanticAnalyzer {
                     );
                 }
 
+                // A branch that leaves takes its moves with it; past the
+                // `if`, what is moved is what either branch left moved.
+                let before = self.symbols.moves();
+                let mut after = Moves::new();
                 self.check_statement(then_branch);
-                if let Some(else_stmt) = else_branch {
-                    self.check_statement(else_stmt);
+                if !Self::always_leaves(std::slice::from_ref(then_branch), true) {
+                    after.extend(self.symbols.moves());
                 }
+                self.symbols.restore_moves(&before);
+                match else_branch {
+                    Some(else_stmt) => {
+                        self.check_statement(else_stmt);
+                        if !Self::always_leaves(std::slice::from_ref(else_stmt), true) {
+                            after.extend(self.symbols.moves());
+                        }
+                    }
+                    None => after.extend(before),
+                }
+                self.symbols.restore_moves(&after);
             }
 
-            StatementKind::While { cond, body } => {
+            // The condition runs on every turn too.
+            StatementKind::While { cond, body } => self.check_loop(|this| {
                 let cond_span = cond.span;
-                let cond_type = self.check_expression(cond, Some(&Type::Bool));
+                let cond_type = this.check_expression(cond, Some(&Type::Bool));
                 if cond_type != Type::Bool && cond_type != Type::Unknown {
-                    self.error(
+                    this.error(
                         format!("While condition must be boolean, got: {}", cond_type),
                         cond_span,
                     );
                 }
+                this.check_statement(body);
+                Self::always_leaves(std::slice::from_ref(body), true)
+            }),
 
-                self.loop_depth += 1;
-                self.check_statement(body);
-                self.loop_depth -= 1;
-            }
-
-            StatementKind::Break | StatementKind::Continue if self.loop_depth == 0 => {
+            StatementKind::Break | StatementKind::Continue if self.loops.is_empty() => {
                 self.error("Break/Continue can only be used inside loops".into(), span);
             }
-            StatementKind::Break | StatementKind::Continue => {}
+            StatementKind::Break | StatementKind::Continue => {
+                if matches!(stmt.kind, StatementKind::Continue) {
+                    self.check_back_edge();
+                }
+                let moves = self.symbols.moves();
+                if let Some(frame) = self.loops.last_mut() {
+                    frame.exits.push(moves);
+                }
+            }
 
             StatementKind::Expression(expr) => {
                 self.check_expression(expr, None);
@@ -1173,8 +1248,8 @@ impl SemanticAnalyzer {
 
         if let Some(symbol) = self.symbols.lookup(name).cloned() {
             match symbol {
-                super::symbol_table::Symbol::Var { ty, is_moved, .. } => {
-                    if is_moved {
+                super::symbol_table::Symbol::Var { ty, moved_at, .. } => {
+                    if moved_at.is_some() {
                         self.error(
                                 format!(
                                     "Use of moved value '{}'. Value was previously moved and is no longer valid.",
@@ -1234,22 +1309,9 @@ impl SemanticAnalyzer {
         }
 
         let target_type = if let ExpressionKind::Identifier(name) = &target.kind {
-            if let Some(super::symbol_table::Symbol::Var {
-                is_const,
-                ty,
-                is_moved,
-                ..
-            }) = self.symbols.lookup(name).cloned()
+            if let Some(super::symbol_table::Symbol::Var { is_const, ty, .. }) =
+                self.symbols.lookup(name).cloned()
             {
-                if is_moved {
-                    self.error(
-                        format!(
-                            "Cannot assign to moved variable '{}'. Value was previously moved.",
-                            name
-                        ),
-                        span,
-                    );
-                }
                 if is_const {
                     self.error(
                         format!("Cannot reassign constant variable '{}'.", name),
@@ -1264,10 +1326,18 @@ impl SemanticAnalyzer {
             None
         };
 
-        let target_ty = self.check_expression(target, target_type.as_ref());
-        if !matches!(target.kind, ExpressionKind::Identifier(_)) {
-            self.require_mutable(target, span);
-        }
+        // A variable being assigned is not read, so it may be a moved one.
+        let target_ty = match &target_type {
+            Some(ty) if matches!(target.kind, ExpressionKind::Identifier(_)) => {
+                target.ty = Some(ty.clone());
+                ty.clone()
+            }
+            _ => {
+                let ty = self.check_expression(target, target_type.as_ref());
+                self.require_mutable(target, span);
+                ty
+            }
+        };
 
         // A slice is a borrowed view, and a `str` literal's is of read-only
         // memory, so an element of one is readable but not writable.
@@ -1297,6 +1367,10 @@ impl SemanticAnalyzer {
             );
         }
         self.consume(value, &val_type);
+        // A moved variable holds a value again once one is assigned to it.
+        if let ExpressionKind::Identifier(name) = &target.kind {
+            self.symbols.set_moved(name, None);
+        }
         Type::Void
     }
 
@@ -1333,34 +1407,23 @@ impl SemanticAnalyzer {
     /// again. A value inside a field, an element or behind a pointer cannot be
     /// moved out at all: what holds it would keep a second owner of it.
     fn consume(&mut self, expr: &Expression, ty: &Type) {
-        if *ty == Type::Unknown || !ty.has_move_semantics() {
+        // Only what owns memory moves; anything else is plain data, copied.
+        if !self.owns_heap(ty) {
             return;
         }
         match &expr.kind {
             // A global is a constant, built anew wherever it is used.
             ExpressionKind::Identifier(name) if !self.symbols.is_global(name) => {
-                let (declared_at, is_borrowed) = match self.symbols.lookup(name) {
-                    Some(super::symbol_table::Symbol::Var {
-                        loop_depth,
-                        is_borrowed,
-                        ..
-                    }) => (*loop_depth, *is_borrowed),
-                    _ => return,
-                };
-                if is_borrowed {
+                if let Some(super::symbol_table::Symbol::Var {
+                    is_borrowed: true, ..
+                }) = self.symbols.lookup(name)
+                {
                     self.error(
                         format!("Cannot move '{name}', which is borrowed; call .copy() on it"),
                         expr.span,
                     );
-                } else if declared_at < self.loop_depth {
-                    self.error(
-                        format!(
-                            "Cannot move '{name}' inside a loop: the next turn would use it again"
-                        ),
-                        expr.span,
-                    );
                 }
-                self.symbols.mark_moved(name);
+                self.symbols.set_moved(name, Some(expr.span));
                 self.moves.insert(expr.span);
             }
             ExpressionKind::Get { .. }
@@ -1648,12 +1711,9 @@ impl SemanticAnalyzer {
                 }
 
                 if method_name == "copy" && arguments.is_empty() {
-                    if !obj_type.has_move_semantics() {
+                    if obj_type != Type::Unknown && !self.owns_heap(&obj_type) {
                         self.error(
-                            format!(
-                                "Method 'copy' is not needed for type {} (it's already Copy)",
-                                obj_type
-                            ),
+                            format!("{obj_type} holds no memory of its own, so it is copied already; drop the .copy()"),
                             span,
                         );
                     }

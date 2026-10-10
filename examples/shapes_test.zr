@@ -56,10 +56,10 @@ struct Drawing {
 
     fn widest(self) Shape? {
         if self.shapes.is_empty() { return None; }
-        var best: Shape = self.shapes[0].copy();
+        var best: Shape = self.shapes[0];
         var i: usize = 1;
         while i < self.shapes.len() {
-            if self.shapes[i].width > best.width { best = self.shapes[i].copy(); }
+            if self.shapes[i].width > best.width { best = self.shapes[i]; }
             i += 1;
         }
         return best;
