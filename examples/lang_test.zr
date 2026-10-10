@@ -53,6 +53,23 @@ fn read_through(p: *Point) i32 { return p.x; }
 
 fn shift_through(p: *Point) { p.shift(5); }
 
+enum Figure { Circle(f64), Rect(f64, f64), Empty }
+
+const LOW: i32 = 10;
+const HIGH: i32 = LOW + 1;
+
+fn area(figure: Figure) f64 {
+    return match figure {
+        Figure::Circle(r) => 3.0 * r * r,
+        Figure::Rect(w, h) => w * h,
+        Figure::Empty => 0.0
+    };
+}
+
+fn band(n: i32) i32 {
+    return match n { LOW => 1, HIGH => 2, default => 0 };
+}
+
 fn main() {
     // --- integers: signedness, shifts ----------------------------------------
     // Overflow, division by zero and oversized shifts abort in Debug and
@@ -317,6 +334,19 @@ fn main() {
     wrapped +%= 2;
     var byte: u8 = 200;
     if wrapped != 1 || byte *% 2 != 144 || 0 -% byte != 56 { exit(149); }
+
+    // Match: values inside T?, T! and enum variants, block arms, constants.
+    var maybe: i64? = 5;
+    var seen: i64 = 0;
+    match maybe {
+        Some(v) => { seen += v; }
+        None => { exit(150); }
+    }
+    var failed: i32! = Err(4);
+    var code = match failed { Ok(v) => v, Err(e) => e * 10 };
+    if seen != 5 || code != 40 { exit(151); }
+    if area(Figure::Circle(2.0)) != 12.0 || area(Figure::Rect(2.0, 3.0)) != 6.0 { exit(152); }
+    if area(Figure::Empty) != 0.0 || band(10) != 1 || band(11) != 2 || band(3) != 0 { exit(153); }
 
     println("lang: all tests passed");
     exit(0);

@@ -5,7 +5,7 @@ use inkwell::{
     FloatPredicate, IntPredicate,
     basic_block::BasicBlock,
     module::Linkage,
-    types::{BasicType, BasicTypeEnum, StructType},
+    types::{BasicType, BasicTypeEnum, IntType, StructType},
     values::{
         BasicMetadataValueEnum, BasicValueEnum, FunctionValue, IntValue, PointerValue, ValueKind,
     },
@@ -479,22 +479,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.loop_stack.pop();
     }
 
-    /// Integer tag of an `Enum::Variant` path, numbered by declaration order.
-    fn enum_variant_tag(&self, qualified_name: &str) -> Option<BasicValueEnum<'ctx>> {
-        let (enum_name, variant_name) = qualified_name.rsplit_once("::")?;
-        let index = self
-            .types
-            .enum_variants(enum_name)?
-            .iter()
-            .position(|v| v == variant_name)?;
-        Some(
-            self.context
-                .i32_type()
-                .const_int(index as u64, false)
-                .into(),
-        )
-    }
-
     pub(super) fn compile_lvalue(
         &mut self,
         expr: &Expression,
@@ -618,7 +602,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             return (index < struct_ty.count_fields()).then_some(index);
         }
         let struct_name = struct_ty.get_name()?.to_str().ok()?;
-        self.struct_defs.get(struct_name)?.1.get(name).copied()
+        let fields = self.types.struct_fields(struct_name);
+        fields
+            .iter()
+            .position(|(field, _)| field == name)
+            .map(|at| at as u32)
     }
 
     /// What `expr` points at, from the type the analyser resolved.
@@ -700,6 +688,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.lower_array_repeat(value, *count, expr)
             }
             ExpressionKind::Try(value) => self.lower_try(value),
+            ExpressionKind::Block(body) => {
+                self.scope_stack.push(Scope::default());
+                for statement in body {
+                    self.compile_statement(statement);
+                }
+                self.pop_scope();
+                self.dummy_val()
+            }
             // Only a `for` loop takes one, and lowers it itself.
             ExpressionKind::Range { .. } => {
                 self.error("A range only goes in a 'for' loop", expr.span);
@@ -830,8 +826,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             return self.compile_expression(&value, ty);
         }
         // The parser folds `Enum::Variant` into one qualified identifier.
-        if let Some(tag) = self.enum_variant_tag(name) {
-            return tag;
+        if let Some(variant) = self.build_variant(name, &[]) {
+            return variant;
         }
 
         self.error(format!("Unknown identifier '{name}'"), span);
@@ -906,7 +902,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         fields: &[(String, Expression)],
         span: Span,
     ) -> BasicValueEnum<'ctx> {
-        let Some(struct_ty) = self.struct_defs.get(name).map(|(st, _)| *st) else {
+        let Some(BasicTypeEnum::StructType(struct_ty)) =
+            self.llvm_type_of(&Type::Struct(name.to_string()))
+        else {
             self.error(format!("Unknown struct type '{name}'"), span);
             return self.dummy_val();
         };
@@ -1149,6 +1147,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
                 "Ok" | "Err" => {
                     return self.compile_result_constructor(arguments, call, name == "Ok");
+                }
+                _ if self.types.variant_fields(name).is_some() => {
+                    return self
+                        .build_variant(name, arguments)
+                        .unwrap_or_else(|| self.dummy_val());
                 }
                 _ => match self.module.get_function(name) {
                     Some(func) => (func, Vec::new()),
@@ -1717,9 +1720,22 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let Some(parent_fn) = self.current_fn else {
             return self.dummy_val();
         };
-        let BasicValueEnum::IntValue(subject) = self.compile_expression(value, None) else {
-            self.error("'match' requires an integer or enum value", value.span);
+        // Where the subject lives, for arms that bind what it holds; a
+        // `T?`, a `T!` or an enum carrying values is told apart by its tag.
+        let subject_type = value.ty.clone().unwrap_or(Type::Unknown);
+        let Some((place, shape)) = self.place_of(value) else {
             return self.dummy_val();
+        };
+        let tag = match self.load(shape, place, "subject") {
+            BasicValueEnum::IntValue(tag) => tag,
+            BasicValueEnum::StructValue(held) => self.extract(held, 0, "tag").into_int_value(),
+            _ => {
+                self.error(
+                    "'match' requires an integer, an enum, a T? or a T!",
+                    value.span,
+                );
+                return self.dummy_val();
+            }
         };
 
         let merge_bb = self.context.append_basic_block(parent_fn, "match_merge");
@@ -1730,17 +1746,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         for (pattern, result) in arms {
             let block = self.context.append_basic_block(parent_fn, "match_arm");
-            arm_bodies.push((block, result));
+            arm_bodies.push((block, pattern, result));
 
             if pattern.is_default_pattern() {
                 default_bb = Some(block);
-            } else if let BasicValueEnum::IntValue(tag) = self.compile_expression(pattern, None) {
-                cases.push((tag, block));
+            } else if let Some(case) = self.pattern_tag(pattern, tag.get_type()) {
+                cases.push((case, block));
             } else {
-                self.error(
-                    "'match' patterns must be integers or enum variants",
-                    pattern.span,
-                );
+                self.error("This pattern has no constant value", pattern.span);
             }
         }
 
@@ -1758,16 +1771,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         });
 
         self.builder.position_at_end(switch_bb);
-        self.builder
-            .build_switch(subject, default_bb, &cases)
-            .unwrap();
+        self.builder.build_switch(tag, default_bb, &cases).unwrap();
 
         // Only arms that fall through to the merge block feed the phi; one that
         // returns or breaks is not a predecessor.
         let mut incoming: Vec<(BasicBlock<'ctx>, BasicValueEnum<'ctx>)> = Vec::new();
-        for (block, result) in arm_bodies {
+        for (block, pattern, result) in arm_bodies {
             self.builder.position_at_end(block);
+            self.scope_stack.push(Scope::default());
+            self.bind_pattern(pattern, &subject_type, place, shape);
             let value = self.compile_expression(result, expected_type);
+            self.pop_scope();
             let end_bb = self.builder.get_insert_block().unwrap();
             if end_bb.get_terminator().is_none() {
                 self.builder.build_unconditional_branch(merge_bb).unwrap();
@@ -1790,5 +1804,135 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             phi.add_incoming(&[(value, *block)]);
         }
         phi.as_basic_value()
+    }
+
+    /// The tag an arm's pattern switches on: 1 for `Some` and `Ok`, 0 for
+    /// `None` and `Err`, a variant's position, or a constant's value.
+    fn pattern_tag(
+        &mut self,
+        pattern: &Expression,
+        tag_type: IntType<'ctx>,
+    ) -> Option<IntValue<'ctx>> {
+        let path = match &pattern.kind {
+            ExpressionKind::None => return Some(tag_type.const_zero()),
+            ExpressionKind::Call { function, .. } => match &function.kind {
+                ExpressionKind::Identifier(path) => path.as_str(),
+                _ => return None,
+            },
+            ExpressionKind::Identifier(path) if self.variant_index(path).is_some() => path.as_str(),
+            // A literal or a constant, as the analyser worked it out.
+            _ => {
+                let value = self.types.constant_value(pattern)?;
+                return Some(tag_type.const_int(value as u64, true));
+            }
+        };
+        let tag = match path {
+            "Some" | "Ok" => 1,
+            "Err" => 0,
+            path => self.variant_index(path)?,
+        };
+        Some(tag_type.const_int(tag, false))
+    }
+
+    /// Bind the names a payload pattern gives, each to where its value sits
+    /// inside the subject: a view of it, which the analyser keeps unchanged.
+    fn bind_pattern(
+        &mut self,
+        pattern: &Expression,
+        subject_type: &Type,
+        place: PointerValue<'ctx>,
+        shape: BasicTypeEnum<'ctx>,
+    ) {
+        let (
+            ExpressionKind::Call {
+                function,
+                arguments,
+            },
+            BasicTypeEnum::StructType(shape),
+        ) = (&pattern.kind, shape)
+        else {
+            return;
+        };
+        let ExpressionKind::Identifier(path) = &function.kind else {
+            return;
+        };
+        let field_at = |this: &Self, at: u32, ty: &Type| {
+            let ptr = this.field_ptr(shape, place, at, "bound");
+            this.llvm_type_of(ty).map(|ty| (ptr, ty))
+        };
+        let values: Vec<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)> =
+            match (path.as_str(), subject_type) {
+                ("Some", Type::Optional(inner)) => {
+                    field_at(self, OPTION_VALUE, inner).into_iter().collect()
+                }
+                ("Ok", Type::Result { ok_type, .. }) => {
+                    field_at(self, RESULT_VALUE, ok_type).into_iter().collect()
+                }
+                ("Err", Type::Result { err_type, .. }) => {
+                    field_at(self, RESULT_ERR, err_type).into_iter().collect()
+                }
+                (path, Type::Enum(_)) => {
+                    let Some((_, fields)) = self.types.variant_fields(path) else {
+                        return;
+                    };
+                    let Some(payload) = self.payload_type(&fields) else {
+                        return;
+                    };
+                    let area = self.field_ptr(shape, place, 1, "payload");
+                    (0..)
+                        .zip(&fields)
+                        .filter_map(|(at, ty)| {
+                            let ptr = self.field_ptr(payload, area, at, "bound");
+                            self.llvm_type_of(ty).map(|ty| (ptr, ty))
+                        })
+                        .collect()
+                }
+                _ => return,
+            };
+        for (binding, value) in arguments.iter().zip(values) {
+            if let ExpressionKind::Identifier(name) = &binding.kind
+                && name != "_"
+            {
+                self.bind_variable(name, value);
+            }
+        }
+    }
+
+    /// A variant's position among its enum's.
+    fn variant_index(&self, path: &str) -> Option<u64> {
+        let (enum_name, variant) = path.rsplit_once("::")?;
+        let variants = self.types.enum_variants(enum_name)?;
+        variants
+            .iter()
+            .position(|(v, _)| v == variant)
+            .map(|at| at as u64)
+    }
+
+    /// `Enum::Variant` or `Enum::Variant(values)`: a bare tag, or for an enum
+    /// whose variants carry values, the tag with them in its payload area.
+    fn build_variant(&mut self, path: &str, values: &[Expression]) -> Option<BasicValueEnum<'ctx>> {
+        let tag = self
+            .context
+            .i32_type()
+            .const_int(self.variant_index(path)?, false);
+        let (enum_name, fields) = self.types.variant_fields(path)?;
+        if !self.types.enum_has_data(&enum_name) {
+            return Some(tag.into());
+        }
+        let BasicTypeEnum::StructType(shape) = self.llvm_type_of(&Type::Enum(enum_name))? else {
+            return None;
+        };
+        let slot = self.create_entry_block_alloca(self.current_fn?, "variant", shape.into());
+        let tag_field = self.field_ptr(shape, slot, 0, "tag");
+        self.builder.build_store(tag_field, tag).unwrap();
+        if let Some(payload) = self.payload_type(&fields) {
+            let area = self.field_ptr(shape, slot, 1, "payload");
+            for ((at, value), ty) in (0..).zip(values).zip(&fields) {
+                let compiled = self.compile_expression(value, self.llvm_type_of(ty));
+                let field = self.field_ptr(payload, area, at, "value");
+                self.builder.build_store(field, compiled).unwrap();
+            }
+        }
+        Some(self.load(shape, slot, "variant"))
     }
 }

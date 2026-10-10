@@ -11,6 +11,9 @@ use std::collections::{HashMap, HashSet};
 
 type TraitMethod = (String, Vec<Type>, Option<Type>);
 
+/// An enum variant's name, and the types of the values it carries.
+pub type Variant = (String, Vec<Type>);
+
 #[derive(PartialEq, Clone, Copy)]
 enum Borrow {
     Shared,
@@ -57,7 +60,7 @@ pub struct SemanticAnalyzer {
     symbols: SymbolTable,
     /// Each struct's fields and each enum's variants, by name.
     struct_defs: HashMap<String, Vec<(String, Type)>>,
-    enum_defs: HashMap<String, Vec<String>>,
+    enum_defs: HashMap<String, Vec<Variant>>,
     trait_defs: HashMap<String, Vec<TraitMethod>>,
     current_fn_return_type: Option<Type>,
     current_type_params: Vec<String>,
@@ -71,9 +74,13 @@ pub struct SemanticAnalyzer {
 
     /// The loops enclosing what is being checked, innermost last.
     loops: Vec<LoopFrame>,
-    /// What a `for x in &var v` loop is walking: changing it under the loop
-    /// would leave `x` pointing at memory the change freed.
+    /// What a `for x in &var v` loop walks, or a `match` binds values inside:
+    /// changing it meanwhile would leave those names pointing at memory the
+    /// change freed.
     locked: Vec<String>,
+
+    /// Each global constant's value, for patterns that name one.
+    constants: HashMap<String, Expression>,
 
     /// Where a variable is given away, so codegen stops owning it there.
     moves: HashSet<Span>,
@@ -95,6 +102,7 @@ impl SemanticAnalyzer {
             instantiations: Vec::new(),
             loops: Vec::new(),
             locked: Vec::new(),
+            constants: HashMap::new(),
             moves: HashSet::new(),
         }
     }
@@ -129,6 +137,12 @@ impl SemanticAnalyzer {
                         .any(|(_, ty)| self.owns_heap_past(ty, seen))
             }
             Type::Tuple(types) => types.iter().any(|ty| self.owns_heap_past(ty, seen)),
+            Type::Enum(name) => self.enum_variants(name).is_some_and(|variants| {
+                variants
+                    .iter()
+                    .flat_map(|(_, fields)| fields)
+                    .any(|ty| self.owns_heap_past(ty, seen))
+            }),
             Type::Array {
                 elem_type: inner, ..
             }
@@ -138,8 +152,15 @@ impl SemanticAnalyzer {
         }
     }
 
-    pub fn enum_variants(&self, name: &str) -> Option<&[String]> {
+    pub fn enum_variants(&self, name: &str) -> Option<&[Variant]> {
         self.enum_defs.get(name).map(Vec::as_slice)
+    }
+
+    /// Whether some variant of the enum carries values, which makes it a
+    /// tag with a payload rather than a bare number.
+    pub fn enum_has_data(&self, name: &str) -> bool {
+        self.enum_variants(name)
+            .is_some_and(|variants| variants.iter().any(|(_, fields)| !fields.is_empty()))
     }
 
     /// A function's parameter and return types as resolved.
@@ -344,26 +365,32 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// A struct that stores itself, directly or through another struct, has no
-    /// finite size. Reported here so codegen never tries to lay one out.
+    /// A struct or enum that stores itself, directly or through another, has
+    /// no finite size. Reported here so codegen never tries to lay one out.
     fn check_recursive_structs(&mut self, stmts: &[Statement]) {
-        let structs: HashMap<&str, &[(String, TypeSpec)]> = stmts
+        let types: HashMap<&str, Vec<&TypeSpec>> = stmts
             .iter()
             .filter_map(|stmt| match &stmt.kind {
                 StatementKind::Struct { name, fields, .. } => {
-                    Some((name.as_str(), fields.as_slice()))
+                    Some((name.as_str(), fields.iter().map(|(_, spec)| spec).collect()))
                 }
+                StatementKind::Enum { name, variants } => Some((
+                    name.as_str(),
+                    variants.iter().flat_map(|(_, f)| f).collect(),
+                )),
                 _ => None,
             })
             .collect();
 
         for stmt in stmts {
-            let StatementKind::Struct { name, .. } = &stmt.kind else {
+            let (StatementKind::Struct { name, .. } | StatementKind::Enum { name, .. }) =
+                &stmt.kind
+            else {
                 continue;
             };
-            if Self::stores_by_value(name, name, &structs, &mut HashSet::new()) {
+            if Self::stores_by_value(name, name, &types, &mut HashSet::new()) {
                 self.error(
-                    format!("Struct '{name}' stores itself, so it has no finite size"),
+                    format!("'{name}' stores itself, so it has no finite size"),
                     stmt.span,
                 );
             }
@@ -374,20 +401,20 @@ impl SemanticAnalyzer {
     fn stores_by_value(
         from: &str,
         target: &str,
-        structs: &HashMap<&str, &[(String, TypeSpec)]>,
+        types: &HashMap<&str, Vec<&TypeSpec>>,
         seen: &mut HashSet<String>,
     ) -> bool {
-        let Some(fields) = structs.get(from) else {
+        let Some(fields) = types.get(from) else {
             return false;
         };
 
         let mut deps = Vec::new();
-        for (_, spec) in fields.iter() {
+        for spec in fields {
             Self::value_dependencies(spec, &mut deps);
         }
         deps.into_iter().any(|dep| {
             dep == target
-                || (seen.insert(dep.clone()) && Self::stores_by_value(&dep, target, structs, seen))
+                || (seen.insert(dep.clone()) && Self::stores_by_value(&dep, target, types, seen))
         })
     }
 
@@ -428,14 +455,17 @@ impl SemanticAnalyzer {
                         continue;
                     }
 
-                    if let Some(dup) = Self::first_duplicate(variants) {
+                    let names: Vec<String> = variants.iter().map(|(v, _)| v.clone()).collect();
+                    if let Some(dup) = Self::first_duplicate(&names) {
                         self.error(
                             format!("Enum '{name}' declares variant '{dup}' twice"),
                             stmt.span,
                         );
                     }
 
-                    self.enum_defs.insert(name.clone(), variants.clone());
+                    // What the variants carry is resolved once every type is known.
+                    let variants = names.into_iter().map(|v| (v, Vec::new())).collect();
+                    self.enum_defs.insert(name.clone(), variants);
                 }
                 StatementKind::Trait { name, methods } => {
                     if self.trait_defs.contains_key(name) {
@@ -464,6 +494,25 @@ impl SemanticAnalyzer {
 
         for stmt in stmts {
             self.scan_struct_fields(stmt);
+            self.scan_variant_fields(stmt);
+        }
+    }
+
+    fn scan_variant_fields(&mut self, stmt: &Statement) {
+        let StatementKind::Enum { name, variants } = &stmt.kind else {
+            return;
+        };
+        let resolved: Vec<Variant> = variants
+            .iter()
+            .map(|(variant, fields)| {
+                let fields = fields.iter().map(|spec| self.resolve_spec(spec, stmt.span));
+                (variant.clone(), fields.collect())
+            })
+            .collect();
+        if let Some(entry) = self.enum_defs.get_mut(name)
+            && entry.len() == resolved.len()
+        {
+            *entry = resolved;
         }
     }
 
@@ -689,13 +738,15 @@ impl SemanticAnalyzer {
                     self.error(format!("'{name}' is already defined"), span);
                 }
                 self.check_statement(stmt);
-                if let StatementKind::Var { value, .. } = &stmt.kind
-                    && !self.is_constant(value)
-                {
-                    self.error(
-                        "A global constant must be made of literals, other constants, enum variants and operators on them".into(),
-                        value.span,
-                    );
+                if let StatementKind::Var { name, value, .. } = &stmt.kind {
+                    if !self.is_constant(value) {
+                        self.error(
+                            "A global constant must be made of literals, other constants, enum variants and operators on them".into(),
+                            value.span,
+                        );
+                    }
+                    // Kept for a `match` that names it as a pattern.
+                    self.constants.insert(name.clone(), value.clone());
                 }
             }
             _ => {}
@@ -917,6 +968,13 @@ impl SemanticAnalyzer {
                 let err_type = match error {
                     None => Self::error_type(),
                     Some(error) => match self.resolve_spec(error, span) {
+                        Type::Enum(name) if self.enum_has_data(&name) => {
+                            self.error(
+                                format!("An error enum carries no values, and {name} does"),
+                                span,
+                            );
+                            Type::Unknown
+                        }
                         ty @ (Type::Enum(_) | Type::Unknown) => ty,
                         other => {
                             self.error(format!("An error type is an enum, not {other}"), span);
@@ -1299,8 +1357,17 @@ impl SemanticAnalyzer {
         if let Some((enum_name, variant)) = name.rsplit_once("::")
             && let Some(variants) = self.enum_defs.get(enum_name)
         {
-            if variants.iter().any(|v| v == variant) {
-                return Type::Enum(enum_name.to_string());
+            match variants.iter().find(|(v, _)| v == variant) {
+                Some((_, fields)) if !fields.is_empty() => {
+                    let message = format!(
+                        "'{name}' carries {} value(s): write {name}(...)",
+                        fields.len()
+                    );
+                    self.error(message, span);
+                    return Type::Unknown;
+                }
+                Some(_) => return Type::Enum(enum_name.to_string()),
+                None => {}
             }
             self.error(
                 format!("Enum '{enum_name}' has no variant '{variant}'"),
@@ -1487,7 +1554,9 @@ impl SemanticAnalyzer {
         };
         if let Some(locked) = self.locked.iter().find(|locked| overlaps(locked)).cloned() {
             self.error(
-                format!("Cannot change '{path}' while a loop walks '{locked}' by reference"),
+                format!(
+                    "Cannot change '{path}' while a loop or match around it refers into '{locked}'"
+                ),
                 span,
             );
         }
@@ -1559,6 +1628,17 @@ impl SemanticAnalyzer {
                     "Binary operation '{operator}' requires operands of same type. Got {} and {}.",
                     l_ty, r_ty
                 ),
+                span,
+            );
+            return Type::Unknown;
+        }
+
+        // A variant's values take part in what it is, so a match tells them apart.
+        if let Type::Enum(name) = &l_ty
+            && self.enum_has_data(name)
+        {
+            self.error(
+                format!("'{operator}' does not apply to {l_ty}, whose variants carry values; use a match"),
                 span,
             );
             return Type::Unknown;
@@ -1695,6 +1775,45 @@ impl SemanticAnalyzer {
                 width: IntWidth::W8,
             }),
         }
+    }
+
+    /// The enum a `Enum::Variant` path names, and what the variant carries.
+    pub fn variant_fields(&self, path: &str) -> Option<(String, Vec<Type>)> {
+        let (name, variant) = path.rsplit_once("::")?;
+        let (_, fields) = self
+            .enum_variants(name)?
+            .iter()
+            .find(|(v, _)| v == variant)?;
+        Some((name.to_string(), fields.clone()))
+    }
+
+    /// `Shape::Circle(1.0)`: a variant built with one value per field.
+    fn check_variant(&mut self, path: &str, arguments: &mut [Expression], span: Span) -> Type {
+        let Some((name, fields)) = self.variant_fields(path) else {
+            return Type::Unknown;
+        };
+        if arguments.len() != fields.len() {
+            self.error(
+                format!(
+                    "'{path}' carries {} value(s), got {}",
+                    fields.len(),
+                    arguments.len()
+                ),
+                span,
+            );
+            return Type::Enum(name);
+        }
+        for (argument, field) in arguments.iter_mut().zip(&fields) {
+            let ty = self.check_expression(argument, Some(field));
+            if !field.accepts(&ty) {
+                self.error(
+                    format!("'{path}' takes {field} here, got {ty}"),
+                    argument.span,
+                );
+            }
+            self.consume(argument, &ty);
+        }
+        Type::Enum(name)
     }
 
     fn check_ok_constructor(
@@ -1853,6 +1972,9 @@ impl SemanticAnalyzer {
         match call_kind {
             CallKind::Named(name) if PRINTS.contains(&name.as_str()) => {
                 self.check_print(arguments, span)
+            }
+            CallKind::Named(name) if self.variant_fields(&name).is_some() => {
+                self.check_variant(&name, arguments, span)
             }
             CallKind::Named(name) if name == "Ok" => {
                 self.check_ok_constructor(arguments, expected_type, span)
@@ -2138,31 +2260,45 @@ impl SemanticAnalyzer {
         span: Span,
     ) -> Type {
         let subject = self.check_expression(value, None);
-        self.check_patterns(&subject, arms, span);
-
+        let bindings = self.check_patterns(&subject, arms, span);
         if arms.is_empty() {
             return Type::Void;
         }
 
-        let first_arm_type = self.check_expression(&mut arms[0].1, expected_type);
-
-        for (i, (_, result)) in arms.iter_mut().enumerate().skip(1) {
-            let first = first_arm_type.clone();
-            let arm_type = self.check_expression(result, Some(&first));
-            if !first_arm_type.accepts(&arm_type)
-                && arm_type != Type::Unknown
-                && first_arm_type != Type::Unknown
-            {
-                self.error(
-                    format!(
-                        "Match arm {} has inconsistent type. Expected {}, got {}",
-                        i + 1,
-                        first_arm_type,
-                        arm_type
-                    ),
-                    result.span,
-                );
+        // The arms are alternatives: each starts from what was moved before
+        // the match, and past it, what is moved is what any arm moved. What an
+        // arm binds is a view of the subject, which must not change meanwhile.
+        let locked = Self::place_path(value).filter(|_| bindings.iter().any(|b| !b.is_empty()));
+        self.locked.extend(locked.clone());
+        let before = self.symbols.moves();
+        let mut after = Moves::new();
+        let mut arm_type: Option<Type> = None;
+        for ((_, result), binds) in arms.iter_mut().zip(bindings) {
+            self.symbols.restore_moves(&before);
+            self.symbols.enter_scope();
+            for (name, ty) in binds {
+                self.symbols.insert_var(name, ty, true, true);
             }
+            let wanted = arm_type.clone().or_else(|| expected_type.cloned());
+            let ty = self.check_expression(result, wanted.as_ref());
+            self.symbols.exit_scope();
+
+            let leaves = matches!(&result.kind, ExpressionKind::Block(body) if Self::always_leaves(body, true));
+            if !leaves {
+                after.extend(self.symbols.moves());
+            }
+            match &arm_type {
+                None => arm_type = Some(ty),
+                Some(first) if !first.accepts(&ty) && ty != Type::Unknown => self.error(
+                    format!("Every arm must give {first}, this one gives {ty}"),
+                    result.span,
+                ),
+                Some(_) => {}
+            }
+        }
+        self.symbols.restore_moves(&after);
+        if locked.is_some() {
+            self.locked.pop();
         }
 
         // Only one arm runs, so the arms give their values away after all of
@@ -2172,35 +2308,47 @@ impl SemanticAnalyzer {
                 self.consume(result, &ty);
             }
         }
-
-        first_arm_type
+        arm_type.unwrap_or(Type::Void)
     }
 
-    /// Each pattern a constant of the subject's type, none of them twice, and
-    /// every value covered: by a `default`, or, for an enum or a bool, by
-    /// listing them all. A value no arm takes has nowhere to go at runtime.
+    /// Check each pattern against the subject: none twice, and every value
+    /// covered, by a `default` or by listing them all. A value no arm takes
+    /// has nowhere to go at runtime. Returns the names each arm binds.
     fn check_patterns(
         &mut self,
         subject: &Type,
         arms: &mut [(Expression, Expression)],
         span: Span,
-    ) {
-        let variants = match subject {
-            Type::Unknown => return,
-            Type::Integer { .. } | Type::Bool => None,
-            Type::Enum(name) => self.enum_defs.get(name).cloned(),
+    ) -> Vec<Vec<(String, Type)>> {
+        let mut bindings = vec![Vec::new(); arms.len()];
+        // Every value there is, by name, when they can be listed.
+        let all: Option<Vec<String>> = match subject {
+            Type::Unknown => return bindings,
+            Type::Integer { .. } => None,
+            Type::Bool => Some(vec!["false".into(), "true".into()]),
+            Type::Optional(_) => Some(vec!["None".into(), "Some(..)".into()]),
+            Type::Result { .. } => Some(vec!["Err(..)".into(), "Ok(..)".into()]),
+            Type::Enum(name) => self.enum_variants(name).map(|variants| {
+                variants
+                    .iter()
+                    .map(|(variant, fields)| match fields.is_empty() {
+                        true => format!("{name}::{variant}"),
+                        false => format!("{name}::{variant}(..)"),
+                    })
+                    .collect()
+            }),
             _ => {
                 self.error(
-                    format!("Cannot match on {subject}, only on an integer, a bool or an enum"),
+                    format!("Cannot match on {subject}, only on an integer, a bool, an enum, a T? or a T!"),
                     span,
                 );
-                return;
+                return bindings;
             }
         };
 
         let mut covered = HashSet::new();
         let mut has_default = false;
-        for (pattern, _) in arms.iter_mut() {
+        for ((pattern, _), binds) in arms.iter_mut().zip(bindings.iter_mut()) {
             if pattern.is_default_pattern() {
                 if has_default {
                     self.error("A match has one 'default' arm".into(), pattern.span);
@@ -2208,51 +2356,29 @@ impl SemanticAnalyzer {
                 has_default = true;
                 continue;
             }
-
-            let ty = self.check_expression(pattern, Some(subject));
-            if ty == Type::Unknown {
-                continue;
-            }
-            if !subject.accepts(&ty) {
-                self.error(
-                    format!("A pattern of type {ty} cannot match a value of type {subject}"),
-                    pattern.span,
-                );
-                continue;
-            }
-            match Self::pattern_value(pattern, variants.as_deref()) {
-                None => self.error(
-                    "A pattern must be a literal or an enum variant".into(),
-                    pattern.span,
-                ),
-                Some(value) if !covered.insert(value) => self.error(
-                    "This value is already matched by an earlier arm".into(),
-                    pattern.span,
-                ),
-                Some(_) => {}
+            if let Some((value, names)) = self.check_pattern(pattern, subject) {
+                if !covered.insert(value) {
+                    self.error(
+                        "This value is already matched by an earlier arm".into(),
+                        pattern.span,
+                    );
+                }
+                *binds = names;
             }
         }
 
         if has_default {
-            return;
+            return bindings;
         }
-        let missing: Vec<String> = match (subject, &variants) {
-            (Type::Enum(name), Some(variants)) => variants
-                .iter()
-                .enumerate()
-                .filter(|(at, _)| !covered.contains(&(*at as i128)))
-                .map(|(_, variant)| format!("{name}::{variant}"))
-                .collect(),
-            (Type::Bool, _) => [(1, "true"), (0, "false")]
-                .into_iter()
-                .filter(|(value, _)| !covered.contains(value))
-                .map(|(_, name)| name.to_string())
-                .collect(),
-            _ => {
-                self.error(format!("A match on {subject} needs a 'default' arm"), span);
-                return;
-            }
+        let Some(all) = all else {
+            self.error(format!("A match on {subject} needs a 'default' arm"), span);
+            return bindings;
         };
+        let missing: Vec<String> = (0..)
+            .zip(all)
+            .filter(|(at, _)| !covered.contains(at))
+            .map(|(_, name)| name)
+            .collect();
         if !missing.is_empty() {
             self.error(
                 format!(
@@ -2262,25 +2388,144 @@ impl SemanticAnalyzer {
                 span,
             );
         }
+        bindings
     }
 
-    /// What a constant pattern stands for: a number, a bool as 0 or 1, or a
-    /// variant's position among `variants`.
-    fn pattern_value(pattern: &Expression, variants: Option<&[String]>) -> Option<i128> {
-        match &pattern.kind {
-            ExpressionKind::Int(value) => Some(i128::from(*value)),
-            ExpressionKind::Prefix {
-                operator: crate::token::Token::Minus,
-                right,
-            } => match right.kind {
-                ExpressionKind::Int(value) => Some(-i128::from(value)),
-                _ => None,
-            },
-            ExpressionKind::Boolean(value) => Some(i128::from(*value)),
-            ExpressionKind::Identifier(path) => {
+    /// One pattern: a constant (a number, a bool, a constant's name, a
+    /// variant), `None`, `Some(x)`, `Ok(x)`, `Err(e)` or `Shape::Circle(r)`.
+    /// Returns what it stands for, to find repeats and gaps (a variant's
+    /// position, `Some` and `Ok` as 1), and the names it binds.
+    fn check_pattern(
+        &mut self,
+        pattern: &mut Expression,
+        subject: &Type,
+    ) -> Option<(i128, Vec<(String, Type)>)> {
+        let (value, fields) = match (&pattern.kind, subject) {
+            (ExpressionKind::None, Type::Optional(_)) => (0, None),
+            (ExpressionKind::Call { function, .. }, _) => {
+                let ExpressionKind::Identifier(path) = &function.kind else {
+                    self.error("A pattern names what it matches".into(), pattern.span);
+                    return None;
+                };
+                let fields = match (path.as_str(), subject) {
+                    ("Some", Type::Optional(inner)) => Some((1, vec![*inner.clone()])),
+                    ("Ok", Type::Result { ok_type, .. }) => Some((1, vec![*ok_type.clone()])),
+                    ("Err", Type::Result { err_type, .. }) => Some((0, vec![*err_type.clone()])),
+                    (path, Type::Enum(name)) => path
+                        .rsplit_once("::")
+                        .filter(|(owner, _)| owner == name)
+                        .and_then(|(_, variant)| {
+                            let variants = self.enum_variants(name)?;
+                            let at = variants.iter().position(|(v, _)| v == variant)?;
+                            Some((at as i128, variants[at].1.clone()))
+                        }),
+                    _ => None,
+                };
+                let Some((value, fields)) = fields else {
+                    self.error(format!("This pattern cannot match {subject}"), pattern.span);
+                    return None;
+                };
+                (value, Some(fields))
+            }
+            _ => {
+                let ty = self.check_expression(pattern, Some(subject));
+                if ty == Type::Unknown {
+                    return None;
+                }
+                if !subject.accepts(&ty) {
+                    self.error(
+                        format!("A pattern of type {ty} cannot match a value of type {subject}"),
+                        pattern.span,
+                    );
+                    return None;
+                }
+                let Some(value) = self.pattern_value(pattern, subject) else {
+                    self.error(
+                        "A pattern must be a literal, a constant or an enum variant".into(),
+                        pattern.span,
+                    );
+                    return None;
+                };
+                return Some((value, Vec::new()));
+            }
+        };
+
+        // What a payload pattern binds: one name per value the variant holds.
+        let names = match &pattern.kind {
+            ExpressionKind::Call { arguments, .. } => arguments.as_slice(),
+            _ => &[],
+        };
+        let fields = fields.unwrap_or_default();
+        if names.len() != fields.len() {
+            self.error(
+                format!("This pattern takes {} name(s), one per value", fields.len()),
+                pattern.span,
+            );
+            return None;
+        }
+        let mut binds = Vec::new();
+        for (name, ty) in names.iter().zip(fields) {
+            match &name.kind {
+                ExpressionKind::Identifier(name) if name == "_" => {}
+                ExpressionKind::Identifier(name) => binds.push((name.clone(), ty)),
+                _ => {
+                    self.error(
+                        "A pattern binds names, as in Some(x); match the value inside again".into(),
+                        name.span,
+                    );
+                    return None;
+                }
+            }
+        }
+        Some((value, binds))
+    }
+
+    /// What a constant pattern stands for: a number, a bool as 0 or 1, a
+    /// variant's position, or a global constant's value.
+    fn pattern_value(&self, pattern: &Expression, subject: &Type) -> Option<i128> {
+        match (&pattern.kind, subject) {
+            (ExpressionKind::Identifier(path), Type::Enum(name)) => {
                 let (_, variant) = path.rsplit_once("::")?;
-                let at = variants?.iter().position(|v| v == variant)?;
-                Some(at as i128)
+                let variants = self.enum_variants(name)?;
+                variants
+                    .iter()
+                    .position(|(v, _)| v == variant)
+                    .map(|at| at as i128)
+            }
+            _ => self.constant_value(pattern),
+        }
+    }
+
+    /// The value of a constant integer expression, following global constants.
+    pub fn constant_value(&self, expr: &Expression) -> Option<i128> {
+        use crate::token::Token as T;
+        match &expr.kind {
+            ExpressionKind::Int(value) => Some(i128::from(*value)),
+            ExpressionKind::Boolean(value) => Some(i128::from(*value)),
+            ExpressionKind::Prefix {
+                operator: T::Minus,
+                right,
+            } => self.constant_value(right).map(|value| -value),
+            ExpressionKind::Identifier(name) => self.constant_value(self.constants.get(name)?),
+            ExpressionKind::Infix {
+                left,
+                operator,
+                right,
+            } => {
+                let (l, r) = (self.constant_value(left)?, self.constant_value(right)?);
+                match operator {
+                    T::Plus => l.checked_add(r),
+                    T::Minus => l.checked_sub(r),
+                    T::Star => l.checked_mul(r),
+                    T::Slash => l.checked_div(r),
+                    T::Mod => l.checked_rem(r),
+                    T::BitAnd => Some(l & r),
+                    T::BitOr => Some(l | r),
+                    T::BitXor => Some(l ^ r),
+                    T::ShiftLeft => l.checked_shl(u32::try_from(r).ok()?),
+                    T::ShiftRight => l.checked_shr(u32::try_from(r).ok()?),
+                    _ => None,
+                }
             }
             _ => None,
         }
@@ -2616,6 +2861,14 @@ impl SemanticAnalyzer {
                 self.check_infix(left, &operator, right, expected_type, span)
             }
             ExpressionKind::Try(value) => self.check_try(value, span),
+            ExpressionKind::Block(body) => {
+                self.symbols.enter_scope();
+                for stmt in body.iter_mut() {
+                    self.check_statement(stmt);
+                }
+                self.symbols.exit_scope();
+                Type::Void
+            }
 
             ExpressionKind::Call {
                 function,
@@ -2648,7 +2901,8 @@ impl SemanticAnalyzer {
             ExpressionKind::Cast { left, target } => {
                 let from = self.check_expression(left, None);
                 let to = self.resolve_spec(target, span);
-                if !Self::castable(&from, &to) {
+                let carries_data = matches!(&from, Type::Enum(name) if self.enum_has_data(name));
+                if carries_data || !Self::castable(&from, &to) {
                     self.error(format!("Cannot cast {from} to {to}"), span);
                     return Type::Unknown;
                 }

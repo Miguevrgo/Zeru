@@ -1,6 +1,6 @@
 //! LLVM types for the analyser's types, struct layout, and signedness queries.
 
-use inkwell::types::{BasicType, BasicTypeEnum};
+use inkwell::types::{BasicType, BasicTypeEnum, StructType};
 
 use crate::{
     ast::Expression,
@@ -9,23 +9,6 @@ use crate::{
 };
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    pub(super) fn compile_struct_body(&mut self, name: &str) {
-        let fields = self.types.struct_fields(name);
-        let field_types: Vec<_> = fields
-            .iter()
-            .filter_map(|(_, ty)| self.llvm_type_of(ty))
-            .collect();
-        let field_indices = (0..)
-            .zip(fields)
-            .map(|(at, (field, _))| (field.clone(), at))
-            .collect();
-
-        if let Some((struct_type, indices)) = self.struct_defs.get_mut(name) {
-            struct_type.set_body(&field_types, false);
-            *indices = field_indices;
-        }
-    }
-
     fn is_unsigned(ty: &Type) -> bool {
         matches!(
             ty,
@@ -40,6 +23,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         expr.ty.as_ref().is_some_and(Self::is_unsigned)
     }
 
+    /// The values a variant carries, laid out as one struct in the payload
+    /// area of its enum.
+    pub(super) fn payload_type(&self, fields: &[Type]) -> Option<StructType<'ctx>> {
+        let types: Vec<_> = fields
+            .iter()
+            .filter_map(|ty| self.llvm_type_of(ty))
+            .collect();
+        (!types.is_empty()).then(|| self.context.struct_type(&types, false))
+    }
+
     /// LLVM type for a type the analyser already resolved.
     pub(super) fn llvm_type_of(&self, ty: &Type) -> Option<BasicTypeEnum<'ctx>> {
         Some(match ty {
@@ -52,6 +45,23 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             Type::Float(FloatWidth::W32) => self.context.f32_type().into(),
             Type::Float(FloatWidth::W64) => self.context.f64_type().into(),
             Type::Bool => self.context.bool_type().into(),
+            Type::Enum(name) if self.types.enum_has_data(name) => {
+                // The tag, then room for the largest variant's values.
+                let words = self
+                    .types
+                    .enum_variants(name)?
+                    .iter()
+                    .filter_map(|(_, fields)| self.payload_type(fields))
+                    .map(|payload| self.target.get_abi_size(&payload))
+                    .max()
+                    .unwrap_or(0)
+                    .div_ceil(8);
+                let area = self.context.i64_type().array_type(words as u32);
+                let tag = self.context.i32_type();
+                self.context
+                    .struct_type(&[tag.into(), area.into()], false)
+                    .into()
+            }
             Type::Enum(_) => self.context.i32_type().into(),
             Type::Pointer(_) | Type::Ref(_) | Type::RefMut(_) => self.ptr_type().into(),
             Type::Slice { .. } => self.slice_type().into(),
@@ -65,7 +75,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let fields: Vec<_> = types.iter().filter_map(|t| self.llvm_type_of(t)).collect();
                 self.context.struct_type(&fields, false).into()
             }
-            Type::Struct(name) => self.struct_defs.get(name)?.0.as_basic_type_enum(),
+            Type::Struct(name) => {
+                let struct_type = *self.struct_defs.get(name)?;
+                // Laid out on first use, so a field may be of a type declared later.
+                if struct_type.is_opaque() {
+                    let fields: Vec<_> = self
+                        .types
+                        .struct_fields(name)
+                        .iter()
+                        .filter_map(|(_, ty)| self.llvm_type_of(ty))
+                        .collect();
+                    struct_type.set_body(&fields, false);
+                }
+                struct_type.as_basic_type_enum()
+            }
             Type::Void | Type::ParamType(_) | Type::Unknown => return None,
         })
     }

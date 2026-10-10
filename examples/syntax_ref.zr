@@ -45,6 +45,13 @@ enum Color {
     Blue
 }
 
+// A variant can carry values; a match takes them out by name.
+enum Shape {
+    Circle(f64),
+    Rect(f64, f64),
+    Empty
+}
+
 // -----------------------------------------------------------------------------
 // Structs with Methods
 // -----------------------------------------------------------------------------
@@ -267,6 +274,25 @@ fn main() {
         default => "Unknown"
     };
 
+    var shape = Shape::Rect(2.0, 3.0);
+    var shape_area = match shape {           // Values come out by name
+        Shape::Circle(r) => 3.14 * r * r,
+        Shape::Rect(w, h) => w * h,
+        Shape::Empty => 0.0
+    };
+
+    var maybe: i32? = find_positive(5);
+    match maybe {                            // Block arms make it a statement
+        Some(found) => { counter += found; }
+        None => { }
+    }
+
+    var retries: u32 = 5;
+    var last_try = match retries {           // A constant is a pattern too
+        MAX_RETRIES => true,
+        default => false
+    };
+
     // -------------------------------------------------------------------------
     // Control Flow
     // -------------------------------------------------------------------------
@@ -418,7 +444,7 @@ Line 3`;
 //
 // - Explicit trait implementations: a type meets a trait by having its methods
 // - Closures/lambdas
-// - Pattern matching with destructuring
+// - Nested patterns: Some(Shape::Empty)
 // - Slices other than str
 // - References (&T, &var T) with member access - currently using pointers
 // - String methods (ends_with, starts_with, etc.)

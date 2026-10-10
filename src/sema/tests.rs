@@ -2637,7 +2637,7 @@ fn test_match_patterns_are_checked() {
         ),
         (
             "y => 1, default => 2",
-            "must be a literal or an enum variant",
+            "must be a literal, a constant or an enum variant",
         ),
         (
             "true => 1, default => 2",
@@ -2954,7 +2954,7 @@ fn test_loops_count_read_and_write() {
     for (body, message) in [
         (
             "var v: Vec<i64> = [1]; for x in &var v { v.push(2); }",
-            "Cannot change 'v' while a loop walks 'v'",
+            "Cannot change 'v' while a loop or match around it refers into 'v'",
         ),
         (
             "var v: Vec<i64> = [1]; for x in v { x = 2; }",
@@ -3039,5 +3039,58 @@ fn test_errors_propagate_and_fall_back() {
         let errors = analyze(input);
         assert_eq!(errors.len(), 1, "{input}: {errors:?}");
         assert!(errors[0].contains(message), "{input}: {errors:?}");
+    }
+}
+
+#[test]
+fn test_match_payloads_variants_blocks_and_constants() {
+    let ok = "
+        enum Shape { Circle(f64), Rect(f64, f64), Empty }
+        const LIMIT: i32 = 10;
+        fn area(s: Shape) f64 {
+            return match s { Shape::Circle(r) => r * r, Shape::Rect(w, _) => w, Shape::Empty => 0.0 };
+        }
+        fn main() {
+            var o: i64? = 5;
+            var total: i64 = 0;
+            match o {
+                Some(v) => { total += v; }
+                None => { }
+            }
+            var r: i32! = Err(4);
+            var code = match r { Ok(v) => v, Err(e) => e };
+            var n = match code { LIMIT => 1, default => 0 };
+            var a = area(Shape::Circle(2.0));
+        }
+    ";
+    assert!(analyze(ok).is_empty(), "{:?}", analyze(ok));
+
+    for (body, message) in [
+        (
+            "var s = S::A(1); if s == S::B { }",
+            "'==' does not apply to S",
+        ),
+        ("var s = S::A;", "'S::A' carries 1 value(s)"),
+        ("var s = S::A(1, 2);", "'S::A' carries 1 value(s), got 2"),
+        (
+            "var s = S::B; var x = match s { S::A(v) => v };",
+            "Match does not cover S::B",
+        ),
+        (
+            "var o: i32? = 1; match o { Some(v) => { o = None; } None => { } }",
+            "Cannot change 'o'",
+        ),
+        (
+            "var o: i32? = 1; var x = match o { Some(1) => 1, default => 0 };",
+            "A pattern binds names",
+        ),
+        (
+            "var o: i32? = 1; var x = match o { Some(v) => 1 };",
+            "Match does not cover None",
+        ),
+    ] {
+        let errors = analyze(&format!("enum S {{ A(i32), B }} fn main() {{ {body} }}"));
+        assert_eq!(errors.len(), 1, "{body}: {errors:?}");
+        assert!(errors[0].contains(message), "{body}: {errors:?}");
     }
 }

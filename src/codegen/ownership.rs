@@ -4,6 +4,7 @@
 //! per type, emitted the first time each is needed.
 
 use inkwell::{
+    IntPredicate,
     module::Linkage,
     types::{BasicType, StructType},
     values::{BasicValueEnum, FunctionValue, IntValue, PointerValue},
@@ -211,6 +212,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     })
                 });
             }
+            Type::Enum(_) => {
+                self.each_variant(&[value], ty, |this, parts, ty| this.call_drop(parts[0], ty))
+            }
             Type::Struct(_) | Type::Tuple(_) => {
                 if let Type::Struct(name) = ty
                     && let Some(user_drop) = self.module.get_function(&format!("{name}::drop"))
@@ -275,6 +279,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     })
                 });
             }
+            Type::Enum(_) => self.each_variant(&[dst, src], ty, |this, parts, ty| {
+                this.call_copy(parts[0], parts[1], ty)
+            }),
             Type::Struct(_) | Type::Tuple(_) => {
                 let shape = self.shape_of(ty);
                 let parts = self.parts_of(ty);
@@ -283,6 +290,53 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 });
             }
             _ => {}
+        }
+    }
+
+    /// Run `visit` on the values of the variant the enum at `values[0]`
+    /// holds, for each variant whose values own something.
+    fn each_variant(
+        &mut self,
+        values: &[PointerValue<'ctx>],
+        ty: &Type,
+        mut visit: impl FnMut(&mut Self, &[PointerValue<'ctx>], &Type),
+    ) {
+        let (Type::Enum(name), Some(shape)) = (ty, self.shape_of(ty)) else {
+            return;
+        };
+        let types = self.types;
+        let i32_type = self.context.i32_type();
+        let tag_field = self
+            .builder
+            .build_struct_gep(shape, values[0], 0, "tag")
+            .unwrap();
+        let tag = self.load_int(i32_type, tag_field, "tag");
+        for (at, (_, fields)) in (0..).zip(types.enum_variants(name).unwrap_or_default()) {
+            if !fields.iter().any(|field| types.owns_heap(field)) {
+                continue;
+            }
+            let holds = self
+                .builder
+                .build_int_compare(
+                    IntPredicate::EQ,
+                    tag,
+                    i32_type.const_int(at, false),
+                    "holds",
+                )
+                .unwrap();
+            let payload = self.payload_type(fields);
+            let parts: Vec<(u32, Type)> = (0..).zip(fields.iter().cloned()).collect();
+            self.if_then(holds, |this| {
+                let areas: Vec<_> = values
+                    .iter()
+                    .map(|value| {
+                        this.builder
+                            .build_struct_gep(shape, *value, 1, "payload")
+                            .unwrap()
+                    })
+                    .collect();
+                this.each_part(payload, &areas, &parts, &mut visit);
+            });
         }
     }
 

@@ -5,10 +5,12 @@
 use std::collections::HashMap;
 
 use inkwell::{
+    OptimizationLevel,
     basic_block::BasicBlock,
     builder::Builder,
     context::Context,
     module::Module,
+    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetData, TargetMachine},
     types::{BasicTypeEnum, StructType},
     values::{FunctionValue, PointerValue},
 };
@@ -34,7 +36,10 @@ pub struct Compiler<'a, 'ctx> {
     /// Each global constant's value and declared type. It is lowered wherever
     /// the constant is used, inside a function, where LLVM folds it.
     pub(super) constants: HashMap<String, (Expression, Option<BasicTypeEnum<'ctx>>)>,
-    pub(super) struct_defs: HashMap<String, (StructType<'ctx>, HashMap<String, u32>)>,
+    /// Each struct's LLVM type, given its body the first time it is needed.
+    pub(super) struct_defs: HashMap<String, StructType<'ctx>>,
+    /// The host's sizes, which an enum's payload area is measured with.
+    pub(super) target: TargetData,
     pub(super) current_fn: Option<FunctionValue<'ctx>>,
 
     pub(super) loop_stack: Vec<LoopContext<'ctx>>,
@@ -54,6 +59,29 @@ pub struct Compiler<'a, 'ctx> {
 
 /// Where a variable lives, and its LLVM type.
 pub(super) type VarBinding<'ctx> = (PointerValue<'ctx>, BasicTypeEnum<'ctx>);
+
+/// Build for the machine compiling, and take its sizes and alignments.
+fn host_layout(module: &Module) -> TargetData {
+    Target::initialize_native(&InitializationConfig::default()).expect("a native target");
+    let triple = TargetMachine::get_default_triple();
+    let machine = Target::from_triple(&triple)
+        .ok()
+        .and_then(|target| {
+            target.create_target_machine(
+                &triple,
+                "generic",
+                "",
+                OptimizationLevel::None,
+                RelocMode::PIC,
+                CodeModel::Default,
+            )
+        })
+        .expect("a target machine for the host");
+    let layout = machine.get_target_data();
+    module.set_triple(&triple);
+    module.set_data_layout(&layout.get_data_layout());
+    layout
+}
 
 pub(super) struct LoopContext<'ctx> {
     pub(super) continue_block: BasicBlock<'ctx>,
@@ -97,6 +125,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             variables: HashMap::new(),
             constants: HashMap::new(),
             struct_defs: HashMap::new(),
+            target: host_layout(module),
             current_fn: None,
             loop_stack: Vec::new(),
             safety_mode,
@@ -114,7 +143,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.init_debug_info();
         self.declare_structs(program);
         self.collect_global_constants(program);
-        self.lay_out_structs(program);
 
         self.init_builtin_streams();
 
@@ -134,8 +162,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         for stmt in &program.statements {
             if let StatementKind::Struct { name, .. } = &stmt.kind {
                 let struct_type = self.context.opaque_struct_type(name);
-                self.struct_defs
-                    .insert(name.clone(), (struct_type, HashMap::new()));
+                self.struct_defs.insert(name.clone(), struct_type);
             }
         }
     }
@@ -152,14 +179,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             {
                 let ty = ty.as_ref().and_then(|ty| self.llvm_type_of(ty));
                 self.constants.insert(name.clone(), (value.clone(), ty));
-            }
-        }
-    }
-
-    fn lay_out_structs(&mut self, program: &Program) {
-        for stmt in &program.statements {
-            if let StatementKind::Struct { name, .. } = &stmt.kind {
-                self.compile_struct_body(name);
             }
         }
     }

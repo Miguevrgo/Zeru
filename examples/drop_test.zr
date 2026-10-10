@@ -11,6 +11,12 @@ struct Probe {
     }
 }
 
+enum Kept {
+    One(Probe),
+    Two(Probe, Probe),
+    Nothing
+}
+
 struct Holder {
     probe: Probe,
     probes: Vec<Probe>,
@@ -108,6 +114,14 @@ fn main() {
     expect(drops, 32, 23);
     { var p = probe(at); consume(p); p = probe(at); }
     expect(drops, 34, 24);
+
+    // An enum drops what its variant holds, and a match only looks at it.
+    { var k = Kept::Two(probe(at), probe(at)); }
+    expect(drops, 36, 25);
+    { var k = Kept::One(probe(at)); var twin = k.copy(); k = Kept::Nothing; expect(drops, 37, 26); }
+    expect(drops, 38, 27);
+    { var k = Kept::One(probe(at)); match k { Kept::One(p) => { expect(drops, 38, 28); } default => { } } }
+    expect(drops, 39, 29);
 
     println("Drop tests passed!");
 }

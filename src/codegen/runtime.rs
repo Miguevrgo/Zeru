@@ -980,11 +980,19 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     /// Declare the `stdout`/`stderr` globals and the ctor that opens them.
     pub(super) fn init_builtin_streams(&mut self) {
-        let Some((stream_type, fields)) = self.struct_defs.get("OutStream") else {
+        let Some(BasicTypeEnum::StructType(stream_type)) =
+            self.llvm_type_of(&Type::Struct("OutStream".into()))
+        else {
             return;
         };
-        let stream_type = *stream_type;
-        let (Some(&fd_index), Some(&index_index)) = (fields.get("fd"), fields.get("index")) else {
+        let field = |name: &str| {
+            let fields = self.types.struct_fields("OutStream");
+            fields
+                .iter()
+                .position(|(field, _)| field == name)
+                .map(|at| at as u32)
+        };
+        let (Some(fd_index), Some(index_index)) = (field("fd"), field("index")) else {
             return;
         };
 

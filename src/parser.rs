@@ -178,7 +178,10 @@ impl<'a> Parser<'a> {
     fn parse_expression_statement(&mut self) -> Option<Statement> {
         let start_span = self.current_span;
         let expr = self.parse_expression(Precedence::Lowest)?;
-        if !self.expect_peek(&Token::Semicolon) {
+        // Like `if` and `while`, a `match` ends at its closing brace.
+        if !matches!(expr.kind, ExpressionKind::Match { .. })
+            && !self.expect_peek(&Token::Semicolon)
+        {
             return None;
         }
         let end_span = self.current_span;
@@ -646,8 +649,15 @@ impl<'a> Parser<'a> {
         if !self.expect_peek(&Token::LBrace) {
             return None;
         }
+        // `Circle(f64)` carries values, `Empty` none.
         let variants = self.parse_list(&Token::RBrace, |p| {
-            p.current_identifier("enum variant name")
+            let name = p.current_identifier("enum variant name")?;
+            let mut fields = Vec::new();
+            if p.peek_token_is(&Token::LParen) {
+                p.next_token();
+                fields = p.parse_list(&Token::RParen, Self::parse_type)?;
+            }
+            Some((name, fields))
         })?;
 
         let kind = StatementKind::Enum { name, variants };
@@ -979,7 +989,13 @@ impl<'a> Parser<'a> {
             }
             self.next_token();
 
-            let body = self.parse_expression(Precedence::Lowest)?;
+            let body = if self.cur_token_is(&Token::LBrace) {
+                let span = self.current_span;
+                let body = self.parse_block_statement();
+                Expression::new(ExpressionKind::Block(body), span.merge(self.current_span))
+            } else {
+                self.parse_expression(Precedence::Lowest)?
+            };
             arms.push((pattern, body));
 
             if self.peek_token_is(&Token::Comma) {
@@ -2233,6 +2249,7 @@ mod tests {
         if let StatementKind::Enum { name, variants } = &program.statements[0].kind {
             assert_eq!(name, "Color");
             assert_eq!(variants.len(), 3);
+            assert!(variants.iter().all(|(_, fields)| fields.is_empty()));
         } else {
             panic!("Expected Enum");
         }

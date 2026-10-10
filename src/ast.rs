@@ -83,7 +83,8 @@ pub enum StatementKind {
     },
     Enum {
         name: String,
-        variants: Vec<String>,
+        /// Each variant's name and the types of the values it carries.
+        variants: Vec<(String, Vec<TypeSpec>)>,
     },
     Trait {
         name: String,
@@ -175,6 +176,8 @@ pub enum ExpressionKind {
     Dereference(Box<Expression>),
     /// `try f()`: the value of a `T!`, or out of the function with its error.
     Try(Box<Expression>),
+    /// `{ ... }` as a `match` arm, run for its effects.
+    Block(Vec<Statement>),
     Tuple(Vec<Expression>),
     InlineAsm {
         template: String,
@@ -306,7 +309,12 @@ pub fn walk_item(v: &mut impl Visitor, statement: &mut Statement) {
                 }
             }
         }
-        StatementKind::Enum { name, .. } => v.item(name),
+        StatementKind::Enum { name, variants } => {
+            v.item(name);
+            for (_, fields) in variants.iter_mut() {
+                fields.iter_mut().for_each(|spec| v.ty(spec));
+            }
+        }
         StatementKind::Trait { name, methods } => {
             v.item(name);
             for method in methods {
@@ -462,10 +470,28 @@ fn walk_expression(v: &mut impl Visitor, expr: &mut Expression) {
         ExpressionKind::Match { value, arms } => {
             walk_expression(v, value);
             for (pattern, result) in arms.iter_mut() {
-                walk_expression(v, pattern);
+                let scope = v.scope();
+                match &mut pattern.kind {
+                    // `Some(x)` or `Shape::Circle(r)`: a path, and the names
+                    // the arm binds.
+                    ExpressionKind::Call {
+                        function,
+                        arguments,
+                    } => {
+                        walk_expression(v, function);
+                        for binding in arguments.iter() {
+                            if let ExpressionKind::Identifier(name) = &binding.kind {
+                                v.bind(name);
+                            }
+                        }
+                    }
+                    _ => walk_expression(v, pattern),
+                }
                 walk_expression(v, result);
+                v.leave(scope);
             }
         }
+        ExpressionKind::Block(body) => walk_block(v, body),
         ExpressionKind::ArrayLiteral(elements) | ExpressionKind::Tuple(elements) => {
             for element in elements {
                 walk_expression(v, element);
