@@ -224,7 +224,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type(&mut self) -> Option<TypeSpec> {
-        match &self.current_token {
+        let base = match &self.current_token {
             Token::Str => Some(TypeSpec::Slice(Box::new(TypeSpec::Named("u8".to_string())))),
             Token::Star => {
                 self.next_token();
@@ -237,7 +237,23 @@ impl<'a> Parser<'a> {
                 self.error_current("Type identifier expected");
                 None
             }
+        }?;
+        if self.peek_token_is(&Token::Question) {
+            self.next_token();
+            return Some(TypeSpec::Optional(Box::new(base)));
         }
+        if self.peek_token_is(&Token::Bang) {
+            self.next_token();
+            let error = match self.peek_token {
+                Token::Identifier(_) => {
+                    self.next_token();
+                    Some(Box::new(self.parse_named_type()?))
+                }
+                _ => None,
+            };
+            return Some(TypeSpec::Result(Box::new(base), error));
+        }
+        Some(base)
     }
 
     /// `&[T]` is a slice, `&var T` a mutable reference, `&T` a shared one.
@@ -285,28 +301,11 @@ impl<'a> Parser<'a> {
             name.push_str(segment);
         }
 
-        let named = if self.peek_token_is(&Token::Lt) && !is_primitive(&name) {
+        if self.peek_token_is(&Token::Lt) && !is_primitive(&name) {
             let args = self.parse_generic_arguments()?;
-            TypeSpec::Generic { name, args }
-        } else {
-            TypeSpec::Named(name)
-        };
-        if self.peek_token_is(&Token::Question) {
-            self.next_token();
-            return Some(TypeSpec::Optional(Box::new(named)));
+            return Some(TypeSpec::Generic { name, args });
         }
-        if self.peek_token_is(&Token::Bang) {
-            self.next_token();
-            let error = match self.peek_token {
-                Token::Identifier(_) => {
-                    self.next_token();
-                    Some(Box::new(self.parse_named_type()?))
-                }
-                _ => None,
-            };
-            return Some(TypeSpec::Result(Box::new(named), error));
-        }
-        Some(named)
+        Some(TypeSpec::Named(name))
     }
 
     /// The `<..>` of a generic type. An argument is either a type or a length,
@@ -496,11 +495,11 @@ impl<'a> Parser<'a> {
         }
         self.next_token();
 
-        let mut iterable = self.parse_expression(Precedence::Lowest)?;
+        let mut iterable = self.parse_condition()?;
         if self.peek_token_is(&Token::DotDot) {
             self.next_token();
             self.next_token();
-            let end = self.parse_expression(Precedence::Lowest)?;
+            let end = self.parse_condition()?;
             let span = iterable.span.merge(end.span);
             let kind = ExpressionKind::Range {
                 start: Box::new(iterable),

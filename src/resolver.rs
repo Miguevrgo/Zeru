@@ -218,7 +218,7 @@ pub fn compile_pipeline(
         .arg("-o")
         .arg(&exe_path)
         .args(safety_mode.clang_flags())
-        .arg("-Wno-override-module")
+        .args(["-Wno-override-module", "-lm"])
         .status()?;
 
     if !link.success() {

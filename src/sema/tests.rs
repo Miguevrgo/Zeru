@@ -323,9 +323,12 @@ fn test_writes_need_a_var_root() {
         "const v: Vec<i32> = Vec.new(); v.push(1);",
         "const p = P { x: 1 }; p.bump();",
         "const p = P { x: 1 }; var r = &var p.x;",
+        "const p = P { x: 1 }; var r: *i32 = &p.x;",
+        "const n: i32 = 1; set(&n);",
     ] {
         let input = format!(
             "struct P {{ x: i32, fn bump(var self) {{ self.x += 1; }} }}
+             fn set(p: *i32) {{ *p = 2; }}
              fn main() {{ {body} }}"
         );
         let errors = analyze(&input);
@@ -747,6 +750,10 @@ fn test_return_gives_the_declared_type() {
             "Function 'f' can finish without returning a value",
         ),
         (
+            "fn f(n: i32?) i32 { match n { Some(v) => { return v; } None => { } } }",
+            "Function 'f' can finish without returning a value",
+        ),
+        (
             "fn f() i32 { return; }",
             "Function expects i32, returning void",
         ),
@@ -767,6 +774,7 @@ fn test_return_on_every_branch_is_accepted() {
         "fn f(n: i32) i32 { if n > 0 { return 1; } else { return 2; } }",
         "fn f(n: i32) i32 { if n > 0 { return 1; } return 2; }",
         "fn f(n: i32) i32 { while n > 0 { return 1; } return 0; }",
+        "fn f(n: i32?) i32 { match n { Some(v) => { return v; } None => { return 0; } } }",
         "fn f() { }",
     ];
     for case in cases {
@@ -781,6 +789,7 @@ fn test_self_referential_struct_is_rejected() {
         "struct S { next: S } fn main() { }",
         "struct A { b: B } struct B { a: A } fn main() { }",
         "struct S { kids: Array<S, 2> } fn main() { }",
+        "struct P<T> { a: T } struct S { p: P<S>? } fn f(s: S) { } fn main() { }",
     ] {
         let errors = analyze(input);
         assert!(
@@ -869,6 +878,17 @@ fn test_static_method_takes_a_dot() {
         "struct Box { n: i32, fn empty() Box { return Box { n: 0 }; } } fn main() { var b = Box::empty(); }",
     );
     assert_eq!(errors, ["Call a struct's function with '.': Box.empty()"]);
+}
+
+#[test]
+fn test_static_function_is_not_a_method() {
+    let errors = analyze(
+        "struct Box { n: i32, fn empty() Box { return Box { n: 0 }; } } fn main() { var b = Box.empty(); var c = b.empty(); }",
+    );
+    assert_eq!(
+        errors,
+        ["'Box::empty' takes no 'self'; call it on the type, not a value"]
+    );
 }
 
 #[test]

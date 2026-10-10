@@ -80,6 +80,7 @@ pub(super) struct LoopContext<'ctx> {
     pub(super) continue_block: BasicBlock<'ctx>,
     pub(super) break_block: BasicBlock<'ctx>,
     pub(super) scope_depth: usize,
+    pub(super) temporaries: usize,
 }
 
 /// One block's bindings: what each name shadowed, and the values it owns.

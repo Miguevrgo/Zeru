@@ -138,8 +138,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn compile_statement(&mut self, stmt: &Statement) {
         let outer_span = std::mem::replace(&mut self.current_span, stmt.span);
         self.set_debug_location();
+        let mark = self.temporaries.len();
         self.lower_statement(stmt);
-        self.drop_temporaries();
+        self.drop_temporaries(mark);
         self.current_span = outer_span;
         self.set_debug_location();
     }
@@ -210,7 +211,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 } else {
                     ctx.continue_block
                 };
-                self.drop_scopes_from(ctx.scope_depth);
+                let (scope_depth, temporaries) = (ctx.scope_depth, ctx.temporaries);
+                self.leave_temporaries(temporaries);
+                self.drop_scopes_from(scope_depth);
                 self.builder.build_unconditional_branch(target).unwrap();
             }
 
@@ -434,8 +437,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     /// A condition, whose temporaries are done with once it is decided.
     fn compile_bool(&mut self, expr: &Expression) -> IntValue<'ctx> {
         let bool_type = self.context.bool_type();
+        let mark = self.temporaries.len();
         let value = self.compile_expression(expr, Some(bool_type.into()));
-        self.drop_temporaries();
+        self.drop_temporaries(mark);
         match value {
             BasicValueEnum::IntValue(v) => v,
             _ => {
@@ -455,6 +459,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             continue_block,
             break_block,
             scope_depth: self.scope_stack.len(),
+            temporaries: self.temporaries.len(),
         });
         self.compile_statement(body);
         self.loop_stack.pop();
@@ -695,6 +700,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ExpressionKind::Prefix { operator, right } => {
                 let operand = self.compile_expression(right, expected_type);
                 match (operator, operand) {
+                    (Token::Minus, BasicValueEnum::IntValue(v))
+                        if !Self::is_unsigned_expr(right)
+                            && !matches!(right.kind, ExpressionKind::Int(_)) =>
+                    {
+                        let zero = v.get_type().const_zero();
+                        self.apply_int_arith(zero, v, &Token::Minus, true).unwrap()
+                    }
                     (Token::Minus, BasicValueEnum::IntValue(v)) => {
                         self.builder.build_int_neg(v, "neg").unwrap().into()
                     }
@@ -735,12 +747,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
 
             ExpressionKind::Tuple(elements) => {
-                let wanted = match expected_type {
-                    Some(BasicTypeEnum::StructType(shape))
-                        if shape.count_fields() as usize == elements.len() =>
-                    {
-                        Some(shape)
-                    }
+                let wanted = match settled_type() {
+                    Some(BasicTypeEnum::StructType(shape)) => Some(shape),
                     _ => None,
                 };
 

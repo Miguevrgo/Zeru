@@ -28,6 +28,10 @@ fn probe(drops: *i32) Probe {
 
 fn consume(p: Probe) { }
 
+fn maybe(drops: *i32) Probe? { return probe(drops); }
+
+fn listed() Vec<i64>? { return [1, 2, 3]; }
+
 fn passed_through(drops: *i32) Probe {
     var p = probe(drops);
     return p;
@@ -118,6 +122,10 @@ fn main() {
     expect(drops, 38, 27);
     { var k = Kept::One(probe(at)); match k { Kept::One(p) => { expect(drops, 38, 28); } default => { } } }
     expect(drops, 39, 29);
+
+    match listed() { Some(v) => { expect(drops, 39, 30); if v[2] != 3 { exit(31); } } None => { } }
+    while true { match maybe(at) { Some(p) => { break; } None => { } } }
+    expect(drops, 40, 32);
 
     println("Drop tests passed!");
 }

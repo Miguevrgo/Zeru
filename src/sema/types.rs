@@ -90,9 +90,7 @@ impl Type {
             (Type::Ref(e1), Type::Ref(e2)) => e1.accepts(e2),
             (Type::RefMut(e1), Type::RefMut(e2)) => e1.accepts(e2),
             (Type::Ref(e1), Type::RefMut(e2)) => e1.accepts(e2),
-            (Type::Pointer(e1), Type::Ref(e2)) | (Type::Pointer(e1), Type::RefMut(e2)) => {
-                e1.accepts(e2)
-            }
+            (Type::Pointer(e1), Type::RefMut(e2)) => e1.accepts(e2),
             (Type::Tuple(t1), Type::Tuple(t2)) => {
                 t1.len() == t2.len() && t1.iter().zip(t2.iter()).all(|(a, b)| a.accepts(b))
             }

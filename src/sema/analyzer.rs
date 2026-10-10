@@ -62,7 +62,8 @@ pub struct SemanticAnalyzer {
     current_fn_return_type: Option<Type>,
     current_type_params: Vec<String>,
 
-    mut_self_methods: HashSet<String>,
+    /// Methods taking `self`, mapped to whether it is `var self`.
+    self_methods: HashMap<String, bool>,
 
     generic_structs: HashMap<String, Statement>,
     generic_functions: HashMap<String, Statement>,
@@ -93,7 +94,7 @@ impl SemanticAnalyzer {
             trait_defs: HashMap::new(),
             current_fn_return_type: None,
             current_type_params: Vec::new(),
-            mut_self_methods: HashSet::new(),
+            self_methods: HashMap::new(),
             generic_structs: HashMap::new(),
             generic_functions: HashMap::new(),
             instantiations: Vec::new(),
@@ -172,7 +173,6 @@ impl SemanticAnalyzer {
         self.privates = std::mem::take(&mut program.privates);
         self.take_generics(program);
         self.scan_types(&program.statements);
-        self.check_recursive_structs(&program.statements);
         self.scan_functions(&program.statements);
         let generic_functions: Vec<_> = self.generic_functions.values().cloned().collect();
         self.scan_functions(&generic_functions);
@@ -182,6 +182,7 @@ impl SemanticAnalyzer {
             self.expand_instantiations(program);
             self.name_instantiations(program);
         }
+        self.check_recursive_types(&program.statements);
     }
 
     /// A generic struct is not a type, nor a generic function a function,
@@ -363,28 +364,14 @@ impl SemanticAnalyzer {
 
     /// A struct or enum that stores itself, directly or through another, has
     /// no finite size. Reported here so codegen never tries to lay one out.
-    fn check_recursive_structs(&mut self, stmts: &[Statement]) {
-        let types: HashMap<&str, Vec<&TypeSpec>> = stmts
-            .iter()
-            .filter_map(|stmt| match &stmt.kind {
-                StatementKind::Struct { name, fields, .. } => {
-                    Some((name.as_str(), fields.iter().map(|(_, spec)| spec).collect()))
-                }
-                StatementKind::Enum { name, variants } => Some((
-                    name.as_str(),
-                    variants.iter().flat_map(|(_, f)| f).collect(),
-                )),
-                _ => None,
-            })
-            .collect();
-
+    fn check_recursive_types(&mut self, stmts: &[Statement]) {
         for stmt in stmts {
             let (StatementKind::Struct { name, .. } | StatementKind::Enum { name, .. }) =
                 &stmt.kind
             else {
                 continue;
             };
-            if Self::stores_by_value(name, name, &types, &mut HashSet::new()) {
+            if self.stores_by_value(name, name, &mut HashSet::new()) {
                 self.error(
                     format!("'{name}' stores itself, so it has no finite size"),
                     stmt.span,
@@ -393,41 +380,39 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn stores_by_value(
-        from: &str,
-        target: &str,
-        types: &HashMap<&str, Vec<&TypeSpec>>,
-        seen: &mut HashSet<String>,
-    ) -> bool {
-        let Some(fields) = types.get(from) else {
-            return false;
+    fn stores_by_value(&self, from: &str, target: &str, seen: &mut HashSet<String>) -> bool {
+        let fields: Vec<&Type> = match self.struct_defs.get(from) {
+            Some(fields) => fields.iter().map(|(_, ty)| ty).collect(),
+            None => self
+                .enum_defs
+                .get(from)
+                .into_iter()
+                .flatten()
+                .flat_map(|(_, payload)| payload)
+                .collect(),
         };
-
         let mut deps = Vec::new();
-        for spec in fields {
-            Self::value_dependencies(spec, &mut deps);
+        for ty in fields {
+            Self::value_dependencies(ty, &mut deps);
         }
         deps.into_iter().any(|dep| {
-            dep == target
-                || (seen.insert(dep.clone()) && Self::stores_by_value(&dep, target, types, seen))
+            dep == target || (seen.insert(dep.clone()) && self.stores_by_value(&dep, target, seen))
         })
     }
 
     /// Type names a field stores inline. Pointers, references, slices and `Vec`
     /// keep their payload elsewhere, so they break a cycle.
-    fn value_dependencies(spec: &TypeSpec, out: &mut Vec<String>) {
-        match spec {
-            TypeSpec::Named(name) => out.push(name.clone()),
-            TypeSpec::Tuple(types) => {
-                types.iter().for_each(|t| Self::value_dependencies(t, out));
-            }
-            TypeSpec::Optional(inner) | TypeSpec::Result(inner, _) => {
-                Self::value_dependencies(inner, out);
-            }
-            TypeSpec::Generic { name, args } if name == "Array" => {
-                if let Some(elem) = args.first() {
-                    Self::value_dependencies(elem, out);
-                }
+    fn value_dependencies(ty: &Type, out: &mut Vec<String>) {
+        match ty {
+            Type::Struct(name) | Type::Enum(name) => out.push(name.clone()),
+            Type::Tuple(types) => types.iter().for_each(|t| Self::value_dependencies(t, out)),
+            Type::Optional(inner)
+            | Type::Array {
+                elem_type: inner, ..
+            } => Self::value_dependencies(inner, out),
+            Type::Result { ok_type, err_type } => {
+                Self::value_dependencies(ok_type, out);
+                Self::value_dependencies(err_type, out);
             }
             _ => {}
         }
@@ -449,6 +434,7 @@ impl SemanticAnalyzer {
                         self.error(format!("Type '{name}' is already defined"), stmt.span);
                         continue;
                     }
+                    self.current_item = name.clone();
 
                     let names: Vec<String> = variants.iter().map(|(v, _)| v.clone()).collect();
                     if let Some(dup) = Self::first_duplicate(&names) {
@@ -514,6 +500,7 @@ impl SemanticAnalyzer {
         let StatementKind::Struct { name, fields, .. } = &stmt.kind else {
             return;
         };
+        let outer_item = std::mem::replace(&mut self.current_item, name.clone());
 
         let mut resolved: Vec<(String, Type)> = Vec::with_capacity(fields.len());
         for (field_name, spec) in fields {
@@ -531,6 +518,7 @@ impl SemanticAnalyzer {
         if let Some(fields) = self.struct_defs.get_mut(name) {
             *fields = resolved;
         }
+        self.current_item = outer_item;
     }
 
     fn scan_functions(&mut self, stmts: &[Statement]) {
@@ -602,6 +590,7 @@ impl SemanticAnalyzer {
             self.error(format!("Function '{name}' is already defined"), span);
             return;
         }
+        let outer_item = std::mem::replace(&mut self.current_item, name.clone());
 
         if let Some(dup) =
             Self::first_duplicate(&params.iter().map(|(n, _, _)| n.clone()).collect::<Vec<_>>())
@@ -628,13 +617,15 @@ impl SemanticAnalyzer {
             }
         }
 
-        if matches!(params.first(), Some((first, _, true)) if first == "self") {
-            self.mut_self_methods.insert(name.clone());
+        if let Some((first, _, is_mut)) = params.first()
+            && first == "self"
+        {
+            self.self_methods.insert(name.clone(), *is_mut);
         }
         if associated_struct.is_some()
             && name.ends_with("::drop")
             && (params.len() != 1
-                || !self.mut_self_methods.contains(&name)
+                || self.self_methods.get(&name) != Some(&true)
                 || return_type.is_some())
         {
             self.error(
@@ -679,6 +670,7 @@ impl SemanticAnalyzer {
         };
 
         self.current_type_params = prev_type_params;
+        self.current_item = outer_item;
 
         self.symbols.insert_fn(name.clone(), param_types, ret_ty);
     }
@@ -810,6 +802,12 @@ impl SemanticAnalyzer {
                 Self::always_leaves(std::slice::from_ref(then_branch), jumps)
                     && Self::always_leaves(std::slice::from_ref(else_branch), jumps)
             }
+            StatementKind::Expression(Expression {
+                kind: ExpressionKind::Match { arms, .. },
+                ..
+            }) => arms.iter().all(|(_, arm)| {
+                matches!(&arm.kind, ExpressionKind::Block(inner) if Self::always_leaves(inner, jumps))
+            }),
             _ => false,
         })
     }
@@ -941,6 +939,7 @@ impl SemanticAnalyzer {
                     };
                 }
                 if self.generic_structs.contains_key(name) {
+                    self.check_visible(name, span);
                     let args: Vec<Type> = args.iter().map(|a| self.resolve_spec(a, span)).collect();
                     return match self.instantiate_struct(name, &args, span) {
                         Some(name) => Type::Struct(name),
@@ -2011,9 +2010,9 @@ impl SemanticAnalyzer {
                 let obj_type = self.check_expression(object, None);
                 let mutates = match &obj_type {
                     Type::Vec { .. } => VEC_MUTATORS.contains(&method_name.as_str()),
-                    Type::Struct(name) => self
-                        .mut_self_methods
-                        .contains(&format!("{name}::{method_name}")),
+                    Type::Struct(name) => {
+                        self.self_methods.get(&format!("{name}::{method_name}")) == Some(&true)
+                    }
                     _ => false,
                 };
                 if mutates {
@@ -2202,13 +2201,13 @@ impl SemanticAnalyzer {
         expected_type: Option<&Type>,
         span: Span,
     ) -> Type {
+        self.check_visible(name, span);
         let name = &self.instantiate_from_literal(name, fields, expected_type, span);
 
         let Some(def_fields) = self.struct_defs.get(name).cloned() else {
             self.error(format!("Unknown struct type '{name}'."), span);
             return Type::Unknown;
         };
-        self.check_visible(name, span);
 
         for (field_name, _) in fields.iter() {
             if !def_fields.iter().any(|(n, _)| n == field_name) {
@@ -2755,15 +2754,7 @@ impl SemanticAnalyzer {
                 | ExpressionKind::Index { .. }
                 | ExpressionKind::Dereference(_)
         ) {
-            self.error(
-                match kind {
-                    Borrow::Shared => "Cannot create reference to a temporary value".into(),
-                    Borrow::Mutable => {
-                        "Cannot create mutable reference to a temporary value".to_string()
-                    }
-                },
-                span,
-            );
+            self.error("Cannot create reference to a temporary value".into(), span);
         }
 
         match kind {
@@ -2891,7 +2882,13 @@ impl SemanticAnalyzer {
                     this.check_array_repeat(value, *count, hint)
                 }),
 
-            ExpressionKind::BorrowRef(inner) => self.check_borrow(inner, Borrow::Shared, span),
+            ExpressionKind::BorrowRef(inner) => {
+                let kind = match expected_type {
+                    Some(Type::Pointer(_)) => Borrow::Mutable,
+                    _ => Borrow::Shared,
+                };
+                self.check_borrow(inner, kind, span)
+            }
             ExpressionKind::BorrowRefMut(inner) => self.check_borrow(inner, Borrow::Mutable, span),
             ExpressionKind::Dereference(inner) => {
                 let inner_type = self.check_expression(inner, None);
@@ -3073,9 +3070,12 @@ impl SemanticAnalyzer {
             let mut expected_args = params.clone();
             let mut substitutions: HashMap<String, Type> = HashMap::new();
 
-            if let Some(self_type) = implicit_self
-                && !expected_args.is_empty()
-            {
+            if implicit_self.is_some() && !self.self_methods.contains_key(name) {
+                self.error(
+                    format!("'{name}' takes no 'self'; call it on the type, not a value"),
+                    call_span,
+                );
+            } else if let Some(self_type) = implicit_self {
                 let self_type = match self_type {
                     Type::Pointer(pointee) | Type::Ref(pointee) | Type::RefMut(pointee) => *pointee,
                     other => other,
@@ -3134,7 +3134,7 @@ impl SemanticAnalyzer {
             (Type::ParamType(name), _) => {
                 subs.entry(name.clone()).or_insert_with(|| arg.clone());
             }
-            (Type::Pointer(p), Type::Pointer(a) | Type::Ref(a) | Type::RefMut(a))
+            (Type::Pointer(p), Type::Pointer(a) | Type::RefMut(a))
             | (Type::Ref(p), Type::Ref(a) | Type::RefMut(a))
             | (Type::RefMut(p), Type::RefMut(a))
             | (Type::Optional(p), Type::Optional(a))
@@ -3236,8 +3236,12 @@ impl SemanticAnalyzer {
 
     fn check_visible(&mut self, name: &str, span: Span) {
         let declared = match name.rsplit_once("::") {
-            Some((owner, member)) if owner.contains("__") => {
-                format!("{}::{member}", owner.split("__").next().unwrap_or(owner))
+            Some((owner, member))
+                if owner.contains("__") || self.struct_defs.contains_key(owner) =>
+            {
+                let base = owner.split("__").next().unwrap_or(owner);
+                self.check_visible(base, span);
+                format!("{base}::{member}")
             }
             _ => name.to_string(),
         };

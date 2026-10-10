@@ -106,18 +106,18 @@ struct OutStream {
     index: usize,
 
     fn flush(var self) i64 {
-        if self.index == 0 {
-            return 0;
-        }
-
         var buf_ptr: *u8 = &self.buffer[0];
-        var amount_written: i64 = syscall3(SYS_WRITE, self.fd as i64, buf_ptr as i64, self.index as i64);
-        self.index = 0;
-
-        if amount_written < 0 {
-            return -1;
+        var done: usize = 0;
+        while done < self.index {
+            var written = syscall3(SYS_WRITE, self.fd as i64, (buf_ptr + done) as i64, (self.index - done) as i64);
+            if written < 0 {
+                self.index = 0;
+                return -1;
+            }
+            done += written as usize;
         }
-        return amount_written;
+        self.index = 0;
+        return done as i64;
     }
 
     fn write_bytes(var self, bytes: *u8, count: usize) i64 {
@@ -194,9 +194,14 @@ struct OutStream {
             self.write_text("-");
             rest = -rest;
         }
-        if rest > 18446744073709551615.0 {
+        if rest > 1.7976931348623157e308 {
             self.write_text("inf");
             return;
+        }
+        var zeros: usize = 0;
+        while rest >= 18446744073709551615.0 {
+            rest /= 10;
+            zeros += 1;
         }
         var whole = rest as u64;
         var millionths = ((rest - whole as f64) * 1000000 + 0.5) as u64;
@@ -205,6 +210,9 @@ struct OutStream {
             millionths = 0;
         }
         self.write_uint(whole);
+        for at in 0..zeros {
+            self.write_text("0");
+        }
         self.write_text(".");
 
         var digits: Array<u8, 6> = [0; 6];
@@ -222,21 +230,28 @@ struct OutStream {
     }
 }
 
-// Allocate `size` bytes of memory using mmap.
-// Returns a pointer to the allocated memory, or null (0) on failure.
+fn __zeru_out_of_memory() {
+    eprintln("panic: out of memory");
+    exit(134);
+}
+
+// Allocate `size` bytes of memory using mmap. Null for zero bytes.
 fn __zeru_alloc(size: usize) *u8 {
+    if size == 0 {
+        return 0 as *u8;
+    }
     var prot: i64 = PROT_READ + PROT_WRITE;
     var flags: i64 = MAP_PRIVATE + MAP_ANONYMOUS;
     var result: i64 = syscall6(SYS_MMAP, 0, size as i64, prot, flags, -1, 0);
 
     if result < 0 {
-        return 0 as *u8;
+        __zeru_out_of_memory();
     }
     return result as *u8;
 }
 
 // Reallocate memory: allocate new_size, copy old data, free old memory.
-// Returns pointer to new memory, or null on failure.
+// Null for zero bytes.
 fn __zeru_realloc(old_ptr: *u8, old_size: usize, new_size: usize) *u8 {
     if new_size == 0 {
         if old_size != 0 {
@@ -257,7 +272,7 @@ fn __zeru_realloc(old_ptr: *u8, old_size: usize, new_size: usize) *u8 {
     ) as *u8;
 
     if new_ptr as i64 < 0 {
-        return 0 as *u8;
+        __zeru_out_of_memory();
     }
 
     return new_ptr;

@@ -29,6 +29,20 @@ fn divide(a: i32, b: i32) i32! {
     return Ok(a / b);
 }
 
+fn name(n: i32) str? {
+    if n == 0 { return None; }
+    return "one";
+}
+
+fn pair() (i32, i32)? { return (1, 2); }
+
+fn sign(n: i32?) i32 {
+    match n {
+        Some(v) => { return v; }
+        None => { return 0; }
+    }
+}
+
 fn always_fail() i64! {
     return Err(42);
 }
@@ -94,6 +108,8 @@ fn main() {
     if number("").unwrap_err() != ParseError::Empty { exit(22); }
     if (number("9z") catch -1) != -1 || (number("42") catch 0) != 42 { exit(23); }
     if (first(Vec.new()) orelse 5) != 5 || (first([3]) orelse 5) != 3 { exit(24); }
+    if (name(0) orelse "none").len() != 4 || name(1).is_none() { exit(25); }
+    if pair().unwrap().1 != 2 || sign(None) != 0 { exit(26); }
 
     println("result: all tests passed");
     exit(0);

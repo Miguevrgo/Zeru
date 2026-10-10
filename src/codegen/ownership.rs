@@ -89,19 +89,24 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    /// Drop everything the function owns, as a `return` leaves it. The
-    /// temporaries stay listed: a `try` returns on one path only.
+    /// Drop everything the function owns, as a `return` leaves it.
     pub(super) fn drop_all_owned(&mut self) {
-        for owned in self.temporaries.clone().iter().rev() {
-            self.drop_owned(owned);
-        }
+        self.leave_temporaries(0);
         self.drop_scopes_from(0);
     }
 
-    pub(super) fn drop_temporaries(&mut self) {
-        for owned in std::mem::take(&mut self.temporaries).iter().rev() {
+    /// Drop the temporaries listed from `mark` on, as a jump out of their
+    /// statement leaves them. They stay listed for the path that does not jump.
+    pub(super) fn leave_temporaries(&mut self, mark: usize) {
+        for owned in self.temporaries[mark..].to_vec().iter().rev() {
             self.drop_owned(owned);
         }
+    }
+
+    /// Drop the temporaries listed from `mark` on, once their statement is done.
+    pub(super) fn drop_temporaries(&mut self, mark: usize) {
+        self.leave_temporaries(mark);
+        self.temporaries.truncate(mark);
     }
 
     pub(super) fn drop_owned(&mut self, owned: &Owned<'ctx>) {
