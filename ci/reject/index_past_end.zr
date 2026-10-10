@@ -1,5 +1,0 @@
-// expect: is outside the array's
-fn main() {
-    var a: Array<i32, 3> = [1, 2, 3];
-    var out: i32 = a[3];
-}

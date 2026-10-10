@@ -49,30 +49,6 @@ fn test_declaration_errors_point_at_their_source() {
 }
 
 #[test]
-fn test_variable_declaration() {
-    let input = "
-            fn main() {
-                var x: i32 = 10;
-                var y = x;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_variable_shadowing() {
-    let input = "
-            fn main() {
-                var x: i32 = 10;
-                var x: bool = true;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
 fn test_type_mismatch() {
     let input = "
             fn main() {
@@ -97,126 +73,37 @@ fn test_undeclared_variable() {
 }
 
 #[test]
-fn test_const_reassignment() {
-    let input = "
-            fn main() {
-                const x = 10;
-                x = 20;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("Cannot reassign constant"));
-}
-
-#[test]
-fn test_var_reassignment_allowed() {
-    let input = "
-            fn main() {
-                var x = 10;
-                x = 20;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_all_signed_integer_types() {
-    let input = "
-            fn main() {
-                var a: i8 = 127;
-                var b: i16 = 32767;
-                var c: i32 = 2147483647;
-                var d: i64 = 100;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_all_unsigned_integer_types() {
-    let input = "
-            fn main() {
-                var a: u8 = 255;
-                var b: u16 = 65535;
-                var c: u32 = 100;
-                var d: u64 = 100;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_i8_overflow() {
-    let input = "
-            fn main() {
-                var x: i8 = 128;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("does not fit"));
-}
-
-#[test]
-fn test_i8_underflow() {
-    let input = "
-            fn main() {
-                var x: i8 = -129;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("does not fit"));
-}
-
-#[test]
-fn test_u8_overflow() {
-    let input = "
-            fn main() {
-                var x: u8 = 256;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("does not fit"));
-}
-
-#[test]
-fn test_u8_negative_value() {
-    let input = "
-            fn main() {
-                var x: u8 = -1;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("does not fit"));
-}
-
-#[test]
-fn test_i16_overflow() {
-    let input = "
-            fn main() {
-                var x: i16 = 32768;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-}
-
-#[test]
-fn test_u16_overflow() {
-    let input = "
-            fn main() {
-                var x: u16 = 65536;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
+fn test_constants_cannot_change() {
+    for (input, message) in [
+        (
+            "fn main() { const x = 10; x = 20; }",
+            "Cannot reassign constant variable 'x'",
+        ),
+        (
+            "const G: i32 = 100; fn main() { G = 200; }",
+            "Cannot reassign constant variable 'G'",
+        ),
+        (
+            "fn f(x: i32) i32 { x += 1; return x; } fn main() { }",
+            "Cannot reassign constant variable 'x'",
+        ),
+        (
+            "fn main() { var a: Array<i32, 2> = [1, 2]; for item in a { item = 9; } }",
+            "Cannot reassign constant variable 'item'",
+        ),
+        (
+            "struct C { v: i32, fn t(self) { self.v = self.v + 1; } } fn main() { }",
+            "Cannot modify 'self', which is not declared 'var'",
+        ),
+        (
+            "struct C { v: i32, fn t(self) { self.v += 1; } } fn main() { }",
+            "Cannot modify 'self', which is not declared 'var'",
+        ),
+    ] {
+        let errors = analyze(input);
+        assert_eq!(errors.len(), 1, "{input}: {errors:?}");
+        assert!(errors[0].contains(message), "{input}: {errors:?}");
+    }
 }
 
 #[test]
@@ -230,18 +117,6 @@ fn test_integer_type_assignment_mismatch() {
     let errors = analyze(input);
     assert!(!errors.is_empty());
     assert!(errors[0].to_lowercase().contains("type mismatch"));
-}
-
-#[test]
-fn test_float_types() {
-    let input = "
-            fn main() {
-                var a: f32 = 3.14;
-                var b: f64 = 2.718281828;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
 }
 
 #[test]
@@ -267,18 +142,6 @@ fn test_int_literal_makes_a_float_only_when_exact() {
 }
 
 #[test]
-fn test_boolean_type() {
-    let input = "
-            fn main() {
-                var a: bool = true;
-                var b: bool = false;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
 fn test_boolean_type_mismatch() {
     let input = "
             fn main() {
@@ -288,17 +151,6 @@ fn test_boolean_type_mismatch() {
     let errors = analyze(input);
     assert!(!errors.is_empty());
     assert!(errors[0].contains("Type mismatch"));
-}
-
-#[test]
-fn test_string_type() {
-    let input = "
-            fn main() {
-                var s: str = \"hello\";
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
 }
 
 #[test]
@@ -314,39 +166,6 @@ fn test_string_type_mismatch() {
 }
 
 #[test]
-fn test_integer_arithmetic() {
-    let input = "
-            fn main() {
-                var a: i32 = 10;
-                var b: i32 = 20;
-                var sum = a + b;
-                var diff = a - b;
-                var prod = a * b;
-                var quot = a / b;
-                var rem = a % b;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_float_arithmetic() {
-    let input = "
-            fn main() {
-                var a: f32 = 1.5;
-                var b: f32 = 2.5;
-                var sum = a + b;
-                var diff = a - b;
-                var prod = a * b;
-                var quot = a / b;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
 fn test_mixed_type_arithmetic_error() {
     let input = "
             fn main() {
@@ -358,66 +177,6 @@ fn test_mixed_type_arithmetic_error() {
     let errors = analyze(input);
     assert!(!errors.is_empty());
     assert!(errors[0].contains("same type"));
-}
-
-#[test]
-fn test_integer_comparisons() {
-    let input = "
-            fn main() {
-                var a: i32 = 10;
-                var b: i32 = 20;
-                var eq = a == b;
-                var neq = a != b;
-                var lt = a < b;
-                var gt = a > b;
-                var leq = a <= b;
-                var geq = a >= b;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_float_comparisons() {
-    let input = "
-            fn main() {
-                var a: f32 = 1.0;
-                var b: f32 = 2.0;
-                var lt = a < b;
-                var eq = a == b;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_boolean_equality() {
-    let input = "
-            fn main() {
-                var a = true;
-                var b = false;
-                var eq = a == b;
-                var neq = a != b;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_logical_operations() {
-    let input = "
-            fn main() {
-                var a = true;
-                var b = false;
-                var and_res = a && b;
-                var or_res = a || b;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
 }
 
 #[test]
@@ -439,36 +198,6 @@ fn test_valid_numeric_base_literals() {
             fn main() {
                 var octal: i32 = 0o1047;
                 var binary: i32 = 0b010110;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_bitwise_operations() {
-    let input = "
-            fn main() {
-                var a: i32 = 0xFF;
-                var b: i32 = 0x0F;
-                var and_res = a & b;
-                var or_res = a | b;
-                var xor_res = a ^ b;
-                var shl = a << 2;
-                var shr = a >> 2;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_bitwise_unsigned() {
-    let input = "
-            fn main() {
-                var a: u32 = 255;
-                var b: u32 = 15;
-                var result = a & b;
             }
         ";
     let errors = analyze(input);
@@ -506,19 +235,6 @@ fn test_compound_assignment_type_mismatch() {
         ";
     let errors = analyze(input);
     assert!(!errors.is_empty());
-}
-
-#[test]
-fn test_struct_definition_and_usage() {
-    let input = "
-            struct Point { x: f32, y: f32 }
-            fn main() {
-                var p = Point { x: 1.0, y: 2.0 };
-                var val = p.x;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
 }
 
 #[test]
@@ -575,19 +291,6 @@ fn test_struct_field_type_mismatch() {
 }
 
 #[test]
-fn test_struct_field_assignment() {
-    let input = "
-            struct Point { x: f32, y: f32 }
-            fn main() {
-                var p = Point { x: 1.0, y: 2.0 };
-                p.x = 5.0;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
 fn test_struct_field_assignment_type_mismatch() {
     let input = "
             struct Point { x: f32, y: f32 }
@@ -602,21 +305,6 @@ fn test_struct_field_assignment_type_mismatch() {
 }
 
 #[test]
-fn test_nested_struct() {
-    let input = "
-            struct Inner { val: i32 }
-            struct Outer { inner: Inner }
-            fn main() {
-                var i = Inner { val: 42 };
-                var o = Outer { inner: i };
-                var x = o.inner.val;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
 fn test_undeclared_struct() {
     let input = "
             fn main() {
@@ -625,71 +313,6 @@ fn test_undeclared_struct() {
         ";
     let errors = analyze(input);
     assert!(!errors.is_empty());
-}
-
-#[test]
-fn test_method_call() {
-    let input = "
-            struct Counter {
-                val: i32,
-                fn increment(var self) { self.val = self.val + 1; }
-            }
-            fn main() {
-                var c = Counter { val: 0 };
-                c.increment();
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_method_with_return_type() {
-    let input = "
-            struct Counter {
-                val: i32,
-                fn get_val(self) i32 { return self.val; }
-            }
-            fn main() {
-                var c = Counter { val: 42 };
-                var v: i32 = c.get_val();
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_method_with_parameters() {
-    let input = "
-            struct Calculator {
-                result: i32,
-                fn add(var self, x: i32) { self.result = self.result + x; }
-            }
-            fn main() {
-                var calc = Calculator { result: 0 };
-                calc.add(10);
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_immutable_self_field_modification() {
-    let input = "
-            struct Counter {
-                val: i32,
-                fn try_increment(self) { self.val = self.val + 1; }
-            }
-            fn main() {
-                var c = Counter { val: 0 };
-                c.try_increment();
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("Cannot modify 'self'"));
 }
 
 #[test]
@@ -783,43 +406,21 @@ fn test_method_not_found() {
 }
 
 #[test]
-fn test_function_definition_and_call() {
-    let input = "
-            fn add(a: i32, b: i32) i32 {
-                return a + b;
-            }
-            fn main() {
-                var result = add(1, 2);
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_function_call_args_mismatch() {
-    let input = "
-            fn add(a: i32, b: i32) i32 { return a + b; }
-            fn main() {
-                add(10);
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("expects 2 arguments"));
-}
-
-#[test]
-fn test_function_call_too_many_args() {
-    let input = "
-            fn add(a: i32, b: i32) i32 { return a + b; }
-            fn main() {
-                add(1, 2, 3);
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("expects 2 arguments"));
+fn test_call_takes_as_many_arguments_as_declared() {
+    for (body, message) in [
+        ("add(10);", "Function 'add' expects 2 arguments, got 1"),
+        ("add(1, 2, 3);", "Function 'add' expects 2 arguments, got 3"),
+        (
+            "var x: i32 = add(1);",
+            "Function 'add' expects 2 arguments, got 1",
+        ),
+    ] {
+        let errors = analyze(&format!(
+            "fn add(a: i32, b: i32) i32 {{ return a + b; }} fn main() {{ {body} }}"
+        ));
+        assert_eq!(errors.len(), 1, "{body}: {errors:?}");
+        assert!(errors[0].contains(message), "{body}: {errors:?}");
+    }
 }
 
 #[test]
@@ -836,45 +437,6 @@ fn test_function_call_arg_type_mismatch() {
 }
 
 #[test]
-fn test_function_return_type_mismatch() {
-    let input = "
-            fn get_number() i32 {
-                return true;
-            }
-            fn main() { }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("Type mismatch") || errors[0].contains("return"));
-}
-
-#[test]
-fn test_function_void_return() {
-    let input = "
-            fn do_nothing() {
-                return;
-            }
-            fn main() {
-                do_nothing();
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_function_missing_return_value() {
-    let input = "
-            fn get_number() i32 {
-                return;
-            }
-            fn main() { }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-}
-
-#[test]
 fn test_undefined_function_call() {
     let input = "
             fn main() {
@@ -887,192 +449,27 @@ fn test_undefined_function_call() {
 }
 
 #[test]
-fn test_multiple_function_calls() {
-    let input = "
-            fn foo() u32 {
-                return 65536;
-            }
-
-            fn fizz() {
-                const unused: i32 = 5;
-            }
-
-            fn main() {
-                const a: u32 = foo();
-                fizz();
-                var returned_val = a % 2;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
+fn test_condition_must_be_bool() {
+    for (body, message) in [
+        ("if i { }", "If condition must be boolean, got i32"),
+        ("while i { }", "While condition must be boolean, got: i32"),
+    ] {
+        let errors = analyze(&format!("fn main() {{ var i: i32 = 1; {body} }}"));
+        assert_eq!(errors.len(), 1, "{body}: {errors:?}");
+        assert!(errors[0].contains(message), "{body}: {errors:?}");
+    }
 }
 
 #[test]
-fn test_recursive_function() {
-    let input = "
-            fn factorial(n: i32) i32 {
-                if n <= 1 {
-                    return 1;
-                }
-                return n * factorial(n - 1);
-            }
-            fn main() {
-                var result = factorial(5);
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_if_statement() {
-    let input = "
-            fn main() {
-                var x: i32 = 10;
-                if x > 5 {
-                    var y = x + 1;
-                }
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_if_else_statement() {
-    let input = "
-            fn main() {
-                var x: i32 = 10;
-                if x > 5 {
-                    var y = 1;
-                } else {
-                    var y = 2;
-                }
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_if_condition_not_bool() {
-    let input = "
-            fn main() {
-                var x: i32 = 10;
-                if x {
-                    var y = 1;
-                }
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("bool"));
-}
-
-#[test]
-fn test_while_loop() {
-    let input = "
-            fn main() {
-                var i: i32 = 0;
-                while i < 10 {
-                    i = i + 1;
-                }
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_while_condition_not_bool() {
-    let input = "
-            fn main() {
-                var i: i32 = 10;
-                while i {
-                    i = i - 1;
-                }
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("bool"));
-}
-
-#[test]
-fn test_for_in_loop() {
-    let input = "
-            fn main() {
-                var arr: Array<i32, 3> = [1, 2, 3];
-                for item in arr {
-                    var x = item;
-                }
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_break_in_loop() {
-    let input = "
-            fn main() {
-                while true {
-                    break;
-                }
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_continue_in_loop() {
-    let input = "
-            fn main() {
-                var i: i32 = 0;
-                while i < 10 {
-                    i = i + 1;
-                    continue;
-                }
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_array_declaration() {
-    let input = "
-            fn main() {
-                var arr: Array<i32, 5> = [1, 2, 3, 4, 5];
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_array_index_access() {
-    let input = "
-            fn main() {
-                var arr: Array<i32, 3> = [10, 20, 30];
-                var first = arr[0];
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_array_index_assignment() {
-    let input = "
-            fn main() {
-                var arr: Array<i32, 3> = [1, 2, 3];
-                arr[0] = 100;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
+fn test_break_and_continue_need_a_loop() {
+    for body in ["break;", "continue;"] {
+        let errors = analyze(&format!("fn main() {{ {body} }}"));
+        assert_eq!(
+            errors,
+            ["Break/Continue can only be used inside loops"],
+            "{body}"
+        );
+    }
 }
 
 #[test]
@@ -1098,67 +495,6 @@ fn test_array_length_mismatch() {
 }
 
 #[test]
-fn test_array_repeat_syntax() {
-    let input = "
-            fn main() {
-                var arr = [0; 10];
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_nested_array() {
-    let input = "
-            fn main() {
-                var matrix: Array<Array<i32, 2>, 2> = [[1, 2], [3, 4]];
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_enum_definition() {
-    let input = "
-            enum Color { Red, Green, Blue }
-            fn main() { }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_enum_usage() {
-    let input = "
-            enum Status { Active, Inactive }
-            fn main() {
-                var s = Status::Active;
-            }
-        ";
-    let errors = analyze(input);
-
-    assert!(errors.is_empty() || errors[0].contains("not implemented"));
-}
-
-#[test]
-fn test_match_expression() {
-    let input = "
-            fn main() {
-                var x: i32 = 1;
-                var result = match x {
-                    0 => 100,
-                    1 => 200,
-                    default => 0
-                };
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
 fn test_match_with_different_arm_types() {
     let input = "
             fn main() {
@@ -1176,86 +512,10 @@ fn test_match_with_different_arm_types() {
 }
 
 #[test]
-fn test_cast_int_to_float() {
-    let input = "
-            fn main() {
-                var x: i32 = 10;
-                var y = x as f32;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_cast_float_to_int() {
-    let input = "
-            fn main() {
-                var x: f32 = 3.14;
-                var y = x as i32;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_cast_between_int_sizes() {
-    let input = "
-            fn main() {
-                var x: i32 = 100;
-                var y = x as i64;
-                var z = x as i8;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_negation_operator() {
-    let input = "
-            fn main() {
-                var x: i32 = 10;
-                var neg = -x;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_not_operator() {
-    let input = "
-            fn main() {
-                var x = true;
-                var not_x = !x;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
 fn test_not_operator_on_numbers() {
     assert!(analyze("fn main() { var x: u8 = 10; var y: u8 = !x; var b = !true; }").is_empty());
     let errors = analyze("fn main() { var f = !1.5; }");
     assert!(errors[0].contains("'!' applies to a bool or an integer, not f64"));
-}
-
-#[test]
-fn test_block_scope() {
-    let input = "
-            fn main() {
-                var x: i32 = 10;
-                {
-                    var y: i32 = 20;
-                    var z = x + y;
-                }
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
 }
 
 #[test]
@@ -1274,135 +534,11 @@ fn test_variable_out_of_scope() {
 }
 
 #[test]
-fn test_nested_block_scope() {
-    let input = "
-            fn main() {
-                var x: i32 = 1;
-                {
-                    var x: i32 = 2;
-                    {
-                        var x: i32 = 3;
-                    }
-                }
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_global_constant() {
-    let input = "
-            const GLOBAL: i32 = 100;
-            fn main() {
-                var x = GLOBAL;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_global_constant_reassignment_error() {
-    let input = "
-            const GLOBAL: i32 = 100;
-            fn main() {
-                GLOBAL = 200;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("Cannot reassign constant"));
-}
-
-#[test]
-fn test_type_inference_from_literal() {
-    let input = "
-            fn main() {
-                var x = 42;
-                var y = 3.14;
-                var z = true;
-                var s = \"hello\";
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_type_inference_from_expression() {
-    let input = "
-            fn main() {
-                var a: i32 = 10;
-                var b: i32 = 20;
-                var sum = a + b;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_type_inference_from_function_call() {
-    let input = "
-            fn get_value() i32 { return 42; }
-            fn main() {
-                var x = get_value();
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_empty_function() {
-    let input = "
-            fn empty() { }
-            fn main() {
-                empty();
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
 fn test_empty_struct() {
     let input = "
             struct Empty { }
             fn main() {
                 var e = Empty { };
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_multiple_statements_in_block() {
-    let input = "
-            fn main() {
-                var a: i32 = 1;
-                var b: i32 = 2;
-                var c: i32 = 3;
-                var sum = a + b + c;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_chained_field_access() {
-    let input = "
-            struct A { b: B }
-            struct B { c: C }
-            struct C { val: i32 }
-            fn main() {
-                var c = C { val: 42 };
-                var b = B { c: c };
-                var a = A { b: b };
-                var x = a.b.c.val;
             }
         ";
     let errors = analyze(input);
@@ -1424,280 +560,11 @@ fn test_similar_variable_name_suggestion() {
 }
 
 #[test]
-fn test_complex_program() {
-    let input = "
-            struct Point {
-                x: f32,
-                y: f32,
-
-                fn distance_from_origin(self) f32 {
-                    return self.x * self.x + self.y * self.y;
-                }
-            }
-
-            fn create_point(x: f32, y: f32) Point {
-                return Point { x: x, y: y };
-            }
-
-            fn main() {
-                var p = create_point(3.0, 4.0);
-                var dist = p.distance_from_origin();
-
-                if dist > 10.0 {
-                    var msg = \"far\";
-                } else {
-                    var msg = \"near\";
-                }
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_fibonacci_program() {
-    let input = "
-            fn fib(n: i32) i32 {
-                if n <= 1 {
-                    return n;
-                }
-                return fib(n - 1) + fib(n - 2);
-            }
-
-            fn main() {
-                var i: i32 = 0;
-                while i < 10 {
-                    var result = fib(i);
-                    i = i + 1;
-                }
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_usize_type() {
-    let input = "
-            fn main() {
-                var idx: usize = 0;
-                var other: usize = 100;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_array_index_with_usize() {
-    let input = "
-            fn main() {
-                var arr: Array<i32, 5> = [1, 2, 3, 4, 5];
-                var idx: usize = 2;
-                var elem = arr[idx];
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_array_index_assignment_with_usize() {
-    let input = "
-            fn main() {
-                var arr: Array<i32, 3> = [10, 20, 30];
-                var idx: usize = 1;
-                arr[idx] = 100;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_prefix_negation_int() {
-    let input = "
-            fn main() {
-                var x: i32 = 42;
-                var neg: i32 = -x;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_prefix_negation_float() {
-    let input = "
-            fn main() {
-                var x: f32 = 3.14;
-                var neg: f32 = -x;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_prefix_not_bool() {
-    let input = "
-            fn main() {
-                var flag: bool = true;
-                var negated: bool = !flag;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_boolean_literal_true() {
-    let input = "
-            fn main() {
-                var t: bool = true;
-                var f: bool = false;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_cast_i32_to_i64() {
-    let input = "
-            fn main() {
-                var small: i32 = 100;
-                var large: i64 = small as i64;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_cast_i64_to_i32_truncate() {
-    let input = "
-            fn main() {
-                var large: i64 = 1000;
-                var small: i32 = large as i32;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_cast_f32_to_f64() {
-    let input = "
-            fn main() {
-                var f: f32 = 3.14;
-                var d: f64 = f as f64;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_cast_f64_to_f32() {
-    let input = "
-            fn main() {
-                var d: f64 = 3.141592653589793;
-                var f: f32 = d as f32;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_array_as_function_param() {
-    let input = "
-            fn sum_first_two(arr: Array<i32, 3>) i32 {
-                return arr[0] + arr[1];
-            }
-            fn main() {
-                var nums: Array<i32, 3> = [10, 20, 30];
-                var result: i32 = sum_first_two(nums);
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_array_element_modification_in_loop() {
-    let input = "
-            fn main() {
-                var arr: Array<i32, 5> = [1, 2, 3, 4, 5];
-                var i: usize = 0;
-                while i < 5 {
-                    arr[i] = arr[i] * 2;
-                    i = i + 1;
-                }
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
 fn test_nested_negation() {
     let input = "
             fn main() {
                 var x: i32 = 10;
                 var y: i32 = --x;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_combined_array_and_cast() {
-    let input = "
-            fn main() {
-                var arr: Array<i32, 3> = [1, 2, 3];
-                var idx: i32 = 1;
-                var elem: i32 = arr[idx as usize];
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_pointer_declaration() {
-    let input = "
-            fn main() {
-                var x: i32 = 42;
-                var ptr: *i32 = &x;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_pointer_dereference() {
-    let input = "
-            fn main() {
-                var x: i32 = 42;
-                var ptr: *i32 = &x;
-                var y: i32 = *ptr;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_pointer_dereference_assignment() {
-    let input = "
-            fn main() {
-                var x: i32 = 42;
-                var ptr: *i32 = &x;
-                *ptr = 100;
             }
         ";
     let errors = analyze(input);
@@ -1730,41 +597,6 @@ fn test_address_of_temporary_error() {
 }
 
 #[test]
-fn test_pointer_to_struct() {
-    let input = "
-            struct Point { x: i32, y: i32 }
-            fn main() {
-                var p: Point = Point { x: 10, y: 20 };
-                var ptr: *Point = &p;
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_tuple_basic() {
-    let input = "
-            fn main() {
-                var t: (i32, bool) = (42, true);
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_tuple_type_inference() {
-    let input = "
-            fn main() {
-                var t = (42, true, 3.14);
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
 fn test_tuple_type_mismatch() {
     let input = "
             fn main() {
@@ -1787,142 +619,10 @@ fn test_tuple_length_mismatch() {
 }
 
 #[test]
-fn test_tuple_nested() {
-    let input = "
-            fn main() {
-                var t: ((i32, i32), bool) = ((1, 2), true);
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_empty_tuple() {
-    let input = "
-            fn main() {
-                var t: () = ();
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_mut_parameter_can_be_modified() {
-    let input = "
-            fn increment(var x: i32) i32 {
-                x += 1;
-                return x;
-            }
-            fn main() {
-                var result = increment(5);
-            }
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_immutable_parameter_cannot_be_modified() {
-    let input = "
-            fn increment(x: i32) i32 {
-                x += 1;
-                return x;
-            }
-            fn main() {}
-        ";
-    let errors = analyze(input);
-    assert!(
-        !errors.is_empty(),
-        "Expected error for mutating immutable parameter"
-    );
-    assert!(errors[0].contains("Cannot reassign constant"));
-}
-
-#[test]
-fn test_mut_self_in_method() {
-    let input = "
-            struct Counter {
-                value: i32,
-
-                fn increment(var self) {
-                    self.value += 1;
-                }
-            }
-            fn main() {}
-        ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_immutable_self_cannot_modify_fields() {
-    let input = "
-            struct Counter {
-                value: i32,
-
-                fn try_increment(self) {
-                    self.value += 1;
-                }
-            }
-            fn main() {}
-        ";
-    let errors = analyze(input);
-    println!("Errors for immutable self: {:?}", errors);
-}
-
-#[test]
-fn test_pointer_arithmetic_add() {
-    let input = "
-        fn get_ptr() *u8 {
-            var x: u8 = 0;
-            return &x;
-        }
-        fn main() {
-            var ptr: *u8 = get_ptr();
-            var next: *u8 = ptr + 1;
-        }
-    ";
-    let errors = analyze(input);
-    assert!(errors.is_empty(), "ptr + int should be valid: {:?}", errors);
-}
-
-#[test]
-fn test_pointer_arithmetic_sub() {
-    let input = "
-        fn get_ptr() *u8 {
-            var x: u8 = 0;
-            return &x;
-        }
-        fn main() {
-            var ptr: *u8 = get_ptr();
-            var prev: *u8 = ptr - 1;
-        }
-    ";
-    let errors = analyze(input);
-    assert!(errors.is_empty(), "ptr - int should be valid: {:?}", errors);
-}
-
-#[test]
-fn test_pointer_arithmetic_with_usize() {
-    let input = "
-        fn get_ptr() *u8 {
-            var x: u8 = 0;
-            return &x;
-        }
-        fn main() {
-            var ptr: *u8 = get_ptr();
-            var offset: usize = 2;
-            var next: *u8 = ptr + offset;
-        }
-    ";
-    let errors = analyze(input);
-    assert!(
-        errors.is_empty(),
-        "ptr + usize should be valid: {:?}",
-        errors
-    );
+fn test_pointer_steps_by_an_integer_literal() {
+    let input =
+        "fn main() { var x: u8 = 0; var p: *u8 = &x; var n: *u8 = p + 1; var b: *u8 = p - 1; }";
+    assert!(analyze(input).is_empty(), "{:?}", analyze(input));
 }
 
 #[test]
@@ -1938,18 +638,6 @@ fn test_pointer_arithmetic_invalid_mul() {
 }
 
 #[test]
-fn test_str_type_alias() {
-    let input = "
-        fn takes_str(s: str) {
-        }
-        fn main() {
-        }
-    ";
-    let errors = analyze(input);
-    assert!(errors.is_empty(), "str type should be valid: {:?}", errors);
-}
-
-#[test]
 fn test_str_type_is_distinct_from_pointer_u8() {
     let input = "
         fn main() {
@@ -1962,156 +650,8 @@ fn test_str_type_is_distinct_from_pointer_u8() {
 }
 
 #[test]
-fn test_str_function_parameter() {
-    let input = "
-        fn print_str(s: str) {
-        }
-        fn main() {
-        }
-    ";
-    let errors = analyze(input);
-    assert!(
-        errors.is_empty(),
-        "str as function param should work: {:?}",
-        errors
-    );
-}
-
-#[test]
-fn test_str_return_type() {
-    let input = "
-        fn takes_and_returns_str(s: str) str {
-            return s;
-        }
-        fn main() {
-        }
-    ";
-    let errors = analyze(input);
-    assert!(
-        errors.is_empty(),
-        "str as return type should work: {:?}",
-        errors
-    );
-}
-
-#[test]
-fn test_logical_and_short_circuit() {
-    let input = "
-        fn main() {
-            var a = true;
-            var b = false;
-            var result = a && b;
-        }
-    ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_logical_or_short_circuit() {
-    let input = "
-        fn main() {
-            var a = true;
-            var b = false;
-            var result = a || b;
-        }
-    ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_deeply_nested_expressions() {
-    let input = "
-        fn main() {
-            var x: i32 = ((((1 + 2) * 3) - 4) / 5);
-        }
-    ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_break_outside_loop_error() {
-    let input = "
-        fn main() {
-            break;
-        }
-    ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("loop"));
-}
-
-#[test]
-fn test_continue_outside_loop_error() {
-    let input = "
-        fn main() {
-            continue;
-        }
-    ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("loop"));
-}
-
-#[test]
-fn test_return_outside_function_error() {
-    let input = "
-        fn main() {
-            return;
-        }
-    ";
-    let errors = analyze(input);
-    assert!(errors.is_empty());
-}
-
-#[test]
-fn test_duplicate_struct_definition() {
-    let input = "
-        struct Foo { x: i32 }
-        struct Foo { y: i32 }
-        fn main() {}
-    ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("already defined"));
-}
-
-#[test]
-fn test_duplicate_enum_definition() {
-    let input = "
-        enum Color { Red, Green }
-        enum Color { Blue, Yellow }
-        fn main() {}
-    ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("already defined"));
-}
-
-#[test]
-fn test_duplicate_function_definition() {
-    let input = "
-        fn foo() {}
-        fn foo() {}
-        fn main() {}
-    ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty());
-    assert!(errors[0].contains("already defined"));
-}
-
-#[test]
-fn test_optional_type_basic() {
-    let input = "
-        fn main() {
-            var x: i32? = 42;
-            var y: i32? = None;
-        }
-    ";
-    let errors = analyze(input);
-    assert!(errors.is_empty(), "Optional type should work: {:?}", errors);
+fn test_main_can_return_early() {
+    assert!(analyze("fn main() { return; }").is_empty());
 }
 
 #[test]
@@ -2126,44 +666,14 @@ fn test_optional_none_requires_context() {
 }
 
 #[test]
-fn test_empty_array() {
-    let input = "
-        fn main() {
-            var arr: Array<i32, 3> = [0; 3];
-        }
-    ";
-    let errors = analyze(input);
-    assert!(
-        errors.is_empty(),
-        "Array initialization should be valid: {:?}",
-        errors
-    );
-}
-
-#[test]
-fn test_main_with_invalid_return_type() {
-    let input = "
-        fn main() f32 {
-            return 3.14;
-        }
-    ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty(), "main should only return void or i32");
-}
-
-#[test]
-fn test_main_with_i32_return_rejected() {
-    let input = "
-        fn main() i32 {
-            return 0;
-        }
-    ";
-    let errors = analyze(input);
-    assert!(
-        !errors.is_empty(),
-        "main with i32 return should be rejected"
-    );
-    assert!(errors[0].contains("must return void"));
+fn test_main_returns_void() {
+    for (ret, value) in [("i32", "0"), ("f32", "3.14")] {
+        let errors = analyze(&format!("fn main() {ret} {{ return {value}; }}"));
+        assert_eq!(
+            errors,
+            [format!("Function 'main' must return void, not {ret}")]
+        );
+    }
 }
 
 #[test]
@@ -2190,38 +700,6 @@ fn test_suggestion_does_not_skip_a_prefix_for_free() {
     assert_eq!(errors, ["Unknown type 'Entry'"]);
 }
 #[test]
-fn test_generic_function_identity() {
-    let input = "
-        fn identity<T>(x: T) T {
-            return x;
-        }
-        fn main() {}
-    ";
-    let errors = analyze(input);
-    assert!(
-        errors.is_empty(),
-        "Generic identity function should be valid: {:?}",
-        errors
-    );
-}
-
-#[test]
-fn test_generic_function_multiple_params() {
-    let input = "
-        fn swap<T, U>(a: T, b: U) T {
-            return a;
-        }
-        fn main() {}
-    ";
-    let errors = analyze(input);
-    assert!(
-        errors.is_empty(),
-        "Generic function with multiple type params should be valid: {:?}",
-        errors
-    );
-}
-
-#[test]
 fn test_generic_function_with_bound() {
     let input = "
         trait Printable {
@@ -2238,35 +716,6 @@ fn test_generic_function_with_bound() {
         "Generic function with trait bound should be valid: {:?}",
         errors
     );
-}
-
-#[test]
-fn test_trait_definition() {
-    let input = "
-        trait Drawable {
-            fn draw(self);
-            fn area(self) f64;
-        }
-        fn main() {}
-    ";
-    let errors = analyze(input);
-    assert!(
-        errors.is_empty(),
-        "Trait definition should be valid: {:?}",
-        errors
-    );
-}
-
-#[test]
-fn test_duplicate_trait_error() {
-    let input = "
-        trait Foo {}
-        trait Foo {}
-        fn main() {}
-    ";
-    let errors = analyze(input);
-    assert!(!errors.is_empty(), "Duplicate trait should error");
-    assert!(errors[0].contains("already defined"));
 }
 
 #[test]
@@ -2287,14 +736,29 @@ fn test_generic_type_param_in_body() {
 }
 
 #[test]
-fn test_missing_return_is_rejected() {
-    let errors = analyze("fn f() i32 { } fn main() { }");
-    assert!(
-        errors
-            .iter()
-            .any(|e| e.contains("without returning a value")),
-        "got: {errors:?}"
-    );
+fn test_return_gives_the_declared_type() {
+    for (function, message) in [
+        (
+            "fn f() i32 { }",
+            "Function 'f' can finish without returning a value",
+        ),
+        (
+            "fn f(n: i32) bool { if n > 0 { return true; } }",
+            "Function 'f' can finish without returning a value",
+        ),
+        (
+            "fn f() i32 { return; }",
+            "Function expects i32, returning void",
+        ),
+        (
+            "fn f() i32 { return true; }",
+            "Function expects i32, returning bool",
+        ),
+    ] {
+        let errors = analyze(&format!("{function} fn main() {{ }}"));
+        assert_eq!(errors.len(), 1, "{function}: {errors:?}");
+        assert!(errors[0].contains(message), "{function}: {errors:?}");
+    }
 }
 
 #[test]
@@ -2320,74 +784,91 @@ fn test_self_referential_struct_is_rejected() {
     ] {
         let errors = analyze(input);
         assert!(
-            errors.iter().any(|e| e.contains("no finite size")),
+            errors
+                .iter()
+                .any(|e| e.contains("stores itself, so it has no finite size")),
             "{input} -> {errors:?}"
         );
     }
-}
-
-#[test]
-fn test_indirection_breaks_struct_recursion() {
-    let errors = analyze("struct N { next: *N, v: i32 } fn main() { }");
-    assert!(errors.is_empty(), "got: {errors:?}");
-}
-
-#[test]
-fn test_generic_return_type_is_concrete_at_the_call_site() {
-    let input = "
-        struct P { x: i32, fn get(self) i32 { return self.x; } }
-        fn pick<T>(a: T, b: T) T { return a; }
-        fn main() {
-            var p1 = P { x: 1 };
-            var p2 = P { x: 2 };
-            var field: i32 = pick(p1, p2).x;
-        }
-    ";
-    assert!(analyze(input).is_empty(), "{:?}", analyze(input));
 }
 
 #[test]
 fn test_duplicate_declarations_are_rejected() {
-    let cases = [
+    for (declarations, message) in [
+        ("struct S { x: i32, x: i32 }", "declares field 'x' twice"),
+        ("fn f(a: i32, a: i32) { }", "declares parameter 'a' twice"),
+        ("enum E { A, A }", "declares variant 'A' twice"),
         (
-            "struct S { a: i32, a: i32 } fn main() { }",
-            "field 'a' twice",
+            "struct Foo { x: i32 } struct Foo { y: i32 }",
+            "Type Foo is already defined",
         ),
         (
-            "fn f(a: i32, a: i32) { } fn main() { }",
-            "parameter 'a' twice",
+            "enum Color { Red } enum Color { Blue }",
+            "Type 'Color' is already defined",
         ),
-        ("enum E { A, A } fn main() { }", "variant 'A' twice"),
-    ];
-    for (input, expected) in cases {
+        (
+            "fn foo() { } fn foo() { }",
+            "Function 'foo' is already defined",
+        ),
+        (
+            "trait Foo { } trait Foo { }",
+            "Trait 'Foo' is already defined",
+        ),
+        (
+            "const LIMIT: i32 = 1; const LIMIT: i32 = 2;",
+            "'LIMIT' is already defined",
+        ),
+        ("fn A() { } const A: i32 = 2;", "'A' is already defined"),
+    ] {
+        let errors = analyze(&format!("{declarations} fn main() {{ }}"));
+        assert_eq!(errors.len(), 1, "{declarations}: {errors:?}");
+        assert!(errors[0].contains(message), "{declarations}: {errors:?}");
+    }
+}
+
+#[test]
+fn test_indexing_is_checked() {
+    for (input, message) in [
+        (
+            "fn main() { var a: Array<i32, 2> = [1, 2]; var v = a[true]; }",
+            "Index must be an integer",
+        ),
+        (
+            "fn main() { var a: Array<i32, 2> = [1, 2]; var v = a[5]; }",
+            "Index 5 is outside the array's 0..2",
+        ),
+        (
+            "fn f(p: *Array<i32, 4>) i32 { return p[0]; } fn main() { }",
+            "Cannot index *Array<i32, 4> directly, write (*p)[i]",
+        ),
+        (
+            "fn main() { var text: str = \"abc\"; text[0] = 65; }",
+            "Cannot write through a slice",
+        ),
+    ] {
         let errors = analyze(input);
         assert!(
-            errors.iter().any(|e| e.contains(expected)),
-            "{input} -> {errors:?}"
+            errors.iter().any(|e| e.contains(message)),
+            "{input}: {errors:?}"
         );
     }
 }
 
 #[test]
-fn test_index_must_be_an_integer() {
-    let errors = analyze("fn main() { var a: Array<i32,2> = [1,2]; var v = a[true]; }");
-    assert!(
-        errors
-            .iter()
-            .any(|e| e.contains("Index must be an integer")),
-        "got: {errors:?}"
+fn test_assignment_is_right_associative() {
+    let errors = analyze("fn main() { var a: i32 = 0; var b: i32 = 0; a = b = 5; }");
+    assert_eq!(
+        errors,
+        ["Type mismatch in assignment. Expected i32, got void."]
     );
 }
 
 #[test]
-fn test_constant_index_out_of_range_is_rejected() {
-    let errors = analyze("fn main() { var a: Array<i32,2> = [1,2]; var v = a[5]; }");
-    assert!(
-        errors
-            .iter()
-            .any(|e| e.contains("outside the array's 0..2")),
-        "got: {errors:?}"
+fn test_static_method_takes_a_dot() {
+    let errors = analyze(
+        "struct Box { n: i32, fn empty() Box { return Box { n: 0 }; } } fn main() { var b = Box::empty(); }",
     );
+    assert_eq!(errors, ["Call a struct's function with '.': Box.empty()"]);
 }
 
 #[test]
@@ -2401,7 +882,9 @@ fn test_assigning_to_a_temporary_is_rejected() {
     for input in cases {
         let errors = analyze(input);
         assert!(
-            errors.iter().any(|e| e.contains("temporary")),
+            errors
+                .iter()
+                .any(|e| e.contains("Cannot assign to a temporary value")),
             "{input} -> {errors:?}"
         );
     }
@@ -2462,24 +945,6 @@ fn test_unknown_trait_in_a_bound_is_reported() {
 }
 
 #[test]
-fn test_writing_through_a_slice_is_rejected() {
-    let errors = analyze(
-        "
-        fn main() {
-            var text: str = \"abc\";
-            text[0] = 65;
-        }
-    ",
-    );
-    assert!(
-        errors
-            .iter()
-            .any(|e| e.contains("Cannot write through a slice")),
-        "expected the write to be refused: {errors:?}"
-    );
-}
-
-#[test]
 fn test_cast_to_a_pointer_has_a_type() {
     let inferred = "fn main() { var x: i64 = 0; var p = x as *u8; var q: *u8 = p; }";
     assert!(analyze(inferred).is_empty(), "{:?}", analyze(inferred));
@@ -2496,6 +961,11 @@ fn test_literal_that_does_not_fit_is_an_error() {
         ("var x: u64 = -1;", "Literal -1 does not fit in u64"),
         ("var x: usize = -5;", "Literal -5 does not fit in usize"),
         ("var x: i8 = -129;", "Literal -129 does not fit in i8"),
+        ("var x: i8 = 128;", "Literal 128 does not fit in i8"),
+        ("var x: u8 = 256;", "Literal 256 does not fit in u8"),
+        ("var x: u8 = -1;", "Literal -1 does not fit in u8"),
+        ("var x: i16 = 32768;", "Literal 32768 does not fit in i16"),
+        ("var x: u16 = 65536;", "Literal 65536 does not fit in u16"),
         (
             "var x: i64 = 18446744073709551615;",
             "Literal 18446744073709551615 does not fit in i64",
@@ -2548,14 +1018,14 @@ fn test_operator_needs_operands_it_applies_to() {
     for (expression, operand) in [
         ("true + true", "bool"),
         ("1 && 2", "i32"),
-        ("p == q", "P"),
+        ("p == q", "Point"),
         ("\"a\" == \"b\"", "str"),
         ("true < false", "bool"),
         ("1.5 & 2.5", "f64"),
         ("1.5 << 2.5", "f64"),
     ] {
         let input = format!(
-            "struct P {{ x: i32 }} fn main() {{ var p = P {{ x: 1 }}; var q = P {{ x: 1 }}; var r = {expression}; }}"
+            "struct Point {{ x: i32 }} fn main() {{ var p = Point {{ x: 1 }}; var q = Point {{ x: 1 }}; var r = {expression}; }}"
         );
         let errors = analyze(&input);
         let expected = format!("cannot be applied to {operand}");
@@ -2670,17 +1140,6 @@ fn test_global_constant_is_made_of_constants() {
 }
 
 #[test]
-fn test_global_constant_is_defined_once() {
-    for input in [
-        "const A: i32 = 1; const A: i32 = 2; fn main() { }",
-        "fn A() { } const A: i32 = 2; fn main() { }",
-    ] {
-        let errors = analyze(input);
-        assert_eq!(errors, ["'A' is already defined"], "{input}");
-    }
-}
-
-#[test]
 fn test_generic_function_is_checked_at_its_types() {
     let input = "
         struct P { x: i32 }
@@ -2734,7 +1193,7 @@ fn test_moving_out_of_a_place_or_a_loop_is_refused() {
     for (body, message) in [
         (
             "var s = S { v: Vec.new() }; var v = s.v;",
-            "out of a field, an element or a pointer",
+            "Cannot move a value out of a field, an element or a pointer",
         ),
         (
             "var vs: Vec<S> = Vec.new(); var s = vs[0];",

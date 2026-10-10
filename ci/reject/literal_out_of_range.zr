@@ -1,5 +1,0 @@
-// expect: Literal -1 does not fit in u64
-fn main() {
-    var count: u64 = -1;
-    exit(0);
-}

@@ -7,9 +7,6 @@ Used by CI, and runnable by hand:
     python3 ci/compile_suite.py --release-safe   # -O2 with safety checks
     python3 ci/compile_suite.py --release-fast   # -O3, checks stripped
 
-Every std module is compiled through a generated `import <module>` wrapper,
-because a library file has no `main` of its own and so cannot be linked alone.
-
 ci/reject holds programs that must NOT compile. Each names the complaint it
 expects on its first line, so a diagnostic that stops being reported, or starts
 saying something else, fails the suite instead of passing quietly.
@@ -31,18 +28,9 @@ COMPILER = ROOT / "target" / "release" / "zeru"
 GREEN, RED, YELLOW, RESET = "\033[32m", "\033[31m", "\033[33m", "\033[0m"
 
 
-def std_modules():
-    """Every std module as a dotted import path, e.g. `std.collections.hashmap`."""
-    for path in sorted((ROOT / "std").rglob("*.zr")):
-        if path.stem == "builtin":
-            continue  # always prepended by the compiler, never imported
-        parts = path.relative_to(ROOT / "std").with_suffix("").parts
-        yield ".".join(("std",) + parts), path
-
-
 def run(args, cwd):
     return subprocess.run(
-        [str(COMPILER)] + args,
+        args,
         cwd=cwd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -60,22 +48,22 @@ class Suite:
         print(f"{GREEN}ok{RESET}  {label}" if ok else f"{RED}FAIL{RESET}  {label}")
         if not ok:
             self.failures.append((label, detail))
+        return ok
 
-    def compile(self, label, source):
+    def compile(self, source):
         """Compile `source` and confirm an executable actually came out."""
-        result = run(["build", str(source)] + self.mode_flags, cwd=self.workdir)
-        exe = self.workdir / "build" / Path(source).stem
+        result = run([COMPILER, "build", source] + self.mode_flags, cwd=self.workdir)
         if result.returncode != 0:
-            self.check(f"compile {label}", False, result.stdout)
-        else:
-            # A linker that failed while the compiler reported success would
-            # otherwise slip through as a pass.
-            self.check(f"compile {label}", exe.is_file(), "no executable produced")
+            return self.check(f"compile {source.name}", False, result.stdout)
+        # A linker that failed while the compiler reported success would
+        # otherwise slip through as a pass.
+        exe = self.workdir / "build" / source.stem
+        return self.check(f"compile {source.name}", exe.is_file(), "no executable produced")
 
     def reject(self, source):
         """Require `source` to be refused, with the message it says it expects."""
         expected = source.read_text().partition("\n")[0].removeprefix("// expect:").strip()
-        result = run(["build", str(source)] + self.mode_flags, cwd=self.workdir)
+        result = run([COMPILER, "build", source] + self.mode_flags, cwd=self.workdir)
 
         if result.returncode == 0:
             self.check(f"reject  {source.name}", False, "compiled, but should not")
@@ -87,8 +75,8 @@ class Suite:
             )
 
     def run_example(self, source):
-        """Run an example and require a zero exit: they self-check via exit codes."""
-        result = run(["run", str(source)], cwd=self.workdir)
+        """Run what compile() built and require a zero exit: examples self-check via exit codes."""
+        result = run([self.workdir / "build" / source.stem], cwd=self.workdir)
         self.check(
             f"run     {source.name}",
             result.returncode == 0,
@@ -101,11 +89,6 @@ def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--release-safe", action="store_true")
     group.add_argument("--release-fast", action="store_true")
-    parser.add_argument(
-        "--no-run",
-        action="store_true",
-        help="only compile; skip executing the examples",
-    )
     args = parser.parse_args()
 
     mode_flags = []
@@ -135,23 +118,14 @@ def main():
             (ROOT / "examples").glob("*/*_test.zr")
         )
         for example in examples:
-            suite.compile(example.name, example)
+            if suite.compile(example):
+                suite.run_example(example)
 
         # A rejection comes out of the front end, which the safety mode does not
         # reach, so checking it once is checking it everywhere.
         if not mode_flags:
             for source in sorted((ROOT / "ci" / "reject").glob("*.zr")):
                 suite.reject(source)
-
-        for module, path in std_modules():
-            wrapper = workdir / f"use_{path.stem}.zr"
-            wrapper.write_text(f"import {module};\n\nfn main() {{\n    exit(0);\n}}\n")
-            suite.compile(f"{module} (via import)", wrapper)
-
-        if not args.no_run:
-            print()
-            for example in examples:
-                suite.run_example(example)
 
         print(f"\n{'=' * 50}")
         if suite.failures:

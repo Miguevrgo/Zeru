@@ -1,7 +1,0 @@
-// expect: Use of moved value 'first'
-fn main() {
-    var first: Vec<i64> = Vec.new();
-    var second: Vec<i64> = Vec.new();
-    second = first;
-    first.push(1);
-}

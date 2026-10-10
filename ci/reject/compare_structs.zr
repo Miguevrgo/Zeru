@@ -1,8 +1,0 @@
-// expect: cannot be applied to Point
-struct Point { x: i32 }
-
-fn main() {
-    var a = Point { x: 1 };
-    var b = Point { x: 1 };
-    if a == b { exit(1); }
-}

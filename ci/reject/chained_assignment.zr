@@ -1,6 +1,0 @@
-// expect: Type mismatch in assignment
-fn main() {
-    var a: i32 = 0;
-    var b: i32 = 0;
-    a = b = 5;
-}
