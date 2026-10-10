@@ -139,6 +139,11 @@ pub enum ExpressionKind {
         name: String,
     },
     ArrayLiteral(Vec<Expression>),
+    /// `start..end` of a `for` loop: from `start`, up to but not with `end`.
+    Range {
+        start: Box<Expression>,
+        end: Box<Expression>,
+    },
     /// `[value; count]`: `value` evaluated once per element.
     ArrayRepeat {
         value: Box<Expression>,
@@ -406,7 +411,11 @@ fn walk_expression(v: &mut impl Visitor, expr: &mut Expression) {
             value: right,
             ..
         }
-        | ExpressionKind::Index { left, index: right } => {
+        | ExpressionKind::Index { left, index: right }
+        | ExpressionKind::Range {
+            start: left,
+            end: right,
+        } => {
             walk_expression(v, left);
             walk_expression(v, right);
         }

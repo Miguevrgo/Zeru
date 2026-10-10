@@ -124,6 +124,18 @@ impl<'a> Lexer<'a> {
                 }
             }
             '!' => self.match_next('=', Token::NotEq, Token::Bang),
+            '+' if self.peek() == Some(&'%') => {
+                self.advance();
+                self.match_next('=', Token::PlusWrapEq, Token::PlusWrap)
+            }
+            '-' if self.peek() == Some(&'%') => {
+                self.advance();
+                self.match_next('=', Token::MinusWrapEq, Token::MinusWrap)
+            }
+            '*' if self.peek() == Some(&'%') => {
+                self.advance();
+                self.match_next('=', Token::StarWrapEq, Token::StarWrap)
+            }
             '+' => self.match_next('=', Token::PlusEq, Token::Plus),
             '-' => self.match_next('=', Token::MinusEq, Token::Minus),
             '*' => self.match_next('=', Token::StarEq, Token::Star),
@@ -177,7 +189,7 @@ impl<'a> Lexer<'a> {
             ':' => self.match_next(':', Token::DoubleColon, Token::Colon),
             ';' => Token::Semicolon,
             ',' => Token::Comma,
-            '.' => Token::Dot,
+            '.' => self.match_next('.', Token::DotDot, Token::Dot),
             '?' => Token::Question,
 
             '"' => self.read_string(),

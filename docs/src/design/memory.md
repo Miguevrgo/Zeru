@@ -359,9 +359,8 @@ fn shrink_to_fit(self: &var Vec<T>)
 // Copying
 fn copy(self: &Vec<T>) Vec<T>            // Deep clone
 
-// Iteration
-fn iter(self: &Vec<T>) Iterator<&T>
-fn iter_mut(self: &var Vec<T>) Iterator<&var T>
+// Iteration is a `for` loop: `for x in v` reads a copy of each element,
+// `for x in &var v` writes each one in place
 ```
 
 *Bounds checking behavior depends on compile mode
@@ -387,7 +386,7 @@ fn main() {
     var maybe = numbers.get(100);     // i32? = None
 
     // Iteration
-    for n in &numbers {
+    for n in numbers {
         print(n);
     }
 
@@ -397,7 +396,7 @@ fn main() {
 }
 
 fn process(data: Vec<i32>) {
-    for item in &data {
+    for item in data {
         print(item);
     }
 }  // data freed here
@@ -454,7 +453,7 @@ C    Zig    Rust    Zeru(fast)    Zeru(safe)    C++    Go    Java
 
 - [x] Implement Vec struct and methods
 - [x] Index operator codegen
-- [ ] Iterator support
+- [x] Iteration (`for x in v`, `for x in &var v`)
 - [x] Integration tests
 
 ### Phase 4: Polish

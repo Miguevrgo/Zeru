@@ -48,6 +48,14 @@ pub enum Token {
     BitOrEq,     // |=
     BitRShiftEq, // >>=
     BitLShiftEq, // <<=
+    PlusWrapEq,  // +%=
+    MinusWrapEq, // -%=
+    StarWrapEq,  // *%=
+
+    // Wrapping arithmetic: the result taken modulo 2^bits, never a panic
+    PlusWrap,  // +%
+    MinusWrap, // -%
+    StarWrap,  // *%
 
     // Single-Character & Double tokens
     Assign, // =
@@ -75,6 +83,7 @@ pub enum Token {
     Semicolon, // ;
     Comma,     // ,
     Dot,       // .
+    DotDot,    // ..
     Question,  // ?
 
     // Custom
@@ -140,6 +149,12 @@ impl std::fmt::Display for Token {
             Token::BitOrEq => "|=",
             Token::BitRShiftEq => ">>=",
             Token::BitLShiftEq => "<<=",
+            Token::PlusWrapEq => "+%=",
+            Token::MinusWrapEq => "-%=",
+            Token::StarWrapEq => "*%=",
+            Token::PlusWrap => "+%",
+            Token::MinusWrap => "-%",
+            Token::StarWrap => "*%",
             Token::Assign => "=",
             Token::Plus => "+",
             Token::Minus => "-",
@@ -163,6 +178,7 @@ impl std::fmt::Display for Token {
             Token::Semicolon => ";",
             Token::Comma => ",",
             Token::Dot => ".",
+            Token::DotDot => "..",
             Token::Question => "?",
             Token::SelfTok => "self",
             Token::Match => "match",

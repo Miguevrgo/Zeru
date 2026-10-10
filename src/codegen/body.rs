@@ -332,7 +332,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(after_bb);
     }
 
-    /// Walk a fixed-size array, copying each element into the loop variable.
+    /// A `for` loop: an index from `first` up to `bound`. Over a range the
+    /// index is the loop variable; over an array or a Vec it picks each
+    /// turn's element, which the variable is a copy of, or behind `&var`, is.
     fn compile_for_in(
         &mut self,
         parent_fn: FunctionValue<'ctx>,
@@ -340,42 +342,43 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         iterable: &Expression,
         body: &Statement,
     ) {
-        let Some((container, shape)) = self.compile_lvalue(iterable) else {
-            self.error("'for .. in' requires an array or a Vec", iterable.span);
-            return;
-        };
         let usize_type = self.usize_type();
-
-        // How many turns is settled before the first one, so pushing inside the
-        // body cannot extend the loop. A Vec's buffer is fetched again each turn
-        // because a push may have moved it.
-        let (elem_type, count) = match shape {
-            BasicTypeEnum::ArrayType(array_type) => (
-                array_type.get_element_type(),
-                usize_type.const_int(array_type.len() as u64, false),
-            ),
-            _ if matches!(iterable.ty, Some(Type::Vec { .. })) => {
-                let len_field = self.vec_field_ptr(container, VEC_LEN, "len_field");
-                (
-                    self.element_type_of(iterable),
-                    self.load_int(usize_type, len_field, "len"),
-                )
-            }
-            _ => {
-                self.error("'for .. in' requires an array or a Vec", iterable.span);
-                return;
-            }
+        let (first, bound, walked) = if let ExpressionKind::Range { start, end } = &iterable.kind {
+            let first = self.compile_expression(start, None).into_int_value();
+            let bound = self
+                .compile_expression(end, Some(first.get_type().into()))
+                .into_int_value();
+            (first, bound, None)
+        } else {
+            let (place, by_ref) = match &iterable.kind {
+                ExpressionKind::BorrowRefMut(inner) => (inner.as_ref(), true),
+                _ => (iterable, false),
+            };
+            // How many turns is settled before the first one, so pushing
+            // inside the body cannot extend the loop.
+            let (container, shape, count) = match self.compile_lvalue(place) {
+                Some((container, BasicTypeEnum::ArrayType(array))) => {
+                    let len = usize_type.const_int(array.len() as u64, false);
+                    (container, Some(array), len)
+                }
+                Some((container, _)) if matches!(place.ty, Some(Type::Vec { .. })) => {
+                    let len_field = self.vec_field_ptr(container, VEC_LEN, "len_field");
+                    (container, None, self.load_int(usize_type, len_field, "len"))
+                }
+                _ => {
+                    self.error("'for .. in' requires an array or a Vec", iterable.span);
+                    return;
+                }
+            };
+            let walked = (container, shape, self.element_type_of(place), by_ref);
+            (usize_type.const_zero(), count, Some(walked))
         };
 
-        // Entry-block allocas: a nested loop must not grow the stack per iteration.
-        let index_ptr = self.create_entry_block_alloca(parent_fn, "for_index", usize_type.into());
-        let elem_slot = self.create_entry_block_alloca(parent_fn, variable, elem_type);
-        self.builder
-            .build_store(index_ptr, usize_type.const_zero())
-            .unwrap();
-
+        // Entry-block allocas: a nested loop must not grow the stack per turn.
+        let index_type = first.get_type();
+        let index_ptr = self.create_entry_block_alloca(parent_fn, "for_index", index_type.into());
+        self.builder.build_store(index_ptr, first).unwrap();
         self.scope_stack.push(Scope::default());
-        self.bind_variable(variable, (elem_slot, elem_type));
 
         let cond_bb = self.context.append_basic_block(parent_fn, "for_cond");
         let body_bb = self.context.append_basic_block(parent_fn, "for_body");
@@ -384,36 +387,51 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         self.builder.build_unconditional_branch(cond_bb).unwrap();
         self.builder.position_at_end(cond_bb);
-        let index = self.load(usize_type, index_ptr, "index").into_int_value();
+        let index = self.load_int(index_type, index_ptr, "index");
+        let below = match walked.is_none() && !Self::is_unsigned_expr(iterable) {
+            true => IntPredicate::SLT,
+            false => IntPredicate::ULT,
+        };
         let in_range = self
             .builder
-            .build_int_compare(IntPredicate::ULT, index, count, "for_cond")
+            .build_int_compare(below, index, bound, "for_cond")
             .unwrap();
         self.builder
             .build_conditional_branch(in_range, body_bb, after_bb)
             .unwrap();
 
         self.builder.position_at_end(body_bb);
-        let elem_gep = match shape {
-            BasicTypeEnum::ArrayType(array_type) => unsafe {
-                self.builder
-                    .build_in_bounds_gep(
-                        array_type,
-                        container,
-                        &[usize_type.const_zero(), index],
-                        "elem_gep",
-                    )
-                    .unwrap()
-            },
-            _ => {
-                let data_field = self.vec_field_ptr(container, VEC_PTR, "data_field");
-                let ptr_type = self.ptr_type();
-                let data = self.load(ptr_type, data_field, "data").into_pointer_value();
-                self.vec_elem_ptr(data, index, elem_type)
+        match walked {
+            None => self.bind_variable(variable, (index_ptr, index_type.into())),
+            Some((container, shape, elem_type, by_ref)) => {
+                let element = match shape {
+                    Some(array) => unsafe {
+                        self.builder
+                            .build_in_bounds_gep(
+                                array,
+                                container,
+                                &[usize_type.const_zero(), index],
+                                "element",
+                            )
+                            .unwrap()
+                    },
+                    // Fetched each turn: a push in the body may have moved it.
+                    None => {
+                        let data_field = self.vec_field_ptr(container, VEC_PTR, "data_field");
+                        let data = self.load(self.ptr_type(), data_field, "data");
+                        self.vec_elem_ptr(data.into_pointer_value(), index, elem_type)
+                    }
+                };
+                if by_ref {
+                    self.bind_variable(variable, (element, elem_type));
+                } else {
+                    let slot = self.create_entry_block_alloca(parent_fn, variable, elem_type);
+                    let value = self.load(elem_type, element, "element");
+                    self.builder.build_store(slot, value).unwrap();
+                    self.bind_variable(variable, (slot, elem_type));
+                }
             }
-        };
-        let elem_val = self.load(elem_type, elem_gep, "elem_val");
-        self.builder.build_store(elem_slot, elem_val).unwrap();
+        }
 
         self.compile_loop_body(body, incr_bb, after_bb);
         self.branch_if_open(incr_bb);
@@ -421,7 +439,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(incr_bb);
         let next = self
             .builder
-            .build_int_add(index, usize_type.const_int(1, false), "next_index")
+            .build_int_add(index, index_type.const_int(1, false), "next_index")
             .unwrap();
         self.builder.build_store(index_ptr, next).unwrap();
         self.builder.build_unconditional_branch(cond_bb).unwrap();
@@ -678,6 +696,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             ExpressionKind::ArrayRepeat { value, count } => {
                 self.lower_array_repeat(value, *count, expr)
+            }
+            // Only a `for` loop takes one, and lowers it itself.
+            ExpressionKind::Range { .. } => {
+                self.error("A range only goes in a 'for' loop", expr.span);
+                self.dummy_val()
             }
             ExpressionKind::Assign {
                 target,
@@ -1018,6 +1041,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             Token::BitXorEq => Token::BitXor,
             Token::BitLShiftEq => Token::ShiftLeft,
             Token::BitRShiftEq => Token::ShiftRight,
+            Token::PlusWrapEq => Token::PlusWrap,
+            Token::MinusWrapEq => Token::MinusWrap,
+            Token::StarWrapEq => Token::StarWrap,
             _ => return self.unsupported_operator(operator, span),
         };
 
@@ -1076,9 +1102,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         let b = self.builder;
         Some(match op {
-            Token::Plus => b.build_int_add(l, r, "add").unwrap().into(),
-            Token::Minus => b.build_int_sub(l, r, "sub").unwrap().into(),
-            Token::Star => b.build_int_mul(l, r, "mul").unwrap().into(),
+            // LLVM's own add, sub and mul wrap; only the checks above trap.
+            Token::Plus | Token::PlusWrap => b.build_int_add(l, r, "add").unwrap().into(),
+            Token::Minus | Token::MinusWrap => b.build_int_sub(l, r, "sub").unwrap().into(),
+            Token::Star | Token::StarWrap => b.build_int_mul(l, r, "mul").unwrap().into(),
             Token::Slash if signed => b.build_int_signed_div(l, r, "div").unwrap().into(),
             Token::Slash => b.build_int_unsigned_div(l, r, "udiv").unwrap().into(),
             Token::Mod if signed => b.build_int_signed_rem(l, r, "rem").unwrap().into(),
@@ -1270,9 +1297,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     /// the analyser resolved. Falls back to a word when nothing said otherwise.
     fn element_type_of(&self, expr: &Expression) -> BasicTypeEnum<'ctx> {
         match &expr.ty {
-            Some(Type::Vec { elem_type } | Type::Slice { elem_type }) => {
-                self.llvm_type_of(elem_type)
-            }
+            Some(
+                Type::Vec { elem_type } | Type::Slice { elem_type } | Type::Array { elem_type, .. },
+            ) => self.llvm_type_of(elem_type),
             _ => None,
         }
         .unwrap_or_else(|| self.usize_type().into())

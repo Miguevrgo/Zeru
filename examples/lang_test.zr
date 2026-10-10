@@ -303,6 +303,21 @@ fn main() {
     var low: u8 = 0x0F;
     if !low != 0xF0 { exit(145); }
 
+    // Counting loops, loops that write each element, wrapping arithmetic.
+    var counted = 0;
+    for i in 0..5 { counted += i; }
+    for i in 5..2 { exit(146); }
+    var backwards = 0;
+    for i in -3..0 { backwards += i; }
+    if counted != 10 || backwards != -6 { exit(147); }
+    var scaled: Vec<i64> = [1, 2, 3];
+    for x in &var scaled { x *= 10; }
+    if scaled[0] != 10 || scaled[2] != 30 { exit(148); }
+    var wrapped: u32 = 4294967295;
+    wrapped +%= 2;
+    var byte: u8 = 200;
+    if wrapped != 1 || byte *% 2 != 144 || 0 -% byte != 56 { exit(149); }
+
     println("lang: all tests passed");
     exit(0);
 }

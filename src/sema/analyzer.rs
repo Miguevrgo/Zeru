@@ -67,6 +67,9 @@ pub struct SemanticAnalyzer {
 
     /// The loops enclosing what is being checked, innermost last.
     loops: Vec<LoopFrame>,
+    /// What a `for x in &var v` loop is walking: changing it under the loop
+    /// would leave `x` pointing at memory the change freed.
+    locked: Vec<String>,
 
     /// Where a variable is given away, so codegen stops owning it there.
     moves: HashSet<Span>,
@@ -100,6 +103,7 @@ impl SemanticAnalyzer {
             generic_functions: HashMap::new(),
             instantiations: Vec::new(),
             loops: Vec::new(),
+            locked: Vec::new(),
             moves: HashSet::new(),
         }
     }
@@ -1063,27 +1067,90 @@ impl SemanticAnalyzer {
         final_type
     }
 
+    /// `for i in a..b` counts; `for x in v` reads each element of an array or
+    /// a Vec; `for x in &var v` lets each be written through `x`, so `v` must
+    /// not change under it meanwhile.
     fn check_for_in(&mut self, variable: &str, iterable: &mut Expression, body: &mut Statement) {
         let iter_span = iterable.span;
         let iterable_type = self.check_expression(iterable, None);
 
-        let item_type = match iterable_type {
+        let (walked, writable) = match iterable_type {
+            Type::RefMut(inner) => (*inner, true),
+            other => (other, false),
+        };
+        let item_type = match walked {
+            Type::Integer { .. } if matches!(iterable.kind, ExpressionKind::Range { .. }) => walked,
             Type::Array { elem_type, .. } | Type::Vec { elem_type } => *elem_type,
             Type::Unknown => Type::Unknown,
             _ => {
-                self.error(format!("{iterable_type} is not iterable"), iter_span);
+                let shown = iterable.ty.clone().unwrap_or(Type::Unknown);
+                self.error(format!("{shown} is not iterable"), iter_span);
                 Type::Unknown
             }
         };
 
+        let locked = match &iterable.kind {
+            ExpressionKind::BorrowRefMut(inner) if writable => Self::place_path(inner),
+            _ => None,
+        };
+        self.locked.extend(locked.clone());
         self.check_loop(|this| {
             this.symbols.enter_scope();
             this.symbols
-                .insert_var(variable.to_string(), item_type, true, true);
+                .insert_var(variable.to_string(), item_type, !writable, true);
             this.check_statement(body);
             this.symbols.exit_scope();
             Self::always_leaves(std::slice::from_ref(body), true)
         });
+        if locked.is_some() {
+            self.locked.pop();
+        }
+    }
+
+    /// Type two operands. A number written out takes the type of the other
+    /// one, on either side: `3 < x` compares at the type of `x`, as `x > 3`.
+    fn check_operands(
+        &mut self,
+        left: &mut Expression,
+        right: &mut Expression,
+        expected_type: Option<&Type>,
+    ) -> (Type, Type) {
+        if Self::is_number_literal(left) && !Self::is_number_literal(right) {
+            let r_ty = self.check_expression(right, expected_type);
+            (self.check_expression(left, Some(&r_ty)), r_ty)
+        } else {
+            let l_ty = self.check_expression(left, expected_type);
+            let r_ty = self.check_expression(right, Some(&l_ty));
+            (l_ty, r_ty)
+        }
+    }
+
+    /// `start..end`: two integers of one type.
+    fn check_range(&mut self, start: &mut Expression, end: &mut Expression, span: Span) -> Type {
+        match self.check_operands(start, end, None) {
+            (Type::Unknown, _) | (_, Type::Unknown) => Type::Unknown,
+            (from @ Type::Integer { .. }, to) if from == to => from,
+            (from, to) => {
+                self.error(
+                    format!("A range counts between two integers of one type, not {from} and {to}"),
+                    span,
+                );
+                Type::Unknown
+            }
+        }
+    }
+
+    /// `a.b[]` for a place built of variables, fields and elements, so two
+    /// places can be told to overlap.
+    fn place_path(place: &Expression) -> Option<String> {
+        match &place.kind {
+            ExpressionKind::Identifier(name) => Some(name.clone()),
+            ExpressionKind::Get { object, name } => {
+                Some(format!("{}.{name}", Self::place_path(object)?))
+            }
+            ExpressionKind::Index { left, .. } => Some(format!("{}[]", Self::place_path(left)?)),
+            _ => None,
+        }
     }
 
     fn check_statement(&mut self, stmt: &mut Statement) {
@@ -1318,6 +1385,7 @@ impl SemanticAnalyzer {
                         span,
                     );
                 }
+                self.require_unlocked(target, span);
                 Some(ty)
             } else {
                 None
@@ -1378,6 +1446,11 @@ impl SemanticAnalyzer {
     /// declared `var`. Behind a pointer the storage is the pointee's, which a
     /// `*T` or `&var T` may write and a `&T` may not.
     fn require_mutable(&mut self, place: &Expression, span: Span) {
+        self.require_unlocked(place, span);
+        self.require_var_root(place, span);
+    }
+
+    fn require_var_root(&mut self, place: &Expression, span: Span) {
         if matches!(place.ty, Some(Type::Pointer(_) | Type::RefMut(_))) {
             return;
         }
@@ -1393,12 +1466,34 @@ impl SemanticAnalyzer {
                 }
             }
             ExpressionKind::Get { object, .. } | ExpressionKind::Index { left: object, .. } => {
-                self.require_mutable(object, span)
+                self.require_var_root(object, span)
             }
             ExpressionKind::Dereference(inner) if matches!(inner.ty, Some(Type::Ref(_))) => {
                 self.error("Cannot write through a '&' reference".into(), span)
             }
             _ => {}
+        }
+    }
+
+    /// Report a change to what an enclosing `for .. in &var` loop walks, or to
+    /// what holds it.
+    fn require_unlocked(&mut self, place: &Expression, span: Span) {
+        let Some(path) = Self::place_path(place) else {
+            return;
+        };
+        let overlaps = |locked: &String| {
+            let within = |outer: &str, inner: &str| {
+                inner == outer
+                    || inner.starts_with(&format!("{outer}."))
+                    || inner.starts_with(&format!("{outer}["))
+            };
+            within(locked, &path) || within(&path, locked)
+        };
+        if let Some(locked) = self.locked.iter().find(|locked| overlaps(locked)).cloned() {
+            self.error(
+                format!("Cannot change '{path}' while a loop walks '{locked}' by reference"),
+                span,
+            );
         }
     }
 
@@ -1446,16 +1541,7 @@ impl SemanticAnalyzer {
         span: Span,
     ) -> Type {
         let operator = operator.clone();
-        // A number written out takes the type of the other operand, on either
-        // side: `3 < x` compares at the type of `x`, as `x > 3` does.
-        let (l_ty, r_ty) = if Self::is_number_literal(left) && !Self::is_number_literal(right) {
-            let r_ty = self.check_expression(right, expected_type);
-            (self.check_expression(left, Some(&r_ty)), r_ty)
-        } else {
-            let l_ty = self.check_expression(left, expected_type);
-            let r_ty = self.check_expression(right, Some(&l_ty));
-            (l_ty, r_ty)
-        };
+        let (l_ty, r_ty) = self.check_operands(left, right, expected_type);
 
         if l_ty == Type::Unknown || r_ty == Type::Unknown {
             return Type::Unknown;
@@ -1511,6 +1597,7 @@ impl SemanticAnalyzer {
         match operator {
             _ if matches!(ty, Type::ParamType(_)) => true,
             T::Plus | T::Minus | T::Star | T::Slash | T::Mod => number,
+            T::PlusWrap | T::MinusWrap | T::StarWrap => matches!(ty, Type::Integer { .. }),
             T::BitAnd | T::BitOr | T::BitXor => matches!(ty, Type::Integer { .. } | Type::Bool),
             T::ShiftLeft | T::ShiftRight => matches!(ty, Type::Integer { .. }),
             T::And | T::Or => *ty == Type::Bool,
@@ -2459,6 +2546,7 @@ impl SemanticAnalyzer {
                 .check_literal_into(inner_expected, |this, hint| {
                     this.check_array_literal(elements, hint)
                 }),
+            ExpressionKind::Range { start, end } => self.check_range(start, end, span),
             ExpressionKind::ArrayRepeat { value, count } => self
                 .check_literal_into(inner_expected, |this, hint| {
                     this.check_array_repeat(value, *count, hint)

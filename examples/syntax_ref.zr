@@ -270,9 +270,16 @@ fn main() {
         }
     }
 
-    // For-in loop (over arrays)
-    for value in numbers {
+    // For-in loops: count, read each element, or write each one in place
+    for i in 0..10 {                         // 0 up to 9
+        var squared = i * i;
+    }
+    for value in numbers {                   // A copy of each element
         var doubled = value * 2;
+    }
+    var scores: Array<i32, 3> = [1, 2, 3];
+    for score in &var scores {               // Each element itself
+        score *= 2;
     }
 
     // -------------------------------------------------------------------------
@@ -308,6 +315,10 @@ fn main() {
     var unsigned_val: u32 = 8;
     var arith_shift = signed_val >> 1;       // Arithmetic (sign-extending)
     var logic_shift = unsigned_val >> 1;     // Logical (zero-filling)
+
+    // Wrapping arithmetic: modulo 2^bits, never an overflow panic
+    var wrap: u8 = 250;
+    wrap = wrap +% 10;                       // 4; also -% *% +%= -%= *%=
 
     // Compound assignment: += -= *= /= %= &= |= ^= <<= >>=
     var x = 10;
@@ -379,7 +390,6 @@ Line 3`;
 // =============================================================================
 //
 // - Optional methods beyond is_some/is_none/unwrap: maybe.unwrap_or()
-// - Range syntax: for i in 0..10 { }
 // - String interpolation: println("Value: {}", x)
 // - Explicit trait implementations: a type meets a trait by having its methods
 // - Closures/lambdas

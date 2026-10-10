@@ -504,7 +504,19 @@ impl<'a> Parser<'a> {
         }
         self.next_token();
 
-        let iterable = self.parse_expression(Precedence::Lowest)?;
+        let mut iterable = self.parse_expression(Precedence::Lowest)?;
+        // `start..end` counts, and is written only here.
+        if self.peek_token_is(&Token::DotDot) {
+            self.next_token();
+            self.next_token();
+            let end = self.parse_expression(Precedence::Lowest)?;
+            let span = iterable.span.merge(end.span);
+            let kind = ExpressionKind::Range {
+                start: Box::new(iterable),
+                end: Box::new(end),
+            };
+            iterable = Expression::new(kind, span);
+        }
         if !self.expect_peek(&Token::LBrace) {
             return None;
         }
@@ -1216,6 +1228,9 @@ impl<'a> Parser<'a> {
                 | Token::BitXorEq
                 | Token::BitLShiftEq
                 | Token::BitRShiftEq
+                | Token::PlusWrapEq
+                | Token::MinusWrapEq
+                | Token::StarWrapEq
         )
     }
 
@@ -1454,7 +1469,10 @@ fn token_precedence(token: &Token) -> Precedence {
         | Token::BitOrEq
         | Token::BitXorEq
         | Token::BitRShiftEq
-        | Token::BitLShiftEq => Precedence::Assignment,
+        | Token::BitLShiftEq
+        | Token::PlusWrapEq
+        | Token::MinusWrapEq
+        | Token::StarWrapEq => Precedence::Assignment,
 
         Token::Or => Precedence::LogicalOr,
         Token::And => Precedence::LogicalAnd,
@@ -1468,8 +1486,8 @@ fn token_precedence(token: &Token) -> Precedence {
         Token::Gt | Token::Lt | Token::Geq | Token::Leq => Precedence::LessGreater,
         Token::ShiftLeft | Token::ShiftRight => Precedence::Shift,
 
-        Token::Plus | Token::Minus => Precedence::Sum,
-        Token::Star | Token::Slash | Token::Mod => Precedence::Product,
+        Token::Plus | Token::Minus | Token::PlusWrap | Token::MinusWrap => Precedence::Sum,
+        Token::Star | Token::Slash | Token::Mod | Token::StarWrap => Precedence::Product,
 
         Token::As => Precedence::Cast,
         Token::LParen => Precedence::Call,

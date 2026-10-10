@@ -2929,3 +2929,48 @@ fn test_moves_follow_the_control_flow() {
         assert!(errors[0].contains(message), "{body}: {errors:?}");
     }
 }
+
+#[test]
+fn test_loops_count_read_and_write() {
+    let ok = "
+        struct S {
+            items: Vec<i64>,
+            n: i32,
+            fn go(var self) { for x in &var self.items { self.n += 1; x += 1; } }
+        }
+        fn main() {
+            var total: u64 = 0;
+            var n: u64 = 10;
+            for i in 0..n { total += i; }
+            var v: Vec<i64> = [1];
+            for x in &var v { x = 2; }
+            for x in v { var y = x + 1; }
+            var h: u8 = 255;
+            h +%= 1;
+        }
+    ";
+    assert!(analyze(ok).is_empty(), "{:?}", analyze(ok));
+
+    for (body, message) in [
+        (
+            "var v: Vec<i64> = [1]; for x in &var v { v.push(2); }",
+            "Cannot change 'v' while a loop walks 'v'",
+        ),
+        (
+            "var v: Vec<i64> = [1]; for x in v { x = 2; }",
+            "Cannot reassign constant variable 'x'",
+        ),
+        (
+            "for i in 0..2.5 { }",
+            "A range counts between two integers of one type",
+        ),
+        (
+            "var f = 1.5 +% 2.0;",
+            "Operator '+%' cannot be applied to f64",
+        ),
+    ] {
+        let errors = analyze(&format!("fn main() {{ {body} }}"));
+        assert_eq!(errors.len(), 1, "{body}: {errors:?}");
+        assert!(errors[0].contains(message), "{body}: {errors:?}");
+    }
+}
