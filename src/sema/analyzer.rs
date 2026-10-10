@@ -47,11 +47,8 @@ const VEC_MUTATORS: &[&str] = &[
 
 /// What a loop has to know to check the moves inside it.
 struct LoopFrame {
-    /// Scopes open outside the loop; a variable in one of them outlives a turn.
     depth: usize,
-    /// What was moved before the first turn.
     before: Moves,
-    /// What was moved where a `break` or `continue` left the body.
     exits: Vec<Moves>,
 }
 
@@ -59,46 +56,33 @@ pub struct SemanticAnalyzer {
     pub errors: Vec<ZeruError>,
 
     symbols: SymbolTable,
-    /// Each struct's fields and each enum's variants, by name.
     struct_defs: HashMap<String, Vec<(String, Type)>>,
     enum_defs: HashMap<String, Vec<Variant>>,
     trait_defs: HashMap<String, Vec<TraitMethod>>,
     current_fn_return_type: Option<Type>,
     current_type_params: Vec<String>,
 
-    /// Methods that take `var self`, whose receiver has to be writable.
     mut_self_methods: HashSet<String>,
 
     generic_structs: HashMap<String, Statement>,
     generic_functions: HashMap<String, Statement>,
     instantiations: Vec<Statement>,
 
-    /// Checking generic code at its type arguments, where a `.copy()` written
-    /// for a T that owns memory meets one that does not.
     in_instance: bool,
 
-    /// The loops enclosing what is being checked, innermost last.
     loops: Vec<LoopFrame>,
-    /// What a `for x in &var v` loop walks, or a `match` binds values inside:
-    /// changing it meanwhile would leave those names pointing at memory the
-    /// change freed.
     locked: Vec<String>,
 
-    /// What each module keeps to itself, and the item being checked, whose
-    /// module may use them.
     privates: HashMap<String, String>,
     current_item: String,
 
-    /// Each global constant's value, for patterns that name one.
     constants: HashMap<String, Expression>,
 
-    /// Where a variable is given away, so codegen stops owning it there.
     moves: HashSet<Span>,
 }
 
 impl SemanticAnalyzer {
     pub fn new() -> Self {
-        // What the compiler provides the prelude: writing out both streams.
         let mut symbols = SymbolTable::new();
         symbols.insert_fn(FLUSH_FN.to_string(), Vec::new(), Type::Void);
         Self {
@@ -123,12 +107,10 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// A struct's fields as resolved, in declaration order.
     pub fn struct_fields(&self, name: &str) -> &[(String, Type)] {
         self.struct_defs.get(name).map_or(&[], Vec::as_slice)
     }
 
-    /// Whether the variable read at `span` is given away there.
     pub fn is_moved_at(&self, span: Span) -> bool {
         self.moves.contains(&span)
     }
@@ -179,7 +161,6 @@ impl SemanticAnalyzer {
             .is_some_and(|variants| variants.iter().any(|(_, fields)| !fields.is_empty()))
     }
 
-    /// A function's parameter and return types as resolved.
     pub fn signature(&self, name: &str) -> Option<(&[Type], &Type)> {
         match self.symbols.lookup(name)? {
             super::symbol_table::Symbol::Function { params, ret_type } => Some((params, ret_type)),
@@ -193,8 +174,6 @@ impl SemanticAnalyzer {
         self.scan_types(&program.statements);
         self.check_recursive_structs(&program.statements);
         self.scan_functions(&program.statements);
-        // A generic function's signature, its parameters still open, is what
-        // a call reads the type arguments off.
         let generic_functions: Vec<_> = self.generic_functions.values().cloned().collect();
         self.scan_functions(&generic_functions);
         self.analyze_bodies(&mut program.statements);
@@ -280,8 +259,6 @@ impl SemanticAnalyzer {
             return Some(name);
         }
 
-        // Registered before its fields resolve, so a field that names the
-        // instantiation again finds it instead of recursing forever.
         self.struct_defs.insert(name.clone(), Vec::new());
 
         let concrete = instantiate(&decl, name.clone(), &subs);
@@ -416,7 +393,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// Depth-first walk of the by-value edges out of `from`, looking for `target`.
     fn stores_by_value(
         from: &str,
         target: &str,
@@ -482,7 +458,6 @@ impl SemanticAnalyzer {
                         );
                     }
 
-                    // What the variants carry is resolved once every type is known.
                     let variants = names.into_iter().map(|v| (v, Vec::new())).collect();
                     self.enum_defs.insert(name.clone(), variants);
                 }
@@ -609,7 +584,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// First name that appears more than once, if any.
     fn first_duplicate(names: &[String]) -> Option<&String> {
         let mut seen = HashSet::new();
         names.iter().find(|name| !seen.insert(*name))
@@ -657,7 +631,6 @@ impl SemanticAnalyzer {
         if matches!(params.first(), Some((first, _, true)) if first == "self") {
             self.mut_self_methods.insert(name.clone());
         }
-        // Called for the value as it goes, with nothing else to pass it.
         if associated_struct.is_some()
             && name.ends_with("::drop")
             && (params.len() != 1
@@ -718,8 +691,6 @@ impl SemanticAnalyzer {
             .partition(|stmt| matches!(stmt.kind, StatementKind::Var { .. }));
         while !globals.is_empty() {
             let waiting: HashSet<String> = globals.iter().map(|g| Self::global_name(g)).collect();
-            // Ready: naming no global still waiting. None ready is a cycle,
-            // which checking in order reports.
             let ready = globals
                 .iter_mut()
                 .position(|global| {
@@ -777,8 +748,6 @@ impl SemanticAnalyzer {
                 }
             }
             StatementKind::Var { name, .. } => {
-                // Unlike a local, a global is not shadowed: a second one with
-                // the same name silently replaced the first.
                 if self.symbols.lookup_current_scope(name).is_some() {
                     self.error(format!("'{name}' is already defined"), span);
                 }
@@ -790,7 +759,6 @@ impl SemanticAnalyzer {
                             value.span,
                         );
                     }
-                    // Kept for a `match` that names it as a pattern.
                     self.constants.insert(name.clone(), value.clone());
                 }
             }
@@ -862,7 +830,6 @@ impl SemanticAnalyzer {
         }
         let frame = self.loops.pop().expect("pushed above");
 
-        // After it, what is moved is what any way out of it left moved.
         let mut after = before;
         if !leaves {
             after.extend(self.symbols.moves());
@@ -931,9 +898,6 @@ impl SemanticAnalyzer {
                 self.check_statement(s);
             }
 
-            // `main` gets an implicit `return 0`, every other function has to
-            // produce its value or the call site reads whatever was in the
-            // return register.
             if !matches!(self.current_fn_return_type, Some(Type::Void))
                 && name != "main"
                 && !Self::always_leaves(body, false)
@@ -951,9 +915,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// Resolves a TypeSpec from the AST into a concrete Type.
-    /// This handles named types (structs, enums), pointers, tuples, optionals, etc.
-    /// Returns Type::Unknown if the type cannot be resolved.
     fn resolve_spec(&mut self, spec: &TypeSpec, span: Span) -> Type {
         match spec {
             TypeSpec::Named(name) => self.resolve_named_type(name, span),
@@ -1150,7 +1111,6 @@ impl SemanticAnalyzer {
 
             expected
         } else {
-            // Unknown after an error was reported is that error's echo.
             if value_type == Type::Unknown && self.errors.len() == reported {
                 self.error(
                     format!(
@@ -1227,7 +1187,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// `start..end`: two integers of one type.
     fn check_range(&mut self, start: &mut Expression, end: &mut Expression, span: Span) -> Type {
         match self.check_operands(start, end, None) {
             (Type::Unknown, _) | (_, Type::Unknown) => Type::Unknown,
@@ -1320,8 +1279,6 @@ impl SemanticAnalyzer {
                     );
                 }
 
-                // A branch that leaves takes its moves with it; past the
-                // `if`, what is moved is what either branch left moved.
                 let before = self.symbols.moves();
                 let mut after = Moves::new();
                 self.check_statement(then_branch);
@@ -1341,7 +1298,6 @@ impl SemanticAnalyzer {
                 self.symbols.restore_moves(&after);
             }
 
-            // The condition runs on every turn too.
             StatementKind::While { cond, body } => self.check_loop(|this| {
                 let cond_span = cond.span;
                 let cond_type = this.check_expression(cond, Some(&Type::Bool));
@@ -1382,17 +1338,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// Type-checks an expression, writes the resolved type into `expr.ty`, and returns it.
-    ///
-    /// This is the core type-checking function that recursively validates
-    /// expressions and ensures type safety throughout the program.
-    ///
-    /// # Arguments
-    /// * `expr` - The expression to type-check (mutably, so `expr.ty` is populated)
-    /// * `expected_type` - Optional hint for expected type (from context like assignment)
-    ///
-    /// # Returns
-    /// The inferred type, or `Type::Unknown` if type checking fails
     fn check_expression(&mut self, expr: &mut Expression, expected_type: Option<&Type>) -> Type {
         let ty = self.check_expression_inner(expr, expected_type);
         expr.ty = Some(ty.clone());
@@ -1400,8 +1345,6 @@ impl SemanticAnalyzer {
     }
 
     fn check_identifier(&mut self, name: &str, span: Span) -> Type {
-        // The enum is everything before the last `::`, which may itself be a
-        // path into a module, as in `shapes::Color::Red`.
         if let Some((enum_name, variant)) = name.rsplit_once("::")
             && let Some(variants) = self.enum_defs.get(enum_name).cloned()
         {
@@ -1509,7 +1452,6 @@ impl SemanticAnalyzer {
             None
         };
 
-        // A variable being assigned is not read, so it may be a moved one.
         let target_ty = match &target_type {
             Some(ty) if matches!(target.kind, ExpressionKind::Identifier(_)) => {
                 target.ty = Some(ty.clone());
@@ -1522,8 +1464,6 @@ impl SemanticAnalyzer {
             }
         };
 
-        // A slice is a borrowed view, and a `str` literal's is of read-only
-        // memory, so an element of one is readable but not writable.
         if let ExpressionKind::Index { left, .. } = &target.kind
             && matches!(left.ty, Some(Type::Slice { .. }))
         {
@@ -1550,7 +1490,6 @@ impl SemanticAnalyzer {
             );
         }
         self.consume(value, &val_type);
-        // A moved variable holds a value again once one is assigned to it.
         if let ExpressionKind::Identifier(name) = &target.kind {
             self.symbols.set_moved(name, None);
         }
@@ -1619,12 +1558,10 @@ impl SemanticAnalyzer {
     /// again. A value inside a field, an element or behind a pointer cannot be
     /// moved out at all: what holds it would keep a second owner of it.
     fn consume(&mut self, expr: &Expression, ty: &Type) {
-        // Only what owns memory moves; anything else is plain data, copied.
         if !self.owns_heap(ty) {
             return;
         }
         match &expr.kind {
-            // A global is a constant, built anew wherever it is used.
             ExpressionKind::Identifier(name) if !self.symbols.is_global(name) => {
                 if let Some(super::symbol_table::Symbol::Var {
                     is_borrowed: true, ..
@@ -1685,7 +1622,6 @@ impl SemanticAnalyzer {
             return Type::Unknown;
         }
 
-        // A variant's values take part in what it is, so a match tells them apart.
         if let Type::Enum(name) = &l_ty
             && self.enum_has_data(name)
         {
@@ -1716,9 +1652,7 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// Whether `operator` means something for operands of type `ty`. Comparing
-    /// structs or strings, arithmetic on bools and `&&` on numbers used to get
-    /// through to codegen, which crashed on some and miscompiled others.
+    /// Whether `operator` means something for operands of type `ty`.
     fn operator_applies(operator: &crate::token::Token, ty: &Type) -> bool {
         use crate::token::Token as T;
         let number = matches!(ty, Type::Integer { .. } | Type::Float(_));
@@ -1829,7 +1763,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// The enum a `Enum::Variant` path names, and what the variant carries.
     pub fn variant_fields(&self, path: &str) -> Option<(String, Vec<Type>)> {
         let (name, variant) = path.rsplit_once("::")?;
         let (_, fields) = self
@@ -1839,7 +1772,6 @@ impl SemanticAnalyzer {
         Some((name.to_string(), fields.clone()))
     }
 
-    /// `Shape::Circle(1.0)`: a variant built with one value per field.
     fn check_variant(&mut self, path: &str, arguments: &mut [Expression], span: Span) -> Type {
         let Some((name, fields)) = self.variant_fields(path) else {
             return Type::Unknown;
@@ -1982,8 +1914,6 @@ impl SemanticAnalyzer {
         expected_type: Option<&Type>,
         span: Span,
     ) -> Type {
-        // A struct's functions are called with `.`, like its methods; `::` is
-        // for enum variants and modules.
         if let ExpressionKind::Identifier(path) = &function.kind
             && let Some((owner, name)) = path.rsplit_once("::")
             && (self.struct_defs.contains_key(owner) || self.generic_structs.contains_key(owner))
@@ -1994,10 +1924,6 @@ impl SemanticAnalyzer {
             );
         }
 
-        // A type on the left is a call on the type, not on a value: `Box.empty()`
-        // names the function `Box::empty`. A variable of the same name wins,
-        // since that one has something to call a method on. A generic struct
-        // takes its type arguments from the type the call is to give.
         if let ExpressionKind::Get { object, name } = &function.kind
             && let ExpressionKind::Identifier(type_name) = &object.kind
             && self.symbols.lookup(type_name).is_none()
@@ -2128,7 +2054,6 @@ impl SemanticAnalyzer {
                     return Type::Unknown;
                 }
 
-                // Unwrapping takes the payload, and with it what the value owns.
                 if method_name == "unwrap"
                     && matches!(obj_type, Type::Result { .. } | Type::Optional(_))
                     && self.owns_heap(&obj_type)
@@ -2250,8 +2175,6 @@ impl SemanticAnalyzer {
 
         let mut args = Vec::with_capacity(type_params.len());
         for param in &type_params {
-            // A parameter is read off a field declared as exactly that
-            // parameter, the same rule a generic call goes by.
             let spec = TypeSpec::Named(param.name.clone());
             let value = declared
                 .iter()
@@ -2300,7 +2223,6 @@ impl SemanticAnalyzer {
             let found = fields.iter_mut().find(|(n, _)| n == def_name);
             if let Some((_, field_expr)) = found {
                 let field_span = field_expr.span;
-                // Settled already if it was read to infer a parameter.
                 let expr_type = match &field_expr.ty {
                     Some(ty) => ty.clone(),
                     None => self.check_expression(field_expr, Some(def_type)),
@@ -2338,9 +2260,6 @@ impl SemanticAnalyzer {
             return Type::Void;
         }
 
-        // The arms are alternatives: each starts from what was moved before
-        // the match, and past it, what is moved is what any arm moved. What an
-        // arm binds is a view of the subject, which must not change meanwhile.
         let locked = Self::place_path(value).filter(|_| bindings.iter().any(|b| !b.is_empty()));
         self.locked.extend(locked.clone());
         let before = self.symbols.moves();
@@ -2374,8 +2293,6 @@ impl SemanticAnalyzer {
             self.locked.pop();
         }
 
-        // Only one arm runs, so the arms give their values away after all of
-        // them are checked: two arms naming one variable is not a reuse.
         for (_, result) in arms.iter() {
             if let Some(ty) = result.ty.clone() {
                 self.consume(result, &ty);
@@ -2394,7 +2311,6 @@ impl SemanticAnalyzer {
         span: Span,
     ) -> Vec<Vec<(String, Type)>> {
         let mut bindings = vec![Vec::new(); arms.len()];
-        // Every value there is, by name, when they can be listed.
         let all: Option<Vec<String>> = match subject {
             Type::Unknown => return bindings,
             Type::Integer { .. } => None,
@@ -2523,7 +2439,6 @@ impl SemanticAnalyzer {
             }
         };
 
-        // What a payload pattern binds: one name per value the variant holds.
         let names = match &pattern.kind {
             ExpressionKind::Call { arguments, .. } => arguments.as_slice(),
             _ => &[],
@@ -2569,7 +2484,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// The value of a constant integer expression, following global constants.
     pub fn constant_value(&self, expr: &Expression) -> Option<i128> {
         use crate::token::Token as T;
         match &expr.kind {
@@ -2614,8 +2528,6 @@ impl SemanticAnalyzer {
         let operator = operator.clone();
         match &operator {
             crate::token::Token::Minus => {
-                // Checked as one number, so `-128` fits an i8 although `128`
-                // on its own does not.
                 if let ExpressionKind::Int(value) = right.kind {
                     let ty = self.check_int_literal(value, true, expected_type, span);
                     right.ty = Some(ty.clone());
@@ -2634,7 +2546,6 @@ impl SemanticAnalyzer {
                     }
                 }
             }
-            // Logical on a bool, bitwise on an integer.
             crate::token::Token::Bang => {
                 let right_type = self.check_expression(right, expected_type);
                 match right_type {
@@ -2673,8 +2584,6 @@ impl SemanticAnalyzer {
 
         match left_type {
             Type::Array { elem_type, len } => {
-                // A literal index is settled here rather than left to the
-                // runtime bounds check.
                 if let ExpressionKind::Int(value) = index.kind
                     && value >= len as u64
                 {
@@ -2685,13 +2594,8 @@ impl SemanticAnalyzer {
                 }
                 *elem_type
             }
-            // How many elements a Vec or a slice has is only known once it runs,
-            // so the bounds check is the runtime one.
             Type::Vec { elem_type } | Type::Slice { elem_type } => *elem_type,
             Type::Unknown => Type::Unknown,
-            // A pointer is followed for a field but not for an index. That is
-            // parked: the destination is Rust's split, where `&T` does the
-            // comfortable access and `*T` follows nothing.
             Type::Pointer(ref pointee) if matches!(pointee.as_ref(), Type::Array { .. }) => {
                 self.error(
                     format!("Cannot index {left_type} directly, write (*p)[i]"),
@@ -2777,7 +2681,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// `[value; count]`, the value checked once as every element's.
     fn check_array_repeat(
         &mut self,
         value: &mut Expression,
@@ -2790,7 +2693,6 @@ impl SemanticAnalyzer {
         };
         let elem_type = self.check_expression(value, elem_hint.as_ref());
         self.consume(value, &elem_type);
-        // Each element evaluates it again, so a moved variable is used again.
         if count > 1 && matches!(value.kind, ExpressionKind::Identifier(_)) {
             self.check_expression(value, elem_hint.as_ref());
         }
@@ -2839,8 +2741,6 @@ impl SemanticAnalyzer {
         Type::Tuple(result_types)
     }
 
-    /// `&x` and `&var x`: each needs a place rather than a temporary, and
-    /// neither may borrow a moved value.
     fn check_borrow(&mut self, inner: &mut Expression, kind: Borrow, span: Span) -> Type {
         let inner_kind = inner.kind.clone();
         let inner_type = self.check_expression(inner, None);
@@ -2879,8 +2779,6 @@ impl SemanticAnalyzer {
     ) -> Type {
         let span = expr.span;
 
-        // Under a `T?` context a literal takes the payload type; `Type::accepts`
-        // then lets the bare value stand in for the optional.
         let inner_expected = match expected_type {
             Some(Type::Optional(inner)) => Some(inner.as_ref()),
             other => other,
@@ -3038,8 +2936,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// Type-check Vec<T> built-in methods
-    /// Report a wrong argument count, and say whether the arity was right.
     fn expect_arity(
         &mut self,
         name: &str,
@@ -3074,8 +2970,6 @@ impl SemanticAnalyzer {
         };
         let full_name = format!("Vec::{method_name}");
 
-        // Arity first: every method reports its own count, then checks the one
-        // argument it may take.
         let arity = match method_name {
             "with_capacity" | "push" | "get" | "remove" | "reserve" => 1,
             "insert" => 2,
@@ -3083,7 +2977,6 @@ impl SemanticAnalyzer {
         };
         let arity_ok = self.expect_arity(&full_name, arguments, arity, span);
 
-        // A count or an index comes first, the element last.
         if arity_ok && method_name != "push" && arity > 0 {
             let arg_type = self.check_expression(&mut arguments[0], Some(&usize_type));
             if !usize_type.accepts(&arg_type) {
@@ -3105,7 +2998,6 @@ impl SemanticAnalyzer {
         match method_name {
             "new" | "with_capacity" => vec_type(),
             "push" | "insert" | "reserve" | "shrink_to_fit" | "clear" => Type::Void,
-            // A copy of an element that owns memory would be a second owner.
             "get" if self.owns_heap(elem_type) => {
                 self.error(
                     format!("Vec::get() cannot copy out a {elem_type}; index it and call .copy()"),
@@ -3125,7 +3017,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// `T?` queries, mirroring the ones on `T!`.
     fn check_option_method(
         &mut self,
         method_name: &str,
@@ -3185,7 +3076,6 @@ impl SemanticAnalyzer {
             if let Some(self_type) = implicit_self
                 && !expected_args.is_empty()
             {
-                // A pointer receiver is followed, matching field access.
                 let self_type = match self_type {
                     Type::Pointer(pointee) | Type::Ref(pointee) | Type::RefMut(pointee) => *pointee,
                     other => other,
@@ -3213,8 +3103,6 @@ impl SemanticAnalyzer {
                 );
             } else {
                 for i in 0..args.len() {
-                    // A parameter an earlier argument settled is checked as
-                    // that type, so `largest(wide, 5)` makes the 5 wide too.
                     let expected = Self::substitute_params(&expected_args[i], &substitutions);
                     let arg_span = args[i].span;
                     let arg_type = self.check_expression(&mut args[i], Some(&expected));
@@ -3224,7 +3112,6 @@ impl SemanticAnalyzer {
                         self.error(format!("Argument {} type mismatch.", i + 1), arg_span);
                     }
 
-                    // Passed by value unless the parameter borrows it.
                     if !matches!(expected, Type::Ref(_) | Type::RefMut(_)) {
                         self.consume(&args[i], &arg_type);
                     }
@@ -3283,7 +3170,6 @@ impl SemanticAnalyzer {
         let mut specs = Substitutions::new();
         for param in type_params {
             match subs.get(&param.name) {
-                // Reported already, where the argument went wrong.
                 Some(Type::Unknown) => return None,
                 Some(ty) => {
                     if let Some(bound) = &param.bound {
@@ -3348,9 +3234,7 @@ impl SemanticAnalyzer {
         }
     }
 
-    /// Report a use of what another module keeps to itself.
     fn check_visible(&mut self, name: &str, span: Span) {
-        // A method of `Map__i64_` is declared as one of `Map`.
         let declared = match name.rsplit_once("::") {
             Some((owner, member)) if owner.contains("__") => {
                 format!("{}::{member}", owner.split("__").next().unwrap_or(owner))
@@ -3383,7 +3267,6 @@ impl SemanticAnalyzer {
             Some(Type::Optional(inner)) => Some(inner.as_ref()),
             other => other,
         };
-        // A whole number makes a float when the float holds it exactly.
         if let Some(Type::Float(width)) = expected {
             let exact = match width {
                 FloatWidth::W32 => (value as f32) as u64 == value,

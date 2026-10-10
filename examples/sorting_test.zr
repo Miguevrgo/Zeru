@@ -70,7 +70,6 @@ fn main() {
     if binary_search(&data, 8, 1) != 0 { exit(7); }
     if binary_search(&data, 8, 4) != -1 { exit(8); }
 
-    // Already sorted input must come out unchanged.
     var ordered: Array<i32, 8> = [1, 2, 3, 4, 5, 6, 7, 8];
     insertion_sort(&ordered, 8);
     if ordered[3] != 4 { exit(9); }

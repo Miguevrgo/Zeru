@@ -33,7 +33,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         (!types.is_empty()).then(|| self.context.struct_type(&types, false))
     }
 
-    /// LLVM type for a type the analyser already resolved.
     pub(super) fn llvm_type_of(&self, ty: &Type) -> Option<BasicTypeEnum<'ctx>> {
         Some(match ty {
             Type::Integer { width, .. } => match width {
@@ -46,7 +45,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             Type::Float(FloatWidth::W64) => self.context.f64_type().into(),
             Type::Bool => self.context.bool_type().into(),
             Type::Enum(name) if self.types.enum_has_data(name) => {
-                // The tag, then room for the largest variant's values.
                 let words = self
                     .types
                     .enum_variants(name)?
@@ -77,7 +75,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             Type::Struct(name) => {
                 let struct_type = *self.struct_defs.get(name)?;
-                // Laid out on first use, so a field may be of a type declared later.
                 if struct_type.is_opaque() {
                     let fields: Vec<_> = self
                         .types

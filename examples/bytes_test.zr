@@ -62,7 +62,6 @@ fn value_of(buf: *u8, length: usize) u64 {
 }
 
 fn main() {
-    // "abc" then a terminator, with the rest zeroed.
     var text: Array<u8, 8> = [97, 98, 99, 0, 0, 0, 0, 0];
     if length(&text[0], 8) != 3 { exit(1); }
 
@@ -89,7 +88,6 @@ fn main() {
     var digits: Array<u8, 3> = [1, 2, 3];
     if value_of(&digits[0], 3) != 66051 { exit(12); }
 
-    // A buffer of one byte, and of none, must not walk off the end.
     var single: Array<u8, 1> = [7];
     reverse(&single[0], 1);
     if single[0] != 7 { exit(13); }

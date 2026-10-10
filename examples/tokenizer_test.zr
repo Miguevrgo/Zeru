@@ -89,7 +89,6 @@ fn evaluate(tokens: Vec<Token>) i64! {
         if token.kind == TokenKind::Number {
             pending = token.value;
             i += 1;
-            // A run of factors belongs to the term being built.
             while i < tokens.len() && tokens[i].kind == TokenKind::Star {
                 if i + 1 >= tokens.len() { return Err(2); }
                 var factor: Token = tokens[i + 1];
@@ -119,7 +118,6 @@ fn text_of(bytes: Array<u8, 16>, length: usize) Vec<u8> {
 }
 
 fn main() {
-    // "2+3*4" is 14, not 20.
     var source: Array<u8, 16> = [50, 43, 51, 42, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     var tokens = scan(text_of(source, 5));
     if tokens.len() != 6 { exit(1); }
@@ -132,24 +130,20 @@ fn main() {
     if !result.is_ok() { exit(6); }
     if result.unwrap() != 14 { exit(7); }
 
-    // Multi-digit numbers, spaces, and a subtraction.
     var second: Array<u8, 16> = [49, 48, 32, 45, 32, 51, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     var spaced = evaluate(scan(text_of(second, 6)));
     if !spaced.is_ok() { exit(8); }
     if spaced.unwrap() != 7 { exit(9); }
 
-    // A single number is its own answer.
     var third: Array<u8, 16> = [55, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     var alone = evaluate(scan(text_of(third, 1)));
     if alone.unwrap() != 7 { exit(10); }
 
-    // A trailing `*` has nothing to multiply by.
     var broken: Array<u8, 16> = [50, 42, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     var failed = evaluate(scan(text_of(broken, 2)));
     if !failed.is_err() { exit(11); }
     if failed.unwrap_err() != 3 { exit(12); }
 
-    // A byte that is no token at all stops the scan.
     var junk: Array<u8, 16> = [37, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     if scan(text_of(junk, 1)).len() != 0 { exit(13); }
 

@@ -53,7 +53,6 @@ fn second<T, U>(a: T, b: U) U { return b; }
 fn make() Pair<i64> { return Pair { first: 10, second: 20 }; }
 
 fn main() {
-    // Read off the fields.
     var p = Pair { first: 1, second: 2 };
     if p.first != 1 { exit(1); }
     if p.same() { exit(2); }
@@ -62,21 +61,17 @@ fn main() {
     if q.first != 2 { exit(3); }
     if q.second != 1 { exit(4); }
 
-    // Written out where the values alone would say i32.
     var wide: Pair<i64> = Pair { first: 100, second: 200 };
     if wide.swap().first != 200 { exit(5); }
     if largest(wide.first, wide.second) != 200 { exit(6); }
 
-    // The same declaration at two widths is two structs.
     var narrow = Pair { first: 7, second: 7 };
     if !narrow.same() { exit(7); }
     if wide.same() { exit(8); }
 
-    // A return type settles it too.
     var made = make();
     if made.second != 20 { exit(9); }
 
-    // A parameter used more than once in a body.
     var c = Counter { value: 0, step: 5 };
     c.bump();
     c.bump();
@@ -90,15 +85,12 @@ fn main() {
     fractional.bump();
     if fractional.value != 0.75 { exit(12); }
 
-    // A parameter inside another generic type.
     var holder: Holder<i64> = Holder { items: Vec.new(), fallback: -1 };
     holder.items.push(3);
     holder.items.push(4);
     if holder.take(1) != 4 { exit(13); }
     if holder.take(99) != -1 { exit(14); }
 
-    // A generic function: one parameter at several types, including a struct,
-    // and two parameters that need not agree.
     if identity(42) != 42 { exit(17); }
     if identity(3.14) != 3.14 { exit(18); }
     if !identity(true) { exit(19); }
@@ -106,16 +98,12 @@ fn main() {
     if first(10, 3.14) != 10 { exit(21); }
     if second(true, 2.5) != 2.5 { exit(22); }
 
-    // An instantiation is checked at its own types: u32 compares unsigned, so
-    // three billion is the larger, where a signed compare says it is negative.
     var big: u32 = 3000000000;
     var small: u32 = 1;
     if largest(big, small) != big { exit(23); }
-    // A literal takes the type an earlier argument settled.
     var wide: i64 = 5000000000;
     if largest(wide, 7) != wide { exit(24); }
 
-    // A bound met by a struct that has the trait's methods.
     var wrapped = Wrap { inner: Square { side: 3 } };
     if wrapped.inner.area() != 9 { exit(15); }
     if wrapped.doubled() != 18 { exit(16); }

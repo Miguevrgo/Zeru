@@ -10,7 +10,6 @@ use crate::ast::{Statement, StatementKind, TypeParameter, TypeSpec, Visitor, wal
 
 pub type Substitutions = HashMap<String, TypeSpec>;
 
-/// Replace every type parameter in `spec` with the type it stands for.
 pub fn substitute(spec: &TypeSpec, subs: &Substitutions) -> TypeSpec {
     let boxed = |inner: &TypeSpec| Box::new(substitute(inner, subs));
     let all = |types: &[TypeSpec]| types.iter().map(|t| substitute(t, subs)).collect();

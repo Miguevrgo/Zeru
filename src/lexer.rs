@@ -6,8 +6,6 @@ use crate::token::Token;
 pub struct Lexer<'a> {
     input: Peekable<Chars<'a>>,
     pos: usize,
-    /// The last token was a `.`, so a number is a tuple index: `t.1.0` is
-    /// two of them, not `t` and the float `1.0`.
     after_dot: bool,
 }
 
@@ -336,8 +334,6 @@ impl<'a> Lexer<'a> {
 
     fn read_string(&mut self) -> Token {
         let mut bytes = Vec::new();
-        // Reported once the closing quote is reached, so the rest of the
-        // string is not read as code.
         let mut problem = None;
 
         while let Some(&ch) = self.peek() {
@@ -369,7 +365,6 @@ impl<'a> Lexer<'a> {
         Token::Illegal("Unterminated String".to_string())
     }
 
-    /// The byte an escape stands for, its `\\` already read.
     fn read_escape(&mut self) -> Result<u8, String> {
         Ok(match self.advance() {
             Some('n') => b'\n',
@@ -534,7 +529,6 @@ mod tests {
 
     #[test]
     fn test_unknown_escape_is_reported_after_the_whole_string() {
-        // The string is read to its end, so `x` after it is still a name.
         let mut lexer = Lexer::new(r#""a\qb" x"#);
         let Token::Illegal(message) = lexer.next_token().0 else {
             panic!("Expected an Illegal token");

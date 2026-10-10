@@ -31,7 +31,6 @@ enum MethodCallOutcome<'ctx> {
 }
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    /// Emit `s` as a global string and pack it into a `{ *u8, usize }` slice.
     fn build_str_slice(&mut self, s: &[u8]) -> BasicValueEnum<'ctx> {
         let data = self.const_bytes(s);
         let len = self.usize_type().const_int(s.len() as u64, false);
@@ -47,7 +46,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let types = self.types;
         let (param_types, ret) = types.signature(name).unwrap_or((&[], &Type::Void));
 
-        // `main` gives the process an exit status even when it returns nothing.
         let ret_type = match self.llvm_type_of(ret) {
             None if name == "main" => Some(self.context.i32_type().into()),
             other => other,
@@ -57,8 +55,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .iter()
             .zip(param_types)
             .filter_map(|((param_name, _, _), ty)| match ty {
-                // `self` comes in by pointer: borrowed, not copied, and
-                // `var self` writes reach the caller.
                 Type::Struct(_) if param_name == "self" => Some(self.ptr_type().into()),
                 _ => self.llvm_type_of(ty).map(Into::into),
             })
@@ -69,7 +65,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             None => self.context.void_type().fn_type(&param_types, false),
         };
 
-        // Only `main` is seen from outside, so LLVM may drop what nothing calls.
         let linkage = (name != "main").then_some(Linkage::Internal);
         self.module.add_function(name, fn_type, linkage)
     }
@@ -81,7 +76,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         body: &[Statement],
         span: Span,
     ) {
-        // Missing means the prototype pass already reported why.
         let Some(function) = self.module.get_function(name) else {
             return;
         };
@@ -99,7 +93,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         for ((arg, (param_name, _, _)), ty) in
             function.get_param_iter().zip(params).zip(param_types)
         {
-            // `self` already points at where its struct lives.
             if let (Type::Struct(_), true) = (ty, param_name == "self")
                 && let Some(struct_type) = self.llvm_type_of(ty)
             {
@@ -112,7 +105,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.builder.build_store(alloca, arg).unwrap();
             self.variables
                 .insert(param_name.clone(), (alloca, slot_type));
-            // Passed by value, so the callee owns it.
             self.own(alloca, ty);
         }
 
@@ -135,7 +127,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         };
     }
 
-    /// Branch to `target` unless the current block already ends in a terminator.
     fn branch_if_open(&self, target: BasicBlock<'ctx>) {
         if let Some(block) = self.builder.get_insert_block()
             && block.get_terminator().is_none()
@@ -169,7 +160,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.drop_all_owned();
                 self.builder.build_return(Some(&val)).unwrap();
             }
-            // `main` returns an implicit exit status even on a bare `return`.
             StatementKind::Return(None) => {
                 self.drop_scopes_from(0);
                 if parent_fn.get_name().to_str() == Ok("main") {
@@ -182,7 +172,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
             StatementKind::Expression(expr) => {
                 let value = self.compile_expression(expr, None);
-                // A value nobody takes is dropped with the statement.
                 if expr.ty.as_ref().is_some_and(|ty| self.types.owns_heap(ty)) {
                     self.adopt_temporary(value, expr.ty.as_ref());
                 }
@@ -225,8 +214,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.builder.build_unconditional_branch(target).unwrap();
             }
 
-            // Accepted by the parser and analyser but never lowered: skipping it
-            // would emit a binary that quietly does less than the source says.
             _ => self.error(
                 "A declaration inside a function body is not supported",
                 stmt.span,
@@ -253,7 +240,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    /// Bind `name` in the innermost scope, remembering what it shadowed.
     fn bind_variable(&mut self, name: &str, binding: VarBinding<'ctx>) {
         let shadowed = self.variables.insert(name.to_string(), binding);
         if let Some(scope) = self.scope_stack.last_mut() {
@@ -287,7 +273,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         let then_bb = self.context.append_basic_block(parent_fn, "then");
         let merge_bb = self.context.append_basic_block(parent_fn, "merge");
-        // Without an `else` the false edge goes straight to the merge block.
         let else_bb = match else_branch {
             Some(_) => self.context.append_basic_block(parent_fn, "else"),
             None => merge_bb,
@@ -356,8 +341,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 ExpressionKind::BorrowRefMut(inner) => (inner.as_ref(), true),
                 _ => (iterable, false),
             };
-            // How many turns is settled before the first one, so pushing
-            // inside the body cannot extend the loop.
             let (container, shape, count) = match self.compile_lvalue(place) {
                 Some((container, BasicTypeEnum::ArrayType(array))) => {
                     let len = usize_type.const_int(array.len() as u64, false);
@@ -376,7 +359,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             (usize_type.const_zero(), count, Some(walked))
         };
 
-        // Entry-block allocas: a nested loop must not grow the stack per turn.
         let index_type = first.get_type();
         let index_ptr = self.create_entry_block_alloca(parent_fn, "for_index", index_type.into());
         self.builder.build_store(index_ptr, first).unwrap();
@@ -417,7 +399,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                             )
                             .unwrap()
                     },
-                    // Fetched each turn: a push in the body may have moved it.
                     None => {
                         let data_field = self.vec_field_ptr(container, VEC_PTR, "data_field");
                         let data = self.load(self.ptr_type(), data_field, "data");
@@ -523,8 +504,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         Some((elem_ptr, array_ty.get_element_type()))
                     }
 
-                    // A Vec and a slice both keep their elements elsewhere, and
-                    // how many there are is only known once it runs.
                     BasicTypeEnum::StructType(shape) => {
                         let (data_at, len_at) = match &left.ty {
                             Some(Type::Vec { .. }) => (VEC_PTR, VEC_LEN),
@@ -546,8 +525,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
 
             ExpressionKind::Dereference(inner) => {
-                // The pointee type sets the width of a store through this lvalue.
-                // Assuming i64 makes `*p = x` on a `*i32` write eight bytes.
                 let elem_type = self
                     .pointee_type_of(inner)
                     .unwrap_or_else(|| self.usize_type().into());
@@ -595,9 +572,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    /// Index of field `name` within a named user struct.
     fn struct_field_index(&self, struct_ty: StructType<'ctx>, name: &str) -> Option<u32> {
-        // A tuple has no name and no field names: the number is the index.
         if let Ok(index) = name.parse::<u32>() {
             return (index < struct_ty.count_fields()).then_some(index);
         }
@@ -609,7 +584,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .map(|at| at as u32)
     }
 
-    /// What `expr` points at, from the type the analyser resolved.
     fn pointee_type_of(&self, expr: &Expression) -> Option<BasicTypeEnum<'ctx>> {
         match &expr.ty {
             Some(Type::Pointer(pointee) | Type::Ref(pointee) | Type::RefMut(pointee)) => {
@@ -642,8 +616,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         expr: &Expression,
         expected_type: Option<BasicTypeEnum<'ctx>>,
     ) -> BasicValueEnum<'ctx> {
-        // The type the analyser settled, which for a literal can come from the
-        // other operand of a comparison, something `expected_type` does not carry.
         let settled_type = || expr.ty.as_ref().and_then(|ty| self.llvm_type_of(ty));
 
         match &expr.kind {
@@ -662,7 +634,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
             ExpressionKind::Identifier(name) => {
                 let value = self.lower_identifier(name, expr.span);
-                // Given away here, so the variable no longer drops it.
                 if self.types.is_moved_at(expr.span)
                     && let Some((slot, _)) = self.variables.get(name)
                 {
@@ -696,7 +667,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 self.pop_scope();
                 self.dummy_val()
             }
-            // Only a `for` loop takes one, and lowers it itself.
             ExpressionKind::Range { .. } => {
                 self.error("A range only goes in a 'for' loop", expr.span);
                 self.dummy_val()
@@ -740,7 +710,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
             ExpressionKind::Cast { left, .. } => self.lower_cast(left, expr),
 
-            // `&x` and `&var x` both lower to the address of the lvalue.
             ExpressionKind::BorrowRef(inner) | ExpressionKind::BorrowRefMut(inner) => {
                 match self.compile_lvalue(inner) {
                     Some((ptr, _)) => ptr.into(),
@@ -766,8 +735,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
 
             ExpressionKind::Tuple(elements) => {
-                // Each element takes its type from the tuple being built, or an
-                // i64 field holding a small literal comes out as an i32.
                 let wanted = match expected_type {
                     Some(BasicTypeEnum::StructType(shape))
                         if shape.count_fields() as usize == elements.len() =>
@@ -818,14 +785,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     fn lower_identifier(&mut self, name: &str, span: Span) -> BasicValueEnum<'ctx> {
-        // A local first: it may shadow a constant of the same name.
         if let Some((ptr, ty)) = self.variables.get(name) {
             return self.load(*ty, *ptr, &format!("{name}_load"));
         }
         if let Some((value, ty)) = self.constants.get(name).cloned() {
             return self.compile_expression(&value, ty);
         }
-        // The parser folds `Enum::Variant` into one qualified identifier.
         if let Some(variant) = self.build_variant(name, &[]) {
             return variant;
         }
@@ -834,7 +799,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.dummy_val()
     }
 
-    /// Read a field or element, as an enum tag or through its storage.
     fn lower_place_read(&mut self, expr: &Expression) -> BasicValueEnum<'ctx> {
         if let Some((ptr, ty)) = self.compile_lvalue(expr) {
             let label = match &expr.kind {
@@ -932,7 +896,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         expected_type: Option<BasicTypeEnum<'ctx>>,
         span: Span,
     ) -> BasicValueEnum<'ctx> {
-        // The element type comes from the annotation, or from the first element.
         let annotated = match expected_type {
             Some(BasicTypeEnum::ArrayType(arr_ty)) => Some(arr_ty.get_element_type()),
             _ => None,
@@ -956,8 +919,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         array_val.into()
     }
 
-    /// `[a, b]` or `[value; count]` where a Vec is wanted: a buffer that
-    /// fits the elements, filled in place.
     fn lower_vec_literal(&mut self, expr: &Expression) -> BasicValueEnum<'ctx> {
         let elem_type = self.element_type_of(expr);
         let usize_type = self.usize_type();
@@ -988,7 +949,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.build_vec(data, count, count)
     }
 
-    /// `[value; count]`: a loop evaluating `value` into each element.
     fn lower_array_repeat(
         &mut self,
         value: &Expression,
@@ -1019,7 +979,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.load(array_type, slot, "repeat")
     }
 
-    /// `x += y` and friends: the plain operator applied to the current value.
     fn apply_compound_op(
         &mut self,
         lhs: BasicValueEnum<'ctx>,
@@ -1049,8 +1008,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap_or_else(|| self.unsupported_operator(operator, span))
     }
 
-    /// Apply an arithmetic or bitwise operator to a matching pair of operands.
-    /// `None` when the operator does not apply, so callers word their own error.
     fn apply_arith(
         &mut self,
         lhs: BasicValueEnum<'ctx>,
@@ -1100,7 +1057,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         let b = self.builder;
         Some(match op {
-            // LLVM's own add, sub and mul wrap; only the checks above trap.
             Token::Plus | Token::PlusWrap => b.build_int_add(l, r, "add").unwrap().into(),
             Token::Minus | Token::MinusWrap => b.build_int_sub(l, r, "sub").unwrap().into(),
             Token::Star | Token::StarWrap => b.build_int_mul(l, r, "mul").unwrap().into(),
@@ -1117,8 +1073,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         })
     }
 
-    /// Resolve the callee (method, builtin, generic instantiation or free
-    /// function) and emit the call.
     fn lower_call(
         &mut self,
         function: &Expression,
@@ -1164,8 +1118,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
         };
 
-        // Parameters are read off the function value so each argument is typed
-        // by the slot it lands in.
         let param_offset = implicit_args.len() as u32;
         let mut compiled_args: Vec<BasicMetadataValueEnum> = implicit_args;
         for (i, arg) in arguments.iter().enumerate() {
@@ -1186,8 +1138,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    /// Resolve a method call: builtin fast paths return a value directly, a
-    /// user method resolves to an LLVM function plus its `self` argument.
     fn compile_method_call(
         &mut self,
         object: &Expression,
@@ -1200,7 +1150,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         if method_name == "copy" && arguments.is_empty() {
             let copy = match object.ty.as_ref().filter(|ty| self.types.owns_heap(ty)) {
-                // What it owns is duplicated too, so the two stay apart.
                 Some(ty) => self
                     .place_of(object)
                     .and_then(|(place, _)| self.copy_value(place, ty)),
@@ -1209,8 +1158,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             return MethodCallOutcome::Done(copy.unwrap_or_else(|| self.dummy_val()));
         }
 
-        // `unwrap` takes the payload out, so the receiver is read as a value:
-        // a variable gives it away instead of dropping it later.
         if method_name == "unwrap"
             && let Some(ty @ (Type::Optional(_) | Type::Result { .. })) = &object.ty
         {
@@ -1225,8 +1172,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         if let ExpressionKind::Identifier(type_name) = &object.kind
             && type_name == "Vec"
         {
-            // No receiver to ask, so the element type comes from the call's
-            // own resolved type.
             let elem_type = self.element_type_of(call);
             return MethodCallOutcome::Done(self.compile_vec_static_method(
                 method_name,
@@ -1236,8 +1181,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ));
         }
 
-        // Every method works on where its receiver lives. A temporary gets a
-        // slot of its own, so `make_point().len()` evaluates it once.
         let Some((place, place_type)) = self.place_of(object) else {
             self.error("Method receiver must be a variable", span);
             return MethodCallOutcome::Done(self.dummy_val());
@@ -1266,7 +1209,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             return MethodCallOutcome::Done(result);
         }
 
-        // A user struct, possibly behind a pointer.
         let struct_name = match &object.ty {
             Some(Type::Struct(name)) => name.clone(),
             Some(Type::Pointer(inner) | Type::Ref(inner) | Type::RefMut(inner))
@@ -1286,7 +1228,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             return MethodCallOutcome::Done(self.dummy_val());
         };
 
-        // Through a pointer, `self` is what it points at.
         let self_ptr = match place_type {
             BasicTypeEnum::PointerType(ptr_type) => {
                 self.load(ptr_type, place, "deref").into_pointer_value()
@@ -1296,8 +1237,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         MethodCallOutcome::Resolved(func, vec![self_ptr.into()])
     }
 
-    /// Element type of the `Vec` or slice `expr` denotes, taken from the type
-    /// the analyser resolved. Falls back to a word when nothing said otherwise.
     fn element_type_of(&self, expr: &Expression) -> BasicTypeEnum<'ctx> {
         match &expr.ty {
             Some(
@@ -1308,7 +1247,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         .unwrap_or_else(|| self.usize_type().into())
     }
 
-    /// Address of one field of an aggregate that lives at `ptr`.
     fn field_ptr(
         &self,
         shape: StructType<'ctx>,
@@ -1321,8 +1259,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap()
     }
 
-    /// Dispatch a binary operator on the operand category (integer, float,
-    /// pointer arithmetic, pointer comparison), plus `&&` and `||`.
     fn lower_infix(
         &mut self,
         left: &Expression,
@@ -1339,7 +1275,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
 
         let comparison = Self::compare_predicates(operator);
-        // A comparison's operands carry their own type, not the boolean result.
         let operand_hint = if comparison.is_some() {
             None
         } else {
@@ -1363,7 +1298,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         .into();
                 }
 
-                // Shifts follow the left operand, everything else the result type.
                 let source = if *operator == Token::ShiftRight {
                     left
                 } else {
@@ -1395,9 +1329,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         return self.dummy_val();
                     }
                 };
-                // A step is one element wide, as in C: `p + 1` on a *i32 moves
-                // four bytes. Without the pointee type it would move one, and
-                // land inside the element it started on.
                 let elem = self
                     .pointee_type_of(left)
                     .unwrap_or_else(|| self.context.i8_type().into());
@@ -1442,7 +1373,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         use IntPredicate as I;
         Some(match op {
             Token::Eq => (I::EQ, I::EQ, F::OEQ),
-            // Unordered: NaN differs from everything, itself included.
             Token::NotEq => (I::NE, I::NE, F::UNE),
             Token::Lt => (I::SLT, I::ULT, F::OLT),
             Token::Leq => (I::SLE, I::ULE, F::OLE),
@@ -1507,7 +1437,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         else {
             return self.dummy_val();
         };
-        // Both keep the tag first and the payload second.
         let has_payload = self
             .extract(held, OPTION_TAG, "has_payload")
             .into_int_value();
@@ -1534,7 +1463,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         phi.as_basic_value()
     }
 
-    /// Lower `&&`/`||` as a branch plus a phi, leaving the builder at the merge.
     fn lower_short_circuit(
         &mut self,
         left: &Expression,
@@ -1553,7 +1481,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let rhs_block = self.context.append_basic_block(current_fn, "rhs_eval");
         let merge_block = self.context.append_basic_block(current_fn, "merge");
 
-        // `&&` only needs the right side when the left is true, `||` when false.
         let (on_true, on_false) = if is_and {
             (rhs_block, merge_block)
         } else {
@@ -1599,7 +1526,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap()
     }
 
-    /// Lower an `ExpressionKind::Cast` to the appropriate LLVM conversion.
     fn lower_cast(&mut self, left: &Expression, cast: &Expression) -> BasicValueEnum<'ctx> {
         let span = cast.span;
         let src_val = self.compile_expression(left, None);
@@ -1609,7 +1535,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             return self.dummy_val();
         };
 
-        // An i1 must never sign-extend, or `true as i32` would come out as -1.
         let src_signed =
             |v: IntValue<'ctx>, signed: bool| v.get_type().get_bit_width() > 1 && signed;
         let left_signed = !Self::is_unsigned_expr(left);
@@ -1618,8 +1543,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         match (src_val, target_type) {
             (BasicValueEnum::IntValue(v), BasicTypeEnum::IntType(t)) => {
                 let (src_bits, dst_bits) = (v.get_type().get_bit_width(), t.get_bit_width());
-                // Widening follows the source signedness: always zero-extending
-                // would turn `-1 as i64` into 4294967295.
                 match (src_bits.cmp(&dst_bits), src_signed(v, left_signed)) {
                     (std::cmp::Ordering::Equal, _) => v.into(),
                     (std::cmp::Ordering::Less, true) => self
@@ -1686,10 +1609,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 .build_int_to_ptr(v, t, "inttoptr")
                 .unwrap()
                 .into(),
-            // A no-op with opaque pointers.
             (BasicValueEnum::PointerValue(v), BasicTypeEnum::PointerType(_)) => v.into(),
-            // A `str` or other slice, the only aggregate the analyser lets
-            // through, keeps its data pointer and drops the length.
             (BasicValueEnum::StructValue(v), BasicTypeEnum::PointerType(_)) => {
                 self.extract(v, SLICE_PTR, "str_ptr")
             }
@@ -1707,7 +1627,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    /// Lower a `match` into a `switch` over the arm blocks plus a result phi.
     fn lower_match(
         &mut self,
         value: &Expression,
@@ -1717,8 +1636,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let Some(parent_fn) = self.current_fn else {
             return self.dummy_val();
         };
-        // Where the subject lives, for arms that bind what it holds; a
-        // `T?`, a `T!` or an enum carrying values is told apart by its tag.
         let subject_type = value.ty.clone().unwrap_or(Type::Unknown);
         let Some((place, shape)) = self.place_of(value) else {
             return self.dummy_val();
@@ -1754,12 +1671,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
         }
 
-        // The switch goes in whichever block the patterns left behind, captured
-        // before the synthesised default moves the builder.
         let switch_bb = self.builder.get_insert_block().unwrap();
 
-        // An exhaustive match has no `default` arm, so one is synthesised for the
-        // switch to fall back to.
         let default_bb = default_bb.unwrap_or_else(|| {
             let bb = self.context.append_basic_block(parent_fn, "match_default");
             self.builder.position_at_end(bb);
@@ -1770,8 +1683,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(switch_bb);
         self.builder.build_switch(tag, default_bb, &cases).unwrap();
 
-        // Only arms that fall through to the merge block feed the phi; one that
-        // returns or breaks is not a predecessor.
         let mut incoming: Vec<(BasicBlock<'ctx>, BasicValueEnum<'ctx>)> = Vec::new();
         for (block, pattern, result) in arm_bodies {
             self.builder.position_at_end(block);
@@ -1817,7 +1728,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 _ => return None,
             },
             ExpressionKind::Identifier(path) if self.variant_index(path).is_some() => path.as_str(),
-            // A literal or a constant, as the analyser worked it out.
             _ => {
                 let value = self.types.constant_value(pattern)?;
                 return Some(tag_type.const_int(value as u64, true));
@@ -1895,7 +1805,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    /// A variant's position among its enum's.
     fn variant_index(&self, path: &str) -> Option<u64> {
         let (enum_name, variant) = path.rsplit_once("::")?;
         let variants = self.types.enum_variants(enum_name)?;

@@ -3,46 +3,38 @@
 // Uses exit codes to verify behavior
 
 fn main() {
-    // Test Vec creation
     var numbers: Vec<i64> = Vec.new();
 
-    // Test len() on empty vec - should be 0
     var len0: usize = numbers.len();
     if len0 != 0 as usize {
         exit(1);
     }
 
-    // Test push
     numbers.push(10);
     numbers.push(20);
     numbers.push(30);
  
-    // len should be 3
     var len3: usize = numbers.len();
     if len3 != 3 as usize {
         exit(2);
     }
 
-    // Test pop - should reduce len to 2
     var popped = numbers.pop();
     var len2: usize = numbers.len();
     if len2 != 2 as usize {
         exit(3);
     }
 
-    // Test clear - len should become 0
     numbers.clear();
     var lenAfterClear: usize = numbers.len();
     if lenAfterClear != 0 as usize {
         exit(4);
     }
 
-    // Test copy
     numbers.push(100);
     numbers.push(200);
     var copied = numbers.copy();
  
-    // Both should have len 2
     var numbersLen: usize = numbers.len();
     var copiedLen: usize = copied.len();
     if numbersLen != 2 as usize {
@@ -52,10 +44,8 @@ fn main() {
         exit(6);
     }
  
-    // Modify original
     numbers.push(300);
 
-    // Original should have len 3, copy should still have len 2
     var finalLen: usize = numbers.len();
     var copyFinalLen: usize = copied.len();
     if finalLen != 3 as usize {
@@ -65,8 +55,6 @@ fn main() {
         exit(8);
     }
 
-    // All tests passed!
-    // --- traversal and indexing ---------------------------------------------
     var items: Vec<i64> = Vec.new();
     var n: i64 = 1;
     while n <= 4 {
@@ -86,7 +74,6 @@ fn main() {
     }
     if walked != 58 { exit(63); }
 
-    // An empty Vec is nought turns, not one.
     var empty: Vec<i64> = Vec.new();
     var turns: i32 = 0;
     for item in empty {
@@ -94,7 +81,6 @@ fn main() {
     }
     if turns != 0 { exit(64); }
 
-    // How many turns is settled before the first one.
     var growing: Vec<i64> = Vec.new();
     growing.push(1);
     growing.push(2);
@@ -106,14 +92,12 @@ fn main() {
     if seen != 2 { exit(65); }
     if growing.len() != 4 { exit(66); }
 
-    // Reserved up front: no growth until the capacity is used up.
     var reserved: Vec<i64> = Vec.with_capacity(4);
     if reserved.capacity() != 4 { exit(67); }
     reserved.push(7);
     if reserved.len() != 1 || reserved[0] != 7 { exit(68); }
     if reserved.capacity() != 4 { exit(69); }
 
-    // --- literals, insert, remove, reserve, shrink_to_fit --------------------
     var listed: Vec<i64> = [1, 2, 4];
     listed.insert(2, 3);
     listed.insert(4, 5);
@@ -134,7 +118,6 @@ fn main() {
     zeros.shrink_to_fit();
     if zeros.capacity() != 100 || zeros[50] != 0 { exit(76); }
 
-    // A copy of nested Vecs shares no buffer with the original.
     var grid: Vec<Vec<i64>> = [[1, 2], [3]];
     var twin = grid.copy();
     twin[0][0] = 9;

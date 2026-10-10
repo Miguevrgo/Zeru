@@ -46,13 +46,11 @@ fn digits_value(text: Array<u8, 3>) i32! {
 }
 
 fn main() {
-    // A list walked through raw pointers.
     var third = Node { value: 3, next: 0 as *Node };
     var second = Node { value: 2, next: &third };
     var first = Node { value: 1, next: &second };
     if sum_list(&first, 3) != 6 { exit(1); }
 
-    // Bubble sort in place, then confirm the whole array is ordered.
     var values: Array<i32, 6> = [5, 2, 9, 1, 7, 3];
     var pass: usize = 0;
     while pass < 6 {
@@ -75,8 +73,6 @@ fn main() {
         check += 1;
     }
 
-    // A Vec whose element is three words wide: every push has to advance by
-    // the element size, not by a fixed slot.
     var records: Vec<Big> = Vec.new();
     records.push(Big { a: 1, b: 2, c: 3 });
     records.push(Big { a: 4, b: 5, c: 6 });
@@ -87,7 +83,6 @@ fn main() {
     if records.get(2).unwrap().a != 7 { exit(23); }
     if records.get(2).unwrap().c != 9 { exit(24); }
 
-    // A Result carried up through two calls, on both paths.
     var good: i32! = digits_value([49, 50, 51]);
     if !good.is_ok() { exit(30); }
     if good.unwrap() != 123 { exit(31); }

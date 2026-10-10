@@ -20,26 +20,20 @@ pub struct TraitMethod {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeSpec {
     Named(String),
-    Generic {
-        name: String,
-        args: Vec<TypeSpec>,
-    },
+    Generic { name: String, args: Vec<TypeSpec> },
     IntLiteral(u64),
     Tuple(Vec<TypeSpec>),
     Pointer(Box<TypeSpec>),
-    Optional(Box<TypeSpec>), // T?
-    /// `T!` fails with an i32 code, `T!E` with a variant of the enum `E`.
+    Optional(Box<TypeSpec>),
     Result(Box<TypeSpec>, Option<Box<TypeSpec>>),
     Slice(Box<TypeSpec>),
-    Ref(Box<TypeSpec>),    // &T - immutable reference
-    RefMut(Box<TypeSpec>), // &var T - mutable reference
+    Ref(Box<TypeSpec>),
+    RefMut(Box<TypeSpec>),
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Program {
     pub statements: Vec<Statement>,
-    /// Each item and method not marked `pub`, by its qualified name, with
-    /// the module it belongs to: only that module may use it.
     pub privates: HashMap<String, String>,
 }
 
@@ -47,7 +41,6 @@ pub struct Program {
 pub struct Statement {
     pub kind: StatementKind,
     pub span: Span,
-    /// Marked `pub`: other modules may use it.
     pub is_pub: bool,
 }
 
@@ -58,7 +51,6 @@ pub enum StatementKind {
         is_const: bool,
         value: Expression,
         type_annotation: Option<TypeSpec>,
-        /// The variable's type, once the analyser has settled it.
         ty: Option<Type>,
     },
     Return(Option<Expression>),
@@ -90,7 +82,6 @@ pub enum StatementKind {
     },
     Enum {
         name: String,
-        /// Each variant's name and the types of the values it carries.
         variants: Vec<(String, Vec<TypeSpec>)>,
     },
     Trait {
@@ -151,12 +142,10 @@ pub enum ExpressionKind {
         name: String,
     },
     ArrayLiteral(Vec<Expression>),
-    /// `start..end` of a `for` loop: from `start`, up to but not with `end`.
     Range {
         start: Box<Expression>,
         end: Box<Expression>,
     },
-    /// `[value; count]`: `value` evaluated once per element.
     ArrayRepeat {
         value: Box<Expression>,
         count: u64,
@@ -181,9 +170,7 @@ pub enum ExpressionKind {
     BorrowRef(Box<Expression>),
     BorrowRefMut(Box<Expression>),
     Dereference(Box<Expression>),
-    /// `try f()`: the value of a `T!`, or out of the function with its error.
     Try(Box<Expression>),
-    /// `{ ... }` as a `match` arm, run for its effects.
     Block(Vec<Statement>),
     Tuple(Vec<Expression>),
     InlineAsm {
@@ -316,7 +303,6 @@ pub fn walk_item(v: &mut impl Visitor, statement: &mut Statement) {
             for (_, spec) in fields.iter_mut() {
                 v.ty(spec);
             }
-            // A method's name belongs to its struct, not to the items.
             for method in methods {
                 if let StatementKind::Function {
                     type_params,
@@ -379,7 +365,6 @@ fn walk_bounds(v: &mut impl Visitor, type_params: &mut [TypeParameter]) {
     }
 }
 
-/// Statements sharing one scope: what they bind is gone after them.
 fn walk_block(v: &mut impl Visitor, statements: &mut [Statement]) {
     let scope = v.scope();
     for statement in statements {
@@ -390,7 +375,6 @@ fn walk_block(v: &mut impl Visitor, statements: &mut [Statement]) {
 
 fn walk_statement(v: &mut impl Visitor, statement: &mut Statement) {
     match &mut statement.kind {
-        // The value is read before the name exists.
         StatementKind::Var {
             name,
             value,
@@ -459,7 +443,6 @@ fn walk_expression(v: &mut impl Visitor, expr: &mut Expression) {
         }
         ExpressionKind::Prefix { right: inner, .. }
         | ExpressionKind::ArrayRepeat { value: inner, .. }
-        // A field's name belongs to its struct.
         | ExpressionKind::Get { object: inner, .. }
         | ExpressionKind::BorrowRef(inner)
         | ExpressionKind::BorrowRefMut(inner)
@@ -493,8 +476,6 @@ fn walk_expression(v: &mut impl Visitor, expr: &mut Expression) {
             for (pattern, result) in arms.iter_mut() {
                 let scope = v.scope();
                 match &mut pattern.kind {
-                    // `Some(x)` or `Shape::Circle(r)`: a path, and the names
-                    // the arm binds.
                     ExpressionKind::Call {
                         function,
                         arguments,

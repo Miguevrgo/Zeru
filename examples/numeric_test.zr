@@ -112,7 +112,6 @@ fn main() {
     if is_power_of_two(63) { exit(14); }
     if is_power_of_two(0) { exit(15); }
 
-    // 15 primes below 50.
     if count_primes_below(50) != 15 { exit(16); }
     if count_primes_below(3) != 1 { exit(17); }
 
@@ -120,7 +119,6 @@ fn main() {
     if !near(sqrt(2.0), 1.41421356) { exit(21); }
     if sqrt(0.0) != 0.0 { exit(22); }
 
-    // A float literal is f64, so it keeps its digits.
     var precise = 3.14159265358979;
     var annotated: f64 = 3.14159265358979;
     if precise != annotated { exit(23); }
@@ -128,21 +126,17 @@ fn main() {
     var third: f64 = 1.0 / 3.0;
     if !near(third * 3.0, 1.0) { exit(24); }
 
-    // Truncation goes towards zero, as in C.
     if 2.9 as i32 != 2 { exit(25); }
     if -2.9 as i32 != -2 { exit(26); }
 
     var narrow: f32 = 1.5;
     if narrow as f64 != 1.5 { exit(27); }
 
-    // The ends of the widest types are written as they are, not wrapped.
     var lowest: i64 = -9223372036854775808;
     if lowest + 1 != -9223372036854775807 { exit(28); }
     var highest: u64 = 18446744073709551615;
     if highest - 1 != 18446744073709551614 { exit(29); }
 
-    // A literal on the left compares at the type on the right: unsigned here,
-    // where a signed compare would read `highest` as -1.
     if 3 > highest { exit(30); }
     var single: f32 = 1.5;
     if 2.0 * single != 3.0 { exit(31); }

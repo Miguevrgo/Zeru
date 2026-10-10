@@ -125,7 +125,6 @@ impl Sources {
         start
     }
 
-    /// The file, line and column a span starts at, counting from 1.
     pub fn position(&self, span: Span) -> Option<(&str, u32, u32)> {
         let (name, text, range) = self.locate(span)?;
         let before = &text[..range.start];
@@ -181,13 +180,10 @@ mod tests {
         sources.push("first.zr", "fn a() { }");
         sources.push("second.zr", "fn bb() { }");
 
-        // "a" sits at offset 3 of the first file, which starts the buffer.
         let (name, text, range) = sources.locate(Span::new(3, 4)).expect("inside first.zr");
         assert_eq!(name, "first.zr");
         assert_eq!(&text[range], "a");
 
-        // "bb" sits at offset 3 of the second, so 14 in the buffer: the first
-        // file is ten characters plus the newline push adds one.
         let (name, text, range) = sources.locate(Span::new(14, 16)).expect("inside second.zr");
         assert_eq!(name, "second.zr");
         assert_eq!(&text[range], "bb");
@@ -207,7 +203,6 @@ mod tests {
         sources.push("first.zr", "fn a() { }");
         sources.push("second.zr", "fn bb() { }");
 
-        // A span that starts in the first file may not reach into the second.
         let (name, text, range) = sources.locate(Span::new(3, 500)).expect("inside first.zr");
         assert_eq!(name, "first.zr");
         assert!(range.end <= text.len());

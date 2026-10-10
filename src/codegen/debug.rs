@@ -20,7 +20,6 @@ use crate::{
 pub(super) struct Debug<'ctx> {
     builder: DebugInfoBuilder<'ctx>,
     files: HashMap<String, DIFile<'ctx>>,
-    /// The function being lowered, which every location belongs to.
     scope: Option<DISubprogram<'ctx>>,
 }
 
@@ -57,7 +56,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         });
     }
 
-    /// Open `function`'s scope at the line its declaration starts on.
     pub(super) fn enter_debug_scope(&mut self, function: FunctionValue<'ctx>, span: Span) {
         let (Some(debug), Some((path, line, _))) = (&mut self.debug, self.sources.position(span))
         else {
@@ -100,7 +98,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.set_debug_location();
     }
 
-    /// Tag what is emitted next with the statement being lowered.
     pub(super) fn set_debug_location(&self) {
         let (Some(debug), Some((_, line, column))) =
             (&self.debug, self.sources.position(self.current_span))

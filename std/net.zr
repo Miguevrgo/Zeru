@@ -27,7 +27,6 @@ pub fn make_addr(ip: u32, port: u16) Array<u8, 16> {
     return addr;
 }
 
-// --- TcpListener ---
 
 pub struct TcpListener {
     fd: i64,
@@ -35,7 +34,6 @@ pub struct TcpListener {
     pub fn bind(ip: u32, port: u16) i64! {
         var fd: i64 = syscall3(41, 2, 1, 0);
         if fd < 0 { return Err((-fd) as i32); }
-        // SO_REUSEADDR
         var one: i32 = 1;
         syscall5(54, fd, 1, 2, (&one) as i64, 4);
         var addr = make_addr(ip, port);
@@ -59,7 +57,6 @@ pub struct TcpListener {
     }
 }
 
-// --- TcpStream ---
 
 pub struct TcpStream {
     fd: i64,
@@ -123,7 +120,6 @@ pub struct TcpStream {
     }
 }
 
-// --- UdpSocket ---
 
 pub struct UdpSocket {
     fd: i64,

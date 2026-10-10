@@ -12,7 +12,6 @@ fn peek(p: *Point) i32 { return p.x; }
 fn take_vec(list: Vec<i64>) usize { return list.len(); }
 
 fn main() {
-    // Plain data, scalar or struct or array, is copied: the source stays.
     var n: i32 = 42;
     var first: i32 = n;
     if first != 42 || n != 42 { exit(1); }
@@ -27,25 +26,19 @@ fn main() {
     twin[0] = 0;
     if cells[0] != 4 { exit(3); }
 
-    // A pointer looks without taking.
     var kept = Point { x: 7, y: 8 };
     if peek(&kept) != 7 || kept.y != 8 { exit(4); }
 
-    // What owns memory moves; `copy` hands over a duplicate instead.
     var list: Vec<i64> = [1, 2];
     if take_vec(list.copy()) != 2 { exit(5); }
     if list.len() != 2 { exit(6); }
-    // Reading `list` after `take_vec(list)` would be rejected;
-    // ci/reject/moved_value.zr pins that.
 
-    // A struct holding memory moves with it, and can be given a new value.
     var holder = Holder { cells: [7, 8, 9] };
     var carried = holder;
     if carried.cells[2] != 9 { exit(7); }
     holder = Holder { cells: [1] };
     if holder.cells[0] != 1 { exit(8); }
 
-    // A move in a loop is fine when the loop is left right after it.
     var once: Vec<i64> = [3];
     var taken: usize = 0;
     while true {

@@ -57,7 +57,6 @@ fn main() {
     { var p = probe(at); consume(p); expect(drops, 2, 2); }
     expect(drops, 2, 3);
 
-    // Moved on one path only: whether to drop is settled at runtime.
     { var p = probe(at); var take = true; if take { consume(p); } }
     { var p = probe(at); var take = false; if take { consume(p); } }
     expect(drops, 4, 4);
@@ -96,7 +95,6 @@ fn main() {
     { var p = probe(at); var twin = p.copy(); }
     expect(drops, 23, 16);
 
-    // A struct's own drop runs, then its fields are dropped.
     { var h = Holder { probe: probe(at), probes: [probe(at)] }; h.probe = probe(at); expect(drops, 24, 17); }
     expect(drops, 26, 18);
 
@@ -109,13 +107,11 @@ fn main() {
     { var pair = (probe(at), [probe(at), probe(at)]); }
     expect(drops, 31, 22);
 
-    // Moved on the way out of a loop, and given a new value after a move.
     { var p = probe(at); while true { consume(p); break; } }
     expect(drops, 32, 23);
     { var p = probe(at); consume(p); p = probe(at); }
     expect(drops, 34, 24);
 
-    // An enum drops what its variant holds, and a match only looks at it.
     { var k = Kept::Two(probe(at), probe(at)); }
     expect(drops, 36, 25);
     { var k = Kept::One(probe(at)); var twin = k.copy(); k = Kept::Nothing; expect(drops, 37, 26); }

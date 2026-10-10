@@ -28,7 +28,6 @@ fn analyze_errors(input: &str) -> Vec<ZeruError> {
 
 #[test]
 fn test_declaration_errors_point_at_their_source() {
-    // Each of these used to come out with no file or line at all.
     for input in [
         "fn f(a: Strng) { } fn main() { }",
         "fn f() { } fn f() { } fn main() { }",
@@ -263,7 +262,6 @@ fn test_int_literal_makes_a_float_only_when_exact() {
     let errors = analyze("fn main() { var x: f32 = 16777217; }");
     assert_eq!(errors.len(), 1, "{errors:?}");
     assert!(errors[0].contains("has no exact f32 value"));
-    // A variable is not a literal: its type stays its own.
     let errors = analyze("fn main() { var i: i32 = 10; var x: f32 = i; }");
     assert!(errors[0].contains("Type mismatch"));
 }
@@ -1240,7 +1238,6 @@ fn test_not_operator() {
 
 #[test]
 fn test_not_operator_on_numbers() {
-    // Logical on a bool, bitwise on an integer, nothing else.
     assert!(analyze("fn main() { var x: u8 = 10; var y: u8 = !x; var b = !true; }").is_empty());
     let errors = analyze("fn main() { var f = !1.5; }");
     assert!(errors[0].contains("'!' applies to a bool or an integer, not f64"));
@@ -1942,15 +1939,10 @@ fn test_pointer_arithmetic_invalid_mul() {
 
 #[test]
 fn test_str_type_alias() {
-    // NOTE: str is now a proper fat pointer type (ptr + len), not an alias for *u8
-    // String literals currently still produce *u8 until codegen is updated
-    // This test verifies str type is recognized
     let input = "
         fn takes_str(s: str) {
         }
         fn main() {
-            // For now, str variables need explicit type annotation
-            // String literals will be updated to produce str in the future
         }
     ";
     let errors = analyze(input);
@@ -1959,7 +1951,6 @@ fn test_str_type_alias() {
 
 #[test]
 fn test_str_type_is_distinct_from_pointer_u8() {
-    // str is now a distinct type from *u8 (fat pointer vs raw pointer)
     let input = "
         fn main() {
             var s1: *u8 = \"hello\";
@@ -1974,10 +1965,8 @@ fn test_str_type_is_distinct_from_pointer_u8() {
 fn test_str_function_parameter() {
     let input = "
         fn print_str(s: str) {
-            // Just type check - str is a valid parameter type
         }
         fn main() {
-            // Note: string literals still produce *u8, full str support pending
         }
     ";
     let errors = analyze(input);
@@ -1990,8 +1979,6 @@ fn test_str_function_parameter() {
 
 #[test]
 fn test_str_return_type() {
-    // Test that str can be used as a return type
-    // Full str support is pending codegen updates
     let input = "
         fn takes_and_returns_str(s: str) str {
             return s;
@@ -2072,7 +2059,6 @@ fn test_continue_outside_loop_error() {
 fn test_return_outside_function_error() {
     let input = "
         fn main() {
-            // Valid return inside function
             return;
         }
     ";
@@ -2194,8 +2180,6 @@ fn test_type_suggestion_typo() {
 
 #[test]
 fn test_suggestion_does_not_skip_a_prefix_for_free() {
-    // 'Entry' is seven edits from 'HashMapEntry'. Leaving the first row of the
-    // distance table at zero made the leading 'HashMap' cost nothing.
     let input = "
         struct HashMapEntry { key: i32 }
         fn main() {
@@ -2304,8 +2288,6 @@ fn test_generic_type_param_in_body() {
 
 #[test]
 fn test_missing_return_is_rejected() {
-    // The body used to compile to a bare `unreachable`, so the caller read
-    // whatever happened to be in the return register.
     let errors = analyze("fn f() i32 { } fn main() { }");
     assert!(
         errors
@@ -2331,7 +2313,6 @@ fn test_return_on_every_branch_is_accepted() {
 
 #[test]
 fn test_self_referential_struct_is_rejected() {
-    // Laying this out sent the compiler into a stack overflow.
     for input in [
         "struct S { next: S } fn main() { }",
         "struct A { b: B } struct B { a: A } fn main() { }",
@@ -2353,8 +2334,6 @@ fn test_indirection_breaks_struct_recursion() {
 
 #[test]
 fn test_generic_return_type_is_concrete_at_the_call_site() {
-    // The return type stayed as the type parameter, so anything that had to
-    // know the real type -- a field, a method -- was rejected.
     let input = "
         struct P { x: i32, fn get(self) i32 { return self.x; } }
         fn pick<T>(a: T, b: T) T { return a; }
@@ -2402,7 +2381,6 @@ fn test_index_must_be_an_integer() {
 
 #[test]
 fn test_constant_index_out_of_range_is_rejected() {
-    // Known at compile time, so it should not wait for the runtime check.
     let errors = analyze("fn main() { var a: Array<i32,2> = [1,2]; var v = a[5]; }");
     assert!(
         errors
@@ -2414,8 +2392,6 @@ fn test_constant_index_out_of_range_is_rejected() {
 
 #[test]
 fn test_assigning_to_a_temporary_is_rejected() {
-    // Nothing reads a temporary again, so the write would go nowhere. Codegen
-    // used to catch this only where it happened to lack a pointer.
     let cases = [
         "fn make() Array<i32,2> { return [1,2]; } fn main() { make()[0] = 5; }",
         "struct S { a: i32 } fn make() S { return S{a:1}; } fn main() { make().a = 5; }",
@@ -2505,8 +2481,6 @@ fn test_writing_through_a_slice_is_rejected() {
 
 #[test]
 fn test_cast_to_a_pointer_has_a_type() {
-    // The target was only understood when it was a bare name, so a pointer
-    // cast came out untyped and fitted any annotation.
     let inferred = "fn main() { var x: i64 = 0; var p = x as *u8; var q: *u8 = p; }";
     assert!(analyze(inferred).is_empty(), "{:?}", analyze(inferred));
 
@@ -2518,7 +2492,6 @@ fn test_cast_to_a_pointer_has_a_type() {
 
 #[test]
 fn test_literal_that_does_not_fit_is_an_error() {
-    // Each of these used to be accepted, and the last two silently wrapped.
     for (declaration, message) in [
         ("var x: u64 = -1;", "Literal -1 does not fit in u64"),
         ("var x: usize = -5;", "Literal -5 does not fit in usize"),
@@ -2556,8 +2529,6 @@ fn test_literal_at_the_edge_of_its_type_fits() {
 
 #[test]
 fn test_literal_on_the_left_takes_the_type_on_the_right() {
-    // Only a literal on the right used to adapt, so `3 < x` compared an i32
-    // with a u32 and was refused, while `x > 3` was fine.
     let input = "
         fn main() {
             var x: u32 = 5;
@@ -2574,8 +2545,6 @@ fn test_literal_on_the_left_takes_the_type_on_the_right() {
 
 #[test]
 fn test_operator_needs_operands_it_applies_to() {
-    // Each of these reached codegen, which crashed on some and miscompiled
-    // the rest: `true < false` compared as signed one-bit numbers.
     for (expression, operand) in [
         ("true + true", "bool"),
         ("1 && 2", "i32"),
@@ -2627,9 +2596,6 @@ fn test_cast_needs_a_conversion_that_exists() {
 
 #[test]
 fn test_match_patterns_are_checked() {
-    // Patterns were never looked at: these reached LLVM, which refused them
-    // with its own messages, or, for the first, compiled to undefined
-    // behaviour for any value no arm named.
     for (arms, message) in [
         ("0 => 1, 1 => 2", "needs a 'default' arm"),
         (
@@ -2716,8 +2682,6 @@ fn test_global_constant_is_defined_once() {
 
 #[test]
 fn test_generic_function_is_checked_at_its_types() {
-    // The body used to be checked once with T standing for anything, and an
-    // instantiation was never checked at all.
     let input = "
         struct P { x: i32 }
         fn bigger<T>(a: T, b: T) T {
@@ -2737,9 +2701,6 @@ fn test_generic_function_is_checked_at_its_types() {
 
 #[test]
 fn test_every_way_of_giving_a_value_away_moves_it() {
-    // Only a declaration, a return and a call argument used to move: each of
-    // these left two owners of one Vec, and a push through either could
-    // reallocate the buffer under the other.
     for given_away in [
         "var s = S { v: a };",
         "var row = [a];",
@@ -2798,19 +2759,15 @@ fn test_moves_that_are_fine_stay_fine() {
         const ROW: Array<i32, 2> = [1, 2];
         fn take(row: Array<i32, 2>) { }
         fn main() {
-            // A copy of a field is a value of its own.
             var s = S { v: Vec.new() };
             var v = s.v.copy();
-            // Declared inside the loop, so a new one each turn.
             while true {
                 var fresh: Vec<i64> = Vec.new();
                 var kept = fresh;
                 break;
             }
-            // A constant is built anew wherever it is used.
             take(ROW);
             take(ROW);
-            // Only one arm runs.
             var a: Vec<i64> = Vec.new();
             var c = 1;
             var picked = match c { 1 => a, default => a };
@@ -2885,13 +2842,9 @@ fn test_new_vec_methods() {
 #[test]
 fn test_moves_follow_the_control_flow() {
     let ok = [
-        // Moved, then out of the loop at once.
         "var v: Vec<i32> = Vec.new(); while true { eat(v); break; }",
-        // Moved, then given a value again before the next turn.
         "var v: Vec<i32> = Vec.new(); var i = 0; while i < 3 { eat(v); v = Vec.new(); i += 1; }",
-        // The branch that moves it returns, so past the `if` it is still there.
         "var v: Vec<i32> = Vec.new(); var c = true; if c { eat(v); return; } eat(v);",
-        // Plain data is copied, not moved.
         "var p = P { x: 1 }; var q = p; var r = p;",
     ];
     for body in ok {

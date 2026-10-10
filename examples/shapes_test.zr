@@ -12,7 +12,6 @@ struct Shape {
         return match self.kind {
             Kind::Square => self.width * self.width,
             Kind::Rectangle => self.width * self.height,
-            // Three times the radius squared, close enough for a whole number.
             Kind::Circle => 3 * self.width * self.width
         };
     }
@@ -80,19 +79,16 @@ fn main() {
     var circle = Shape { kind: Kind::Circle, width: 2, height: 0 };
     if circle.area() != 12 { exit(5); }
 
-    // A method that returns a new shape leaves the receiver alone.
     var bigger = square.scaled(2);
     if bigger.area() != 36 { exit(6); }
     if square.area() != 9 { exit(7); }
 
-    // One that takes `var self` changes it in place.
     rect.grow(1);
     if rect.width != 5 { exit(8); }
     if rect.area() != 30 { exit(9); }
 
     if area_through_pointer(&square) != 9 { exit(10); }
 
-    // Shapes in an array, mutated where they sit.
     var row: Array<Shape, 3> = [
         Shape { kind: Kind::Square, width: 1, height: 1 },
         Shape { kind: Kind::Square, width: 2, height: 2 },
@@ -106,7 +102,6 @@ fn main() {
     row[1].width = 4;
     if row[1].area() != 16 { exit(12); }
 
-    // And in a Vec, through a struct that owns it.
     var drawing = Drawing { shapes: Vec.new() };
     if drawing.total_area() != 0 { exit(13); }
     if drawing.widest().is_some() { exit(14); }

@@ -9,12 +9,9 @@ fn slot(bits: u64, mask: usize) usize {
 }
 
 pub struct HashMap<K: Eq, V> {
-    // A slot never used holds no key. One whose entry was removed keeps its
-    // key but not its value, so probing goes on past it.
     keys: Vec<K?>,
     values: Vec<V?>,
     len: usize,
-    // Slots holding a key, removed entries included.
     used: usize,
 
     pub fn new() HashMap<K, V> {
@@ -120,7 +117,6 @@ pub struct HashMap<K: Eq, V> {
             bigger.keys.push(None);
             bigger.values.push(None);
         }
-        // Popped, each entry moves across without a copy.
         while !self.keys.is_empty() {
             var key = self.keys.pop().unwrap();
             var value = self.values.pop().unwrap();

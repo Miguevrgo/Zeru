@@ -60,7 +60,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         })
     }
 
-    /// The owned variable living at `slot`, if it is one.
     pub(super) fn owned_at(&self, slot: PointerValue<'ctx>) -> Option<Owned<'ctx>> {
         self.scope_stack
             .iter()
@@ -99,14 +98,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.drop_scopes_from(0);
     }
 
-    /// Drop the temporaries of the statement that just finished.
     pub(super) fn drop_temporaries(&mut self) {
         for owned in std::mem::take(&mut self.temporaries).iter().rev() {
             self.drop_owned(owned);
         }
     }
 
-    /// Drop the value if its flag says it is still owned, and lower the flag.
     pub(super) fn drop_owned(&mut self, owned: &Owned<'ctx>) {
         if !self.block_is_open() {
             return;
@@ -121,7 +118,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         });
     }
 
-    /// A deep copy of the value at `src`, which owns memory of its own.
     pub(super) fn copy_value(
         &mut self,
         src: PointerValue<'ctx>,
@@ -340,7 +336,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    /// The fields of a struct or tuple, by position.
     fn parts_of(&self, ty: &Type) -> Vec<(u32, Type)> {
         let types: Vec<Type> = match ty {
             Type::Struct(name) => self
@@ -420,7 +415,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         });
     }
 
-    /// Run `then` when the `T?` or `T!` at `value` holds its payload.
     fn if_tag_set(
         &mut self,
         value: PointerValue<'ctx>,
@@ -438,7 +432,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.if_then(tag, then);
     }
 
-    /// Emit `then` to run only when `condition` holds.
     pub(super) fn if_then(&mut self, condition: IntValue<'ctx>, then: impl FnOnce(&mut Self)) {
         let Some(function) = self.current_fn else {
             return;

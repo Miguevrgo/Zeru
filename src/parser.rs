@@ -19,18 +19,10 @@ pub struct Parser<'a> {
     pub errors: Vec<ZeruError>,
     panic_mode: bool,
 
-    /// Set while reading the condition of `if`/`while` or the subject of
-    /// `match`, where a `{` opens the body rather than a struct literal. It is
-    /// cleared inside parentheses, brackets and argument lists, where there is
-    /// nothing to confuse.
     no_struct_literal: bool,
 
-    /// A `>` owed from splitting a `>>` that closed two generic levels at once.
-    /// It is handed out as the next token instead of reading the lexer.
     pending_gt: bool,
 
-    /// Set by the first top-level item that is not an import: imports come
-    /// before any other code.
     code_seen: bool,
 }
 
@@ -80,8 +72,6 @@ impl<'a> Parser<'a> {
     fn synchronize(&mut self) {
         self.panic_mode = false;
 
-        // Stops on the `;` or just before the next statement, so the caller's
-        // step forward lands on that statement.
         while self.current_token != Token::Eof {
             if self.current_token == Token::Semicolon {
                 return;
@@ -182,7 +172,6 @@ impl<'a> Parser<'a> {
     fn parse_expression_statement(&mut self) -> Option<Statement> {
         let start_span = self.current_span;
         let expr = self.parse_expression(Precedence::Lowest)?;
-        // Like `if` and `while`, a `match` ends at its closing brace.
         if !matches!(expr.kind, ExpressionKind::Match { .. })
             && !self.expect_peek(&Token::Semicolon)
         {
@@ -234,11 +223,8 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    /// A type: a pointer, reference, slice, tuple, or a name with optional
-    /// generic arguments and an optional `?` or `!` suffix.
     fn parse_type(&mut self) -> Option<TypeSpec> {
         match &self.current_token {
-            // `str` is a slice of bytes.
             Token::Str => Some(TypeSpec::Slice(Box::new(TypeSpec::Named("u8".to_string())))),
             Token::Star => {
                 self.next_token();
@@ -281,7 +267,6 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    /// A possibly qualified name, then generic arguments or a `?`/`!` suffix.
     fn parse_named_type(&mut self) -> Option<TypeSpec> {
         let Token::Identifier(first) = &self.current_token else {
             self.error_current("Type identifier expected");
@@ -300,8 +285,6 @@ impl<'a> Parser<'a> {
             name.push_str(segment);
         }
 
-        // A primitive takes no arguments, so a `<` after one is a comparison,
-        // as in `x as i64 < 0`.
         let named = if self.peek_token_is(&Token::Lt) && !is_primitive(&name) {
             let args = self.parse_generic_arguments()?;
             TypeSpec::Generic { name, args }
@@ -339,9 +322,6 @@ impl<'a> Parser<'a> {
                 _ => self.parse_type()?,
             });
 
-            // `Vec<Vec<i32>>` ends in a single `>>` that has to close two
-            // levels: the first half is taken here, the second is left for the
-            // level above.
             if self.peek_token_is(&Token::ShiftRight) {
                 self.peek_token = Token::Gt;
                 self.pending_gt = true;
@@ -407,8 +387,6 @@ impl<'a> Parser<'a> {
             return_type = self.parse_type();
             return_type.as_ref()?;
         }
-        // The signature, not the body: what is wrong with a declaration as a
-        // whole, such as a bad parameter type, is in the signature.
         let end_span = self.current_span;
 
         if !self.expect_peek(&Token::LBrace) {
@@ -519,7 +497,6 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         let mut iterable = self.parse_expression(Precedence::Lowest)?;
-        // `start..end` counts, and is written only here.
         if self.peek_token_is(&Token::DotDot) {
             self.next_token();
             self.next_token();
@@ -585,7 +562,6 @@ impl<'a> Parser<'a> {
                 return None;
             }
 
-            // One malformed field should not swallow the ones after it.
             match self.parse_struct_field() {
                 Some(field) => fields.push(field),
                 None => {
@@ -620,7 +596,6 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    /// One `name: Type` field of a struct.
     fn parse_struct_field(&mut self) -> Option<(String, TypeSpec)> {
         self.next_token();
 
@@ -651,7 +626,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// `pub` before an item: other modules may use it.
     fn parse_public(&mut self) -> Option<Statement> {
         self.next_token();
         let mut item = match self.current_token {
@@ -676,7 +650,6 @@ impl<'a> Parser<'a> {
         if !self.expect_peek(&Token::LBrace) {
             return None;
         }
-        // `Circle(f64)` carries values, `Empty` none.
         let variants = self.parse_list(&Token::RBrace, |p| {
             let name = p.current_identifier("enum variant name")?;
             let mut fields = Vec::new();
@@ -756,8 +729,6 @@ impl<'a> Parser<'a> {
         };
         let mut path = first.clone();
 
-        // A qualified path travels as one name, which is how `Enum::Variant` and
-        // `module::item` reach the analyser.
         while self.peek_token_is(&Token::DoubleColon) {
             self.next_token();
             self.next_token();
@@ -817,7 +788,6 @@ impl<'a> Parser<'a> {
         Some(Expression::new(kind, start_span.merge(self.current_span)))
     }
 
-    /// A `{ .. }` block as one statement, starting on its `{`.
     fn parse_block(&mut self) -> Statement {
         let start_span = self.current_span;
         let statements = self.parse_block_statement();
@@ -852,7 +822,6 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    /// The `a.b.c` of an import.
     fn parse_dotted_path(&mut self) -> Option<Vec<String>> {
         let mut path = vec![self.expect_identifier()?];
 
@@ -863,7 +832,6 @@ impl<'a> Parser<'a> {
         Some(path)
     }
 
-    /// The `{a, b}` of a selective import.
     fn parse_import_selection(&mut self) -> Option<Vec<String>> {
         if !self.expect_peek(&Token::LBrace) {
             return None;
@@ -871,7 +839,6 @@ impl<'a> Parser<'a> {
         self.parse_list(&Token::RBrace, |p| p.current_identifier("imported name"))
     }
 
-    /// `break` or `continue`, with an optional `;`.
     fn parse_jump(&mut self, kind: StatementKind) -> Option<Statement> {
         let start_span = self.current_span;
         if !self.expect_peek(&Token::Semicolon) {
@@ -1229,8 +1196,6 @@ impl<'a> Parser<'a> {
         let start_span = left.span;
         let operator = self.current_token.clone();
 
-        // These are postfix rather than infix: they consume their own brackets,
-        // or a type, instead of a right-hand expression.
         match operator {
             Token::LBracket => return self.parse_index_expression(left),
             Token::LParen => return self.parse_call_expression(left),
@@ -1245,8 +1210,6 @@ impl<'a> Parser<'a> {
             _ => {}
         }
 
-        // Assignment is the one right associative operator: `a = b = 5` reads
-        // as `a = (b = 5)`, so its right side takes everything that follows.
         let precedence = if Self::is_assignment(&operator) {
             Precedence::Lowest
         } else {
@@ -1272,7 +1235,6 @@ impl<'a> Parser<'a> {
         Some(Expression::new(kind, span))
     }
 
-    /// The operators that write to their left-hand side.
     fn is_assignment(token: &Token) -> bool {
         matches!(
             token,
@@ -1293,7 +1255,6 @@ impl<'a> Parser<'a> {
         )
     }
 
-    /// `[a, b, c]` or `[value; count]`, starting on the `[`.
     fn parse_array_literal(&mut self) -> Option<Expression> {
         let start_span = self.current_span;
         let kind = self.allowing_struct_literals(Self::parse_array_elements)?;
@@ -1370,8 +1331,6 @@ impl<'a> Parser<'a> {
 
         let name = match &self.current_token {
             Token::Identifier(name) => name.clone(),
-            // A tuple's fields are numbered, as in Rust. `p.0.1` needs
-            // parentheses: the lexer reads `0.1` as one number.
             Token::Int(index) => index.to_string(),
             _ => {
                 self.error_current("Expected a field name after '.'");
@@ -1412,7 +1371,6 @@ impl<'a> Parser<'a> {
         self.parse_list(close, |p| p.parse_expression(Precedence::Lowest))
     }
 
-    /// The name the current token holds, or a complaint about it.
     fn current_identifier(&mut self, what: &str) -> Option<String> {
         if let Token::Identifier(name) = &self.current_token {
             return Some(name.clone());
@@ -1439,7 +1397,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Move onto the next token and hand back its name, or report what it was.
     fn expect_identifier(&mut self) -> Option<String> {
         if let Token::Identifier(name) = &self.peek_token {
             let name = name.clone();
@@ -1450,8 +1407,6 @@ impl<'a> Parser<'a> {
         None
     }
 
-    // An Illegal token was reported when it was read, so neither of these
-    // complains about it a second time.
     fn error_peek(&mut self, expected: &str) {
         if self.panic_mode || matches!(self.peek_token, Token::Illegal(_)) {
             return;
@@ -1480,8 +1435,6 @@ impl<'a> Parser<'a> {
 enum Precedence {
     Lowest,
     Assignment,
-    // `catch` and `orelse` take what is left of the expression as their
-    // fallback: `f() catch 0 + 1` falls back to 1.
     Fallback,
     LogicalOr,
     LogicalAnd,
@@ -1493,8 +1446,6 @@ enum Precedence {
     Shift,
     Sum,
     Product,
-    // A prefix operator binds tighter than a cast, as in Rust and C: `*p as u64`
-    // reads the pointer and then widens, rather than casting the pointer.
     Cast,
     Prefix,
     Call,
@@ -1631,8 +1582,6 @@ mod tests {
 
     #[test]
     fn test_trailing_comma_everywhere_a_list_ends() {
-        // A struct literal already allowed one, nothing else did, so
-        // reformatting a call or an array across lines broke the parse.
         for source in [
             "fn f(a: i32, b: i32,) { }",
             "fn main() { f(1, 2,); }",
@@ -1646,8 +1595,6 @@ mod tests {
 
     #[test]
     fn test_import_after_code_is_rejected() {
-        // The module loader only looks at the imports a file starts with, so
-        // a later one would otherwise be dropped without a word.
         for source in [
             "fn f() { }\nimport std.math;",
             "fn f() { import std.math; }",
@@ -1665,8 +1612,6 @@ mod tests {
 
     #[test]
     fn test_cast_target_is_a_type() {
-        // A `<` after a primitive still compares, and a target that is not a
-        // bare name, such as a pointer to a generic type, can be written.
         let program =
             parse_input("fn main() { var a = x as i64 < 0; var b = p as *Array<u8, 4>; }");
         let body = get_function_body(&program.statements[0]);
@@ -1695,8 +1640,6 @@ mod tests {
 
     #[test]
     fn test_nested_generic_closes_on_a_single_shift_token() {
-        // The lexer hands `>>` over as one ShiftRight, so both levels have to
-        // close on it. Before, no nested generic type could be written at all.
         for source in [
             "fn f(v: Vec<Vec<i32>>) { }",
             "fn f(v: Vec<Vec<Vec<i32>>>) { }",
@@ -1743,8 +1686,6 @@ mod tests {
 
     #[test]
     fn test_a_condition_brace_opens_the_body() {
-        // `Color::Red` names a variant, so the brace after it is the `if` body.
-        // Reading it as a struct literal swallowed the block.
         let program = parse_input("fn main() { if c == Color::Red { var inside = 1; } }");
         let body = get_function_body(&program.statements[0]);
         let StatementKind::If {
@@ -1761,8 +1702,6 @@ mod tests {
 
     #[test]
     fn test_a_delimited_brace_is_still_a_literal() {
-        // Inside a call, brackets or another literal there is nothing to confuse,
-        // so a struct literal is allowed even in condition position.
         for input in [
             "fn main() { if take(P { x: 1 }) { } }",
             "fn main() { if list[P { x: 1 }] { } }",
@@ -1779,7 +1718,6 @@ mod tests {
 
     #[test]
     fn test_bitwise_binds_tighter_than_comparison() {
-        // C groups this as `flags & (mask == 0)`, which is almost never meant.
         let program = parse_input("fn main() { var t = flags & mask == 0; }");
         let body = get_function_body(&program.statements[0]);
         let StatementKind::Var { value, .. } = &body[0].kind else {

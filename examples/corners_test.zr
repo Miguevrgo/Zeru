@@ -44,22 +44,17 @@ fn main() {
     if LIMIT != 10 { exit(1); }
     if RATIO != 1.5 { exit(2); }
     if !ON { exit(3); }
-    // Built from other constants, and a string: both used to fail, the
-    // string by crashing the compiler.
     if SPAN != 21 { exit(21); }
     if GREETING.len() != 2 { exit(22); }
     {
-        // A local shadows a constant; the constant used to win.
         var LIMIT: i32 = 3;
         if LIMIT != 3 { exit(23); }
     }
 
-    // Two functions that call each other.
     if !even(8) { exit(4); }
     if even(7) { exit(5); }
     if !odd(9) { exit(6); }
 
-    // An optional and a result carrying a struct.
     var some = maybe_small(true);
     if !some.is_some() { exit(7); }
     if some.unwrap().n != 3 { exit(8); }
@@ -70,18 +65,15 @@ fn main() {
     if !wrapped(false).is_err() { exit(11); }
     if wrapped(false).unwrap_err() != 9 { exit(12); }
 
-    // An optional held in a field.
     var holder = Maybe { value: 5, tag: 1 };
     if holder.value.unwrap() != 5 { exit(13); }
     var blank = Maybe { value: None, tag: 2 };
     if blank.value.is_some() { exit(14); }
 
-    // An early return out of a loop, and nothing found.
     var data: Array<i32, 5> = [1, 5, 9, 2, 7];
     if first_over(data, 4).unwrap() != 5 { exit(15); }
     if first_over(data, 100).is_some() { exit(16); }
 
-    // A larger array, written and then walked.
     var big: Array<i64, 64> = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -98,8 +90,6 @@ fn main() {
     }
     if total != 4032 { exit(18); }
 
-    // A name shadowed inside a loop starts over each turn and leaves the outer
-    // one alone.
     var counter: i32 = 0;
     var round: i32 = 0;
     while round < 3 {

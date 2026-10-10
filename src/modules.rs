@@ -64,7 +64,6 @@ pub fn privates(program: &Program, module: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Names declared at the top level of a module.
 fn declarations(statements: &[Statement]) -> Vec<&String> {
     statements
         .iter()
@@ -85,7 +84,6 @@ fn declarations(statements: &[Statement]) -> Vec<&String> {
 
 struct Renamer<'a> {
     renames: &'a HashMap<String, String>,
-    /// Names bound by the scopes open at this point, innermost last.
     locals: Vec<String>,
 }
 

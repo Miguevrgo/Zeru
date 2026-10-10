@@ -142,7 +142,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    /// Bytes taken by `count` elements, as an LLVM constant expression.
     pub(super) fn bytes_for(
         &self,
         elem_type: BasicTypeEnum<'ctx>,
@@ -256,7 +255,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         f
     }
 
-    /// Report what went wrong and where, then abort.
     fn build_panic(&mut self, from: inkwell::basic_block::BasicBlock<'ctx>, label: &str) {
         let what = match label {
             "null" => "null pointer dereference",
@@ -327,8 +325,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         if !self.safety_mode.emit_safety_checks() {
             return;
         }
-        // A constant index needs no check; the analyser already rejected the
-        // ones that do not fit.
         if let Some(constant) = index.get_sign_extended_constant()
             && (0..len as i64).contains(&constant)
         {
@@ -469,8 +465,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         Some(self.extract(pair, 0, "arith_val"))
     }
 
-    /// Emit `body` once per index in `0..count`, leaving the builder after
-    /// the loop.
     pub(super) fn build_counted_loop(
         &mut self,
         count: IntValue<'ctx>,
@@ -521,7 +515,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         flag
     }
 
-    /// A buffer for `count` elements of `elem_type`.
     pub(super) fn alloc_buffer(
         &self,
         elem_type: BasicTypeEnum<'ctx>,
@@ -536,7 +529,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.call_ptr(alloc_fn, &[size.into()], "buffer")
     }
 
-    /// Give back a buffer that held `capacity` elements.
     pub(super) fn free_buffer(
         &self,
         data: PointerValue<'ctx>,
@@ -544,7 +536,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         capacity: IntValue<'ctx>,
     ) {
         let size = self.bytes_for(elem_type, capacity);
-        // Resizing to nothing is how the allocator frees.
         self.resize_buffer(data, size, self.usize_type().const_zero());
     }
 
@@ -613,8 +604,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         builder
     }
 
-    /// Lower an `asm` block: build the constraint string, call the inline asm
-    /// value, then write each output back to its lvalue.
     pub(super) fn compile_inline_asm(
         &mut self,
         template: &str,
@@ -720,7 +709,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.build_vec(data, zero, cap)
     }
 
-    /// A Vec header over `data`.
     pub(super) fn build_vec(
         &self,
         data: PointerValue<'ctx>,
@@ -735,8 +723,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         .into()
     }
 
-    /// A method on the Vec at `vec_ptr`. `elem` is the element type, which
-    /// `clear` needs to drop what it removes.
     pub(super) fn compile_vec_method(
         &mut self,
         method_name: &str,
@@ -779,7 +765,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 let len = self.load_int(usize_type, len_field, "len");
                 let grown = self.builder.build_int_add(len, one, "grown").unwrap();
                 let at = match at {
-                    // At the end is a place to insert, past it is not.
                     Some(at) => {
                         self.emit_bounds_check_against(at, grown, true);
                         at
@@ -977,7 +962,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         phi.as_basic_value()
     }
 
-    /// Declare the `stdout`/`stderr` globals and the ctor that opens them.
     pub(super) fn init_builtin_streams(&mut self) {
         let Some(BasicTypeEnum::StructType(stream_type)) =
             self.llvm_type_of(&Type::Struct("OutStream".into()))
@@ -1106,8 +1090,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         unit
     }
 
-    /// Write one value: a `str` as it is, a bool as `true` or `false`, a
-    /// number in decimal.
     fn print_value(&mut self, stream: PointerValue<'ctx>, value: &Expression) {
         let compiled = self.compile_expression(value, None);
         let i64_type = self.context.i64_type();
@@ -1150,7 +1132,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    /// Call `OutStream::<method>` on `stream`, if the prelude defines it.
     fn call_stream(
         &self,
         method: &str,
@@ -1165,8 +1146,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_call(function, &all, "").unwrap();
     }
 
-    /// `Ok(value)` or `Err(code)`, laid out as the `T!` the analyser typed the
-    /// call as.
     pub(super) fn compile_result_constructor(
         &mut self,
         arguments: &[Expression],
@@ -1195,7 +1174,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .into()
     }
 
-    /// `T?` queries, mirroring the ones on `T!`.
     pub(super) fn compile_option_method(
         &mut self,
         method_name: &str,

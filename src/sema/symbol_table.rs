@@ -12,10 +12,7 @@ pub enum Symbol {
     Var {
         ty: Type,
         is_const: bool,
-        /// Where its value was given away, while it holds none.
         moved_at: Option<Span>,
-        /// A view of a value something else owns: `self`, or a `for` loop's
-        /// element. It can be read but not moved.
         is_borrowed: bool,
     },
     Function {
@@ -87,7 +84,6 @@ impl SymbolTable {
         }
     }
 
-    /// The variables moved right now.
     pub fn moves(&self) -> Moves {
         let mut moves = Moves::new();
         for (depth, scope) in self.scopes.iter().enumerate() {
@@ -104,7 +100,6 @@ impl SymbolTable {
         moves
     }
 
-    /// Make exactly the variables in `moves` the moved ones.
     pub fn restore_moves(&mut self, moves: &[(usize, String, Span)]) {
         for (depth, scope) in self.scopes.iter_mut().enumerate() {
             for (name, symbol) in scope.iter_mut() {

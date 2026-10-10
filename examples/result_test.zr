@@ -39,7 +39,6 @@ fn always_ok() i64! {
 }
 
 fn main() {
-    // Test Ok path
     var r1: i32! = divide(10, 2);
     if !r1.is_ok() {
         exit(1);
@@ -52,7 +51,6 @@ fn main() {
         exit(3);
     }
 
-    // Test Err path
     var r2: i32! = divide(10, 0);
     if r2.is_ok() {
         exit(4);
@@ -65,7 +63,6 @@ fn main() {
         exit(6);
     }
 
-    // Test i64! Ok
     var r3: i64! = always_ok();
     if !r3.is_ok() {
         exit(7);
@@ -74,7 +71,6 @@ fn main() {
         exit(8);
     }
 
-    // Test i64! Err
     var r4: i64! = always_fail();
     if !r4.is_err() {
         exit(9);
@@ -83,7 +79,6 @@ fn main() {
         exit(10);
     }
 
-    // Test branching on result
     var r5: i32! = divide(20, 4);
     if r5.is_ok() {
         var v: i32 = r5.unwrap();
@@ -97,7 +92,6 @@ fn main() {
     if number("123").unwrap() != 123 { exit(20); }
     if number("1x").unwrap_err() != ParseError::NotDigit { exit(21); }
     if number("").unwrap_err() != ParseError::Empty { exit(22); }
-    // The fallback is used only when there is no value.
     if (number("9z") catch -1) != -1 || (number("42") catch 0) != 42 { exit(23); }
     if (first(Vec.new()) orelse 5) != 5 || (first([3]) orelse 5) != 3 { exit(24); }
 

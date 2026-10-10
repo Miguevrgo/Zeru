@@ -1,5 +1,3 @@
-// NOTE: This file is meant to be removed once there is a proper handling
-// for modules in the compiler
 use inkwell::context::Context;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -49,7 +47,6 @@ fn resolve_import(import_path: &str, root: &Path) -> Result<Option<PathBuf>, Com
     Ok(full_path.exists().then_some(full_path))
 }
 
-/// The `import`s a parsed file opens with, as dotted paths and selections.
 fn imports_of(program: &Program) -> Vec<(String, Option<Vec<String>>)> {
     program
         .statements

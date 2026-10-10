@@ -32,8 +32,6 @@ fn compile_to_ir_with_mode(input: &str, safety_mode: SafetyMode) -> Result<Strin
     let module = context.create_module("test");
     let builder = context.create_builder();
 
-    // Positions resolve, so a debug build carries line tables and a panic
-    // names its line.
     let mut sources = Sources::default();
     sources.push("test.zr", input);
     let mut compiler = Compiler::new(
@@ -157,7 +155,6 @@ fn test_integer_arithmetic() {
                 var rem = a % b;
             }
         ";
-    // Debug traps on overflow, so `+ - *` go through the intrinsic.
     assert_ir_contains(
         input,
         &[
@@ -320,11 +317,7 @@ fn test_struct_method() {
                 var v = c.get();
             }
         ";
-    assert_ir_contains(
-        input,
-        // Borrowed: a pointer to the caller's struct, not a copy of it.
-        &["define internal i32 @\"Counter::get\"(ptr %0)"],
-    );
+    assert_ir_contains(input, &["define internal i32 @\"Counter::get\"(ptr %0)"]);
 }
 
 #[test]
@@ -922,9 +915,6 @@ fn test_result_is_ok_branch() {
     assert_compiles(input);
 }
 
-// Regression tests: each pins a bug that emitted wrong code rather than an
-// error, so the IR is the only witness.
-
 fn assert_ir_lacks(input: &str, patterns: &[&str]) {
     let ir = compile_to_ir(input).expect("Compilation failed");
     for pattern in patterns {
@@ -939,7 +929,6 @@ fn assert_ir_lacks(input: &str, patterns: &[&str]) {
 
 #[test]
 fn test_signed_widening_cast_sign_extends() {
-    // Zero-extending turns `-1 as i64` into 4294967295.
     let input = "
         fn main() {
             var a: i32 = -1;
@@ -964,7 +953,6 @@ fn test_unsigned_widening_cast_zero_extends() {
 
 #[test]
 fn test_bool_widening_cast_zero_extends() {
-    // Sign-extending an i1 makes `true as i32` equal -1.
     let input = "
         fn main() {
             var flag: bool = true;
@@ -988,8 +976,6 @@ fn test_float_to_unsigned_cast_is_unsigned() {
 
 #[test]
 fn test_three_field_struct_method_is_not_a_vec_method() {
-    // A struct shaped like `Vec`'s header went through the Vec fast path, which
-    // reads a garbage pointer out of the first field.
     let input = "
         struct Buf {
             a: i32,
@@ -1010,7 +996,6 @@ fn test_three_field_struct_method_is_not_a_vec_method() {
 
 #[test]
 fn test_store_through_pointer_uses_pointee_width() {
-    // Storing i64 through a *i32 overwrites the next four bytes.
     let input = "
         fn main() {
             var arr: Array<i32, 4> = [1, 2, 3, 4];
@@ -1024,8 +1009,6 @@ fn test_store_through_pointer_uses_pointee_width() {
 
 #[test]
 fn test_enum_variant_path_resolves() {
-    // Arrives as one qualified identifier; without a case for it every enum use
-    // failed with "Unknown identifier".
     let input = "
         enum Status { Connected, Disconnected, Connecting }
         fn main() {
@@ -1053,8 +1036,6 @@ fn test_enum_variant_path_in_match() {
 
 #[test]
 fn test_method_call_on_temporary_evaluates_receiver_once() {
-    // The receiver was compiled three times, so a call in that position ran its
-    // side effects three times.
     let input = "
         struct Counter {
             n: i32,
@@ -1075,8 +1056,6 @@ fn test_method_call_on_temporary_evaluates_receiver_once() {
 
 #[test]
 fn test_exhaustive_match_without_default_arm() {
-    // The switch landed in the synthesised default block, after its
-    // `unreachable`, leaving the entry block with no terminator.
     let input = "
         enum Color { Red, Green }
         fn main() {
@@ -1092,7 +1071,6 @@ fn test_exhaustive_match_without_default_arm() {
 
 #[test]
 fn test_nested_for_allocates_in_entry_block() {
-    // An alloca in the loop body grows the stack once per iteration.
     let input = "
         fn main() {
             var outer: Array<i32, 2> = [1, 2];
@@ -1119,8 +1097,6 @@ fn test_nested_for_allocates_in_entry_block() {
 
 #[test]
 fn test_block_scope_restores_shadowed_variable() {
-    // The inner declaration used to overwrite the outer binding for good, so
-    // the outer `x` read the inner slot after the block closed.
     let input = "
         fn main() {
             var x: i32 = 1;
@@ -1131,14 +1107,11 @@ fn test_block_scope_restores_shadowed_variable() {
             var outer: i32 = x;
         }
     ";
-    // The shadowing slot is `%x1`, so a load from `%x` proves the outer
-    // binding came back.
     assert_ir_contains(input, &["load i32, ptr %x,"]);
 }
 
 #[test]
 fn test_optional_literal_takes_payload_type() {
-    // `200` was typed as i32 against a `u8?` annotation and rejected.
     assert_compiles("fn main() { var c: u8? = 200; }");
 }
 
@@ -1169,8 +1142,6 @@ fn test_release_fast_drops_bounds_check() {
 
 #[test]
 fn test_integer_literal_beyond_i64_survives() {
-    // The lexer used to fall back to 0 for anything `i64::from_str` rejected,
-    // so `u64` literals above i64::MAX became zero with no diagnostic.
     let input = "fn main() { var a: u64 = 18446744073709551615; }";
     assert_ir_contains(input, &["store i64 -1"]);
 }
@@ -1184,8 +1155,6 @@ fn test_out_of_range_literal_is_rejected() {
 
 #[test]
 fn test_vec_uses_its_element_type() {
-    // Every element used to occupy a fixed 8-byte slot, so a `Vec<i32>` stored
-    // four bytes and read eight back.
     let input = "
         fn main() {
             var v: Vec<i32> = Vec.new();
@@ -1198,8 +1167,6 @@ fn test_vec_uses_its_element_type() {
 
 #[test]
 fn test_field_access_through_pointer() {
-    // Only a receiver literally named `self` used to be followed, so any other
-    // pointer failed to resolve its fields at all.
     let input = "
         struct S { v: i32, w: i32 }
         fn read(p: *S) i32 { return p.v; }
@@ -1226,8 +1193,6 @@ fn test_method_call_through_pointer() {
 
 #[test]
 fn test_optional_methods() {
-    // `T?` had no accessor at all, so `Vec::get` and `Vec::pop` returned values
-    // nothing could read.
     let input = "
         fn main() {
             var some: i32? = 5;
@@ -1282,8 +1247,6 @@ fn test_release_fast_drops_arithmetic_checks() {
 
 #[test]
 fn test_same_scope_shadowing() {
-    // The new binding is created after its initialiser runs, so the
-    // initialiser still reads the old one, and the type may change.
     let input = "
         fn main() {
             var x: i32 = 1;
@@ -1297,7 +1260,6 @@ fn test_same_scope_shadowing() {
 
 #[test]
 fn test_constant_index_needs_no_bounds_check() {
-    // The analyser settles a literal index, so the branch is dead weight.
     let input = "
         fn main() {
             var a: Array<i32, 4> = [1, 2, 3, 4];
@@ -1309,8 +1271,6 @@ fn test_constant_index_needs_no_bounds_check() {
 
 #[test]
 fn test_reading_through_a_temporary() {
-    // A call result has no storage, so it is spilled to a slot and read from
-    // there, whatever the shape of the access.
     let input = "
         struct Inner { n: i32 }
         struct Holder { data: Array<i32, 3>, inner: Inner }
@@ -1329,8 +1289,6 @@ fn test_reading_through_a_temporary() {
 
 #[test]
 fn test_deref_of_a_computed_pointer_reads_the_pointee_width() {
-    // `p + 1` has no name to look up, so the width has to come from the type
-    // the analyser resolved. Guessing reads the wrong number of bytes.
     let input = "
         fn main() {
             var bytes: Array<u8, 4> = [1, 2, 3, 4];
@@ -1338,15 +1296,11 @@ fn test_deref_of_a_computed_pointer_reads_the_pointee_width() {
             if *(p + 1) == 2 { return; }
         }
     ";
-    // A comparison carries no expected type, so nothing else can supply the
-    // width: an eight byte load here reads past a four byte array.
     assert_ir_lacks(input, &["load i64"]);
 }
 
 #[test]
 fn test_pointer_arithmetic_steps_by_element() {
-    // As in C: one step is one element, so a *i32 moves four bytes and lands on
-    // the next element instead of inside the one it started on.
     let input = "
         fn main() {
             var words: Array<i32, 3> = [1, 2, 3];
@@ -1359,8 +1313,6 @@ fn test_pointer_arithmetic_steps_by_element() {
 
 #[test]
 fn test_vec_mutation_reaches_any_place() {
-    // A mutating method needs the storage, which is wherever the Vec lives:
-    // a field, a field of a field, or an array slot, not only a variable.
     let input = "
         struct Bag { items: Vec<i64> }
         struct Nested { bag: Bag }
@@ -1380,8 +1332,6 @@ fn test_vec_mutation_reaches_any_place() {
 
 #[test]
 fn test_assignment_is_right_associative() {
-    // `a = b = 5` groups as `a = (b = 5)`, so the inner assignment is the one
-    // that has to typecheck against `a`, not the other way round.
     let input = "
         fn main() {
             var a: i32 = 0;
@@ -1398,9 +1348,6 @@ fn test_assignment_is_right_associative() {
 
 #[test]
 fn test_generic_call_instantiates_for_the_argument_type() {
-    // The argument is a field, not a literal or a plain variable. Guessing from
-    // the shape of the expression reads i32 out of it and then passes an i64
-    // into a function that takes an i32.
     let input = "
         struct Wide { first: i64, second: i64 }
         fn largest<T>(a: T, b: T) T {
@@ -1418,8 +1365,6 @@ fn test_generic_call_instantiates_for_the_argument_type() {
 
 #[test]
 fn test_generic_struct_takes_its_arguments_from_the_values() {
-    // Each set of arguments is a struct of its own, so the same declaration at
-    // two widths lays out twice and the methods follow.
     let input = "
         struct Pair<T> {
             first: T,
@@ -1438,8 +1383,6 @@ fn test_generic_struct_takes_its_arguments_from_the_values() {
 
 #[test]
 fn test_generic_struct_holds_a_parameterised_field() {
-    // A parameter reached through another generic type: the field is a Vec of
-    // whatever the struct was instantiated with.
     let input = "
         struct Holder<T> {
             items: Vec<T>,
@@ -1461,8 +1404,6 @@ fn test_generic_struct_holds_a_parameterised_field() {
 
 #[test]
 fn test_a_cast_applies_to_what_the_prefix_produced() {
-    // `*p as u64` reads the pointer and widens the byte. Grouping it the other
-    // way casts the pointer itself, which is not a thing to dereference.
     let input = "
         fn at(p: *u8) u64 { return *p as u64; }
         fn main() {
@@ -1475,8 +1416,6 @@ fn test_a_cast_applies_to_what_the_prefix_produced() {
 
 #[test]
 fn test_vec_is_indexed_like_an_array() {
-    // A Vec keeps its elements elsewhere, so an index loads the data pointer
-    // and checks against the length the header carries.
     let input = "
         struct Item { id: i32 }
         fn main() {
@@ -1516,8 +1455,6 @@ fn test_release_fast_drops_the_vec_bounds_check() {
 
 #[test]
 fn test_slice_is_indexed_for_reading() {
-    // A slice is a pointer and a length, so an element is reached the way a
-    // Vec's is; without this there is no way to look inside a str at all.
     let input = "
         fn main() {
             var text: str = \"abc\";
@@ -1530,8 +1467,6 @@ fn test_slice_is_indexed_for_reading() {
 
 #[test]
 fn test_for_in_walks_a_vec() {
-    // A Vec keeps its elements elsewhere and its length in the header, so the
-    // loop counts against the loaded length and fetches the buffer each turn.
     let input = "
         struct Item { weight: i32 }
         fn main() {
@@ -1548,8 +1483,6 @@ fn test_for_in_walks_a_vec() {
 
 #[test]
 fn test_tuple_field_is_a_place() {
-    // A tuple has no field names, so the number is the index, and reaching one
-    // goes through the same path a struct field does: it can be written too.
     let input = "
         fn main() {
             var p: (i32, i64) = (3, 4);
@@ -1563,8 +1496,6 @@ fn test_tuple_field_is_a_place() {
 
 #[test]
 fn test_tuple_literal_takes_the_expected_field_types() {
-    // Without the expected type each element is typed on its own, so an i64
-    // field holding a small literal comes out as an i32 the return rejects.
     let input = "
         fn make() (i32, i64) { return (7, 8); }
         fn main() {
@@ -1578,8 +1509,6 @@ fn test_tuple_literal_takes_the_expected_field_types() {
 
 #[test]
 fn test_a_mutable_receiver_is_reached_wherever_it_lives() {
-    // `var self` takes the receiver by pointer, and the place it names need not
-    // be a variable: an element or a field has storage just the same.
     let input = "
         struct Counter {
             n: i32,
@@ -1604,7 +1533,6 @@ fn test_a_mutable_receiver_is_reached_wherever_it_lives() {
 
 #[test]
 fn test_static_method_takes_a_dot() {
-    // A type on the left of the dot is a call on the type; `::` is not.
     let struct_box = "
         struct Box {
             n: i32,

@@ -27,7 +27,6 @@ pub(super) const SLICE_PTR: u32 = 0;
 pub(super) const SLICE_LEN: u32 = 1;
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    /// Build an aggregate value field by field.
     pub(super) fn build_struct(
         &self,
         st: StructType<'ctx>,

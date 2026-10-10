@@ -71,9 +71,6 @@ fn band(n: i32) i32 {
 }
 
 fn main() {
-    // --- integers: signedness, shifts ----------------------------------------
-    // Overflow, division by zero and oversized shifts abort in Debug and
-    // ReleaseSafe, so there is nothing to assert about them from in here.
     var umax: u32 = 4294967295;
     var one: u32 = 1;
     if umax - one != 4294967294 { exit(1); }
@@ -94,7 +91,6 @@ fn main() {
     if big == 0 { exit(9); }
     if big / 2 != 9223372036854775807 { exit(10); }
 
-    // --- casts ---------------------------------------------------------------
     var small: i32 = -1;
     if small as i64 != -1 { exit(11); }
     var upos: u32 = 7;
@@ -108,7 +104,6 @@ fn main() {
     var whole: i32 = 7;
     if whole as f64 as i32 != 7 { exit(16); }
 
-    // --- structs and methods -------------------------------------------------
     var p = Point { x: 1, y: 2 };
     if p.sum() != 3 { exit(20); }
     p.shift(10);
@@ -120,7 +115,6 @@ fn main() {
     var chain = Chain { v: 5 };
     if chain.point().sum() != 10 { exit(24); }
 
-    // --- aggregates ----------------------------------------------------------
     var w = Wrapper { data: [1, 2, 3], n: 3 };
     if w.data[1] != 2 { exit(30); }
     w.data[1] = 20;
@@ -140,7 +134,6 @@ fn main() {
     shift_through(&through);
     if through.x != 9 { exit(37); }
 
-    // --- scoping and shadowing -----------------------------------------------
     var shadowed: i32 = 1;
     {
         var shadowed: i32 = 2;
@@ -148,8 +141,6 @@ fn main() {
     }
     if shadowed != 1 { exit(41); }
 
-    // Rebinding in the same scope: the initialiser still sees the old value,
-    // and the type is free to change.
     var reused: i32 = 1;
     var reused: i32 = reused + 1;
     if reused != 2 { exit(42); }
@@ -157,16 +148,12 @@ fn main() {
     var flag: bool = flag > 0;
     if !flag { exit(43); }
 
-    // Bitwise binds tighter than comparison, as in Rust.
     var bits: u32 = 12;
     if !(bits & 4 == 4) { exit(44); }
 
-    // A brace after a condition opens the body; inside a call or brackets it
-    // still starts a struct literal.
     if sum3([1, 2, 3]) != 6 { exit(45); }
     if (Point { x: 3, y: 4 }).sum() != 7 { exit(46); }
 
-    // --- pointers ------------------------------------------------------------
     var target: i32 = 41;
     var ptr: *i32 = &target;
     *ptr = *ptr + 1;
@@ -179,7 +166,6 @@ fn main() {
     if cells[0] != 1 { exit(52); }
     if cells[2] != 3 { exit(53); }
 
-    // A step is one element, as in C, whatever the pointee width.
     var head: *i32 = &cells[0];
     if *(head + 2) != 3 { exit(54); }
     *(head + 1) = 7;
@@ -191,7 +177,6 @@ fn main() {
     if *(byte + 3) != 4 { exit(57); }
     if *(byte + 3 - 2) != 2 { exit(58); }
 
-    // --- control flow --------------------------------------------------------
     var i: i32 = 0;
     var sum: i32 = 0;
     while i < 10 {
@@ -214,7 +199,6 @@ fn main() {
 
     if fib(10) != 55 { exit(62); }
 
-    // --- short circuit -------------------------------------------------------
     var calls: i32 = 0;
     var counter: *i32 = &calls;
     var no: bool = false;
@@ -225,17 +209,14 @@ fn main() {
     if yes && bump(counter) { }
     if calls != 1 { exit(73); }
 
-    // --- generics ------------------------------------------------------------
     if twice(3) != 6 { exit(80); }
     var wide64: i64 = 10;
     if twice(wide64) != 20 { exit(81); }
 
-    // A generic result keeps its concrete type, so its fields are reachable.
     var first = Point { x: 1, y: 1 };
     var second = Point { x: 2, y: 2 };
     if pick(first, second).sum() != 2 { exit(82); }
 
-    // --- enums and match -----------------------------------------------------
     var color: Color = Color::Green;
     if color != Color::Green { exit(90); }
     var named = match color {
@@ -250,7 +231,6 @@ fn main() {
     };
     if fallback != 9 { exit(92); }
 
-    // A bool is covered by its two values, and a u8 matches at its own width.
     var flag = true;
     var flag_value = match flag { true => 1, false => 0 };
     if flag_value != 1 { exit(93); }
@@ -258,7 +238,6 @@ fn main() {
     var byte_class = match byte { 200 => 1, default => 0 };
     if byte_class != 1 { exit(94); }
 
-    // --- Result --------------------------------------------------------------
     var ok: i32! = divide(10, 2);
     if !ok.is_ok() { exit(100); }
     if ok.unwrap() != 5 { exit(101); }
@@ -266,7 +245,6 @@ fn main() {
     if !bad.is_err() { exit(102); }
     if bad.unwrap_err() != 1 { exit(103); }
 
-    // --- optionals -----------------------------------------------------------
     var some: i32? = 5;
     var none: i32? = None;
     if !some.is_some() { exit(120); }
@@ -275,7 +253,6 @@ fn main() {
     if none.is_some() { exit(123); }
     if !none.is_none() { exit(124); }
 
-    // --- Vec -----------------------------------------------------------------
     var list: Vec<i64> = Vec.new();
     var n: i64 = 0;
     while n < 20 {
@@ -295,7 +272,6 @@ fn main() {
     list.clear();
     if !list.is_empty() { exit(116); }
 
-    // A Vec is mutable wherever it lives, not only in a variable.
     var bag = Bag { items: Vec.new() };
     bag.add(4);
     bag.items.push(5);
@@ -307,7 +283,6 @@ fn main() {
     if bags[0].len() != 1 { exit(132); }
     if bags[1].len() != 0 { exit(133); }
 
-    // Literals: escapes, characters, separators, exponents, whole floats.
     var bytes = "a\0b\x41";
     if bytes.len() != 4 || bytes[1] != 0 || bytes[3] != 'A' { exit(140); }
     if 'z' != 122 || '\n' != 10 || '\'' != 39 { exit(141); }
@@ -320,7 +295,6 @@ fn main() {
     var low: u8 = 0x0F;
     if !low != 0xF0 { exit(145); }
 
-    // Counting loops, loops that write each element, wrapping arithmetic.
     var counted = 0;
     for i in 0..5 { counted += i; }
     for i in 5..2 { exit(146); }
@@ -335,7 +309,6 @@ fn main() {
     var byte: u8 = 200;
     if wrapped != 1 || byte *% 2 != 144 || 0 -% byte != 56 { exit(149); }
 
-    // Match: values inside T?, T! and enum variants, block arms, constants.
     var maybe: i64? = 5;
     var seen: i64 = 0;
     match maybe {

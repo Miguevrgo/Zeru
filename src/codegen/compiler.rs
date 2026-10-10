@@ -26,19 +26,13 @@ pub struct Compiler<'a, 'ctx> {
     pub context: &'ctx Context,
     pub builder: &'a Builder<'ctx>,
     pub module: &'a Module<'ctx>,
-    /// What the analyser resolved: struct fields, enum variants, signatures.
     pub(super) types: &'a SemanticAnalyzer,
     pub(super) sources: &'a Sources,
-    /// The statement being lowered, which a panic message points at.
     pub(super) current_span: Span,
 
     pub(super) variables: HashMap<String, VarBinding<'ctx>>,
-    /// Each global constant's value and declared type. It is lowered wherever
-    /// the constant is used, inside a function, where LLVM folds it.
     pub(super) constants: HashMap<String, (Expression, Option<BasicTypeEnum<'ctx>>)>,
-    /// Each struct's LLVM type, given its body the first time it is needed.
     pub(super) struct_defs: HashMap<String, StructType<'ctx>>,
-    /// The host's sizes, which an enum's payload area is measured with.
     pub(super) target: TargetData,
     pub(super) current_fn: Option<FunctionValue<'ctx>>,
 
@@ -50,7 +44,6 @@ pub struct Compiler<'a, 'ctx> {
     pub(super) stderr_stream: Option<PointerValue<'ctx>>,
 
     pub(super) scope_stack: Vec<Scope<'ctx>>,
-    /// Temporaries that own memory, dropped when their statement is done.
     pub(super) temporaries: Vec<Owned<'ctx>>,
     pub(super) debug: Option<super::debug::Debug<'ctx>>,
 
@@ -86,7 +79,6 @@ fn host_layout(module: &Module) -> TargetData {
 pub(super) struct LoopContext<'ctx> {
     pub(super) continue_block: BasicBlock<'ctx>,
     pub(super) break_block: BasicBlock<'ctx>,
-    /// How many scopes were open around the loop; leaving it closes the rest.
     pub(super) scope_depth: usize,
 }
 
@@ -183,7 +175,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    /// Run `emit` over every function: free functions, then struct methods.
     fn for_each_concrete_fn(
         &mut self,
         program: &Program,

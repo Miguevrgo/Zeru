@@ -1,6 +1,5 @@
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
-    // Keywords
     Fn,
     Var,
     Const,
@@ -17,93 +16,83 @@ pub enum Token {
     Continue,
     As,
     DoubleColon,
-    Pub,    // pub
-    Try,    // try
-    Catch,  // catch
-    Orelse, // orelse
+    Pub,
+    Try,
+    Catch,
+    Orelse,
 
-    // Literals
     Identifier(String),
     Int(u64),
     Float(f64),
     StringLit(Vec<u8>),
 
-    // Logic
-    And,   // &&
-    Or,    // ||
-    True,  // true
-    False, // false
+    And,
+    Or,
+    True,
+    False,
 
-    // Bitwise
-    ShiftLeft,  // <<
-    ShiftRight, // >>
-    BitXor,     // ^
-    BitAnd,     // &
-    BitOr,      // |
+    ShiftLeft,
+    ShiftRight,
+    BitXor,
+    BitAnd,
+    BitOr,
 
-    // Compound Assign
-    PlusEq,      // +=
-    MinusEq,     // -=
-    StarEq,      // *=
-    SlashEq,     // /=
-    ModEq,       // %=
-    BitXorEq,    // ^=
-    BitAndEq,    // &=
-    BitOrEq,     // |=
-    BitRShiftEq, // >>=
-    BitLShiftEq, // <<=
-    PlusWrapEq,  // +%=
-    MinusWrapEq, // -%=
-    StarWrapEq,  // *%=
+    PlusEq,
+    MinusEq,
+    StarEq,
+    SlashEq,
+    ModEq,
+    BitXorEq,
+    BitAndEq,
+    BitOrEq,
+    BitRShiftEq,
+    BitLShiftEq,
+    PlusWrapEq,
+    MinusWrapEq,
+    StarWrapEq,
 
-    // Wrapping arithmetic: the result taken modulo 2^bits, never a panic
-    PlusWrap,  // +%
-    MinusWrap, // -%
-    StarWrap,  // *%
+    PlusWrap,
+    MinusWrap,
+    StarWrap,
 
-    // Single-Character & Double tokens
-    Assign, // =
-    Plus,   // +
-    Minus,  // -
-    Star,   // *
-    Slash,  // /
-    Mod,    // %
-    Eq,     // ==
-    NotEq,  // !=
-    Lt,     // <
-    Leq,    // <=
-    Gt,     // >
-    Geq,    // >=
-    Bang,   // !
+    Assign,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    Mod,
+    Eq,
+    NotEq,
+    Lt,
+    Leq,
+    Gt,
+    Geq,
+    Bang,
 
-    // Delimiters
-    LParen,    // (
-    RParen,    // )
-    LBrace,    // {
-    RBrace,    // }
-    LBracket,  // [
-    RBracket,  // ]
-    Colon,     // :
-    Semicolon, // ;
-    Comma,     // ,
-    Dot,       // .
-    DotDot,    // ..
-    Question,  // ?
+    LParen,
+    RParen,
+    LBrace,
+    RBrace,
+    LBracket,
+    RBracket,
+    Colon,
+    Semicolon,
+    Comma,
+    Dot,
+    DotDot,
+    Question,
 
-    // Custom
-    SelfTok, // self
-    Match,   // match
-    Default, // default
-    Enum,    // enum
-    Arrow,   // =>
-    Str,     // str type keyword
-    Trait,   // trait keyword
+    SelfTok,
+    Match,
+    Default,
+    Enum,
+    Arrow,
+    Str,
+    Trait,
 
-    // Inline Assembly
-    Asm,      // asm
-    Volatile, // volatile
+    Asm,
+    Volatile,
 
-    // Special
     Eof,
     Illegal(String),
 }
