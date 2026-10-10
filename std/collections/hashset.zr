@@ -1,86 +1,41 @@
-// Zeru Standard Library - HashSet (i64 elements)
-// Fixed-capacity open-addressing hash set. 256 slots, ~192 usable (75% load).
+// Zeru Standard Library - HashSet
+// A HashMap whose keys are the members.
 
-const EMPTY: u8 = 0;
-const OCCUPIED: u8 = 1;
-const DELETED: u8 = 2;
+import std.collections.hashmap::{HashMap};
 
-// Where probing for `key` starts: the key folded to 32 bits, then the top
-// byte of its product with 2^32 / phi (Fibonacci hashing). A 32-bit value
-// times a 32-bit constant cannot overflow a u64, so no key trips the overflow
-// check.
-fn slot(key: i64) usize {
-    var h: u64 = key as u64;
-    h = (h ^ (h >> 32)) & 4294967295;
-    return (((h * 2654435769) >> 24) & 255) as usize;
-}
+pub struct HashSet<K: Eq> {
+    members: HashMap<K, bool>,
 
-struct HashSet {
-    keys: Array<i64, 256>,
-    state: Array<u8, 256>,
-    len: usize,
-
-    fn new() HashSet {
-        return HashSet { keys: [0; 256], state: [EMPTY; 256], len: 0 };
+    pub fn new() HashSet<K> {
+        return HashSet { members: HashMap.new() };
     }
 
-    // The slot holding `key`. Probing stops at a slot never used; a deleted
-    // one may still have the key past it.
-    fn find(self, key: i64) usize? {
-        var idx: usize = slot(key);
-        var i: usize = 0;
-        while i < 256 && self.state[idx] != EMPTY {
-            if self.state[idx] == OCCUPIED && self.keys[idx] == key {
-                return idx;
-            }
-            idx = (idx + 1) & 255;
-            i += 1;
-        }
-        return None;
-    }
-
-    fn insert(var self, key: i64) bool {
-        if self.len >= 192 || self.find(key).is_some() {
+    // Add `key`; false when it was a member already.
+    pub fn insert(var self, key: K) bool {
+        if self.members.contains(key) {
             return false;
         }
-        var idx: usize = slot(key);
-        while self.state[idx] == OCCUPIED {
-            idx = (idx + 1) & 255;
-        }
-        self.keys[idx] = key;
-        self.state[idx] = OCCUPIED;
-        self.len += 1;
+        self.members.insert(key, true);
         return true;
     }
 
-    fn contains(self, key: i64) bool {
-        return self.find(key).is_some();
+    pub fn contains(self, key: K) bool {
+        return self.members.contains(key);
     }
 
-    fn remove(var self, key: i64) bool {
-        var found = self.find(key);
-        if found.is_none() {
-            return false;
-        }
-        self.state[found.unwrap()] = DELETED;
-        self.len -= 1;
-        return true;
+    pub fn remove(var self, key: K) bool {
+        return self.members.remove(key);
     }
 
-    fn clear(var self) {
-        var i: usize = 0;
-        while i < 256 {
-            self.state[i] = EMPTY;
-            i += 1;
-        }
-        self.len = 0;
+    pub fn clear(var self) {
+        self.members.clear();
     }
 
-    fn size(self) usize {
-        return self.len;
+    pub fn size(self) usize {
+        return self.members.size();
     }
 
-    fn is_empty(self) bool {
-        return self.len == 0;
+    pub fn is_empty(self) bool {
+        return self.members.is_empty();
     }
 }

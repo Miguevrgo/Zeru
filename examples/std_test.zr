@@ -7,6 +7,8 @@ import std.collections.hashset::{HashSet};
 import std.collections.binary_heap::{BinaryHeap};
 import std.collections.vecdeque::{VecDeque};
 
+enum Tone { Low, High }
+
 fn main() {
     // --- math ----------------------------------------------------------------
     if math::abs(-4) != 4 { exit(1); }
@@ -27,17 +29,17 @@ fn main() {
     if math::max(top, 1) != top { exit(12); }
 
     // --- HashMap -------------------------------------------------------------
-    var map = HashMap.new();
+    var map: HashMap<i64, i64> = HashMap.new();
     if !map.is_empty() { exit(20); }
-    if !map.insert(1, 100) { exit(21); }
-    if !map.insert(2, 200) { exit(22); }
+    map.insert(1, 100);
+    map.insert(2, 200);
     if map.size() != 2 { exit(23); }
     if map.get(1).unwrap() != 100 { exit(24); }
     if map.get(9).is_some() { exit(25); }
     if !map.contains(2) { exit(26); }
 
     // Inserting a key that is there again replaces the value.
-    if !map.insert(1, 111) { exit(27); }
+    map.insert(1, 111);
     if map.get(1).unwrap() != 111 { exit(28); }
     if map.size() != 2 { exit(29); }
 
@@ -47,34 +49,36 @@ fn main() {
     map.clear();
     if !map.is_empty() { exit(33); }
 
-    // Enough keys to make the open addressing collide and probe.
-    var key: i64 = 0;
-    while key < 100 {
-        if !map.insert(key, key * 3) { exit(34); }
+    // The slots double as they fill, and every key stays where it can be found.
+    var key: i64 = -2500;
+    while key < 2500 {
+        map.insert(key, key * 3);
         key += 1;
     }
-    if map.size() != 100 { exit(35); }
-    if map.get(77).unwrap() != 231 { exit(36); }
-    // A negative key hashes like any other: it used to overflow the hash.
-    if !map.insert(-1, 7) { exit(37); }
-    if map.get(-1).unwrap() != 7 { exit(38); }
+    if map.size() != 5000 { exit(35); }
+    if map.get(1234).unwrap() != 3702 || map.get(-7).unwrap() != -21 { exit(36); }
 
-    // Two keys on one probe chain: removing the first must not let the second
-    // be inserted again in its place, as a duplicate.
-    var chained = HashMap.new();
-    var first_key: i64 = 0;
-    var second_key: i64 = 1;
-    while hashmap::slot(second_key) != hashmap::slot(first_key) { second_key += 1; }
-    chained.insert(first_key, 1);
-    chained.insert(second_key, 2);
-    chained.remove(first_key);
-    chained.insert(second_key, 3);
-    if chained.size() != 1 { exit(46); }
-    chained.remove(second_key);
-    if chained.contains(second_key) { exit(47); }
+    // A removed entry leaves a mark probing goes past, so the keys after it
+    // in a chain are still found, and none of them can be added twice.
+    key = -2500;
+    while key < 2500 {
+        map.remove(key);
+        key += 2;
+    }
+    if map.size() != 2500 || map.contains(0) || map.get(1).unwrap() != 3 { exit(37); }
+    map.insert(1, 4);
+    if map.size() != 2500 { exit(38); }
+
+    // Keys may be enums, and values anything, a Vec included.
+    var lists: HashMap<Tone, Vec<i64>> = HashMap.new();
+    lists.insert(Tone::Low, [1, 2]);
+    lists.insert(Tone::High, [3]);
+    lists.insert(Tone::Low, [4, 5, 6]);
+    if lists.size() != 2 || !lists.contains(Tone::High) { exit(39); }
+    if lists.get(Tone::Low).unwrap().len() != 3 { exit(34); }
 
     // --- HashSet -------------------------------------------------------------
-    var seen = HashSet.new();
+    var seen: HashSet<i64> = HashSet.new();
     if !seen.insert(5) { exit(40); }
     // The same element twice is not an error, and not a second element.
     seen.insert(5);

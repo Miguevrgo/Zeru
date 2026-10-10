@@ -11,6 +11,13 @@
 // Imports come first in a file. std modules are reached through `std.`:
 // import std.math;                           // math::abs(...)
 // import std.collections.hashmap::{HashMap}; // HashMap used unqualified
+//
+// Another module can use only what is marked `pub`; struct fields always:
+// pub fn area(w: i32, h: i32) i32 { ... }
+// pub struct Grid { cells: Vec<u8>, pub fn get(self, at: usize) u8 { ... } }
+//
+// var counts: HashMap<i64, i32> = HashMap.new(); // A generic type's arguments
+//                                                // come from the variable
 
 // -----------------------------------------------------------------------------
 // Constants

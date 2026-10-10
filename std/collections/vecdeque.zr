@@ -1,16 +1,16 @@
 // Zeru Standard Library - VecDeque (double-ended queue, i64 elements)
 // Fixed-capacity circular buffer. 1024 elements max. O(1) push/pop both ends.
 
-struct VecDeque {
+pub struct VecDeque {
     data: Array<i64, 1024>,
     head: usize,
     len: usize,
 
-    fn new() VecDeque {
+    pub fn new() VecDeque {
         return VecDeque { data: [0; 1024], head: 0, len: 0 };
     }
 
-    fn push_back(var self, val: i64) bool {
+    pub fn push_back(var self, val: i64) bool {
         if self.len >= 1024 {
             return false;
         }
@@ -20,7 +20,7 @@ struct VecDeque {
         return true;
     }
 
-    fn push_front(var self, val: i64) bool {
+    pub fn push_front(var self, val: i64) bool {
         if self.len >= 1024 {
             return false;
         }
@@ -34,7 +34,7 @@ struct VecDeque {
         return true;
     }
 
-    fn pop_front(var self) i64? {
+    pub fn pop_front(var self) i64? {
         if self.len == 0 {
             return None;
         }
@@ -44,7 +44,7 @@ struct VecDeque {
         return val;
     }
 
-    fn pop_back(var self) i64? {
+    pub fn pop_back(var self) i64? {
         if self.len == 0 {
             return None;
         }
@@ -53,14 +53,14 @@ struct VecDeque {
         return self.data[tail];
     }
 
-    fn front(self) i64? {
+    pub fn front(self) i64? {
         if self.len == 0 {
             return None;
         }
         return self.data[self.head];
     }
 
-    fn back(self) i64? {
+    pub fn back(self) i64? {
         if self.len == 0 {
             return None;
         }
@@ -68,7 +68,7 @@ struct VecDeque {
         return self.data[tail];
     }
 
-    fn at(self, index: usize) i64? {
+    pub fn at(self, index: usize) i64? {
         if index >= self.len {
             return None;
         }
@@ -76,15 +76,15 @@ struct VecDeque {
         return self.data[real_idx];
     }
 
-    fn size(self) usize {
+    pub fn size(self) usize {
         return self.len;
     }
 
-    fn is_empty(self) bool {
+    pub fn is_empty(self) bool {
         return self.len == 0;
     }
 
-    fn clear(var self) {
+    pub fn clear(var self) {
         self.head = 0;
         self.len = 0;
     }

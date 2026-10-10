@@ -876,23 +876,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     /// Drop the value an assignment is about to replace. A variable may have
-    /// given its value away, so its flag decides; a field or an element still
-    /// holds its own. What a raw pointer points at may never have been set.
+    /// given its value away, so its flag decides. A field, an element, or what
+    /// `self` or a `for .. in &var` name stands for still holds its own. What
+    /// a raw pointer points at may never have been set.
     fn drop_overwritten(&mut self, target: &Expression, ptr: PointerValue<'ctx>) {
-        match &target.kind {
-            ExpressionKind::Identifier(_) => {
-                if let Some(owned) = self.owned_at(ptr) {
-                    self.drop_owned(&owned);
-                    let raised = self.context.bool_type().const_int(1, false);
-                    self.builder.build_store(owned.flag, raised).unwrap();
-                }
-            }
-            ExpressionKind::Get { .. } | ExpressionKind::Index { .. } => {
-                if let Some(ty) = target.ty.as_ref().filter(|ty| self.types.owns_heap(ty)) {
-                    self.call_drop(ptr, ty);
-                }
-            }
-            _ => {}
+        if let Some(owned) = self.owned_at(ptr) {
+            self.drop_owned(&owned);
+            let raised = self.context.bool_type().const_int(1, false);
+            self.builder.build_store(owned.flag, raised).unwrap();
+            return;
+        }
+        if !matches!(target.kind, ExpressionKind::Dereference(_))
+            && let Some(ty) = target.ty.as_ref().filter(|ty| self.types.owns_heap(ty))
+        {
+            self.call_drop(ptr, ty);
         }
     }
 

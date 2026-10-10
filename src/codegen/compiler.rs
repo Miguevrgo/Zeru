@@ -149,12 +149,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.for_each_concrete_fn(program, |this, f| {
             this.compile_fn_prototype(&f.name, f.params);
         });
+        self.create_flush();
         self.for_each_concrete_fn(program, |this, f| {
             this.compile_fn_body(&f.name, f.params, f.body, f.span);
             this.leave_debug_scope();
         });
 
-        self.create_builtin_cleanup();
         self.finish_debug_info();
     }
 

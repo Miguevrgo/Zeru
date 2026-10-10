@@ -1,20 +1,20 @@
 // Zeru Standard Library - Network (Linux x86_64)
 
-const AF_INET: i64 = 2;
-const AF_INET6: i64 = 10;
-const SOCK_STREAM: i64 = 1;
-const SOCK_DGRAM: i64 = 2;
-const SHUT_RD: i64 = 0;
-const SHUT_WR: i64 = 1;
-const SHUT_RDWR: i64 = 2;
+pub const AF_INET: i64 = 2;
+pub const AF_INET6: i64 = 10;
+pub const SOCK_STREAM: i64 = 1;
+pub const SOCK_DGRAM: i64 = 2;
+pub const SHUT_RD: i64 = 0;
+pub const SHUT_WR: i64 = 1;
+pub const SHUT_RDWR: i64 = 2;
 
 // Build IPv4 address from octets: ip4(127, 0, 0, 1)
-fn ip4(a: u32, b: u32, c: u32, d: u32) u32 {
+pub fn ip4(a: u32, b: u32, c: u32, d: u32) u32 {
     return (a << 24) | (b << 16) | (c << 8) | d;
 }
 
 // Build sockaddr_in (16 bytes) for bind/connect.
-fn make_addr(ip: u32, port: u16) Array<u8, 16> {
+pub fn make_addr(ip: u32, port: u16) Array<u8, 16> {
     var addr: Array<u8, 16> = [0; 16];
     addr[0] = 2;
     addr[1] = 0;
@@ -29,10 +29,10 @@ fn make_addr(ip: u32, port: u16) Array<u8, 16> {
 
 // --- TcpListener ---
 
-struct TcpListener {
+pub struct TcpListener {
     fd: i64,
 
-    fn bind(ip: u32, port: u16) i64! {
+    pub fn bind(ip: u32, port: u16) i64! {
         var fd: i64 = syscall3(41, 2, 1, 0);
         if fd < 0 { return Err((-fd) as i32); }
         // SO_REUSEADDR
@@ -46,13 +46,13 @@ struct TcpListener {
         return Ok(fd);
     }
 
-    fn accept(self) i64! {
+    pub fn accept(self) i64! {
         var r: i64 = syscall3(43, self.fd, 0, 0);
         if r < 0 { return Err((-r) as i32); }
         return Ok(r);
     }
 
-    fn close(self) i64! {
+    pub fn close(self) i64! {
         var r: i64 = syscall1(3, self.fd);
         if r < 0 { return Err((-r) as i32); }
         return Ok(0);
@@ -61,10 +61,10 @@ struct TcpListener {
 
 // --- TcpStream ---
 
-struct TcpStream {
+pub struct TcpStream {
     fd: i64,
 
-    fn connect(ip: u32, port: u16) i64! {
+    pub fn connect(ip: u32, port: u16) i64! {
         var fd: i64 = syscall3(41, 2, 1, 0);
         if fd < 0 { return Err((-fd) as i32); }
         var addr = make_addr(ip, port);
@@ -73,19 +73,19 @@ struct TcpStream {
         return Ok(fd);
     }
 
-    fn read(self, buf: *u8, len: usize) i64! {
+    pub fn read(self, buf: *u8, len: usize) i64! {
         var r: i64 = syscall3(0, self.fd, buf as i64, len as i64);
         if r < 0 { return Err((-r) as i32); }
         return Ok(r);
     }
 
-    fn write(self, buf: *u8, len: usize) i64! {
+    pub fn write(self, buf: *u8, len: usize) i64! {
         var r: i64 = syscall3(1, self.fd, buf as i64, len as i64);
         if r < 0 { return Err((-r) as i32); }
         return Ok(r);
     }
 
-    fn write_all(var self, buf: *u8, len: usize) i64! {
+    pub fn write_all(var self, buf: *u8, len: usize) i64! {
         var total: i64 = 0;
         var remaining: usize = len;
         while remaining > 0 {
@@ -97,7 +97,7 @@ struct TcpStream {
         return Ok(total);
     }
 
-    fn read_all(var self, buf: *u8, buf_size: usize) i64! {
+    pub fn read_all(var self, buf: *u8, buf_size: usize) i64! {
         var total: i64 = 0;
         var remaining: usize = buf_size;
         while remaining > 0 {
@@ -110,13 +110,13 @@ struct TcpStream {
         return Ok(total);
     }
 
-    fn shutdown(self, how: i64) i64! {
+    pub fn shutdown(self, how: i64) i64! {
         var r: i64 = syscall2(48, self.fd, how);
         if r < 0 { return Err((-r) as i32); }
         return Ok(0);
     }
 
-    fn close(self) i64! {
+    pub fn close(self) i64! {
         var r: i64 = syscall1(3, self.fd);
         if r < 0 { return Err((-r) as i32); }
         return Ok(0);
@@ -125,10 +125,10 @@ struct TcpStream {
 
 // --- UdpSocket ---
 
-struct UdpSocket {
+pub struct UdpSocket {
     fd: i64,
 
-    fn bind(ip: u32, port: u16) i64! {
+    pub fn bind(ip: u32, port: u16) i64! {
         var fd: i64 = syscall3(41, 2, 2, 0);
         if fd < 0 { return Err((-fd) as i32); }
         var addr = make_addr(ip, port);
@@ -137,20 +137,20 @@ struct UdpSocket {
         return Ok(fd);
     }
 
-    fn send_to(self, buf: *u8, len: usize, ip: u32, port: u16) i64! {
+    pub fn send_to(self, buf: *u8, len: usize, ip: u32, port: u16) i64! {
         var addr = make_addr(ip, port);
         var r: i64 = syscall6(44, self.fd, buf as i64, len as i64, 0, (&addr[0]) as i64, 16);
         if r < 0 { return Err((-r) as i32); }
         return Ok(r);
     }
 
-    fn recv(self, buf: *u8, len: usize) i64! {
+    pub fn recv(self, buf: *u8, len: usize) i64! {
         var r: i64 = syscall6(45, self.fd, buf as i64, len as i64, 0, 0, 0);
         if r < 0 { return Err((-r) as i32); }
         return Ok(r);
     }
 
-    fn close(self) i64! {
+    pub fn close(self) i64! {
         var r: i64 = syscall1(3, self.fd);
         if r < 0 { return Err((-r) as i32); }
         return Ok(0);

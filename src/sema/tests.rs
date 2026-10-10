@@ -747,8 +747,9 @@ fn test_borrowed_values_cannot_be_moved() {
 
 #[test]
 fn test_functions_see_constants_declared_below() {
-    let input = "fn f() i32 { return N; } const N: i32 = 3; fn main() { f(); }";
-    assert!(analyze(input).is_empty());
+    let input =
+        "fn f() i32 { return N; } const N: i32 = M + 1; const M: i32 = 3; fn main() { f(); }";
+    assert!(analyze(input).is_empty(), "{:?}", analyze(input));
 }
 
 #[test]

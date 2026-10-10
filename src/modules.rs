@@ -35,6 +35,35 @@ pub fn qualify(program: &mut Program, module: Option<&str>, aliases: &HashMap<St
     }
 }
 
+/// What a module keeps to itself: each item and method not marked `pub`, by
+/// its qualified name, paired with `module`.
+pub fn privates(program: &Program, module: &str) -> Vec<(String, String)> {
+    let mut private = Vec::new();
+    for statement in &program.statements {
+        let StatementKind::Struct { name, methods, .. } = &statement.kind else {
+            continue;
+        };
+        for method in methods.iter().filter(|method| !method.is_pub) {
+            if let StatementKind::Function { name: method, .. } = &method.kind {
+                private.push(format!("{name}::{method}"));
+            }
+        }
+    }
+    let items = program
+        .statements
+        .iter()
+        .filter(|statement| !statement.is_pub);
+    private.extend(
+        items
+            .flat_map(|item| declarations(std::slice::from_ref(item)))
+            .cloned(),
+    );
+    private
+        .into_iter()
+        .map(|name| (name, module.to_string()))
+        .collect()
+}
+
 /// Names declared at the top level of a module.
 fn declarations(statements: &[Statement]) -> Vec<&String> {
     statements

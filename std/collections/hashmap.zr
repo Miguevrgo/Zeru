@@ -1,102 +1,133 @@
-// Zeru Standard Library - HashMap (i64 keys, i64 values)
-// Fixed-capacity open-addressing hash map. 256 slots, ~192 usable (75% load).
+// Zeru Standard Library - HashMap
+// Open addressing over slots that double once three quarters are taken.
+// A key is an integer, a bool or an enum, hashed by its bits.
 
-const EMPTY: u8 = 0;
-const OCCUPIED: u8 = 1;
-const DELETED: u8 = 2;
-
-// Where probing for `key` starts: the key folded to 32 bits, then the top
-// byte of its product with 2^32 / phi (Fibonacci hashing). A 32-bit value
-// times a 32-bit constant cannot overflow a u64, so no key trips the overflow
-// check.
-fn slot(key: i64) usize {
-    var h: u64 = key as u64;
-    h = (h ^ (h >> 32)) & 4294967295;
-    return (((h * 2654435769) >> 24) & 255) as usize;
+// Where probing for `bits` starts: Fibonacci hashing, the bits times 2^64
+// over the golden ratio, wrapping, with the high half kept.
+fn slot(bits: u64, mask: usize) usize {
+    return ((bits *% 11400714819323198485) >> 32) as usize & mask;
 }
 
-struct HashMap {
-    keys: Array<i64, 256>,
-    vals: Array<i64, 256>,
-    state: Array<u8, 256>,
+pub struct HashMap<K: Eq, V> {
+    // A slot never used holds no key. One whose entry was removed keeps its
+    // key but not its value, so probing goes on past it.
+    keys: Vec<K?>,
+    values: Vec<V?>,
     len: usize,
+    // Slots holding a key, removed entries included.
+    used: usize,
 
-    fn new() HashMap {
-        return HashMap { keys: [0; 256], vals: [0; 256], state: [EMPTY; 256], len: 0 };
+    pub fn new() HashMap<K, V> {
+        return HashMap { keys: Vec.new(), values: Vec.new(), len: 0, used: 0 };
     }
 
-    // The slot holding `key`. Probing stops at a slot never used; a deleted
-    // one may still have the key past it.
-    fn find(self, key: i64) usize? {
-        var idx: usize = slot(key);
-        var i: usize = 0;
-        while i < 256 && self.state[idx] != EMPTY {
-            if self.state[idx] == OCCUPIED && self.keys[idx] == key {
-                return idx;
-            }
-            idx = (idx + 1) & 255;
-            i += 1;
-        }
-        return None;
-    }
-
-    fn insert(var self, key: i64, val: i64) bool {
+    // Store `value` under `key`, in place of what was there.
+    pub fn insert(var self, key: K, value: V) {
         var found = self.find(key);
         if found.is_some() {
-            self.vals[found.unwrap()] = val;
-            return true;
+            self.values[found.unwrap()] = value;
+            return;
         }
-        if self.len >= 192 {
-            return false;
+        if (self.used + 1) * 4 > self.keys.len() * 3 {
+            self.grow();
         }
-
-        var idx: usize = slot(key);
-        while self.state[idx] == OCCUPIED {
-            idx = (idx + 1) & 255;
+        var mask = self.keys.len() - 1;
+        var at = slot(key as u64, mask);
+        while self.values[at].is_some() {
+            at = (at + 1) & mask;
         }
-        self.keys[idx] = key;
-        self.vals[idx] = val;
-        self.state[idx] = OCCUPIED;
+        if self.keys[at].is_none() {
+            self.used += 1;
+        }
+        self.keys[at] = key;
+        self.values[at] = value;
         self.len += 1;
-        return true;
     }
 
-    fn get(self, key: i64) i64? {
+    // A copy of the value under `key`, a deep one if it owns memory.
+    pub fn get(self, key: K) V? {
         var found = self.find(key);
         if found.is_none() {
             return None;
         }
-        return self.vals[found.unwrap()];
+        return self.values[found.unwrap()].copy();
     }
 
-    fn contains(self, key: i64) bool {
+    pub fn contains(self, key: K) bool {
         return self.find(key).is_some();
     }
 
-    fn remove(var self, key: i64) bool {
+    // Drop the entry under `key`; false when there was none.
+    pub fn remove(var self, key: K) bool {
         var found = self.find(key);
         if found.is_none() {
             return false;
         }
-        self.state[found.unwrap()] = DELETED;
+        self.values[found.unwrap()] = None;
         self.len -= 1;
         return true;
     }
 
-    fn clear(var self) {
-        var i: usize = 0;
-        while i < 256 {
-            self.state[i] = EMPTY;
-            i += 1;
-        }
+    pub fn clear(var self) {
+        self.keys.clear();
+        self.values.clear();
         self.len = 0;
+        self.used = 0;
     }
 
-    fn size(self) usize {
+    pub fn size(self) usize {
         return self.len;
     }
 
-    fn is_empty(self) bool {
+    pub fn is_empty(self) bool {
         return self.len == 0;
+    }
+
+    // The slot holding `key`. Probing stops at a slot never used.
+    fn find(self, key: K) usize? {
+        if self.keys.is_empty() {
+            return None;
+        }
+        var mask = self.keys.len() - 1;
+        var at = slot(key as u64, mask);
+        while self.keys[at].is_some() {
+            match self.keys[at] {
+                Some(held) => {
+                    if held == key && self.values[at].is_some() {
+                        return at;
+                    }
+                }
+                None => { }
+            }
+            at = (at + 1) & mask;
+        }
+        return None;
+    }
+
+    // Twice the slots, or eight to start, with every entry placed again.
+    fn grow(var self) {
+        var size: usize = self.keys.len() * 2;
+        if size == 0 {
+            size = 8;
+        }
+        var bigger: HashMap<K, V> = HashMap {
+            keys: Vec.with_capacity(size),
+            values: Vec.with_capacity(size),
+            len: 0,
+            used: 0
+        };
+        for at in 0..size {
+            bigger.keys.push(None);
+            bigger.values.push(None);
+        }
+        // Popped, each entry moves across without a copy.
+        while !self.keys.is_empty() {
+            var key = self.keys.pop().unwrap();
+            var value = self.values.pop().unwrap();
+            if value.is_some() {
+                bigger.insert(key.unwrap(), value.unwrap());
+            }
+        }
+        self = bigger;
     }
 }

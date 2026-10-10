@@ -1,5 +1,6 @@
 use crate::{
     ast::{Expression, ExpressionKind, Program, Statement, StatementKind, TypeSpec},
+    codegen::runtime::FLUSH_FN,
     errors::{Span, ZeruError},
     generics::{Substitutions, instantiate, mangle, map_types},
     sema::{
@@ -72,12 +73,21 @@ pub struct SemanticAnalyzer {
     generic_functions: HashMap<String, Statement>,
     instantiations: Vec<Statement>,
 
+    /// Checking generic code at its type arguments, where a `.copy()` written
+    /// for a T that owns memory meets one that does not.
+    in_instance: bool,
+
     /// The loops enclosing what is being checked, innermost last.
     loops: Vec<LoopFrame>,
     /// What a `for x in &var v` loop walks, or a `match` binds values inside:
     /// changing it meanwhile would leave those names pointing at memory the
     /// change freed.
     locked: Vec<String>,
+
+    /// What each module keeps to itself, and the item being checked, whose
+    /// module may use them.
+    privates: HashMap<String, String>,
+    current_item: String,
 
     /// Each global constant's value, for patterns that name one.
     constants: HashMap<String, Expression>,
@@ -88,9 +98,12 @@ pub struct SemanticAnalyzer {
 
 impl SemanticAnalyzer {
     pub fn new() -> Self {
+        // What the compiler provides the prelude: writing out both streams.
+        let mut symbols = SymbolTable::new();
+        symbols.insert_fn(FLUSH_FN.to_string(), Vec::new(), Type::Void);
         Self {
             errors: Vec::new(),
-            symbols: SymbolTable::new(),
+            symbols,
             struct_defs: HashMap::new(),
             enum_defs: HashMap::new(),
             trait_defs: HashMap::new(),
@@ -100,8 +113,11 @@ impl SemanticAnalyzer {
             generic_structs: HashMap::new(),
             generic_functions: HashMap::new(),
             instantiations: Vec::new(),
+            in_instance: false,
             loops: Vec::new(),
             locked: Vec::new(),
+            privates: HashMap::new(),
+            current_item: String::new(),
             constants: HashMap::new(),
             moves: HashSet::new(),
         }
@@ -172,6 +188,7 @@ impl SemanticAnalyzer {
     }
 
     pub fn analyze(&mut self, program: &mut Program) {
+        self.privates = std::mem::take(&mut program.privates);
         self.take_generics(program);
         self.scan_types(&program.statements);
         self.check_recursive_structs(&program.statements);
@@ -219,10 +236,12 @@ impl SemanticAnalyzer {
     /// reach a generic struct nothing has instantiated yet, so the caller
     /// repeats this until no new instantiation turns up.
     fn expand_instantiations(&mut self, program: &mut Program) {
+        self.in_instance = true;
         for mut decl in std::mem::take(&mut self.instantiations) {
             self.check_statement_top_level(&mut decl);
             program.statements.push(decl);
         }
+        self.in_instance = false;
     }
 
     /// Register `Pair<i32>` as a struct of its own and queue its declaration.
@@ -691,18 +710,44 @@ impl SemanticAnalyzer {
         self.symbols.insert_fn(name.clone(), param_types, ret_ty);
     }
 
-    /// Globals first, so a function may use a constant declared below it.
+    /// Globals first, each after the ones it names, so a function or a
+    /// constant may use a constant declared below it.
     fn analyze_bodies(&mut self, stmts: &mut [Statement]) {
-        let (globals, rest): (Vec<_>, Vec<_>) = stmts
+        let (mut globals, rest): (Vec<_>, Vec<_>) = stmts
             .iter_mut()
             .partition(|stmt| matches!(stmt.kind, StatementKind::Var { .. }));
-        for stmt in globals.into_iter().chain(rest) {
+        while !globals.is_empty() {
+            let waiting: HashSet<String> = globals.iter().map(|g| Self::global_name(g)).collect();
+            // Ready: naming no global still waiting. None ready is a cycle,
+            // which checking in order reports.
+            let ready = globals
+                .iter_mut()
+                .position(|global| {
+                    let mut names = crate::ast::Names::default();
+                    crate::ast::walk_item(&mut names, global);
+                    names.0.iter().all(|name| !waiting.contains(name))
+                })
+                .unwrap_or(0);
+            let global = globals.remove(ready);
+            self.check_statement_top_level(global);
+        }
+        for stmt in rest {
             self.check_statement_top_level(stmt);
+        }
+    }
+
+    fn global_name(global: &Statement) -> String {
+        match &global.kind {
+            StatementKind::Var { name, .. } => name.clone(),
+            _ => String::new(),
         }
     }
 
     fn check_statement_top_level(&mut self, stmt: &mut Statement) {
         let span = stmt.span;
+        if let StatementKind::Var { name, .. } = &stmt.kind {
+            self.current_item = name.clone();
+        }
         match &mut stmt.kind {
             StatementKind::Function {
                 name,
@@ -863,6 +908,7 @@ impl SemanticAnalyzer {
         let Some(function_symbol) = self.symbols.lookup(name).cloned() else {
             return;
         };
+        self.current_item = name.to_string();
 
         if let super::symbol_table::Symbol::Function {
             ret_type,
@@ -1010,9 +1056,11 @@ impl SemanticAnalyzer {
         }
 
         if self.struct_defs.contains_key(name) {
+            self.check_visible(name, span);
             return Type::Struct(name.to_string());
         }
         if self.enum_defs.contains_key(name) {
+            self.check_visible(name, span);
             return Type::Enum(name.to_string());
         }
 
@@ -1355,8 +1403,9 @@ impl SemanticAnalyzer {
         // The enum is everything before the last `::`, which may itself be a
         // path into a module, as in `shapes::Color::Red`.
         if let Some((enum_name, variant)) = name.rsplit_once("::")
-            && let Some(variants) = self.enum_defs.get(enum_name)
+            && let Some(variants) = self.enum_defs.get(enum_name).cloned()
         {
+            self.check_visible(enum_name, span);
             match variants.iter().find(|(v, _)| v == variant) {
                 Some((_, fields)) if !fields.is_empty() => {
                     let message = format!(
@@ -1376,6 +1425,9 @@ impl SemanticAnalyzer {
             return Type::Unknown;
         }
 
+        if self.symbols.is_global(name) {
+            self.check_visible(name, span);
+        }
         if let Some(symbol) = self.symbols.lookup(name).cloned() {
             match symbol {
                 super::symbol_table::Symbol::Var { ty, moved_at, .. } => {
@@ -1944,13 +1996,32 @@ impl SemanticAnalyzer {
 
         // A type on the left is a call on the type, not on a value: `Box.empty()`
         // names the function `Box::empty`. A variable of the same name wins,
-        // since that one has something to call a method on.
+        // since that one has something to call a method on. A generic struct
+        // takes its type arguments from the type the call is to give.
         if let ExpressionKind::Get { object, name } = &function.kind
             && let ExpressionKind::Identifier(type_name) = &object.kind
-            && self.struct_defs.contains_key(type_name)
             && self.symbols.lookup(type_name).is_none()
         {
-            function.kind = ExpressionKind::Identifier(format!("{type_name}::{name}"));
+            let owner = match expected_type {
+                _ if self.struct_defs.contains_key(type_name) => Some(type_name.clone()),
+                Some(Type::Struct(instance))
+                    if self.generic_structs.contains_key(type_name)
+                        && instance.starts_with(&format!("{type_name}__")) =>
+                {
+                    Some(instance.clone())
+                }
+                _ if self.generic_structs.contains_key(type_name) => {
+                    self.error(
+                        format!("Cannot tell what {type_name}'s type arguments are here; give the variable a type, as in var x: {type_name}<..> = {type_name}.{name}()"),
+                        span,
+                    );
+                    return Type::Unknown;
+                }
+                _ => None,
+            };
+            if let Some(owner) = owner {
+                function.kind = ExpressionKind::Identifier(format!("{owner}::{name}"));
+            }
         }
 
         let call_kind = match &function.kind {
@@ -2024,7 +2095,8 @@ impl SemanticAnalyzer {
                 }
 
                 if method_name == "copy" && arguments.is_empty() {
-                    if obj_type != Type::Unknown && !self.owns_heap(&obj_type) {
+                    if obj_type != Type::Unknown && !self.owns_heap(&obj_type) && !self.in_instance
+                    {
                         self.error(
                             format!("{obj_type} holds no memory of its own, so it is copied already; drop the .copy()"),
                             span,
@@ -2213,6 +2285,7 @@ impl SemanticAnalyzer {
             self.error(format!("Unknown struct type '{name}'."), span);
             return Type::Unknown;
         };
+        self.check_visible(name, span);
 
         for (field_name, _) in fields.iter() {
             if !def_fields.iter().any(|(n, _)| n == field_name) {
@@ -3102,6 +3175,7 @@ impl SemanticAnalyzer {
         implicit_self: Option<Type>,
         call_span: Span,
     ) -> (Type, HashMap<String, Type>) {
+        self.check_visible(name, call_span);
         if let Some(super::symbol_table::Symbol::Function { params, ret_type }) =
             self.symbols.lookup(name).cloned()
         {
@@ -3271,6 +3345,23 @@ impl SemanticAnalyzer {
                     .collect(),
             ),
             _ => ty.clone(),
+        }
+    }
+
+    /// Report a use of what another module keeps to itself.
+    fn check_visible(&mut self, name: &str, span: Span) {
+        // A method of `Map__i64_` is declared as one of `Map`.
+        let declared = match name.rsplit_once("::") {
+            Some((owner, member)) if owner.contains("__") => {
+                format!("{}::{member}", owner.split("__").next().unwrap_or(owner))
+            }
+            _ => name.to_string(),
+        };
+        if let Some(module) = self.privates.get(&declared)
+            && !self.current_item.starts_with(&format!("{module}::"))
+        {
+            let message = format!("'{declared}' is private to module '{module}'; mark it pub");
+            self.error(message, span);
         }
     }
 

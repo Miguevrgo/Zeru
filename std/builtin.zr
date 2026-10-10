@@ -40,7 +40,9 @@ fn syscall1(nr: i64, arg1: i64) i64 {
     return result;
 }
 
+// End the process, after writing out what print left buffered.
 fn exit(code: i32) {
+    __zeru_flush();
     syscall1(SYS_EXIT, code as i64);
 }
 
@@ -250,7 +252,10 @@ fn __zeru_alloc(size: usize) *u8 {
 // Returns pointer to new memory, or null on failure.
 fn __zeru_realloc(old_ptr: *u8, old_size: usize, new_size: usize) *u8 {
     if new_size == 0 {
-        syscall2(SYS_MUNMAP, old_ptr as i64, old_size as i64);
+        // An empty Vec never had a buffer to give back.
+        if old_size != 0 {
+            syscall2(SYS_MUNMAP, old_ptr as i64, old_size as i64);
+        }
         return 0 as *u8;
     }
     if old_size == 0 {

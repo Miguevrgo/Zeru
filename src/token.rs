@@ -17,6 +17,7 @@ pub enum Token {
     Continue,
     As,
     DoubleColon,
+    Pub,    // pub
     Try,    // try
     Catch,  // catch
     Orelse, // orelse
@@ -132,6 +133,7 @@ impl std::fmt::Display for Token {
             Token::Break => "break",
             Token::Continue => "continue",
             Token::As => "as",
+            Token::Pub => "pub",
             Token::Try => "try",
             Token::Catch => "catch",
             Token::Orelse => "orelse",

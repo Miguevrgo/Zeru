@@ -31,6 +31,7 @@ use crate::{
 const ALLOC_FN: &str = "__zeru_alloc";
 const REALLOC_FN: &str = "__zeru_realloc";
 const MEMMOVE_FN: &str = "__zeru_memmove";
+pub const FLUSH_FN: &str = "__zeru_flush";
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub(super) fn error(&mut self, message: impl Into<String>, span: Span) {
@@ -237,18 +238,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let abort_fn = self.extern_fn("abort", void.fn_type(&[], false));
 
         self.in_helper(f, |this| {
-            if let (Some(out), Some(err), Some(write), Some(flush)) = (
-                this.stdout_stream,
+            if let (Some(err), Some(write), Some(flush)) = (
                 this.stderr_stream,
                 this.module.get_function("OutStream::write_bytes"),
-                this.module.get_function("OutStream::flush"),
+                this.module.get_function(FLUSH_FN),
             ) {
                 let (text, len) = (f.get_nth_param(0).unwrap(), f.get_nth_param(1).unwrap());
                 let b = this.builder;
-                b.build_call(flush, &[out.into()], "").unwrap();
                 b.build_call(write, &[err.into(), text.into(), len.into()], "")
                     .unwrap();
-                b.build_call(flush, &[err.into()], "").unwrap();
+                b.build_call(flush, &[], "").unwrap();
             }
             this.builder.build_call(abort_fn, &[], "").unwrap();
             this.builder.build_unreachable().unwrap();
@@ -1037,8 +1036,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.register_global_array("llvm.global_ctors", init_fn);
     }
 
-    /// Emit the dtor that flushes both builtin streams at exit.
-    pub(super) fn create_builtin_cleanup(&mut self) {
+    /// `__zeru_flush`, which writes out what both builtin streams hold: run
+    /// as the program ends, by `exit`, and before a panic aborts.
+    pub(super) fn create_flush(&mut self) {
         let (Some(stdout_ptr), Some(stderr_ptr), Some(flush_fn)) = (
             self.stdout_stream,
             self.stderr_stream,
@@ -1048,9 +1048,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         };
 
         let dtor_fn = self.module.add_function(
-            "__cleanup_builtin_streams",
+            FLUSH_FN,
             self.context.void_type().fn_type(&[], false),
-            None,
+            Some(Linkage::Internal),
         );
         let entry = self.context.append_basic_block(dtor_fn, "entry");
         self.builder.position_at_end(entry);

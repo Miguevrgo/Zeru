@@ -1,0 +1,6 @@
+// expect: 'hashmap::slot' is private to module 'hashmap'; mark it pub
+import std.collections.hashmap;
+
+fn main() {
+    var at = hashmap::slot(1, 7);
+}

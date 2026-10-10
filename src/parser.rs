@@ -119,6 +119,7 @@ impl<'a> Parser<'a> {
                 Token::Struct => self.parse_struct_statement(),
                 Token::Enum => self.parse_enum_statement(),
                 Token::Trait => self.parse_trait_statement(),
+                Token::Pub => self.parse_public(),
                 Token::Import => self.parse_import_statement(),
                 Token::Semicolon => {
                     self.next_token();
@@ -151,7 +152,10 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        Program { statements }
+        Program {
+            statements,
+            ..Program::default()
+        }
     }
 
     fn parse_statement(&mut self) -> Option<Statement> {
@@ -560,10 +564,15 @@ impl<'a> Parser<'a> {
         let mut seen_method = false;
 
         while !self.peek_token_is(&Token::RBrace) && !self.peek_token_is(&Token::Eof) {
-            if self.peek_token_is(&Token::Fn) {
+            if self.peek_token_is(&Token::Fn) || self.peek_token_is(&Token::Pub) {
                 seen_method = true;
                 self.next_token();
-                if let Some(method) = self.parse_function_statement() {
+                let is_pub = self.cur_token_is(&Token::Pub);
+                if is_pub && !self.expect_peek(&Token::Fn) {
+                    return None;
+                }
+                if let Some(mut method) = self.parse_function_statement() {
+                    method.is_pub = is_pub;
                     methods.push(method);
                 }
                 continue;
@@ -640,6 +649,24 @@ impl<'a> Parser<'a> {
         if self.peek_token_is(&Token::Comma) {
             self.next_token();
         }
+    }
+
+    /// `pub` before an item: other modules may use it.
+    fn parse_public(&mut self) -> Option<Statement> {
+        self.next_token();
+        let mut item = match self.current_token {
+            Token::Fn => self.parse_function_statement(),
+            Token::Struct => self.parse_struct_statement(),
+            Token::Enum => self.parse_enum_statement(),
+            Token::Trait => self.parse_trait_statement(),
+            Token::Const => self.parse_var_statement::<true>(),
+            _ => {
+                self.error_current("'pub' goes before fn, struct, enum, trait or const");
+                None
+            }
+        }?;
+        item.is_pub = true;
+        Some(item)
     }
 
     fn parse_enum_statement(&mut self) -> Option<Statement> {

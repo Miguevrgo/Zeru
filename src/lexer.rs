@@ -234,6 +234,7 @@ impl<'a> Lexer<'a> {
             "break" => Token::Break,
             "continue" => Token::Continue,
             "as" => Token::As,
+            "pub" => Token::Pub,
             "try" => Token::Try,
             "catch" => Token::Catch,
             "orelse" => Token::Orelse,

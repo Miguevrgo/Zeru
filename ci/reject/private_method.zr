@@ -1,0 +1,7 @@
+// expect: 'hashmap::HashMap::find' is private to module 'hashmap'; mark it pub
+import std.collections.hashmap::{HashMap};
+
+fn main() {
+    var map: HashMap<i64, i64> = HashMap.new();
+    var at = map.find(1);
+}

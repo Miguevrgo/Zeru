@@ -99,6 +99,9 @@ fn load_modules(
                 errors,
             )?;
             modules::qualify(&mut module, Some(short_name), &inner_aliases);
+            program
+                .privates
+                .extend(modules::privates(&module, short_name));
             program.statements.append(&mut module.statements);
         }
     }

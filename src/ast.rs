@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::errors::Span;
 use crate::sema::types::Type;
 use crate::token::Token;
@@ -36,12 +38,17 @@ pub enum TypeSpec {
 #[derive(Debug, Clone, Default)]
 pub struct Program {
     pub statements: Vec<Statement>,
+    /// Each item and method not marked `pub`, by its qualified name, with
+    /// the module it belongs to: only that module may use it.
+    pub privates: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Statement {
     pub kind: StatementKind,
     pub span: Span,
+    /// Marked `pub`: other modules may use it.
+    pub is_pub: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -196,7 +203,11 @@ pub struct AsmOperand {
 
 impl Statement {
     pub fn new(kind: StatementKind, span: Span) -> Self {
-        Self { kind, span }
+        Self {
+            kind,
+            span,
+            is_pub: false,
+        }
     }
 }
 
@@ -256,6 +267,16 @@ pub trait Visitor {
         0
     }
     fn leave(&mut self, _scope: usize) {}
+}
+
+/// Every name a walk comes across, as a [`Visitor`] collects them.
+#[derive(Default)]
+pub struct Names(pub Vec<String>);
+
+impl Visitor for Names {
+    fn name(&mut self, name: &mut String) {
+        self.0.push(name.clone());
+    }
 }
 
 /// Walk a top-level item: a function, a struct with its methods, an enum, a
