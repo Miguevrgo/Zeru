@@ -73,12 +73,15 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_load(ty, ptr, name).unwrap()
     }
 
-    /// Store `value` at `ptr`. An array that was just loaded is copied
-    /// with `memmove` instead, which LLVM lowers without splitting it apart.
+    /// Store `value` at `ptr`. An array loaded by the last instruction is
+    /// copied with `memmove` instead, which LLVM lowers without splitting it
+    /// apart; a load followed by anything else may no longer match memory.
     pub(super) fn store(&self, ptr: PointerValue<'ctx>, value: BasicValueEnum<'ctx>) {
         if let Some(load) = value.as_instruction_value()
             && load.get_opcode() == InstructionOpcode::Load
             && value.is_array_value()
+            && load.get_next_instruction().is_none()
+            && load.get_parent() == self.builder.get_insert_block()
             && let Some(Operand::Value(BasicValueEnum::PointerValue(src))) = load.get_operand(0)
         {
             let size = value.get_type().size_of().unwrap();
