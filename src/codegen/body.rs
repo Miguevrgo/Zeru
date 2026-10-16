@@ -56,6 +56,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .zip(param_types)
             .filter_map(|((param_name, _, _), ty)| match ty {
                 Type::Struct(_) if param_name == "self" => Some(self.ptr_type().into()),
+                Type::Array { .. } => Some(self.ptr_type().into()),
                 _ => self.llvm_type_of(ty).map(Into::into),
             })
             .collect();
@@ -100,12 +101,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     .insert(param_name.clone(), (arg.into_pointer_value(), struct_type));
                 continue;
             }
-            let slot_type = arg.get_type();
-            let alloca = self.create_entry_block_alloca(function, param_name, slot_type);
-            self.builder.build_store(alloca, arg).unwrap();
-            self.variables
-                .insert(param_name.clone(), (alloca, slot_type));
-            self.own(alloca, ty);
+            let (slot, slot_type) = match (ty, self.llvm_type_of(ty)) {
+                (Type::Array { .. }, Some(array)) => (arg.into_pointer_value(), array),
+                _ => {
+                    let alloca =
+                        self.create_entry_block_alloca(function, param_name, arg.get_type());
+                    self.builder.build_store(alloca, arg).unwrap();
+                    (alloca, arg.get_type())
+                }
+            };
+            self.variables.insert(param_name.clone(), (slot, slot_type));
+            self.own(slot, ty);
         }
 
         for stmt in body {
@@ -235,7 +241,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let initial = self.compile_expression(value, declared);
         let slot_type = declared.unwrap_or_else(|| initial.get_type());
         let alloca = self.create_entry_block_alloca(parent_fn, name, slot_type);
-        self.builder.build_store(alloca, initial).unwrap();
+        self.store(alloca, initial);
 
         self.bind_variable(name, (alloca, slot_type));
         if let Some(ty) = ty {
@@ -1127,11 +1133,29 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
         };
 
-        let param_offset = implicit_args.len() as u32;
+        let types = self.types;
+        let param_types = fn_val
+            .get_name()
+            .to_str()
+            .ok()
+            .and_then(|name| types.signature(name))
+            .map_or(&[][..], |(params, _)| params);
+        let param_offset = implicit_args.len();
         let mut compiled_args: Vec<BasicMetadataValueEnum> = implicit_args;
         for (i, arg) in arguments.iter().enumerate() {
+            let index = i + param_offset;
+            if let Some(ty @ Type::Array { .. }) = param_types.get(index)
+                && let Some(array) = self.llvm_type_of(ty)
+                && let Some(function) = self.current_fn
+            {
+                let value = self.compile_expression(arg, Some(array));
+                let slot = self.create_entry_block_alloca(function, "arg", array);
+                self.store(slot, value);
+                compiled_args.push(slot.into());
+                continue;
+            }
             let expected = fn_val
-                .get_nth_param(i as u32 + param_offset)
+                .get_nth_param(index as u32)
                 .map(|param| param.get_type());
             compiled_args.push(self.compile_expression(arg, expected).into());
         }

@@ -241,8 +241,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let Some(llvm_type) = self.llvm_type_of(ty) else {
             return;
         };
-        let bits = self.load(llvm_type, src, "bits");
-        self.builder.build_store(dst, bits).unwrap();
+        self.builder
+            .build_memcpy(dst, 1, src, 1, llvm_type.size_of().unwrap())
+            .unwrap();
 
         match ty {
             Type::Vec { elem_type } => {

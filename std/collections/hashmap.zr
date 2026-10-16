@@ -54,14 +54,22 @@ pub struct HashMap<K: Eq, V> {
         return self.find(key).is_some();
     }
 
-    // Drop the entry under `key`; false when there was none.
+    // Drop the entry under `key`; false when there was none. Removed slots
+    // that end a probe run become unused again.
     pub fn remove(var self, key: K) bool {
         var found = self.find(key);
         if found.is_none() {
             return false;
         }
-        self.values[found.unwrap()] = None;
+        var mask = self.keys.len() - 1;
+        var at = found.unwrap();
+        self.values[at] = None;
         self.len -= 1;
+        while self.keys[at].is_some() && self.values[at].is_none() && self.keys[(at + 1) & mask].is_none() {
+            self.keys[at] = None;
+            self.used -= 1;
+            at = (at + mask) & mask;
+        }
         return true;
     }
 
@@ -101,9 +109,13 @@ pub struct HashMap<K: Eq, V> {
         return None;
     }
 
-    // Twice the slots, or eight to start, with every entry placed again.
+    // Twice the slots when half or more hold entries, as many otherwise,
+    // or eight to start, with every entry placed again.
     fn grow(var self) {
-        var size: usize = self.keys.len() * 2;
+        var size: usize = self.keys.len();
+        if self.len * 2 >= size {
+            size *= 2;
+        }
         if size == 0 {
             size = 8;
         }

@@ -333,6 +333,27 @@ fn test_release_fast_drops_bounds_check() {
 }
 
 #[test]
+fn test_release_fast_drops_unwrap_check() {
+    let input = "
+        fn none() i32? { return None; }
+        fn main() { var o = none(); var x = o.unwrap(); }
+    ";
+    let ir = compile_to_ir_with_mode(input, SafetyMode::ReleaseFast).expect("Compilation failed");
+    assert!(!ir.contains("unwrap_none_panic"), "Full IR:\n{ir}");
+}
+
+#[test]
+fn test_array_argument_is_copied_through_a_pointer() {
+    assert_ir_contains(
+        "
+        fn first(a: Array<u8, 64>) u8 { return a[0]; }
+        fn main() { var a: Array<u8, 64> = [1; 64]; var b = a; first(b); }
+        ",
+        &["@first(ptr", "@llvm.memmove"],
+    );
+}
+
+#[test]
 fn test_field_access_through_pointer() {
     let input = "
         struct S { v: i32, w: i32 }
