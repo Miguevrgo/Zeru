@@ -5,7 +5,7 @@ use std::process::Command;
 
 use crate::ast::{Program, StatementKind};
 use crate::codegen::{SafetyMode, compiler::Compiler};
-use crate::errors::{Sources, ZeruError, report_errors};
+use crate::errors::{Sources, Span, ZeruError, report_errors};
 use crate::sema::analyzer::SemanticAnalyzer;
 use crate::{CompileError, lexer::Lexer, modules, parser::Parser};
 
@@ -168,6 +168,7 @@ pub fn compile_pipeline(
         &mut sources,
         &mut errors,
     );
+    let main_end = sources.end();
     let root = path.parent().unwrap_or(Path::new("."));
     load_modules(
         &imports_of(&main),
@@ -179,6 +180,16 @@ pub fn compile_pipeline(
         &mut errors,
     )?;
     modules::qualify(&mut main, None, &aliases);
+    if !main
+        .statements
+        .iter()
+        .any(|stmt| matches!(&stmt.kind, StatementKind::Function { name, .. } if name == "main"))
+    {
+        errors.push(ZeruError::syntax(
+            "Missing 'fn main'",
+            Span::new(main_end - 1, main_end),
+        ));
+    }
     program.statements.append(&mut main.statements);
 
     let check_errors = |errs: &[ZeruError]| -> Result<(), CompileError> {

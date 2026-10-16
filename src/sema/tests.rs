@@ -990,6 +990,21 @@ fn test_literal_that_does_not_fit_is_an_error() {
             "var x: i64 = 18446744073709551615;",
             "Literal 18446744073709551615 does not fit in i64",
         ),
+        ("var x: u8 = 200 + 100;", "Constant 300 does not fit in u8"),
+        (
+            "var x: i32 = 1 << 40;",
+            "Shift by 40 is out of range for i32",
+        ),
+        ("var x: f32 = 1e40;", "Literal 1e40 does not fit in f32"),
+        ("var x: i8 = -(64 * 2);", "Constant 128 does not fit in i8"),
+        (
+            "var x = 2147483647 + 1;",
+            "Constant 2147483648 does not fit in i32",
+        ),
+        (
+            "var x: u16 = 0; x = 65535 + 1;",
+            "Constant 65536 does not fit in u16",
+        ),
         (
             "var x = 3000000000;",
             "Literal 3000000000 does not fit in i32, the type a literal takes",
@@ -1011,6 +1026,8 @@ fn test_literal_at_the_edge_of_its_type_fits() {
             var d: u8 = 255;
             var e = -2147483648;
             var f: i32? = -5;
+            var g: i32 = (1 << 31) + 0;
+            var h: u8 = 255 - 1 + 1;
         }
     ";
     let errors = analyze(input);
