@@ -1,4 +1,4 @@
-use std::{iter::Peekable, str::Chars};
+use std::{iter::Peekable, num::IntErrorKind, str::Chars};
 
 use crate::errors::Span;
 use crate::token::Token;
@@ -106,7 +106,7 @@ impl<'a> Lexer<'a> {
 
         let ch = match self.advance() {
             Some(c) => c,
-            None => return (Token::Eof, Span::new(start_pos, self.pos)),
+            None => return (Token::Eof, Span::new(start_pos, start_pos + 1)),
         };
 
         let token = match ch {
@@ -280,15 +280,15 @@ impl<'a> Lexer<'a> {
         if first == '0'
             && let Some(&ch) = self.peek()
         {
-            let (radix, predicate): (u32, fn(char) -> bool) = match ch {
-                'x' => (16, |c| c.is_ascii_hexdigit()),
-                'b' => (2, |c| c == '0' || c == '1'),
-                'o' => (8, |c| matches!(c, '0'..='7')),
-                _ => (0, |_| false),
+            let radix = match ch {
+                'x' => 16,
+                'b' => 2,
+                'o' => 8,
+                _ => 0,
             };
             if radix != 0 {
                 self.advance();
-                let digits = self.read_digits(predicate);
+                let digits = self.read_digits(|c| c.is_ascii_alphanumeric());
                 return Self::int_token(&digits, radix);
             }
         }
@@ -317,10 +317,11 @@ impl<'a> Lexer<'a> {
         if !float {
             return Self::int_token(&literal, 10);
         }
-        literal.parse().map_or_else(
-            |_| Token::Illegal(format!("Malformed number '{literal}'")),
-            Token::Float,
-        )
+        match literal.parse::<f64>() {
+            Ok(value) if value.is_finite() => Token::Float(value),
+            Ok(_) => Token::Illegal(format!("Float literal '{literal}' is out of range")),
+            Err(_) => Token::Illegal(format!("Malformed number '{literal}'")),
+        }
     }
 
     /// An integer literal carries its magnitude: a minus sign is an operator,
@@ -328,7 +329,13 @@ impl<'a> Lexer<'a> {
     fn int_token(digits: &str, radix: u32) -> Token {
         match u64::from_str_radix(digits, radix) {
             Ok(value) => Token::Int(value),
-            Err(_) => Token::Illegal(format!("Integer literal '{digits}' is out of range")),
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
+                Token::Illegal(format!("Integer literal '{digits}' is out of range"))
+            }
+            Err(_) if digits.is_empty() => {
+                Token::Illegal(format!("Base {radix} literal has no digits"))
+            }
+            Err(_) => Token::Illegal(format!("Invalid digit in base {radix} literal '{digits}'")),
         }
     }
 
@@ -588,7 +595,7 @@ mod tests {
                 Token::Int(0),
             ]
         );
-        for bad in ["'ab'", "''", "'\\x80'", "\"\\xZ1\""] {
+        for bad in ["'ab'", "''", "'\\x80'", "\"\\xZ1\"", "0x", "0b102", "1e400"] {
             assert!(
                 matches!(Lexer::new(bad).next_token().0, Token::Illegal(_)),
                 "{bad}"

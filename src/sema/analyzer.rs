@@ -1322,9 +1322,61 @@ impl SemanticAnalyzer {
     }
 
     fn check_expression(&mut self, expr: &mut Expression, expected_type: Option<&Type>) -> Type {
+        let reported = self.errors.len();
         let ty = self.check_expression_inner(expr, expected_type);
+        if self.errors.len() == reported {
+            self.check_constant_overflow(expr, &ty);
+        }
         expr.ty = Some(ty.clone());
         ty
+    }
+
+    /// Report arithmetic on constants that fit `ty` whose result does not,
+    /// and constant shifts by at least the width of `ty`.
+    fn check_constant_overflow(&mut self, expr: &Expression, ty: &Type) {
+        use crate::token::Token as T;
+        let &Type::Integer { signed, width } = ty else {
+            return;
+        };
+        if let ExpressionKind::Infix {
+            operator: T::ShiftLeft | T::ShiftRight,
+            right,
+            ..
+        } = &expr.kind
+            && let Some(amount) = self.constant_value(right)
+            && !(0..i128::from(Self::bits(width))).contains(&amount)
+        {
+            self.error(
+                format!("Shift by {amount} is out of range for {ty}"),
+                expr.span,
+            );
+            return;
+        }
+        let (left, right) = match &expr.kind {
+            ExpressionKind::Infix {
+                left,
+                operator: T::Plus | T::Minus | T::Star | T::Slash | T::Mod,
+                right,
+            } => (Some(left.as_ref()), right.as_ref()),
+            ExpressionKind::Prefix {
+                operator: T::Minus,
+                right,
+            } => (None, right.as_ref()),
+            _ => return,
+        };
+        let fits = |value: i128| {
+            u64::try_from(value.unsigned_abs())
+                .is_ok_and(|magnitude| Self::fits_in_int(magnitude, value < 0, width, signed))
+        };
+        if left
+            .into_iter()
+            .chain([right])
+            .all(|operand| self.constant_value(operand).is_some_and(fits))
+            && let Some(value) = self.constant_value(expr)
+            && !fits(value)
+        {
+            self.error(format!("Constant {value} does not fit in {ty}"), expr.span);
+        }
     }
 
     fn check_identifier(&mut self, name: &str, span: Span) -> Type {
@@ -2770,8 +2822,13 @@ impl SemanticAnalyzer {
             ExpressionKind::Int(value) => {
                 self.check_int_literal(*value, false, inner_expected, span)
             }
-            ExpressionKind::Float(_) => match inner_expected {
-                Some(Type::Float(width)) => Type::Float(*width),
+            ExpressionKind::Float(value) => match inner_expected {
+                Some(Type::Float(width)) => {
+                    if *width == FloatWidth::W32 && (*value as f32).is_infinite() {
+                        self.error(format!("Literal {value:e} does not fit in f32"), span);
+                    }
+                    Type::Float(*width)
+                }
                 _ => Type::Float(FloatWidth::W64),
             },
             ExpressionKind::Boolean(_) => Type::Bool,
@@ -3295,13 +3352,17 @@ impl SemanticAnalyzer {
         ty
     }
 
-    fn fits_in_int(value: u64, negative: bool, width: IntWidth, signed: Signedness) -> bool {
-        let bits = match width {
+    fn bits(width: IntWidth) -> u32 {
+        match width {
             IntWidth::W8 => 8,
             IntWidth::W16 => 16,
             IntWidth::W32 => 32,
             IntWidth::W64 | IntWidth::WSize => 64,
-        };
+        }
+    }
+
+    fn fits_in_int(value: u64, negative: bool, width: IntWidth, signed: Signedness) -> bool {
+        let bits = Self::bits(width);
         let value = u128::from(value);
         match (signed, negative) {
             (Signedness::Unsigned, false) => value < 1 << bits,
