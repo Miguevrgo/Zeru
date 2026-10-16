@@ -162,8 +162,8 @@ pub enum CompileError {
     Llvm(#[from] LLVMString),
     #[error("std library not found: install zeru or set ZERU_STD_PATH for local development")]
     StdNotFound,
-    #[error("module '{0}' not found")]
-    ModuleNotFound(String),
+    #[error("module '{}' not found at {}", .0, .1.display())]
+    ModuleNotFound(String, std::path::PathBuf),
     #[error("invalid path: must point to a .zr file with a valid UTF-8 name")]
     InvalidPath,
     #[error("linking failed: clang exited with {0}")]

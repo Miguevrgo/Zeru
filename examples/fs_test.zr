@@ -15,13 +15,17 @@ fn main() {
     var rd = fs::read_file(path, &buf[0], 64);
     if rd.is_err() { exit(5); }
     if rd.unwrap() != 16 { exit(6); }
-    if buf[0] != 72 { exit(7); }
+    if buf[0] != 'H' { exit(7); }
 
     var path2: *u8 = "build/test_fs2.txt" as *u8;
-    var fd = fs::open(path2, 577, 420);
+    var fd = fs::open(path2, fs::O_WRONLY | fs::O_CREAT | fs::O_TRUNC, fs::PERM_644);
     if fd.is_err() { exit(8); }
     var w2 = fs::write(fd.unwrap(), "test" as *u8, 4);
     if w2.is_err() { exit(9); }
+    if fs::close(fd.unwrap()).is_err() { exit(10); }
+    if fs::unlink(path).is_err() { exit(11); }
+    if fs::unlink(path2).is_err() { exit(12); }
+    if fs::exists(path) { exit(13); }
 
     println("fs: all tests passed");
 }

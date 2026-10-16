@@ -27,24 +27,12 @@ fn get_std_path() -> Result<PathBuf, CompileError> {
     Ok(PathBuf::from(home).join(".zeru/std"))
 }
 
-fn resolve_import(import_path: &str, root: &Path) -> Result<Option<PathBuf>, CompileError> {
-    let mut parts = import_path.split('.').peekable();
-    let base = match parts.peek() {
-        Some(&"std") => {
-            parts.next();
-            get_std_path()?
-        }
-        Some(_) => root.to_path_buf(),
-        None => return Ok(None),
+fn resolve_import(import_path: &str, root: &Path) -> Result<PathBuf, CompileError> {
+    let (base, relative) = match import_path.strip_prefix("std.") {
+        Some(rest) => (get_std_path()?, rest),
+        None => (root.to_path_buf(), import_path),
     };
-
-    let relative: Vec<&str> = parts.collect();
-    if relative.is_empty() {
-        return Ok(None);
-    }
-
-    let full_path = base.join(format!("{}.zr", relative.join("/")));
-    Ok(full_path.exists().then_some(full_path))
+    Ok(base.join(relative.replace('.', "/")).with_extension("zr"))
 }
 
 fn imports_of(program: &Program) -> Vec<(String, Option<Vec<String>>)> {
@@ -78,11 +66,10 @@ fn load_modules(
         }
 
         if loaded.insert(import_path.clone()) {
-            let Some(file_path) = resolve_import(import_path, root)? else {
-                return Err(CompileError::ModuleNotFound(import_path.clone()));
-            };
-            let source = std::fs::read_to_string(&file_path)
-                .map_err(|_| CompileError::ModuleNotFound(import_path.clone()))?;
+            let file_path = resolve_import(import_path, root)?;
+            let source = std::fs::read_to_string(&file_path).map_err(|_| {
+                CompileError::ModuleNotFound(import_path.clone(), file_path.clone())
+            })?;
 
             let mut module = parse_file(file_path.display().to_string(), &source, sources, errors);
             let mut inner_aliases = HashMap::new();

@@ -4,56 +4,28 @@
 
 fn main() {
     var numbers: Vec<i64> = Vec.new();
-
-    var len0: usize = numbers.len();
-    if len0 != 0 as usize {
-        exit(1);
-    }
+    if numbers.len() != 0 { exit(1); }
 
     numbers.push(10);
     numbers.push(20);
     numbers.push(30);
- 
-    var len3: usize = numbers.len();
-    if len3 != 3 as usize {
-        exit(2);
-    }
+    if numbers.len() != 3 { exit(2); }
 
-    var popped = numbers.pop();
-    var len2: usize = numbers.len();
-    if len2 != 2 as usize {
-        exit(3);
-    }
+    numbers.pop();
+    if numbers.len() != 2 { exit(3); }
 
     numbers.clear();
-    var lenAfterClear: usize = numbers.len();
-    if lenAfterClear != 0 as usize {
-        exit(4);
-    }
+    if numbers.len() != 0 { exit(4); }
 
     numbers.push(100);
     numbers.push(200);
     var copied = numbers.copy();
- 
-    var numbersLen: usize = numbers.len();
-    var copiedLen: usize = copied.len();
-    if numbersLen != 2 as usize {
-        exit(5);
-    }
-    if copiedLen != 2 as usize {
-        exit(6);
-    }
- 
-    numbers.push(300);
+    if numbers.len() != 2 { exit(5); }
+    if copied.len() != 2 { exit(6); }
 
-    var finalLen: usize = numbers.len();
-    var copyFinalLen: usize = copied.len();
-    if finalLen != 3 as usize {
-        exit(7);
-    }
-    if copyFinalLen != 2 as usize {
-        exit(8);
-    }
+    numbers.push(300);
+    if numbers.len() != 3 { exit(7); }
+    if copied.len() != 2 { exit(8); }
 
     var items: Vec<i64> = Vec.new();
     var n: i64 = 1;

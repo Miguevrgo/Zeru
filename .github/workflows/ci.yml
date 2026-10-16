@@ -71,20 +71,10 @@ jobs:
   #
   # x86_64 Linux only: std/builtin.zr reaches the kernel through inline `syscall`
   # asm with Linux call numbers, so a Zeru program cannot be built anywhere else
-  # yet. Widen the matrix once std grows a portable syscall layer.
+  # yet. Add runners once std grows a portable syscall layer.
   compile-suite:
-    name: Compile Suite (${{ matrix.name }})
+    name: Compile Suite
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: debug
-            flag: ""
-          - name: release-safe
-            flag: --release-safe
-          - name: release-fast
-            flag: --release-fast
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-llvm
@@ -93,7 +83,14 @@ jobs:
         with:
           key: linux-x86_64
       - run: cargo build --release
-      - run: python3 ci/compile_suite.py ${{ matrix.flag }}
+      - name: Debug
+        run: python3 ci/compile_suite.py
+      - name: Release safe
+        if: ${{ !cancelled() }}
+        run: python3 ci/compile_suite.py --release-safe
+      - name: Release fast
+        if: ${{ !cancelled() }}
+        run: python3 ci/compile_suite.py --release-fast
 
   # Single gate to require in branch protection: adding or renaming a job above
   # then needs no settings change.
