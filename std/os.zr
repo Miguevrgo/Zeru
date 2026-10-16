@@ -43,6 +43,7 @@ pub fn time() i64! {
 }
 
 pub fn hostname(buf: *u8, size: usize) i64! {
+    if size == 0 { return Ok(0); }
     var utsname: Array<u8, 390> = [0; 390];
     try sys_result(syscall1(63, (&utsname[0]) as i64));
     var i: usize = 0;

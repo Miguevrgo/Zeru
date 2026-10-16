@@ -146,6 +146,19 @@ fn test_release_fast_no_null_checks() {
 }
 
 #[test]
+fn test_allocation_size_overflow_checked_unless_release_fast() {
+    let input = "
+        fn main() {
+            var v: Vec<i64> = Vec.with_capacity(4);
+        }
+    ";
+    let safe = compile_to_ir_with_mode(input, SafetyMode::ReleaseSafe).unwrap();
+    let fast = compile_to_ir_with_mode(input, SafetyMode::ReleaseFast).unwrap();
+    assert!(safe.contains("umul.with.overflow"));
+    assert!(!fast.contains("umul.with.overflow"));
+}
+
+#[test]
 fn test_generic_function_multiple_types() {
     let input = "
         fn identity<T>(x: T) T {
