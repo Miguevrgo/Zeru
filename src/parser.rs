@@ -1257,7 +1257,8 @@ impl<'a> Parser<'a> {
         if let Token::Identifier(name) = &self.current_token {
             return Some(name.clone());
         }
-        self.error_current(&format!("Expected {what}"));
+        let message = format!("Expected {what}, found '{}'", self.current_token);
+        self.error_current(&message);
         None
     }
 
@@ -1265,7 +1266,8 @@ impl<'a> Parser<'a> {
         if let Token::StringLit(bytes) = &self.current_token {
             return Some(String::from_utf8_lossy(bytes).into_owned());
         }
-        self.error_current(&format!("Expected {what}"));
+        let message = format!("Expected {what}, found '{}'", self.current_token);
+        self.error_current(&message);
         None
     }
 
