@@ -1560,7 +1560,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
             }
             (BasicValueEnum::FloatValue(v), BasicTypeEnum::IntType(t)) => {
-                if Self::is_unsigned_expr(cast) {
+                let unsigned = Self::is_unsigned_expr(cast);
+                self.emit_float_to_int_check(v, t, unsigned);
+                if unsigned {
                     self.builder
                         .build_float_to_unsigned_int(v, t, "fptoui")
                         .unwrap()

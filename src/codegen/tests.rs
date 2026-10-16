@@ -233,7 +233,9 @@ fn test_float_to_unsigned_cast_is_unsigned() {
             var n: u32 = f as u32;
         }
     ";
-    assert_ir_contains(input, &["fptoui"]);
+    assert_ir_contains(input, &["fptoui", "float_cast_panic"]);
+    let ir = compile_to_ir_with_mode(input, SafetyMode::ReleaseFast).expect("Compilation failed");
+    assert!(!ir.contains("float_cast_panic"), "Full IR:\n{ir}");
 }
 
 #[test]

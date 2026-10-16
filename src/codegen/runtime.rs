@@ -2,15 +2,15 @@
 //! streams, and the `Vec`/`T!` runtime.
 
 use inkwell::{
-    AddressSpace, IntPredicate,
+    AddressSpace, FloatPredicate, IntPredicate,
     attributes::{Attribute, AttributeLoc},
     builder::Builder,
     intrinsics::Intrinsic,
     module::Linkage,
     types::{BasicType, BasicTypeEnum, FunctionType, IntType, PointerType, StructType},
     values::{
-        BasicMetadataValueEnum, BasicValueEnum, FunctionValue, IntValue, PointerValue, StructValue,
-        ValueKind,
+        BasicMetadataValueEnum, BasicValueEnum, FloatValue, FunctionValue, IntValue, PointerValue,
+        StructValue, ValueKind,
     },
 };
 
@@ -277,6 +277,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             "unwrap_none" => "unwrap on None",
             "unwrap" => "unwrap on Err",
             "unwrap_err" => "unwrap_err on Ok",
+            "float_cast" => "float out of range for the integer type",
             _ => label,
         };
         let message = match self.sources.position(self.current_span) {
@@ -417,6 +418,54 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
 
         self.emit_trap_if(invalid, "div");
+    }
+
+    /// Trap unless `value`, truncated, fits `int_type`. NaN never fits.
+    pub(super) fn emit_float_to_int_check(
+        &mut self,
+        value: FloatValue<'ctx>,
+        int_type: IntType<'ctx>,
+        unsigned: bool,
+    ) {
+        if !self.safety_mode.emit_safety_checks() {
+            return;
+        }
+        let float_type = value.get_type();
+        let Some(trunc) = Intrinsic::find("llvm.trunc")
+            .and_then(|i| i.get_declaration(self.module, &[float_type.into()]))
+        else {
+            return;
+        };
+        let ValueKind::Basic(BasicValueEnum::FloatValue(whole)) = self
+            .builder
+            .build_call(trunc, &[value.into()], "whole")
+            .unwrap()
+            .try_as_basic_value()
+        else {
+            return;
+        };
+
+        let high = 2f64.powi(int_type.get_bit_width() as i32 - i32::from(!unsigned));
+        let low = if unsigned { 0.0 } else { -high };
+        let b = self.builder;
+        let below = b
+            .build_float_compare(
+                FloatPredicate::ULT,
+                whole,
+                float_type.const_float(low),
+                "below",
+            )
+            .unwrap();
+        let above = b
+            .build_float_compare(
+                FloatPredicate::UGE,
+                whole,
+                float_type.const_float(high),
+                "above",
+            )
+            .unwrap();
+        let outside = b.build_or(below, above, "outside").unwrap();
+        self.emit_trap_if(outside, "float_cast");
     }
 
     /// LLVM leaves a shift by the operand width or more undefined.
