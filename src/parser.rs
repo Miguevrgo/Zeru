@@ -116,7 +116,7 @@ impl<'a> Parser<'a> {
                     None
                 }
                 Token::Var => {
-                    self.error_current("Global variables ('var') are not allowed. Use 'const' for constants or move 'var' inside a function.");
+                    self.error_current("Global variables ('var') are not allowed. Use 'const' for constants or move 'var' inside a function");
                     self.synchronize();
                     None
                 }
@@ -231,7 +231,9 @@ impl<'a> Parser<'a> {
                 Some(TypeSpec::Pointer(Box::new(self.parse_type()?)))
             }
             Token::BitAnd => self.parse_reference_type(),
-            Token::LParen => self.parse_tuple_type(),
+            Token::LParen => Some(TypeSpec::Tuple(
+                self.parse_list(&Token::RParen, Self::parse_type)?,
+            )),
             Token::Identifier(_) => self.parse_named_type(),
             _ => {
                 self.error_current("Type identifier expected");
@@ -277,30 +279,8 @@ impl<'a> Parser<'a> {
         Some(TypeSpec::Ref(Box::new(self.parse_type()?)))
     }
 
-    fn parse_tuple_type(&mut self) -> Option<TypeSpec> {
-        Some(TypeSpec::Tuple(
-            self.parse_list(&Token::RParen, Self::parse_type)?,
-        ))
-    }
-
     fn parse_named_type(&mut self) -> Option<TypeSpec> {
-        let Token::Identifier(first) = &self.current_token else {
-            self.error_current("Type identifier expected");
-            return None;
-        };
-        let mut name = first.clone();
-
-        while self.peek_token_is(&Token::DoubleColon) {
-            self.next_token();
-            self.next_token();
-            let Token::Identifier(segment) = &self.current_token else {
-                self.error_current("Expected type name after '::'");
-                return None;
-            };
-            name.push_str("::");
-            name.push_str(segment);
-        }
-
+        let name = self.parse_path(&Token::DoubleColon)?.join("::");
         if self.peek_token_is(&Token::Lt) && !PRIMITIVES.contains(&name.as_str()) {
             let args = self.parse_generic_arguments()?;
             return Some(TypeSpec::Generic { name, args });
@@ -379,13 +359,7 @@ impl<'a> Parser<'a> {
         }
 
         let params = self.parse_function_parameters()?;
-        let mut return_type = None;
-
-        if !self.peek_token_is(&Token::LBrace) {
-            self.next_token();
-            return_type = self.parse_type();
-            return_type.as_ref()?;
-        }
+        let return_type = self.parse_return_type(&[Token::LBrace])?;
         let end_span = self.current_span;
 
         if !self.expect_peek(&Token::LBrace) {
@@ -403,6 +377,14 @@ impl<'a> Parser<'a> {
             },
             start_span.merge(end_span),
         ))
+    }
+
+    fn parse_return_type(&mut self, body_starts: &[Token]) -> Option<Option<TypeSpec>> {
+        if body_starts.iter().any(|t| self.peek_token_is(t)) {
+            return Some(None);
+        }
+        self.next_token();
+        self.parse_type().map(Some)
     }
 
     fn parse_type_parameters(&mut self) -> Option<Vec<TypeParameter>> {
@@ -556,7 +538,7 @@ impl<'a> Parser<'a> {
 
             if seen_method {
                 self.error_current(&format!(
-                    "Struct '{name}': Fields must be declared before methods."
+                    "Struct '{name}': Fields must be declared before methods"
                 ));
                 return None;
             }
@@ -597,13 +579,7 @@ impl<'a> Parser<'a> {
 
     fn parse_struct_field(&mut self) -> Option<(String, TypeSpec)> {
         self.next_token();
-
-        let Token::Identifier(name) = &self.current_token else {
-            self.error_current("Expected field name");
-            return None;
-        };
-        let name = name.clone();
-
+        let name = self.current_identifier("field name")?;
         if !self.expect_peek(&Token::Colon) {
             return None;
         }
@@ -687,15 +663,8 @@ impl<'a> Parser<'a> {
             }
 
             let params = self.parse_function_parameters()?;
-            let mut return_type = None;
-
-            if !self.peek_token_is(&Token::Semicolon)
-                && !self.peek_token_is(&Token::RBrace)
-                && !self.peek_token_is(&Token::Fn)
-            {
-                self.next_token();
-                return_type = self.parse_type();
-            }
+            let return_type =
+                self.parse_return_type(&[Token::Semicolon, Token::RBrace, Token::Fn])?;
 
             if self.peek_token_is(&Token::Semicolon) {
                 self.next_token();
@@ -722,19 +691,7 @@ impl<'a> Parser<'a> {
     /// A name, a qualified path like `module::Name`, or a struct literal when a
     /// path naming a type is followed by a brace.
     fn parse_path_or_struct_literal(&mut self, start_span: Span) -> Option<Expression> {
-        let Token::Identifier(first) = &self.current_token else {
-            return None;
-        };
-        let mut path = first.clone();
-
-        while self.peek_token_is(&Token::DoubleColon) {
-            self.next_token();
-            self.next_token();
-            let Token::Identifier(segment) = &self.current_token else {
-                return None;
-            };
-            path = format!("{path}::{segment}");
-        }
+        let path = self.parse_path(&Token::DoubleColon)?.join("::");
 
         let names_a_type = path
             .rsplit("::")
@@ -801,7 +758,8 @@ impl<'a> Parser<'a> {
             self.error_current("Imports must come before any other code");
         }
 
-        let path = self.parse_dotted_path()?;
+        self.next_token();
+        let path = self.parse_path(&Token::Dot)?;
         let symbols = if self.peek_token_is(&Token::DoubleColon) {
             self.next_token();
             Some(self.parse_import_selection()?)
@@ -820,10 +778,9 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_dotted_path(&mut self) -> Option<Vec<String>> {
-        let mut path = vec![self.expect_identifier()?];
-
-        while self.peek_token_is(&Token::Dot) {
+    fn parse_path(&mut self, separator: &Token) -> Option<Vec<String>> {
+        let mut path = vec![self.current_identifier("a name")?];
+        while self.peek_token_is(separator) {
             self.next_token();
             path.push(self.expect_identifier()?);
         }
@@ -1023,31 +980,10 @@ impl<'a> Parser<'a> {
         }
 
         self.next_token();
-        let template = match &self.current_token {
-            Token::StringLit(s) => String::from_utf8(s.clone()).unwrap(),
-            _ => {
-                self.error_current("Expected assembly template string");
-                return None;
-            }
-        };
-
-        let mut outputs = Vec::new();
-        if self.peek_token_is(&Token::Colon) {
-            self.next_token();
-            outputs = self.parse_asm_operands()?;
-        }
-
-        let mut inputs = Vec::new();
-        if self.peek_token_is(&Token::Colon) {
-            self.next_token();
-            inputs = self.parse_asm_operands()?;
-        }
-
-        let mut clobbers = Vec::new();
-        if self.peek_token_is(&Token::Colon) {
-            self.next_token();
-            clobbers = self.parse_asm_clobbers()?;
-        }
+        let template = self.current_string("assembly template string")?;
+        let outputs = self.parse_asm_section(Self::parse_asm_operand)?;
+        let inputs = self.parse_asm_section(Self::parse_asm_operand)?;
+        let clobbers = self.parse_asm_section(|p| p.current_string("clobber string"))?;
 
         if !self.expect_peek(&Token::RParen) {
             return None;
@@ -1066,74 +1002,40 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_asm_operands(&mut self) -> Option<Vec<AsmOperand>> {
-        let mut operands = Vec::new();
-
-        if self.peek_token_is(&Token::Colon) || self.peek_token_is(&Token::RParen) {
-            return Some(operands);
+    /// `: item, item` of an asm statement, or nothing when the colon is absent.
+    fn parse_asm_section<T>(
+        &mut self,
+        mut item: impl FnMut(&mut Self) -> Option<T>,
+    ) -> Option<Vec<T>> {
+        let mut items = Vec::new();
+        if !self.peek_token_is(&Token::Colon) {
+            return Some(items);
         }
-
+        self.next_token();
+        if self.peek_token_is(&Token::Colon) || self.peek_token_is(&Token::RParen) {
+            return Some(items);
+        }
         loop {
             self.next_token();
-
-            let constraint = match &self.current_token {
-                Token::StringLit(s) => String::from_utf8(s.clone()).unwrap(),
-                _ => {
-                    self.error_current("Expected constraint string in assembly operand");
-                    return None;
-                }
-            };
-
-            if !self.expect_peek(&Token::LParen) {
-                return None;
+            items.push(item(self)?);
+            if !self.peek_token_is(&Token::Comma) {
+                return Some(items);
             }
             self.next_token();
-
-            let expr = self.parse_expression(Precedence::Lowest)?;
-
-            if !self.expect_peek(&Token::RParen) {
-                return None;
-            }
-            operands.push(AsmOperand { constraint, expr });
-
-            if self.peek_token_is(&Token::Comma) {
-                self.next_token();
-            } else {
-                break;
-            }
         }
-
-        Some(operands)
     }
 
-    fn parse_asm_clobbers(&mut self) -> Option<Vec<String>> {
-        let mut clobbers = Vec::new();
-
-        if self.peek_token_is(&Token::RParen) {
-            return Some(clobbers);
+    fn parse_asm_operand(&mut self) -> Option<AsmOperand> {
+        let constraint = self.current_string("constraint string in assembly operand")?;
+        if !self.expect_peek(&Token::LParen) {
+            return None;
         }
-
-        loop {
-            self.next_token();
-
-            let clobber = match &self.current_token {
-                Token::StringLit(s) => String::from_utf8(s.clone()).unwrap(),
-                _ => {
-                    self.error_current("Expected clobber string");
-                    return None;
-                }
-            };
-
-            clobbers.push(clobber);
-
-            if self.peek_token_is(&Token::Comma) {
-                self.next_token();
-            } else {
-                break;
-            }
+        self.next_token();
+        let expr = self.parse_expression(Precedence::Lowest)?;
+        if !self.expect_peek(&Token::RParen) {
+            return None;
         }
-
-        Some(clobbers)
+        Some(AsmOperand { constraint, expr })
     }
 
     fn parse_prefix_expression(&mut self) -> Option<Expression> {
@@ -1354,6 +1256,14 @@ impl<'a> Parser<'a> {
     fn current_identifier(&mut self, what: &str) -> Option<String> {
         if let Token::Identifier(name) = &self.current_token {
             return Some(name.clone());
+        }
+        self.error_current(&format!("Expected {what}"));
+        None
+    }
+
+    fn current_string(&mut self, what: &str) -> Option<String> {
+        if let Token::StringLit(bytes) = &self.current_token {
+            return Some(String::from_utf8_lossy(bytes).into_owned());
         }
         self.error_current(&format!("Expected {what}"));
         None
@@ -1626,26 +1536,6 @@ mod tests {
     }
 
     #[test]
-    fn test_splitting_a_shift_leaves_the_operator_alone() {
-        let program = parse_input("fn main() { var t = a >> 2; }");
-        let body = get_function_body(&program.statements[0]);
-        let StatementKind::Var { value, .. } = &body[0].kind else {
-            panic!("Expected a var statement");
-        };
-        assert_eq!(shape(value), "(a ShiftRight 2)");
-    }
-
-    #[test]
-    fn test_qualified_path_is_one_name() {
-        let program = parse_input("fn main() { var t = module::item; }");
-        let body = get_function_body(&program.statements[0]);
-        let StatementKind::Var { value, .. } = &body[0].kind else {
-            panic!("Expected a var statement");
-        };
-        assert_eq!(shape(value), "module::item");
-    }
-
-    #[test]
     fn test_qualified_struct_literal() {
         let program = parse_input("fn main() { var t = shapes::Rect { w: 1, h: 2 }; }");
         let body = get_function_body(&program.statements[0]);
@@ -1692,36 +1582,6 @@ mod tests {
     }
 
     #[test]
-    fn test_bitwise_binds_tighter_than_comparison() {
-        let program = parse_input("fn main() { var t = flags & mask == 0; }");
-        let body = get_function_body(&program.statements[0]);
-        let StatementKind::Var { value, .. } = &body[0].kind else {
-            panic!("Expected a var statement");
-        };
-        assert_eq!(shape(value), "((flags BitAnd mask) Eq 0)");
-    }
-
-    #[test]
-    fn test_precedence_within_the_bitwise_group() {
-        let program = parse_input("fn main() { var t = a | b ^ c & d; }");
-        let body = get_function_body(&program.statements[0]);
-        let StatementKind::Var { value, .. } = &body[0].kind else {
-            panic!("Expected a var statement");
-        };
-        assert_eq!(shape(value), "(a BitOr (b BitXor (c BitAnd d)))");
-    }
-
-    #[test]
-    fn test_shift_stays_looser_than_arithmetic() {
-        let program = parse_input("fn main() { var t = a << 2 + 1; }");
-        let body = get_function_body(&program.statements[0]);
-        let StatementKind::Var { value, .. } = &body[0].kind else {
-            panic!("Expected a var statement");
-        };
-        assert_eq!(shape(value), "(a ShiftLeft (2 Plus 1))");
-    }
-
-    #[test]
     fn test_operator_precedence() {
         for (input, expected) in [
             ("5 > 5 == 3 < 4", "((5 Gt 5) Eq (3 Lt 4))"),
@@ -1736,6 +1596,12 @@ mod tests {
             ),
             ("(5 + 5) * 2", "((5 Plus 5) Star 2)"),
             ("a - b - c", "((a Minus b) Minus c)"),
+            ("a >> 2", "(a ShiftRight 2)"),
+            ("module::item", "module::item"),
+            ("flags & mask == 0", "((flags BitAnd mask) Eq 0)"),
+            ("a | b ^ c & d", "(a BitOr (b BitXor (c BitAnd d)))"),
+            ("a << 2 + 1", "(a ShiftLeft (2 Plus 1))"),
+            ("(42)", "42"),
         ] {
             let program = parse_input(&format!("fn main() {{ var t = {input}; }}"));
             let body = get_function_body(&program.statements[0]);
@@ -1758,24 +1624,6 @@ mod tests {
                     assert_eq!(elements.len(), 1);
                 }
                 _ => panic!("Expected single-element Tuple"),
-            },
-            _ => panic!("Expected Var statement"),
-        }
-    }
-
-    #[test]
-    fn test_grouped_expression_not_tuple() {
-        let input = "fn main() { var x = (42); }";
-        let program = parse_input(input);
-        let body = get_function_body(&program.statements[0]);
-
-        match &body[0].kind {
-            StatementKind::Var { value, .. } => match &value.kind {
-                ExpressionKind::Int(_) => {}
-                ExpressionKind::Tuple(_) => {
-                    panic!("(42) should not be a tuple, use (42,) for single-element tuple")
-                }
-                _ => panic!("Expected integer literal from grouped expression"),
             },
             _ => panic!("Expected Var statement"),
         }

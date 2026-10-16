@@ -65,6 +65,23 @@ pub enum Type {
 }
 
 impl Type {
+    pub const U8: Type = Type::Integer {
+        signed: Signedness::Unsigned,
+        width: IntWidth::W8,
+    };
+    pub const I32: Type = Type::Integer {
+        signed: Signedness::Signed,
+        width: IntWidth::W32,
+    };
+    pub const I64: Type = Type::Integer {
+        signed: Signedness::Signed,
+        width: IntWidth::W64,
+    };
+    pub const USIZE: Type = Type::Integer {
+        signed: Signedness::Unsigned,
+        width: IntWidth::WSize,
+    };
+
     /// Whether a value of `other` can go where `self` is wanted: equal types,
     /// a `T` where a `T?` is, or a type still unknown after an error.
     pub fn accepts(&self, other: &Type) -> bool {
@@ -175,9 +192,7 @@ impl std::fmt::Display for Type {
                 write!(f, "{ok_type}!{err_type}")
             }
             Type::Result { ok_type, .. } => write!(f, "{ok_type}!"),
-            Type::Slice { elem_type } if elem_type.to_spec() == TypeSpec::Named("u8".into()) => {
-                write!(f, "str")
-            }
+            Type::Slice { elem_type } if **elem_type == Type::U8 => write!(f, "str"),
             Type::Slice { elem_type } => write!(f, "&[{elem_type}]"),
             Type::Vec { elem_type } => write!(f, "Vec<{elem_type}>"),
             Type::Ref(elem_type) => write!(f, "&{elem_type}"),

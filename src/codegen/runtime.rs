@@ -179,30 +179,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    /// Append `func` to `llvm.global_ctors` or `llvm.global_dtors`.
-    fn register_global_array(&mut self, array_name: &str, func: FunctionValue<'ctx>) {
-        let i32_type = self.context.i32_type();
-        let ptr_type = self.ptr_type();
-        let entry_type = self
-            .context
-            .struct_type(&[i32_type.into(), ptr_type.into(), ptr_type.into()], false);
-
-        let entry = entry_type.const_named_struct(&[
-            i32_type.const_int(65535, false).into(),
-            func.as_global_value().as_pointer_value().into(),
-            ptr_type.const_null().into(),
-        ]);
-
-        let entries = entry_type.const_array(&[entry]);
-        let global = self.module.add_global(
-            entries.get_type(),
-            Some(AddressSpace::default()),
-            array_name,
-        );
-        global.set_linkage(Linkage::Appending);
-        global.set_initializer(&entries);
-    }
-
     /// Emit the body of `function` through `build`, then put the builder
     /// back where it was.
     pub(super) fn in_helper(
@@ -1019,17 +995,33 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             self.context.void_type().fn_type(&[], false),
             Some(Linkage::Internal),
         );
-        let entry = self.context.append_basic_block(dtor_fn, "entry");
-        self.builder.position_at_end(entry);
+        self.in_helper(dtor_fn, |this| {
+            for stream in [stdout_ptr, stderr_ptr] {
+                this.builder
+                    .build_call(flush_fn, &[stream.into()], "")
+                    .unwrap();
+            }
+            this.builder.build_return(None).unwrap();
+        });
 
-        for stream in [stdout_ptr, stderr_ptr] {
-            self.builder
-                .build_call(flush_fn, &[stream.into()], "")
-                .unwrap();
-        }
-        self.builder.build_return(None).unwrap();
-
-        self.register_global_array("llvm.global_dtors", dtor_fn);
+        let i32_type = self.context.i32_type();
+        let ptr_type = self.ptr_type();
+        let entry_type = self
+            .context
+            .struct_type(&[i32_type.into(), ptr_type.into(), ptr_type.into()], false);
+        let entry = entry_type.const_named_struct(&[
+            i32_type.const_int(65535, false).into(),
+            dtor_fn.as_global_value().as_pointer_value().into(),
+            ptr_type.const_null().into(),
+        ]);
+        let entries = entry_type.const_array(&[entry]);
+        let global = self.module.add_global(
+            entries.get_type(),
+            Some(AddressSpace::default()),
+            "llvm.global_dtors",
+        );
+        global.set_linkage(Linkage::Appending);
+        global.set_initializer(&entries);
     }
 
     /// `print("x is {}", x)`: the format's text around each `{}` is written
@@ -1139,7 +1131,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             arguments,
             call.ty.as_ref().and_then(|ty| self.llvm_type_of(ty)),
         ) else {
-            self.error("'Err()' requires a known Result type context", call.span);
+            let name = if ok { "Ok" } else { "Err" };
+            self.error(
+                format!("'{name}()' requires a known Result type context"),
+                call.span,
+            );
             return self.dummy_val();
         };
 
