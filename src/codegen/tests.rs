@@ -427,6 +427,16 @@ fn test_reading_through_a_temporary() {
 }
 
 #[test]
+fn test_for_in_walks_a_temporary() {
+    assert_compiles(
+        "
+        fn make() Vec<i64> { var v: Vec<i64> = Vec.new(); v.push(1); return v; }
+        fn main() { var s: i64 = 0; for x in make() { s += x; } }
+    ",
+    );
+}
+
+#[test]
 fn test_vec_mutation_reaches_any_place() {
     let input = "
         struct Bag { items: Vec<i64> }
