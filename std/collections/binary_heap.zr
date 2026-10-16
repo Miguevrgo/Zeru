@@ -71,7 +71,7 @@ pub struct BinaryHeap {
         return self.data[0];
     }
 
-    pub fn size(self) usize {
+    pub fn len(self) usize {
         return self.len;
     }
 

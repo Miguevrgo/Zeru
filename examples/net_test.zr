@@ -3,9 +3,9 @@ import std.net;
 fn main() {
     var bind_r = net::TcpListener.bind(0, 0);
     if bind_r.is_err() { exit(1); }
-    var listener = net::TcpListener { fd: bind_r.unwrap() };
+    var listener = bind_r.unwrap();
 
-    var sock_fd: i64 = syscall3(41, 2, 1, 0);
+    var sock_fd: i64 = syscall3(41, net::AF_INET, net::SOCK_STREAM, 0);
     if sock_fd < 0 { exit(2); }
     var stream = net::TcpStream { fd: sock_fd };
 
@@ -23,7 +23,7 @@ fn main() {
 
     var udp_r = net::UdpSocket.bind(0, 0);
     if udp_r.is_err() { exit(7); }
-    var udp = net::UdpSocket { fd: udp_r.unwrap() };
+    var udp = udp_r.unwrap();
     udp.close();
 
     println("net: all tests passed");
