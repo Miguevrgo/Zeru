@@ -2,15 +2,15 @@
 //! streams, and the `Vec`/`T!` runtime.
 
 use inkwell::{
-    AddressSpace, IntPredicate,
+    AddressSpace, FloatPredicate, IntPredicate,
     attributes::{Attribute, AttributeLoc},
     builder::Builder,
     intrinsics::Intrinsic,
     module::Linkage,
     types::{BasicType, BasicTypeEnum, FunctionType, IntType, PointerType, StructType},
     values::{
-        BasicMetadataValueEnum, BasicValueEnum, FunctionValue, IntValue, PointerValue, StructValue,
-        ValueKind,
+        BasicMetadataValueEnum, BasicValueEnum, FloatValue, FunctionValue, IntValue, PointerValue,
+        StructValue, ValueKind,
     },
 };
 
@@ -154,17 +154,32 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
+    fn stride(&self, elem_type: BasicTypeEnum<'ctx>) -> IntValue<'ctx> {
+        elem_type
+            .size_of()
+            .unwrap_or(self.usize_type().const_int(1, false))
+    }
+
     pub(super) fn bytes_for(
         &self,
         elem_type: BasicTypeEnum<'ctx>,
         count: IntValue<'ctx>,
     ) -> IntValue<'ctx> {
-        let stride = elem_type
-            .size_of()
-            .unwrap_or(self.usize_type().const_int(1, false));
         self.builder
-            .build_int_mul(count, stride, "byte_size")
+            .build_int_mul(count, self.stride(elem_type), "byte_size")
             .unwrap()
+    }
+
+    /// `bytes_for` a buffer about to be allocated, trapping on overflow.
+    fn bytes_to_allocate(
+        &mut self,
+        elem_type: BasicTypeEnum<'ctx>,
+        count: IntValue<'ctx>,
+    ) -> IntValue<'ctx> {
+        let stride = self.stride(elem_type);
+        self.apply_int_arith(count, stride, &Token::Star, false)
+            .unwrap()
+            .into_int_value()
     }
 
     pub(super) fn zero_value_for(&self, ty: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
@@ -277,6 +292,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             "unwrap_none" => "unwrap on None",
             "unwrap" => "unwrap on Err",
             "unwrap_err" => "unwrap_err on Ok",
+            "float_cast" => "float out of range for the integer type",
             _ => label,
         };
         let message = match self.sources.position(self.current_span) {
@@ -419,6 +435,54 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.emit_trap_if(invalid, "div");
     }
 
+    /// Trap unless `value`, truncated, fits `int_type`. NaN never fits.
+    pub(super) fn emit_float_to_int_check(
+        &mut self,
+        value: FloatValue<'ctx>,
+        int_type: IntType<'ctx>,
+        unsigned: bool,
+    ) {
+        if !self.safety_mode.emit_safety_checks() {
+            return;
+        }
+        let float_type = value.get_type();
+        let Some(trunc) = Intrinsic::find("llvm.trunc")
+            .and_then(|i| i.get_declaration(self.module, &[float_type.into()]))
+        else {
+            return;
+        };
+        let ValueKind::Basic(BasicValueEnum::FloatValue(whole)) = self
+            .builder
+            .build_call(trunc, &[value.into()], "whole")
+            .unwrap()
+            .try_as_basic_value()
+        else {
+            return;
+        };
+
+        let high = 2f64.powi(int_type.get_bit_width() as i32 - i32::from(!unsigned));
+        let low = if unsigned { 0.0 } else { -high };
+        let b = self.builder;
+        let below = b
+            .build_float_compare(
+                FloatPredicate::ULT,
+                whole,
+                float_type.const_float(low),
+                "below",
+            )
+            .unwrap();
+        let above = b
+            .build_float_compare(
+                FloatPredicate::UGE,
+                whole,
+                float_type.const_float(high),
+                "above",
+            )
+            .unwrap();
+        let outside = b.build_or(below, above, "outside").unwrap();
+        self.emit_trap_if(outside, "float_cast");
+    }
+
     /// LLVM leaves a shift by the operand width or more undefined.
     pub(super) fn emit_shift_check(&mut self, amount: IntValue<'ctx>) {
         if !self.safety_mode.emit_safety_checks() {
@@ -520,7 +584,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     pub(super) fn alloc_buffer(
-        &self,
+        &mut self,
         elem_type: BasicTypeEnum<'ctx>,
         count: IntValue<'ctx>,
     ) -> PointerValue<'ctx> {
@@ -529,7 +593,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ALLOC_FN,
             self.ptr_type().fn_type(&[usize_type.into()], false),
         );
-        let size = self.bytes_for(elem_type, count);
+        let size = self.bytes_to_allocate(elem_type, count);
         self.call_ptr(alloc_fn, &[size.into()], "buffer")
     }
 
@@ -905,7 +969,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             let ptr_field = this.vec_field_ptr(vec_ptr, VEC_PTR, "ptr_field");
             let data = this.load_ptr(ptr_field, "data");
             let old_size = this.bytes_for(elem_type, cap);
-            let new_size = this.bytes_for(elem_type, new_cap);
+            let new_size = this.bytes_to_allocate(elem_type, new_cap);
             let resized = this.resize_buffer(data, old_size, new_size);
             this.builder.build_store(ptr_field, resized).unwrap();
             this.builder.build_store(cap_field, new_cap).unwrap();

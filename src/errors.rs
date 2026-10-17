@@ -125,6 +125,10 @@ impl Sources {
         start
     }
 
+    pub fn end(&self) -> usize {
+        self.text.len()
+    }
+
     pub fn position(&self, span: Span) -> Option<(&str, u32, u32)> {
         let (name, text, range) = self.locate(span)?;
         let before = &text[..range.start];

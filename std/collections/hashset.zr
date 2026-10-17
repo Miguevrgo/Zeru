@@ -31,8 +31,8 @@ pub struct HashSet<K: Eq> {
         self.members.clear();
     }
 
-    pub fn size(self) usize {
-        return self.members.size();
+    pub fn len(self) usize {
+        return self.members.len();
     }
 
     pub fn is_empty(self) bool {
