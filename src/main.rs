@@ -1,16 +1,17 @@
 mod ast;
-mod codegen;
+mod check;
+mod driver;
 mod errors;
-mod generics;
+mod items;
 mod lexer;
-mod modules;
+mod lower;
 mod parser;
-mod resolver;
-mod sema;
+mod tir;
 mod token;
+mod ty;
 
-use crate::resolver::{GREEN, RED, RESET, compile_pipeline, status};
-use crate::{codegen::SafetyMode, errors::CompileError};
+use crate::driver::{GREEN, RED, RESET, compile, status};
+use crate::{errors::CompileError, lower::SafetyMode};
 use clap::{Parser, Subcommand};
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
@@ -63,7 +64,7 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
             emit_ir,
         } => {
             let safety_mode = SafetyMode::from_flags(release_fast, release_safe);
-            compile_pipeline(&file, safety_mode, emit_ir)?;
+            compile(&file, safety_mode, emit_ir)?;
         }
         Commands::Run {
             file,
@@ -71,7 +72,7 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
             release_fast,
         } => {
             let safety_mode = SafetyMode::from_flags(release_fast, release_safe);
-            let executable_path = compile_pipeline(&file, safety_mode, false)?;
+            let executable_path = compile(&file, safety_mode, false)?;
             status(GREEN, '\u{e7d5}', "Running", executable_path.display());
             let status = std::process::Command::new(&executable_path).status()?;
             std::process::exit(

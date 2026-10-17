@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: Invalid return type. Function expects i64, returning bool
-   ╭─[ tests/ui/traits/bound_return_type_not_checked.zr:3:25 ]
+Error: 'f' asks for T: Tr, which A does not satisfy
+   ╭─[ tests/ui/traits/bound_return_type_not_checked.zr:5:13 ]
    │
- 3 │ fn f<T: Tr>(t: T) i64 { return t.go(); }
-   │                         ───────┬──────
-   │                                ╰──────── Invalid return type. Function expects i64, returning bool
+ 5 │     var r = f(A { x: 1 });
+   │             ──────┬──────
+   │                   ╰──────── 'f' asks for T: Tr, which A does not satisfy
 ───╯
 [-] Error: aborting due to previous error

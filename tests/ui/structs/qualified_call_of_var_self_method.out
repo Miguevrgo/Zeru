@@ -1,3 +1,10 @@
 status: compile error
 -- stderr
-[-] Error: LLVM error: "Call parameter type does not match function signature!\n  %s_load = load %S, ptr %s, align 4\n ptr  call void @\"S::bump\"(%S %s_load)\n"
+Error: 'S::bump' takes 'self'; call it on a value, as in x.bump()
+   ╭─[ tests/ui/structs/qualified_call_of_var_self_method.zr:4:5 ]
+   │
+ 4 │     S.bump(s);
+   │     ────┬────
+   │         ╰────── 'S::bump' takes 'self'; call it on a value, as in x.bump()
+───╯
+[-] Error: aborting due to previous error

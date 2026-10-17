@@ -1,0 +1,2 @@
+fn make() Vec<i32> { return [1]; }
+fn main() { for x in &var make() { x = 2; } println("ok"); }

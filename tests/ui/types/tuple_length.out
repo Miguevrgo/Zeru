@@ -7,11 +7,4 @@ Error: Tuple has 2 elements, but expected 3
    │                               ─────┬────
    │                                    ╰────── Tuple has 2 elements, but expected 3
 ───╯
-Error: Type mismatch for variable 't'. Annotated as (i32, bool, f64) but got (i32, bool)
-   ╭─[ tests/ui/types/tuple_length.zr:2:5 ]
-   │
- 2 │     var t: (i32, bool, f64) = (42, true);
-   │     ──────────────────┬──────────────────
-   │                       ╰──────────────────── Type mismatch for variable 't'. Annotated as (i32, bool, f64) but got (i32, bool)
-───╯
 [-] Error: aborting due to previous error

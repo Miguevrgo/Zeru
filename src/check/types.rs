@@ -1,0 +1,193 @@
+//! Types as written, resolved to interned [`Ty`]s.
+
+use crate::ast::{PRIMITIVES, TypeSpec};
+use crate::errors::Span;
+use crate::items::{DefId, ItemKind};
+use crate::ty::{Ty, TyKind, Types};
+
+use super::{Checker, Scope};
+
+impl Checker<'_> {
+    pub(super) fn resolve_type(&mut self, spec: &TypeSpec, scope: &Scope, span: Span) -> Ty {
+        match spec {
+            TypeSpec::Named(name) => self.resolve_named(name, scope, span),
+            TypeSpec::Generic { name, args } if name == "Array" && args.len() == 2 => {
+                let elem = self.resolve_type(&args[0], scope, span);
+                let TypeSpec::IntLiteral(len) = args[1] else {
+                    self.error("Array length must be an integer literal", span);
+                    return Types::ERROR;
+                };
+                self.intern_or_error(TyKind::Array(elem, len), &[elem])
+            }
+            TypeSpec::Generic { name, args } if name == "Vec" && args.len() == 1 => {
+                let elem = self.resolve_type(&args[0], scope, span);
+                self.intern_or_error(TyKind::Vec(elem), &[elem])
+            }
+            TypeSpec::Generic { name, args } => {
+                let Some(def) = self.items.lookup_type(scope.module, name) else {
+                    return self.resolve_named(name, scope, span);
+                };
+                self.check_visible(def, scope.module, span);
+                let args: Vec<Ty> = args
+                    .iter()
+                    .map(|arg| self.resolve_type(arg, scope, span))
+                    .collect();
+                self.generic_adt(def, args, span)
+            }
+            TypeSpec::IntLiteral(_) => {
+                self.error("Unexpected integer literal in type position", span);
+                Types::ERROR
+            }
+            TypeSpec::Tuple(parts) => {
+                let parts: Vec<Ty> = parts
+                    .iter()
+                    .map(|part| self.resolve_type(part, scope, span))
+                    .collect();
+                self.intern_or_error(TyKind::Tuple(parts.clone()), &parts)
+            }
+            TypeSpec::Pointer(inner) => self.wrap(inner, scope, span, TyKind::Ptr),
+            TypeSpec::Optional(inner) => self.wrap(inner, scope, span, TyKind::Optional),
+            TypeSpec::Slice(inner) => self.wrap(inner, scope, span, TyKind::Slice),
+            TypeSpec::Ref(inner) => self.wrap(inner, scope, span, TyKind::Ref),
+            TypeSpec::RefMut(inner) => self.wrap(inner, scope, span, TyKind::RefMut),
+            TypeSpec::Result(ok, error) => {
+                let ok = self.resolve_type(ok, scope, span);
+                let error = match error {
+                    None => Types::I32,
+                    Some(error) => {
+                        let error = self.resolve_type(error, scope, span);
+                        match self.is_enum(error) {
+                            Some(def) if self.enum_has_data(def) => {
+                                let shown = self.types.show(error);
+                                self.error(
+                                    format!("An error enum carries no values, and {shown} does"),
+                                    span,
+                                );
+                                Types::ERROR
+                            }
+                            Some(_) => error,
+                            None if self.types.is_error(error) => error,
+                            None => {
+                                let shown = self.types.show(error);
+                                self.error(format!("An error type is an enum, not {shown}"), span);
+                                Types::ERROR
+                            }
+                        }
+                    }
+                };
+                self.intern_or_error(TyKind::Result(ok, error), &[ok, error])
+            }
+        }
+    }
+
+    fn wrap(&mut self, inner: &TypeSpec, scope: &Scope, span: Span, kind: fn(Ty) -> TyKind) -> Ty {
+        let inner = self.resolve_type(inner, scope, span);
+        self.intern_or_error(kind(inner), &[inner])
+    }
+
+    /// A type built of parts, or the error type if a part already failed.
+    pub(super) fn intern_or_error(&mut self, kind: TyKind, parts: &[Ty]) -> Ty {
+        if parts.iter().any(|&part| self.types.is_error(part)) {
+            return Types::ERROR;
+        }
+        self.types.intern(kind)
+    }
+
+    fn resolve_named(&mut self, name: &str, scope: &Scope, span: Span) -> Ty {
+        if let Some(at) = scope.generics.iter().position(|g| g == name) {
+            return match scope.args.get(at) {
+                Some(&arg) => arg,
+                None => self.types.intern(TyKind::Param(at as u32)),
+            };
+        }
+        if let Some(def) = self.items.lookup_type(scope.module, name) {
+            self.check_visible(def, scope.module, span);
+            let generics = super::generics_of(self.items.item(def).decl).len();
+            if generics > 0 {
+                let base = self.items.item(def).name.clone();
+                self.error(
+                    format!("'{base}' takes {generics} type argument(s), got 0"),
+                    span,
+                );
+                return Types::ERROR;
+            }
+            return self.types.intern(TyKind::Adt(def, Vec::new()));
+        }
+        if name != "str"
+            && let Some(ty) = self.types.primitive(name)
+        {
+            return ty;
+        }
+        if name == "self" {
+            return Types::ERROR;
+        }
+        let mut candidates: Vec<String> = PRIMITIVES.iter().map(|p| p.to_string()).collect();
+        candidates.extend(
+            self.items
+                .items
+                .iter()
+                .filter(|item| matches!(item.kind, ItemKind::Struct | ItemKind::Enum))
+                .map(|item| item.name.clone()),
+        );
+        match closest(name, &candidates) {
+            Some(similar) => self.error(
+                format!("Unknown type '{name}'. Did you mean '{similar}'?"),
+                span,
+            ),
+            None => self.error(format!("Unknown type '{name}'"), span),
+        }
+        Types::ERROR
+    }
+
+    /// `Pair<i32>`: the struct at those arguments, if they meet its bounds.
+    pub(super) fn generic_adt(&mut self, def: DefId, args: Vec<Ty>, span: Span) -> Ty {
+        if args.iter().any(|&arg| self.types.is_error(arg)) {
+            return Types::ERROR;
+        }
+        let generics = super::generics_of(self.items.item(def).decl).to_vec();
+        if generics.len() != args.len() {
+            let base = self.items.item(def).name.clone();
+            self.error(
+                format!(
+                    "'{base}' takes {} type argument(s), got {}",
+                    generics.len(),
+                    args.len()
+                ),
+                span,
+            );
+            return Types::ERROR;
+        }
+        if !self.check_bounds(def, &generics, &args, span) {
+            return Types::ERROR;
+        }
+        self.types.intern(TyKind::Adt(def, args))
+    }
+}
+
+/// The candidate within two edits of `name`, closest first.
+pub(super) fn closest<'c>(name: &str, candidates: &'c [String]) -> Option<&'c str> {
+    candidates
+        .iter()
+        .map(|c| (c.as_str(), edit_distance(name, c)))
+        .filter(|(_, distance)| *distance <= 2)
+        .min_by_key(|(_, distance)| *distance)
+        .map(|(c, _)| c)
+}
+
+/// Levenshtein distance, one row at a time.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, a_char) in a.chars().enumerate() {
+        let mut diagonal = row[0];
+        row[0] = i + 1;
+        for (j, &b_char) in b.iter().enumerate() {
+            let above = row[j + 1];
+            row[j + 1] = (above + 1)
+                .min(row[j] + 1)
+                .min(diagonal + usize::from(a_char != b_char));
+            diagonal = above;
+        }
+    }
+    row[b.len()]
+}

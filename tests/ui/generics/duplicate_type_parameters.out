@@ -1,3 +1,17 @@
-status: exit 0
--- stdout
-1
+status: compile error
+-- stderr
+Error: Function 'f' declares type parameter 'T' twice
+   ╭─[ tests/ui/generics/duplicate_type_parameters.zr:1:1 ]
+   │
+ 1 │ fn f<T, T>(a: T) T { return a; }
+   │ ─────────┬────────
+   │          ╰────────── Function 'f' declares type parameter 'T' twice
+───╯
+Error: Struct 'B' declares type parameter 'T' twice
+   ╭─[ tests/ui/generics/duplicate_type_parameters.zr:2:1 ]
+   │
+ 2 │ struct B<T, T> { v: T }
+   │ ───────────┬───────────
+   │            ╰───────────── Struct 'B' declares type parameter 'T' twice
+───╯
+[-] Error: aborting due to previous error

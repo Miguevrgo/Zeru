@@ -7,11 +7,4 @@ Error: Array length must be an integer literal
    │     ──────────────┬──────────────
    │                   ╰──────────────── Array length must be an integer literal
 ───╯
-Error: Type mismatch for variable 'a'. Annotated as Array<i32, 0> but got Array<i32, 1>
-   ╭─[ tests/ui/types/array_length_not_a_number.zr:2:5 ]
-   │
- 2 │     var a: Array<i32, i32> = [1];
-   │     ──────────────┬──────────────
-   │                   ╰──────────────── Type mismatch for variable 'a'. Annotated as Array<i32, 0> but got Array<i32, 1>
-───╯
 [-] Error: aborting due to previous error

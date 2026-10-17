@@ -1,3 +1,10 @@
-status: exit 0
--- stdout
-compiled
+status: compile error
+-- stderr
+Error: Module 'lib' has no 'nope'
+   ╭─[ tests/ui/modules/unknown_selected_name/main.zr:1:1 ]
+   │
+ 1 │ import lib::{nope};
+   │ ─────────┬─────────
+   │          ╰─────────── Module 'lib' has no 'nope'
+───╯
+[-] Error: aborting due to previous error

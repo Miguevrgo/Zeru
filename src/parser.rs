@@ -181,10 +181,7 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        Program {
-            statements,
-            ..Program::default()
-        }
+        Program { statements }
     }
 
     fn parse_statement(&mut self) -> Option<Statement> {
@@ -256,7 +253,6 @@ impl<'a> Parser<'a> {
                 is_const: CONSTANT,
                 value,
                 type_annotation,
-                ty: None,
             },
             start_span.merge(end_span),
         ))
@@ -437,7 +433,8 @@ impl<'a> Parser<'a> {
             let name = p.current_identifier("type parameter name")?;
             let bound = if p.peek_token_is(&Token::Colon) {
                 p.next_token();
-                Some(p.expect_identifier()?)
+                p.next_token();
+                Some(p.parse_path(&Token::DoubleColon)?.join("::"))
             } else {
                 None
             };

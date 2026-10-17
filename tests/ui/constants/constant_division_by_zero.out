@@ -1,3 +1,10 @@
-status: signal 6
+status: compile error
 -- stderr
-panic at tests/ui/constants/constant_division_by_zero.zr:3:5: division by zero, or MIN / -1
+Error: Division by zero in a constant expression
+   ╭─[ tests/ui/constants/constant_division_by_zero.zr:3:13 ]
+   │
+ 3 │     var x = 5 / 0;
+   │             ──┬──
+   │               ╰──── Division by zero in a constant expression
+───╯
+[-] Error: aborting due to previous error

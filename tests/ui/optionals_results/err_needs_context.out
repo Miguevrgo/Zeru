@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Err() needs a T! to be part of; give it one, as in var r: i32! = Err(1)
+   ╭─[ tests/ui/optionals_results/err_needs_context.zr:1:21 ]
+   │
+ 1 │ fn main() { var r = Err(1); }
+   │                     ───┬──
+   │                        ╰──── Err() needs a T! to be part of; give it one, as in var r: i32! = Err(1)
+───╯
+[-] Error: aborting due to previous error

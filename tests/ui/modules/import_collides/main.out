@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'min' is imported from 'u' and also declared here
+   ╭─[ tests/ui/modules/import_collides/main.zr:1:1 ]
+   │
+ 1 │ import lib.u::{min};
+   │ ──────────┬─────────
+   │           ╰─────────── 'min' is imported from 'u' and also declared here
+───╯
+[-] Error: aborting due to previous error

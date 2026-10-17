@@ -6,5 +6,11 @@ Error: Cannot negate unsigned type u32
  31 │         return -num;
     │                ──┬─
     │                  ╰─── Cannot negate unsigned type u32
+    │
+    ├─[ tests/ui/std/math_abs_unsigned_rejected.zr:4:13 ]
+    │
+  4 │     var b = math::abs(a);
+    │             ──────┬─────
+    │                   ╰─────── in 'math::abs<u32>', instantiated here
 ────╯
 [-] Error: aborting due to previous error

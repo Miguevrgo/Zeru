@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot write through a '&' reference
+   ╭─[ tests/ui/vec/push_through_shared_reference.zr:1:22 ]
+   │
+ 1 │ fn f(r: &Vec<i32>) { r.push(1); }
+   │                      ────┬────
+   │                          ╰────── Cannot write through a '&' reference
+───╯
+[-] Error: aborting due to previous error

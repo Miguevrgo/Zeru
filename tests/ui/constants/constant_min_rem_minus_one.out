@@ -1,3 +1,10 @@
-status: signal 6
+status: compile error
 -- stderr
-panic at tests/ui/constants/constant_min_rem_minus_one.zr:3:5: division by zero, or MIN / -1
+Error: Constant expression overflows i8
+   ╭─[ tests/ui/constants/constant_min_rem_minus_one.zr:3:17 ]
+   │
+ 3 │     var x: i8 = -128 % -1;
+   │                 ────┬────
+   │                     ╰────── Constant expression overflows i8
+───╯
+[-] Error: aborting due to previous error

@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: Binary operation '&&' requires operands of same type. Got i32 and bool
+Error: Operator '&&' cannot be applied to i32
    ╭─[ tests/ui/arithmetic/logical_needs_bool.zr:4:13 ]
    │
  4 │     var c = a && b;
    │             ───┬──
-   │                ╰──── Binary operation '&&' requires operands of same type. Got i32 and bool
+   │                ╰──── Operator '&&' cannot be applied to i32
 ───╯
 [-] Error: aborting due to previous error

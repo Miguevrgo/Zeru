@@ -1,13 +1,6 @@
 status: compile error
 -- stderr
 Error: Unknown type 'Strng'
-   ╭─[ tests/ui/diagnostics/declaration_errors.zr:5:1 ]
-   │
- 5 │ struct S { a: Strng }
-   │ ──────────┬──────────
-   │           ╰──────────── Unknown type 'Strng'
-───╯
-Error: Unknown type 'Strng'
    ╭─[ tests/ui/diagnostics/declaration_errors.zr:1:1 ]
    │
  1 │ fn f(a: Strng) { }
@@ -27,5 +20,12 @@ Error: Function 'h' declares parameter 'a' twice
  4 │ fn h(a: i32, a: i32) { }
    │ ──────────┬─────────
    │           ╰─────────── Function 'h' declares parameter 'a' twice
+───╯
+Error: Unknown type 'Strng'
+   ╭─[ tests/ui/diagnostics/declaration_errors.zr:5:1 ]
+   │
+ 5 │ struct S { a: Strng }
+   │ ──────────┬──────────
+   │           ╰──────────── Unknown type 'Strng'
 ───╯
 [-] Error: aborting due to previous error

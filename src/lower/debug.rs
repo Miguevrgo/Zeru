@@ -12,10 +12,10 @@ use inkwell::{
     values::FunctionValue,
 };
 
-use crate::{
-    codegen::{SafetyMode, compiler::Compiler},
-    errors::Span,
-};
+use super::SafetyMode;
+use crate::errors::Span;
+
+use super::Lower;
 
 pub(super) struct Debug<'ctx> {
     builder: DebugInfoBuilder<'ctx>,
@@ -23,9 +23,9 @@ pub(super) struct Debug<'ctx> {
     scope: Option<DISubprogram<'ctx>>,
 }
 
-impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    pub(super) fn init_debug_info(&mut self) {
-        if self.safety_mode != SafetyMode::Debug {
+impl<'ctx> Lower<'_, 'ctx> {
+    pub(super) fn init_debug(&mut self) {
+        if self.mode != SafetyMode::Debug {
             return;
         }
         let version = self.context.i32_type().const_int(3, false);
@@ -66,7 +66,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             files,
             scope,
         } = debug;
-
         let file = *files.entry(path.to_string()).or_insert_with(|| {
             let path = Path::new(path);
             let name = path
@@ -93,14 +92,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         );
         function.set_subprogram(subprogram);
         *scope = Some(subprogram);
-
-        self.current_span = span;
         self.set_debug_location();
     }
 
     pub(super) fn set_debug_location(&self) {
         let (Some(debug), Some((_, line, column))) =
-            (&self.debug, self.sources.position(self.current_span))
+            (&self.debug, self.sources.position(self.span))
         else {
             return;
         };
@@ -134,7 +131,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.unset_current_debug_location();
     }
 
-    pub(super) fn finish_debug_info(&self) {
+    pub(super) fn finish_debug(&self) {
         if let Some(debug) = &self.debug {
             debug.builder.finalize();
         }

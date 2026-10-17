@@ -1,5 +1,10 @@
 status: compile error
 -- stderr
-
-thread 'main' has overflowed its stack
-fatal runtime error: stack overflow, aborting
+Error: Checking the methods of 'Box' asks for ever deeper instances of it, without end
+   ╭─[ tests/ui/generics/recursive_generic_method.zr:3:5 ]
+   │
+ 3 │     fn wrap(self) Box<Box<T>> { return Box { v: self }; }
+   │     ─────────────┬────────────
+   │                  ╰────────────── Checking the methods of 'Box' asks for ever deeper instances of it, without end
+───╯
+[-] Error: aborting due to previous error

@@ -1,11 +1,11 @@
 status: compile error
 -- stderr
-Error: Argument 2 type mismatch
+Error: Argument 2 type mismatch: expected i32, got bool
    ╭─[ tests/ui/diagnostics/wrong_argument_then_moved.zr:4:12 ]
    │
  4 │     eat(v, true);
    │            ──┬─
-   │              ╰─── Argument 2 type mismatch
+   │              ╰─── Argument 2 type mismatch: expected i32, got bool
 ───╯
 Error: Use of moved value 'v'. Value was previously moved and is no longer valid
    ╭─[ tests/ui/diagnostics/wrong_argument_then_moved.zr:5:19 ]

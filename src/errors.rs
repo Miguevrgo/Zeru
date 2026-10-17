@@ -40,6 +40,8 @@ pub struct ZeruError {
     pub kind: ErrorKind,
     pub message: String,
     pub span: Span,
+    /// Further places that explain the error, each with what to say there.
+    pub notes: Vec<(String, Span)>,
 }
 
 impl ZeruError {
@@ -48,6 +50,7 @@ impl ZeruError {
             kind: ErrorKind::Syntax,
             message: message.into(),
             span,
+            notes: Vec::new(),
         }
     }
 
@@ -56,6 +59,7 @@ impl ZeruError {
             kind: ErrorKind::Semantic,
             message: message.into(),
             span,
+            notes: Vec::new(),
         }
     }
 
@@ -81,18 +85,31 @@ impl ZeruError {
             ErrorKind::Syntax => Color::Red,
             ErrorKind::Semantic => Color::Magenta,
         };
-        let name = name.to_string();
-
-        Report::<(String, Range<usize>)>::build(ReportKind::Error, (name.clone(), range.clone()))
-            .with_message(message)
-            .with_label(
-                Label::new((name.clone(), range))
-                    .with_message(message)
-                    .with_color(color),
-            )
-            .finish()
-            .eprint(ariadne::sources([(name, text.to_string())]))
-            .unwrap();
+        let mut files = vec![(name.to_string(), text.to_string())];
+        let mut report = Report::<(String, Range<usize>)>::build(
+            ReportKind::Error,
+            (name.to_string(), range.clone()),
+        )
+        .with_message(message)
+        .with_label(
+            Label::new((name.to_string(), range))
+                .with_message(message)
+                .with_color(color),
+        );
+        for (note, span) in &self.notes {
+            let Some((name, text, range)) = sources.locate(*span) else {
+                continue;
+            };
+            if !files.iter().any(|(file, _)| file == name) {
+                files.push((name.to_string(), text.to_string()));
+            }
+            report = report.with_label(
+                Label::new((name.to_string(), range))
+                    .with_message(note)
+                    .with_color(Color::Blue),
+            );
+        }
+        report.finish().eprint(ariadne::sources(files)).unwrap();
     }
 }
 
@@ -108,6 +125,8 @@ struct SourceFile {
     name: String,
     start: usize,
     end: usize,
+    /// Where each line begins, as an offset into the file.
+    lines: Vec<usize>,
 }
 
 impl Sources {
@@ -117,10 +136,14 @@ impl Sources {
         let start = self.text.len();
         self.text.push_str(source);
         self.text.push('\n');
+        let lines = std::iter::once(0)
+            .chain(source.match_indices('\n').map(|(at, _)| at + 1))
+            .collect();
         self.files.push(SourceFile {
             name: name.into(),
             start,
             end: self.text.len(),
+            lines,
         });
         start
     }
@@ -129,21 +152,24 @@ impl Sources {
         self.text.len()
     }
 
+    /// The file, line and column a span starts at, found by binary search
+    /// in each file's table of line starts.
     pub fn position(&self, span: Span) -> Option<(&str, u32, u32)> {
-        let (name, text, range) = self.locate(span)?;
-        let before = &text[..range.start];
-        let line = before.matches('\n').count() + 1;
-        let column = before.len() - before.rfind('\n').map_or(0, |at| at + 1) + 1;
-        Some((name, line as u32, column as u32))
+        let file = self.file(span)?;
+        let offset = span.start - file.start;
+        let line = file.lines.partition_point(|&start| start <= offset);
+        let column = offset - file.lines[line - 1] + 1;
+        Some((&file.name, line as u32, column as u32))
+    }
+
+    fn file(&self, span: Span) -> Option<&SourceFile> {
+        let at = self.files.partition_point(|file| file.end <= span.start);
+        self.files.get(at).filter(|file| file.start <= span.start)
     }
 
     /// The file a span points into, its text, and the span rebased onto it.
     fn locate(&self, span: Span) -> Option<(&str, &str, Range<usize>)> {
-        let file = self
-            .files
-            .iter()
-            .find(|file| (file.start..file.end).contains(&span.start))?;
-
+        let file = self.file(span)?;
         let text = &self.text[file.start..file.end];
         let end = span.end.min(file.end) - file.start;
         Some((&file.name, text, span.start - file.start..end))
@@ -191,6 +217,19 @@ mod tests {
         let (name, text, range) = sources.locate(Span::new(14, 16)).expect("inside second.zr");
         assert_eq!(name, "second.zr");
         assert_eq!(&text[range], "bb");
+    }
+
+    #[test]
+    fn positions_count_lines_and_columns_from_one() {
+        let mut sources = Sources::default();
+        sources.push("first.zr", "ab\ncd\n");
+        sources.push("second.zr", "x\n  y");
+        assert_eq!(sources.position(Span::new(4, 5)), Some(("first.zr", 2, 2)));
+        let y = sources.end() - 2;
+        assert_eq!(
+            sources.position(Span::new(y, y + 1)),
+            Some(("second.zr", 2, 3))
+        );
     }
 
     #[test]

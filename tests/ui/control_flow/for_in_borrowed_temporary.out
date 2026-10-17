@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot create reference to a temporary value
+   ╭─[ tests/ui/control_flow/for_in_borrowed_temporary.zr:2:22 ]
+   │
+ 2 │ fn main() { for x in &var make() { x = 2; } println("ok"); }
+   │                      ─────┬─────
+   │                           ╰─────── Cannot create reference to a temporary value
+───╯
+[-] Error: aborting due to previous error

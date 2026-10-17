@@ -1,3 +1,10 @@
-status: exit 0
--- stdout
-1
+status: compile error
+-- stderr
+Error: 'lib::Hidden' is private to module 'lib'; mark it pub
+   ╭─[ tests/ui/modules/private_trait/main.zr:1:1 ]
+   │
+ 1 │ import lib::{Hidden};
+   │ ──────────┬──────────
+   │           ╰──────────── 'lib::Hidden' is private to module 'lib'; mark it pub
+───╯
+[-] Error: aborting due to previous error

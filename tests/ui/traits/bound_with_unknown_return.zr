@@ -1,0 +1,4 @@
+trait Area { fn area(self) i64; }
+struct S { f: i64, fn area(self) Nope { return self.f; } }
+fn twice<T: Area>(a: T) i64 { return a.area() * 2; }
+fn main() { println("{}", twice(S { f: 1 })); }
