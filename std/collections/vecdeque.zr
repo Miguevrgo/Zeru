@@ -76,7 +76,7 @@ pub struct VecDeque {
         return self.data[real_idx];
     }
 
-    pub fn size(self) usize {
+    pub fn len(self) usize {
         return self.len;
     }
 
