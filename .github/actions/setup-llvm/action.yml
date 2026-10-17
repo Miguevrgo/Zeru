@@ -1,7 +1,7 @@
 name: Setup LLVM
 description: >
   Install the LLVM toolchain Zeru builds against and expose it on PATH,
-  so `llvm-config` and `clang` both resolve to the right major version.
+  so `llvm-config` resolves to the right major version.
 
 inputs:
   version:
@@ -12,10 +12,9 @@ inputs:
 runs:
   using: composite
   steps:
-    # `llvm.sh <ver> all` pulls lldb, mlir, bolt and more. Zeru needs the
-    # libraries and headers (llvm-sys), polly, and clang to link the IR it
-    # emits, so the script only adds the apt source and the packages are
-    # named explicitly.
+    # `llvm.sh <ver> all` pulls lldb, mlir, bolt and more. Zeru needs only
+    # the libraries and headers (llvm-sys) and polly, so the script only adds
+    # the apt source and the packages are named explicitly.
     - name: Install LLVM ${{ inputs.version }} (Linux)
       if: runner.os == 'Linux'
       shell: bash
@@ -29,8 +28,6 @@ runs:
           zlib1g-dev libzstd-dev
         rm llvm.sh
         echo "LLVM_SYS_${{ inputs.version }}0_PREFIX=/usr/lib/llvm-${{ inputs.version }}" >> "$GITHUB_ENV"
-        # Ahead of the distro clang, whose IR reader is a version behind and
-        # would reject the textual IR Zeru emits.
         echo "/usr/lib/llvm-${{ inputs.version }}/bin" >> "$GITHUB_PATH"
 
     - name: Install LLVM ${{ inputs.version }} (macOS)
@@ -46,4 +43,4 @@ runs:
       shell: bash
       run: |
         llvm-config --version
-        clang --version | head -1
+        cc --version | head -1

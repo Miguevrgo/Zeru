@@ -38,7 +38,16 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         }
     }
 
+    /// Lower `expr`, a check in it reporting where `expr` starts, as rustc
+    /// gives each check the span of its own operation.
     pub(super) fn expr(&mut self, expr: &'a Expr) -> Val<'ctx> {
+        let outer = std::mem::replace(&mut self.span, expr.span);
+        let value = self.value(expr);
+        self.span = outer;
+        value
+    }
+
+    fn value(&mut self, expr: &'a Expr) -> Val<'ctx> {
         if self.builds_in_place(expr) {
             let slot = self.alloca(expr.ty, "value");
             self.build_into(expr, slot);

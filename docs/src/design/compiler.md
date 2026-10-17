@@ -5,14 +5,14 @@ before and produces something the next one reads; no pass revisits a decision
 an earlier one made. The layout follows what rustc, Zig and Carbon do.
 
 ```text
-source ─▶ lexer ─▶ parser ─▶ items ─▶ check ─▶ lower ─▶ clang
-          tokens    AST      DefIds    typed IR  LLVM IR   executable
+source ─▶ lexer ─▶ parser ─▶ items ─▶ check ─▶ lower ─▶ LLVM ─▶ cc
+          tokens    AST      DefIds    typed IR  LLVM IR  object  executable
 ```
 
 | Pass | Files | Produces |
 |---|---|---|
-| Driver | `driver.rs` | Loads the prelude, the root file and every imported module, runs the passes, links |
-| Lexer, parser | `lexer.rs`, `parser.rs`, `ast.rs` | One syntax tree per file. The tree is never changed after parsing |
+| Driver | `driver.rs` | Loads the prelude, the root file and every imported module, runs the passes, has LLVM optimize and emit an object file, and links it with the system C compiler |
+| Lexer, parser | `lexer.rs`, `parser.rs`, `ast.rs` | A token list per file, which the parser walks with one cursor into a syntax tree. The tree is never changed after parsing |
 | Items | `items.rs` | A `DefId` for every function, method, struct, enum, trait and constant, and a scope per module |
 | Check | `check/` | The typed IR of every function instance, or the errors |
 | Lower | `lower/` | An LLVM module |

@@ -1,7 +1,10 @@
 //! The pipeline: load and parse every file, collect the items, type check
-//! into the typed IR, lower that to LLVM, and link with clang.
+//! into the typed IR, lower that to LLVM, emit an object file and link it
+//! with the system C compiler.
 
 use inkwell::context::Context;
+use inkwell::passes::PassBuilderOptions;
+use inkwell::targets::FileType;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -63,6 +66,7 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
     let build_dir = Path::new("build");
     std::fs::create_dir_all(build_dir)?;
     let ir_path = build_dir.join(format!("{name}.ll"));
+    let object_path = build_dir.join(format!("{name}.o"));
     let exe_path = build_dir.join(name);
 
     status(
@@ -89,17 +93,24 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
     };
     let context = Context::create();
     let module = context.create_module(name);
-    crate::lower::lower(&program, &context, &module, &sources, mode);
+    let machine = crate::lower::host_machine(mode);
+    crate::lower::lower(&program, &context, &module, &sources, mode, &machine);
     module.verify()?;
-    module.print_to_file(&ir_path)?;
+    if keep_ir {
+        module.print_to_file(&ir_path)?;
+    }
 
-    let link = Command::new("clang")
-        .arg(&ir_path)
+    let options = PassBuilderOptions::create();
+    options.set_loop_slp_vectorization(mode != SafetyMode::Debug);
+    module.run_passes(mode.passes(), &machine, options)?;
+    machine.write_to_file(&module, FileType::Object, &object_path)?;
+    let link = Command::new("cc")
+        .arg(&object_path)
         .arg("-o")
         .arg(&exe_path)
-        .args(mode.clang_flags())
-        .args(["-Wno-override-module", "-lm"])
+        .arg("-lm")
         .status()?;
+    std::fs::remove_file(object_path)?;
     if !link.success() {
         return Err(CompileError::Link(link));
     }
@@ -113,8 +124,6 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
     );
     if keep_ir {
         status(GREEN, '\u{eaf3}', "IR saved", ir_path.display());
-    } else {
-        std::fs::remove_file(ir_path)?;
     }
     Ok(exe_path)
 }

@@ -1,3 +1,3 @@
 status: signal 6
 -- stderr
-panic at tests/ui/optionals_results/unwrap_err_on_ok_panics.zr:4:5: unwrap_err on Ok
+panic at tests/ui/optionals_results/unwrap_err_on_ok_panics.zr:4:19: unwrap_err on Ok

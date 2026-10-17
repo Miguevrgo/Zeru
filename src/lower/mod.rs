@@ -84,7 +84,11 @@ pub fn lower<'ctx>(
     module: &Module<'ctx>,
     sources: &Sources,
     mode: SafetyMode,
+    machine: &TargetMachine,
 ) {
+    let target = machine.get_target_data();
+    module.set_triple(&machine.get_triple());
+    module.set_data_layout(&target.get_data_layout());
     let mut lower = Lower {
         context,
         module,
@@ -92,7 +96,7 @@ pub fn lower<'ctx>(
         program,
         sources,
         mode,
-        target: host_layout(module),
+        target,
         llvm_types: HashMap::new(),
         functions: Vec::new(),
         streams: None,
@@ -122,27 +126,23 @@ pub fn lower<'ctx>(
     lower.finish_debug();
 }
 
-/// Build for the machine compiling, and take its sizes and alignments.
-fn host_layout(module: &Module) -> TargetData {
+/// The machine compiling, which the program is built for.
+pub fn host_machine(mode: SafetyMode) -> TargetMachine {
     Target::initialize_native(&InitializationConfig::default()).expect("a native target");
     let triple = TargetMachine::get_default_triple();
-    let machine = Target::from_triple(&triple)
+    Target::from_triple(&triple)
         .ok()
         .and_then(|target| {
             target.create_target_machine(
                 &triple,
                 "generic",
                 "",
-                OptimizationLevel::None,
+                mode.opt_level(),
                 RelocMode::PIC,
                 CodeModel::Default,
             )
         })
-        .expect("a target machine for the host");
-    let layout = machine.get_target_data();
-    module.set_triple(&triple);
-    module.set_data_layout(&layout.get_data_layout());
-    layout
+        .expect("a target machine for the host")
 }
 
 impl<'a, 'ctx> Lower<'a, 'ctx> {
@@ -669,11 +669,20 @@ impl SafetyMode {
         }
     }
 
-    pub const fn clang_flags(&self) -> &[&str] {
+    pub const fn opt_level(&self) -> OptimizationLevel {
         match self {
-            Self::Debug => &["-O0", "-g"],
-            Self::ReleaseSafe => &["-O2"],
-            Self::ReleaseFast => &["-O3"],
+            Self::Debug => OptimizationLevel::None,
+            Self::ReleaseSafe => OptimizationLevel::Default,
+            Self::ReleaseFast => OptimizationLevel::Aggressive,
+        }
+    }
+
+    /// The LLVM pipeline, as clang runs it at -O0, -O2 and -O3.
+    pub const fn passes(&self) -> &str {
+        match self {
+            Self::Debug => "default<O0>",
+            Self::ReleaseSafe => "default<O2>",
+            Self::ReleaseFast => "default<O3>",
         }
     }
 }

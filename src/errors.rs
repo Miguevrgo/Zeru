@@ -196,7 +196,7 @@ pub enum CompileError {
     ModuleNotFound(String, std::path::PathBuf),
     #[error("invalid path: must point to a .zr file with a valid UTF-8 name")]
     InvalidPath,
-    #[error("linking failed: clang exited with {0}")]
+    #[error("linking failed: cc exited with {0}")]
     Link(std::process::ExitStatus),
 }
 
