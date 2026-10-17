@@ -13,6 +13,7 @@
 
 const SYS_READ: i64 = 0;
 const SYS_WRITE: i64 = 1;
+const SYS_CLOSE: i64 = 3;
 const SYS_MMAP: i64 = 9;
 const SYS_MREMAP: i64 = 25;
 const SYS_MUNMAP: i64 = 11;
@@ -198,7 +199,7 @@ struct OutStream {
             return;
         }
         var rest = value;
-        if rest < 0 {
+        if rest < 0 || 1 / rest < 0 {
             self.write_text("-");
             rest = -rest;
         }

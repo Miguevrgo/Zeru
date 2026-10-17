@@ -80,7 +80,7 @@ pub struct HashMap<K: Eq, V> {
         self.used = 0;
     }
 
-    pub fn size(self) usize {
+    pub fn len(self) usize {
         return self.len;
     }
 

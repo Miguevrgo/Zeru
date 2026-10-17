@@ -146,6 +146,19 @@ fn test_release_fast_no_null_checks() {
 }
 
 #[test]
+fn test_allocation_size_overflow_checked_unless_release_fast() {
+    let input = "
+        fn main() {
+            var v: Vec<i64> = Vec.with_capacity(4);
+        }
+    ";
+    let safe = compile_to_ir_with_mode(input, SafetyMode::ReleaseSafe).unwrap();
+    let fast = compile_to_ir_with_mode(input, SafetyMode::ReleaseFast).unwrap();
+    assert!(safe.contains("umul.with.overflow"));
+    assert!(!fast.contains("umul.with.overflow"));
+}
+
+#[test]
 fn test_generic_function_multiple_types() {
     let input = "
         fn identity<T>(x: T) T {
@@ -233,7 +246,9 @@ fn test_float_to_unsigned_cast_is_unsigned() {
             var n: u32 = f as u32;
         }
     ";
-    assert_ir_contains(input, &["fptoui"]);
+    assert_ir_contains(input, &["fptoui", "float_cast_panic"]);
+    let ir = compile_to_ir_with_mode(input, SafetyMode::ReleaseFast).expect("Compilation failed");
+    assert!(!ir.contains("float_cast_panic"), "Full IR:\n{ir}");
 }
 
 #[test]
@@ -445,6 +460,16 @@ fn test_reading_through_a_temporary() {
         }
     ";
     assert_compiles(input);
+}
+
+#[test]
+fn test_for_in_walks_a_temporary() {
+    assert_compiles(
+        "
+        fn make() Vec<i64> { var v: Vec<i64> = Vec.new(); v.push(1); return v; }
+        fn main() { var s: i64 = 0; for x in make() { s += x; } }
+    ",
+    );
 }
 
 #[test]

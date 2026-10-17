@@ -8,6 +8,18 @@ pub const SHUT_RD: i64 = 0;
 pub const SHUT_WR: i64 = 1;
 pub const SHUT_RDWR: i64 = 2;
 
+const SYS_SOCKET: i64 = 41;
+const SYS_CONNECT: i64 = 42;
+const SYS_ACCEPT: i64 = 43;
+const SYS_SENDTO: i64 = 44;
+const SYS_RECVFROM: i64 = 45;
+const SYS_SHUTDOWN: i64 = 48;
+const SYS_BIND: i64 = 49;
+const SYS_LISTEN: i64 = 50;
+const SYS_SETSOCKOPT: i64 = 54;
+const SOL_SOCKET: i64 = 1;
+const SO_REUSEADDR: i64 = 2;
+
 // Build IPv4 address from octets: ip4(127, 0, 0, 1)
 pub fn ip4(a: u32, b: u32, c: u32, d: u32) u32 {
     return (a << 24) | (b << 16) | (c << 8) | d;
@@ -31,24 +43,24 @@ pub fn make_addr(ip: u32, port: u16) Array<u8, 16> {
 pub struct TcpListener {
     fd: i64,
 
-    pub fn bind(ip: u32, port: u16) i64! {
-        var fd = try sys_result(syscall3(41, AF_INET, SOCK_STREAM, 0));
+    pub fn bind(ip: u32, port: u16) TcpListener! {
+        var fd = try sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_STREAM, 0));
         var one: i32 = 1;
-        syscall5(54, fd, 1, 2, (&one) as i64, 4);
+        syscall5(SYS_SETSOCKOPT, fd, SOL_SOCKET, SO_REUSEADDR, (&one) as i64, 4);
         var addr = make_addr(ip, port);
-        var r: i64 = syscall3(49, fd, (&addr[0]) as i64, 16);
-        if r < 0 { syscall1(3, fd); return sys_result(r); }
-        r = syscall2(50, fd, 128);
-        if r < 0 { syscall1(3, fd); return sys_result(r); }
-        return Ok(fd);
+        var r: i64 = syscall3(SYS_BIND, fd, (&addr[0]) as i64, 16);
+        if r < 0 { syscall1(SYS_CLOSE, fd); return Err((-r) as i32); }
+        r = syscall2(SYS_LISTEN, fd, 128);
+        if r < 0 { syscall1(SYS_CLOSE, fd); return Err((-r) as i32); }
+        return Ok(TcpListener { fd: fd });
     }
 
     pub fn accept(self) i64! {
-        return sys_result(syscall3(43, self.fd, 0, 0));
+        return sys_result(syscall3(SYS_ACCEPT, self.fd, 0, 0));
     }
 
     pub fn close(self) i64! {
-        return sys_result(syscall1(3, self.fd));
+        return sys_result(syscall1(SYS_CLOSE, self.fd));
     }
 }
 
@@ -56,38 +68,38 @@ pub struct TcpListener {
 pub struct TcpStream {
     fd: i64,
 
-    pub fn connect(ip: u32, port: u16) i64! {
-        var fd = try sys_result(syscall3(41, AF_INET, SOCK_STREAM, 0));
+    pub fn connect(ip: u32, port: u16) TcpStream! {
+        var fd = try sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_STREAM, 0));
         var addr = make_addr(ip, port);
-        var r: i64 = syscall3(42, fd, (&addr[0]) as i64, 16);
-        if r < 0 { syscall1(3, fd); return sys_result(r); }
-        return Ok(fd);
+        var r: i64 = syscall3(SYS_CONNECT, fd, (&addr[0]) as i64, 16);
+        if r < 0 { syscall1(SYS_CLOSE, fd); return Err((-r) as i32); }
+        return Ok(TcpStream { fd: fd });
     }
 
     pub fn read(self, buf: *u8, len: usize) i64! {
-        return sys_result(syscall3(0, self.fd, buf as i64, len as i64));
+        return sys_result(syscall3(SYS_READ, self.fd, buf as i64, len as i64));
     }
 
     pub fn write(self, buf: *u8, len: usize) i64! {
-        return sys_result(syscall3(1, self.fd, buf as i64, len as i64));
+        return sys_result(syscall3(SYS_WRITE, self.fd, buf as i64, len as i64));
     }
 
-    pub fn write_all(var self, buf: *u8, len: usize) i64! {
+    pub fn write_all(self, buf: *u8, len: usize) i64! {
         var total: i64 = 0;
         var remaining: usize = len;
         while remaining > 0 {
-            var n = try sys_result(syscall3(1, self.fd, (buf + total as usize) as i64, remaining as i64));
+            var n = try sys_result(syscall3(SYS_WRITE, self.fd, (buf + total as usize) as i64, remaining as i64));
             total = total + n;
             remaining = remaining - n as usize;
         }
         return Ok(total);
     }
 
-    pub fn read_all(var self, buf: *u8, buf_size: usize) i64! {
+    pub fn read_all(self, buf: *u8, buf_size: usize) i64! {
         var total: i64 = 0;
         var remaining: usize = buf_size;
         while remaining > 0 {
-            var n = try sys_result(syscall3(0, self.fd, (buf + total as usize) as i64, remaining as i64));
+            var n = try sys_result(syscall3(SYS_READ, self.fd, (buf + total as usize) as i64, remaining as i64));
             if n == 0 { break; }
             total = total + n;
             remaining = remaining - n as usize;
@@ -96,11 +108,11 @@ pub struct TcpStream {
     }
 
     pub fn shutdown(self, how: i64) i64! {
-        return sys_result(syscall2(48, self.fd, how));
+        return sys_result(syscall2(SYS_SHUTDOWN, self.fd, how));
     }
 
     pub fn close(self) i64! {
-        return sys_result(syscall1(3, self.fd));
+        return sys_result(syscall1(SYS_CLOSE, self.fd));
     }
 }
 
@@ -108,24 +120,24 @@ pub struct TcpStream {
 pub struct UdpSocket {
     fd: i64,
 
-    pub fn bind(ip: u32, port: u16) i64! {
-        var fd = try sys_result(syscall3(41, AF_INET, SOCK_DGRAM, 0));
+    pub fn bind(ip: u32, port: u16) UdpSocket! {
+        var fd = try sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_DGRAM, 0));
         var addr = make_addr(ip, port);
-        var r: i64 = syscall3(49, fd, (&addr[0]) as i64, 16);
-        if r < 0 { syscall1(3, fd); return sys_result(r); }
-        return Ok(fd);
+        var r: i64 = syscall3(SYS_BIND, fd, (&addr[0]) as i64, 16);
+        if r < 0 { syscall1(SYS_CLOSE, fd); return Err((-r) as i32); }
+        return Ok(UdpSocket { fd: fd });
     }
 
     pub fn send_to(self, buf: *u8, len: usize, ip: u32, port: u16) i64! {
         var addr = make_addr(ip, port);
-        return sys_result(syscall6(44, self.fd, buf as i64, len as i64, 0, (&addr[0]) as i64, 16));
+        return sys_result(syscall6(SYS_SENDTO, self.fd, buf as i64, len as i64, 0, (&addr[0]) as i64, 16));
     }
 
     pub fn recv(self, buf: *u8, len: usize) i64! {
-        return sys_result(syscall6(45, self.fd, buf as i64, len as i64, 0, 0, 0));
+        return sys_result(syscall6(SYS_RECVFROM, self.fd, buf as i64, len as i64, 0, 0, 0));
     }
 
     pub fn close(self) i64! {
-        return sys_result(syscall1(3, self.fd));
+        return sys_result(syscall1(SYS_CLOSE, self.fd));
     }
 }
