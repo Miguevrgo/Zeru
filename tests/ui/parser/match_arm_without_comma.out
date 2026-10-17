@@ -1,3 +1,10 @@
-status: exit 0
--- stdout
-20
+status: compile error
+-- stderr
+Error: Expected ',', found '2'
+   ╭─[ tests/ui/parser/match_arm_without_comma.zr:3:28 ]
+   │
+ 3 │     var r = match a { 1 => 10 2 => 20, default => 0 };
+   │                            ─┬
+   │                             ╰── Expected ',', found '2'
+───╯
+[-] Error: aborting due to previous error

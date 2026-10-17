@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot change 'v' while a loop or match around it refers into 'v'
+   ╭─[ tests/ui/control_flow/for_in_vec_is_locked.zr:3:18 ]
+   │
+ 3 │     for x in v { v.push(x); }
+   │                  ────┬────
+   │                      ╰────── Cannot change 'v' while a loop or match around it refers into 'v'
+───╯
+[-] Error: aborting due to previous error

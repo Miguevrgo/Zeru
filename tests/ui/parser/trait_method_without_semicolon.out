@@ -1,3 +1,10 @@
-status: exit 0
--- stdout
-parsed
+status: compile error
+-- stderr
+Error: Expected ';', found 'fn'
+   ╭─[ tests/ui/parser/trait_method_without_semicolon.zr:2:14 ]
+   │
+ 2 │     fn a(self)
+   │              ┬
+   │              ╰── Expected ';', found 'fn'
+───╯
+[-] Error: aborting due to previous error

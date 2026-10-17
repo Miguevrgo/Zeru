@@ -495,6 +495,19 @@ fn __zeru_out_of_memory() {
     exit(134);
 }
 
+// Whether two strings hold the same bytes, for `==` and `!=` on str.
+fn __zeru_str_eq(a: str, b: str) bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    for i in 0..a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Allocate `size` bytes of memory using mmap. Null for zero bytes.
 fn __zeru_alloc(size: usize) *u8 {
     if size == 0 {

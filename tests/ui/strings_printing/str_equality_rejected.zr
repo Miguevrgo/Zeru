@@ -1,4 +1,0 @@
-fn main() {
-    var a: str = "x";
-    var b = a == "x";
-}

@@ -53,17 +53,6 @@ fn main() {
     }
     if turns != 0 { exit(64); }
 
-    var growing: Vec<i64> = Vec.new();
-    growing.push(1);
-    growing.push(2);
-    var seen: i32 = 0;
-    for item in growing {
-        seen += 1;
-        growing.push(item);
-    }
-    if seen != 2 { exit(65); }
-    if growing.len() != 4 { exit(66); }
-
     var reserved: Vec<i64> = Vec.with_capacity(4);
     if reserved.capacity() != 4 { exit(67); }
     reserved.push(7);

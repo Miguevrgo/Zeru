@@ -1,0 +1,8 @@
+fn half(n: i32) i32! {
+    if n % 2 != 0 { return Err(1); }
+    return n / 2;
+}
+fn main() {
+    var r: i32! = 5;
+    println("{} {} {}", r catch 0, half(8) catch -1, half(3) catch -1);
+}

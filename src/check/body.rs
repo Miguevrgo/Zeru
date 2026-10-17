@@ -254,7 +254,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             return;
         }
         let local = match &mut expr.kind {
-            ExprKind::Some(value) => return self.consume(value),
+            ExprKind::Some(value) | ExprKind::Ok(value) => return self.consume(value),
             ExprKind::Read(Place::Temp(value)) => {
                 let value = std::mem::replace(
                     value.as_mut(),
@@ -346,7 +346,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
 
     /// Whether `value` of type `actual` can go where `target` is wanted, and
     /// the expression that puts it there: unchanged, retyped between pointer
-    /// kinds, or wrapped in `Some`.
+    /// kinds, or wrapped in `Some` or `Ok`.
     pub(super) fn coerce(&mut self, mut value: Expr, target: Ty) -> Result<Expr, Expr> {
         let types = &self.cx.types;
         if value.ty == target || types.is_error(value.ty) || types.is_error(target) {
@@ -356,18 +356,21 @@ impl<'c, 'a> FnCx<'c, 'a> {
             value.ty = target;
             return Ok(value);
         }
-        if let TyKind::Optional(inner) = *self.cx.types.kind(target)
-            && (value.ty == inner || self.same_repr(inner, value.ty))
-        {
-            value.ty = inner;
-            let span = value.span;
-            return Ok(Expr {
-                kind: ExprKind::Some(Box::new(value)),
-                ty: target,
-                span,
-            });
+        let (inner, wrap): (Ty, fn(Box<Expr>) -> ExprKind) = match *types.kind(target) {
+            TyKind::Optional(inner) => (inner, ExprKind::Some),
+            TyKind::Result(inner, _) => (inner, ExprKind::Ok),
+            _ => return Err(value),
+        };
+        if !self.same_repr(inner, value.ty) {
+            return Err(value);
         }
-        Err(value)
+        value.ty = inner;
+        let span = value.span;
+        Ok(Expr {
+            kind: wrap(Box::new(value)),
+            ty: target,
+            span,
+        })
     }
 
     /// Whether a value of `actual` is laid out as a `target` and may be used
@@ -709,9 +712,14 @@ impl<'c, 'a> FnCx<'c, 'a> {
 
         let (inner, writable) = match &iterable.kind {
             ExpressionKind::BorrowRefMut(inner) => (inner.as_ref(), true),
+            ExpressionKind::BorrowRef(inner) => (inner.as_ref(), false),
             _ => (iterable, false),
         };
-        let seq = self.place(inner);
+        let mut seq = self.place(inner);
+        if let TyKind::Ref(pointee) | TyKind::RefMut(pointee) = *self.cx.types.kind(seq.1) {
+            let reference = self.mk(ExprKind::Read(seq.0), seq.1, inner.span);
+            seq = (Place::Deref(Box::new(reference)), pointee);
+        }
         if writable {
             self.require_mutable(&seq.0, inner, iterable.span);
             if !super::expr::is_assignable(inner) {
@@ -736,11 +744,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 Types::ERROR
             }
         };
-        let locked = if writable {
-            self.place_path(inner)
-        } else {
-            None
-        };
+        let locked = self.place_path(inner);
         if let Some(path) = locked.clone() {
             self.lock(path);
         }

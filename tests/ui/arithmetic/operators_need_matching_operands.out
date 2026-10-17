@@ -21,13 +21,6 @@ Error: Operator '==' cannot be applied to Point
    │             ───┬──
    │                ╰──── Operator '==' cannot be applied to Point
 ───╯
-Error: Operator '==' cannot be applied to str
-   ╭─[ tests/ui/arithmetic/operators_need_matching_operands.zr:8:13 ]
-   │
- 8 │     var d = "a" == "b";
-   │             ─────┬────
-   │                  ╰────── Operator '==' cannot be applied to str
-───╯
 Error: Operator '<' cannot be applied to bool
    ╭─[ tests/ui/arithmetic/operators_need_matching_operands.zr:9:13 ]
    │

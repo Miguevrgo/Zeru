@@ -639,7 +639,7 @@ impl Parser {
             let params = self.parse_list(&Token::RParen, Self::parse_parameter)?;
             let return_type =
                 self.parse_return_type(&[Token::Semicolon, Token::RBrace, Token::Fn])?;
-            self.eat(&Token::Semicolon);
+            self.expect(&Token::Semicolon)?;
             methods.push(TraitMethod {
                 name,
                 params,
@@ -843,8 +843,13 @@ impl Parser {
                 }
                 false => self.parse_expression(Precedence::Lowest)?,
             };
+            let block = matches!(body.kind, ExpressionKind::Block(_));
             arms.push((pattern, body));
-            self.eat(&Token::Comma);
+            if block || self.at(&Token::RBrace) {
+                self.eat(&Token::Comma);
+            } else {
+                self.expect(&Token::Comma)?;
+            }
         }
         self.expect(&Token::RBrace)?;
 

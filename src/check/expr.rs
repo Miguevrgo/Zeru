@@ -591,7 +591,7 @@ impl FnCx<'_, '_> {
             return self.mk(ExprKind::Binary(op, Box::new(l), Box::new(r)), ty, span);
         }
         let (l_ty, r) = match self.coerce(r, l.ty) {
-            Ok(r) if !matches!(r.kind, ExprKind::Some(_)) => (l.ty, r),
+            Ok(r) if !matches!(r.kind, ExprKind::Some(_) | ExprKind::Ok(_)) => (l.ty, r),
             Ok(r) | Err(r) => {
                 let (lt, rt) = (self.ty(l.ty), self.ty(r.ty));
                 self.error(
@@ -622,6 +622,18 @@ impl FnCx<'_, '_> {
         match operator {
             Token::And => self.mk(ExprKind::And(Box::new(l), Box::new(r)), Types::BOOL, span),
             Token::Or => self.mk(ExprKind::Or(Box::new(l), Box::new(r)), Types::BOOL, span),
+            Token::Eq | Token::NotEq if l_ty == Types::STR => {
+                let eq = self.cx.prelude_fn("__zeru_str_eq");
+                let equal = self.mk(ExprKind::Call(eq, vec![l, r]), Types::BOOL, span);
+                match operator {
+                    Token::Eq => equal,
+                    _ => self.mk(
+                        ExprKind::Unary(UnOp::Not, Box::new(equal)),
+                        Types::BOOL,
+                        span,
+                    ),
+                }
+            }
             _ => {
                 let ty = if comparison { Types::BOOL } else { l_ty };
                 let op = binop(operator);
@@ -644,6 +656,7 @@ impl FnCx<'_, '_> {
             Token::And | Token::Or => *kind == TyKind::Bool,
             Token::Eq | Token::NotEq => {
                 number
+                    || ty == Types::STR
                     || matches!(kind, TyKind::Bool | TyKind::Ptr(_))
                     || self.cx.is_enum(ty).is_some()
             }

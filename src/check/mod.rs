@@ -828,6 +828,15 @@ impl<'a> Checker<'a> {
     }
 
     /// The prelude functions generated code calls on its own.
+    /// An instance of a function the prelude defines for the compiler's use.
+    pub(super) fn prelude_fn(&mut self, name: &str) -> FnId {
+        let def = self
+            .items
+            .lookup_value(ModuleId::PRELUDE, name)
+            .expect("the prelude defines it");
+        self.instance(def, Vec::new(), Span::default())
+    }
+
     fn runtime(&mut self) -> Option<tir::Runtime> {
         let global = ModuleId::PRELUDE;
         let stream = self.items.lookup_type(global, "OutStream")?;

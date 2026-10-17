@@ -211,7 +211,7 @@ impl<'a> Lexer<'a> {
         let mut literal = String::from(ch);
 
         while let Some(&ch) = self.peek() {
-            if ch.is_alphanumeric() || ch == '_' {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
                 literal.push(self.advance().unwrap());
             } else {
                 break;

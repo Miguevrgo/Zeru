@@ -1,0 +1,12 @@
+fn sum(v: &Vec<i64>) i64 {
+    var s: i64 = 0;
+    for x in v { s += x; }
+    return s;
+}
+fn main() {
+    var v: Vec<i64> = [1, 2, 3];
+    for x in &v { print("{} ", x); }
+    var m = &var v;
+    for x in m { print("{} ", x); }
+    println("{}", sum(&v));
+}
