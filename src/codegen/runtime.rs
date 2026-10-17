@@ -9,8 +9,8 @@ use inkwell::{
     module::Linkage,
     types::{BasicType, BasicTypeEnum, FunctionType, IntType, PointerType, StructType},
     values::{
-        BasicMetadataValueEnum, BasicValueEnum, FloatValue, FunctionValue, IntValue, PointerValue,
-        StructValue, ValueKind,
+        BasicMetadataValueEnum, BasicValue, BasicValueEnum, FloatValue, FunctionValue,
+        InstructionOpcode, IntValue, Operand, PointerValue, StructValue, ValueKind,
     },
 };
 
@@ -33,7 +33,6 @@ use crate::{
 
 const ALLOC_FN: &str = "__zeru_alloc";
 const REALLOC_FN: &str = "__zeru_realloc";
-const MEMMOVE_FN: &str = "__zeru_memmove";
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub(super) fn error(&mut self, message: impl Into<String>, span: Span) {
@@ -72,6 +71,27 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         name: &str,
     ) -> BasicValueEnum<'ctx> {
         self.builder.build_load(ty, ptr, name).unwrap()
+    }
+
+    /// Store `value` at `ptr`. An array loaded by the last instruction is
+    /// copied with `memmove` instead, which LLVM lowers without splitting it
+    /// apart; a load followed by anything else may no longer match memory.
+    pub(super) fn store(&self, ptr: PointerValue<'ctx>, value: BasicValueEnum<'ctx>) {
+        if let Some(load) = value.as_instruction_value()
+            && load.get_opcode() == InstructionOpcode::Load
+            && value.is_array_value()
+            && load.get_next_instruction().is_none()
+            && load.get_parent() == self.builder.get_insert_block()
+            && let Some(Operand::Value(BasicValueEnum::PointerValue(src))) = load.get_operand(0)
+        {
+            let size = value.get_type().size_of().unwrap();
+            self.builder.build_memmove(ptr, 1, src, 1, size).unwrap();
+            if load.get_first_use().is_none() {
+                load.erase_from_basic_block();
+            }
+            return;
+        }
+        self.builder.build_store(ptr, value).unwrap();
     }
 
     pub(super) fn load_int(
@@ -316,6 +336,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let Some(current_fn) = self.current_fn else {
             return;
         };
+        if !self.safety_mode.emit_safety_checks() {
+            return;
+        }
         let panic_bb = self
             .context
             .append_basic_block(current_fn, &format!("{label}_panic"));
@@ -637,18 +660,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         elem_type: BasicTypeEnum<'ctx>,
         count: IntValue<'ctx>,
     ) {
-        let ptr_type = self.ptr_type();
-        let memmove_fn = self.extern_fn(
-            MEMMOVE_FN,
-            self.context.void_type().fn_type(
-                &[ptr_type.into(), ptr_type.into(), self.usize_type().into()],
-                false,
-            ),
-        );
         let size = self.bytes_for(elem_type, count);
-        self.builder
-            .build_call(memmove_fn, &[dst.into(), src.into(), size.into()], "")
-            .unwrap();
+        self.builder.build_memmove(dst, 1, src, 1, size).unwrap();
     }
 
     pub(super) fn create_entry_block_alloca(

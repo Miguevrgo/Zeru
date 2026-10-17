@@ -28,6 +28,8 @@ fn probe(drops: *i32) Probe {
 
 fn consume(p: Probe) { }
 
+fn consume_all(ps: Array<Probe, 2>) { }
+
 fn maybe(drops: *i32) Probe? { return probe(drops); }
 
 fn listed() Vec<i64>? { return [1, 2, 3]; }
@@ -126,6 +128,14 @@ fn main() {
     match listed() { Some(v) => { expect(drops, 39, 30); if v[2] != 3 { exit(31); } } None => { } }
     while true { match maybe(at) { Some(p) => { break; } None => { } } }
     expect(drops, 40, 32);
+
+    { var ps: Array<Probe, 2> = [probe(at), probe(at)]; consume_all(ps); expect(drops, 42, 33); }
+    expect(drops, 42, 34);
+
+    var first_drops: i32 = 0;
+    var second_drops: i32 = 0;
+    { var vs: Vec<Array<Probe, 1>> = [[probe(&first_drops)], [probe(&second_drops)]]; var first = vs.remove(0); }
+    expect(first_drops * 10 + second_drops, 11, 35);
 
     println("Drop tests passed!");
 }

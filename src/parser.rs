@@ -48,7 +48,7 @@ impl<'a> Parser<'a> {
     }
 
     fn next_token(&mut self) {
-        self.current_token = self.peek_token.clone();
+        self.current_token = std::mem::replace(&mut self.peek_token, Token::Eof);
         self.current_span = self.peek_span;
 
         if let Some(token) = self.pending.take() {
