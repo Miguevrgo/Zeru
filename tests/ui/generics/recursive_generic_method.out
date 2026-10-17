@@ -4,7 +4,7 @@ Error: Checking the methods of 'Box' asks for ever deeper instances of it, witho
    ╭─[ tests/ui/generics/recursive_generic_method.zr:3:5 ]
    │
  3 │     fn wrap(self) Box<Box<T>> { return Box { v: self }; }
-   │     ─────────────┬────────────
-   │                  ╰────────────── Checking the methods of 'Box' asks for ever deeper instances of it, without end
+   │     ────────────┬────────────
+   │                 ╰────────────── Checking the methods of 'Box' asks for ever deeper instances of it, without end
 ───╯
 [-] Error: aborting due to previous error
