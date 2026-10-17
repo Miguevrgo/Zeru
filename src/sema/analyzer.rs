@@ -72,6 +72,7 @@ pub struct SemanticAnalyzer {
     generic_functions: HashMap<String, Statement>,
     instantiations: Vec<Statement>,
     instances: HashMap<String, (String, Vec<Type>)>,
+    unsatisfied: HashSet<String>,
 
     in_instance: bool,
 
@@ -103,6 +104,7 @@ impl SemanticAnalyzer {
             generic_functions: HashMap::new(),
             instantiations: Vec::new(),
             instances: HashMap::new(),
+            unsatisfied: HashSet::new(),
             in_instance: false,
             loops: Vec::new(),
             locked: Vec::new(),
@@ -177,8 +179,8 @@ impl SemanticAnalyzer {
     pub fn analyze(&mut self, program: &mut Program) {
         self.privates = std::mem::take(&mut program.privates);
         self.take_generics(program);
-        self.scan_types(&program.statements);
         let generic_functions: Vec<_> = self.generic_functions.values().cloned().collect();
+        self.scan_types(&program.statements);
         self.scan_functions(&program.statements);
         self.scan_functions(&generic_functions);
         self.analyze_bodies(&mut program.statements);
@@ -301,6 +303,9 @@ impl SemanticAnalyzer {
         if self.struct_defs.contains_key(&name) {
             return Some(name);
         }
+        if self.unsatisfied.contains(&name) {
+            return None;
+        }
 
         let mut satisfied = true;
         for (param, arg) in type_params.iter().zip(args) {
@@ -309,6 +314,7 @@ impl SemanticAnalyzer {
             }
         }
         if !satisfied {
+            self.unsatisfied.insert(name);
             return None;
         }
 
@@ -2323,7 +2329,9 @@ impl SemanticAnalyzer {
         let name = &self.instantiate_from_literal(name, fields, expected_type, span);
 
         let Some(def_fields) = self.struct_defs.get(name).cloned() else {
-            self.error(format!("Unknown struct type '{name}'"), span);
+            if !self.generic_structs.contains_key(name) {
+                self.error(format!("Unknown struct type '{name}'"), span);
+            }
             return Type::Unknown;
         };
 
@@ -2617,7 +2625,16 @@ impl SemanticAnalyzer {
                 operator: T::Minus,
                 right,
             } => self.constant_value(right).map(|value| -value),
-            ExpressionKind::Identifier(name) => self.constant_value(self.constants.get(name)?),
+            ExpressionKind::Identifier(name)
+                if self
+                    .symbols
+                    .get_all_scopes()
+                    .iter()
+                    .rposition(|scope| scope.contains_key(name))
+                    == Some(0) =>
+            {
+                self.constant_value(self.constants.get(name)?)
+            }
             ExpressionKind::Infix {
                 left,
                 operator,
