@@ -21,6 +21,7 @@ fn main() {
 
     var host: Array<u8, 65> = [0; 65];
     if os::hostname(&host[0], 65).is_err() { exit(10); }
+    if os::hostname(&host[0], 0).is_err() { exit(11); }
 
     println("os: all tests passed");
 }

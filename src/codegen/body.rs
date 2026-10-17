@@ -344,7 +344,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 ExpressionKind::BorrowRefMut(inner) => (inner.as_ref(), true),
                 _ => (iterable, false),
             };
-            let (container, shape, count) = match self.compile_lvalue(place) {
+            let (container, shape, count) = match self.place_of(place) {
                 Some((container, BasicTypeEnum::ArrayType(array))) => {
                     let len = usize_type.const_int(array.len() as u64, false);
                     (container, Some(array), len)
@@ -602,7 +602,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         expr: &Expression,
         expected_type: Option<BasicTypeEnum<'ctx>>,
     ) -> BasicValueEnum<'ctx> {
-        let result = self.compile_expression_inner(expr, expected_type);
+        let payload = expr.ty.as_ref().and_then(|ty| self.llvm_type_of(ty));
+        let inner_expected = match (expected_type, payload) {
+            (Some(BasicTypeEnum::StructType(expected)), Some(payload))
+                if expected == self.option_type(payload) =>
+            {
+                Some(payload)
+            }
+            _ => expected_type,
+        };
+        let result = self.compile_expression_inner(expr, inner_expected);
 
         if let Some(BasicTypeEnum::StructType(expected)) = expected_type
             && expected == self.option_type(result.get_type())
@@ -824,18 +833,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         value: &Expression,
         span: Span,
     ) -> BasicValueEnum<'ctx> {
+        let expected = target.ty.as_ref().and_then(|ty| self.llvm_type_of(ty));
+        let rhs = self.compile_expression(value, expected);
         let Some((ptr, ty)) = self.compile_lvalue(target) else {
             self.error("Invalid assignment target", target.span);
             return self.dummy_val();
         };
 
         let stored = if *operator == Token::Assign {
-            let stored = self.compile_expression(value, Some(ty));
             self.drop_overwritten(target, ptr);
-            stored
+            rhs
         } else {
             let current = self.load(ty, ptr, "cur_val");
-            let rhs = self.compile_expression(value, Some(ty));
             let signed = !Self::is_unsigned_expr(target);
             self.apply_compound_op(current, rhs, operator, signed, span)
         };
@@ -992,21 +1001,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         signed: bool,
         span: Span,
     ) -> BasicValueEnum<'ctx> {
-        let plain = match operator {
-            Token::PlusEq => Token::Plus,
-            Token::MinusEq => Token::Minus,
-            Token::StarEq => Token::Star,
-            Token::SlashEq => Token::Slash,
-            Token::ModEq => Token::Mod,
-            Token::BitAndEq => Token::BitAnd,
-            Token::BitOrEq => Token::BitOr,
-            Token::BitXorEq => Token::BitXor,
-            Token::BitLShiftEq => Token::ShiftLeft,
-            Token::BitRShiftEq => Token::ShiftRight,
-            Token::PlusWrapEq => Token::PlusWrap,
-            Token::MinusWrapEq => Token::MinusWrap,
-            Token::StarWrapEq => Token::StarWrap,
-            _ => return self.unsupported_operator(operator, span),
+        let Some(plain) = operator.compound_base() else {
+            return self.unsupported_operator(operator, span);
         };
 
         self.apply_arith(lhs, rhs, &plain, signed)
@@ -1042,7 +1038,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     /// The operations that can go wrong emit a check first: `+ - *` trap on
     /// overflow, `/ %` on a zero divisor, and shifts on an oversized amount.
     /// All three are skipped in ReleaseFast.
-    fn apply_int_arith(
+    pub(super) fn apply_int_arith(
         &mut self,
         l: IntValue<'ctx>,
         r: IntValue<'ctx>,
@@ -1542,7 +1538,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
             }
             (BasicValueEnum::FloatValue(v), BasicTypeEnum::IntType(t)) => {
-                if Self::is_unsigned_expr(cast) {
+                let unsigned = Self::is_unsigned_expr(cast);
+                self.emit_float_to_int_check(v, t, unsigned);
+                if unsigned {
                     self.builder
                         .build_float_to_unsigned_int(v, t, "fptoui")
                         .unwrap()

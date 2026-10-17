@@ -21,7 +21,7 @@ pub struct Parser<'a> {
 
     no_struct_literal: bool,
 
-    pending_gt: bool,
+    pending: Option<Token>,
 
     code_seen: bool,
 }
@@ -37,7 +37,7 @@ impl<'a> Parser<'a> {
             errors: Vec::new(),
             panic_mode: false,
             no_struct_literal: false,
-            pending_gt: false,
+            pending: None,
             code_seen: false,
         };
 
@@ -51,9 +51,8 @@ impl<'a> Parser<'a> {
         self.current_token = self.peek_token.clone();
         self.current_span = self.peek_span;
 
-        if self.pending_gt {
-            self.pending_gt = false;
-            self.peek_token = Token::Gt;
+        if let Some(token) = self.pending.take() {
+            self.peek_token = token;
             self.peek_span = Span::new(self.current_span.end, self.current_span.end + 1);
             return;
         }
@@ -111,10 +110,7 @@ impl<'a> Parser<'a> {
                 Token::Trait => self.parse_trait_statement(),
                 Token::Pub => self.parse_public(),
                 Token::Import => self.parse_import_statement(),
-                Token::Semicolon => {
-                    self.next_token();
-                    None
-                }
+                Token::Semicolon => None,
                 Token::Var => {
                     self.error_current("Global variables ('var') are not allowed. Use 'const' for constants or move 'var' inside a function");
                     self.synchronize();
@@ -301,9 +297,15 @@ impl<'a> Parser<'a> {
                 _ => self.parse_type()?,
             });
 
-            if self.peek_token_is(&Token::ShiftRight) {
+            let rest = match self.peek_token {
+                Token::ShiftRight => Some(Token::Gt),
+                Token::Geq => Some(Token::Assign),
+                Token::BitRShiftEq => Some(Token::Geq),
+                _ => None,
+            };
+            if rest.is_some() {
                 self.peek_token = Token::Gt;
-                self.pending_gt = true;
+                self.pending = rest;
             }
 
             if self.peek_token_is(&Token::Comma) {
@@ -813,6 +815,15 @@ impl<'a> Parser<'a> {
                 None => {}
             }
             self.next_token();
+        }
+
+        if self.cur_token_is(&Token::Eof)
+            && self
+                .errors
+                .last()
+                .is_none_or(|e| e.span != self.current_span)
+        {
+            self.error_current("Expected '}', found 'end of file'");
         }
 
         block
@@ -1481,6 +1492,27 @@ mod tests {
                 ["Imports must come before any other code"],
                 "{source}"
             );
+        }
+    }
+
+    #[test]
+    fn test_stray_semicolons_and_generic_close_before_assign() {
+        for source in [
+            ";fn main() { }",
+            "const A: i32 = 1;; fn main() { }",
+            "fn main() { var v: Vec<i32>= x; var w: Vec<Vec<i32>>= y; }",
+        ] {
+            parse_input(source);
+        }
+    }
+
+    #[test]
+    fn test_unclosed_block_is_rejected() {
+        for source in ["fn main() { f();", "fn main() { while a { a += 1; }"] {
+            let mut parser = Parser::new(Lexer::new(source));
+            parser.parse_program();
+            let messages: Vec<_> = parser.errors.iter().map(|e| &e.message).collect();
+            assert_eq!(messages, ["Expected '}', found 'end of file'"], "{source}");
         }
     }
 

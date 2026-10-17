@@ -31,6 +31,17 @@ fn wrapped(yes: bool) Small! {
     return Err(9);
 }
 
+struct Growing {
+    v: Vec<i64>,
+    fn grow(var self) i64 {
+        var i: i64 = 0;
+        while i < 100000 { self.v.push(i); i += 1; }
+        return 7;
+    }
+}
+
+fn doubled(a: i64) i64? { return a * 2; }
+
 fn first_over(data: Array<i32, 5>, limit: i32) i32? {
     var i: usize = 0;
     while i < 5 {
@@ -99,6 +110,19 @@ fn main() {
         round += 1;
     }
     if counter != 0 { exit(20); }
+
+    var a: i64 = 3;
+    var sum: i64? = a + 4;
+    var neg: i64? = -a;
+    var n: i32 = 7;
+    var p: *i32 = &n;
+    var read: i32? = *p;
+    if (doubled(a) orelse 0) != 6 { exit(21); }
+    if (sum orelse 0) != 7 || (neg orelse 0) != -3 || (read orelse 0) != 7 { exit(22); }
+
+    var g = Growing { v: [1] };
+    g.v[0] = g.grow();
+    if g.v[0] != 7 || g.v.len() != 100001 { exit(23); }
 
     println("corners: all tests passed");
     exit(0);

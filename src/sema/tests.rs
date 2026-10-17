@@ -575,6 +575,15 @@ fn test_nested_negation() {
 }
 
 #[test]
+fn test_unsigned_negation_is_refused() {
+    let errors = analyze("fn main() { var x: u32 = 5; var y = -x; }");
+    assert!(
+        errors[0].contains("Cannot negate unsigned type u32"),
+        "{errors:?}"
+    );
+}
+
+#[test]
 fn test_dereference_non_pointer_error() {
     let input = "
             fn main() {
@@ -949,6 +958,49 @@ fn test_bound_rejects_an_argument_that_does_not_meet_it() {
 }
 
 #[test]
+fn test_invalid_programs_are_refused() {
+    for (input, message) in [
+        (
+            "struct H { v: Vec<i64> } fn mk() H { return H { v: Vec.new() }; } fn main() { var p: *Vec<i64> = &mk().v; }",
+            "Cannot create reference to a temporary value",
+        ),
+        (
+            "struct P { x: i32, y: i32 } fn main() { var p = P { x: 1, y: 2, x: 3 }; }",
+            "Field 'x' is given twice",
+        ),
+        (
+            "fn main() { var b = true; b += true; }",
+            "Operator '+=' cannot be applied to bool",
+        ),
+        (
+            "fn main() { var s: str = \"ab\"; s += \"c\"; }",
+            "Operator '+=' cannot be applied to str",
+        ),
+        (
+            "struct B<T> { v: T, fn f<T>(self, x: T) T { return x; } } fn main() { }",
+            "Type parameter 'T' of 'f' is already a parameter of B",
+        ),
+        (
+            "struct Set<K: Eq> { k: K } enum E { A(i32) } fn main() { var s: Set<E> = Set { k: E.A(1) }; }",
+            "asks for K: Eq, which E does not satisfy",
+        ),
+    ] {
+        let errors = analyze(input);
+        assert!(
+            errors.iter().any(|e| e.contains(message)),
+            "{input}: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn test_unknown_type_argument_is_reported_once() {
+    let errors =
+        analyze("struct Pair<T> { a: T } fn main() { var p: Pair<Nope> = Pair { a: 1 }; }");
+    assert_eq!(errors, ["Unknown type 'Nope'"]);
+}
+
+#[test]
 fn test_unknown_trait_in_a_bound_is_reported() {
     let errors = analyze(
         "
@@ -990,6 +1042,21 @@ fn test_literal_that_does_not_fit_is_an_error() {
             "var x: i64 = 18446744073709551615;",
             "Literal 18446744073709551615 does not fit in i64",
         ),
+        ("var x: u8 = 200 + 100;", "Constant 300 does not fit in u8"),
+        (
+            "var x: i32 = 1 << 40;",
+            "Shift by 40 is out of range for i32",
+        ),
+        ("var x: f32 = 1e40;", "Literal 1e40 does not fit in f32"),
+        ("var x: i8 = -(64 * 2);", "Constant 128 does not fit in i8"),
+        (
+            "var x = 2147483647 + 1;",
+            "Constant 2147483648 does not fit in i32",
+        ),
+        (
+            "var x: u16 = 0; x = 65535 + 1;",
+            "Constant 65536 does not fit in u16",
+        ),
         (
             "var x = 3000000000;",
             "Literal 3000000000 does not fit in i32, the type a literal takes",
@@ -1011,6 +1078,8 @@ fn test_literal_at_the_edge_of_its_type_fits() {
             var d: u8 = 255;
             var e = -2147483648;
             var f: i32? = -5;
+            var g: i32 = (1 << 31) + 0;
+            var h: u8 = 255 - 1 + 1;
         }
     ";
     let errors = analyze(input);
@@ -1060,6 +1129,9 @@ fn test_cast_needs_a_conversion_that_exists() {
         ("p as *u8", "Cannot cast P to *u8"),
         ("1 as Color", "Cannot cast i32 to Color"),
         ("2.5 as Color", "Cannot cast f64 to Color"),
+        ("p.x as bool", "Cannot cast i32 to bool"),
+        ("2.5 as bool", "Cannot cast f64 to bool"),
+        ("true as f64", "Cannot cast bool to f64"),
     ] {
         let input = format!(
             "struct P {{ x: i32 }} enum Color {{ Red }} fn main() {{ var p = P {{ x: 1 }}; var r = {cast}; }}"
