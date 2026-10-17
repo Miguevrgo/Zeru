@@ -1829,9 +1829,10 @@ impl SemanticAnalyzer {
             (Unknown | ParamType(_), _)
                 | (_, Unknown | ParamType(_))
                 | (
-                    Integer { .. } | Float(_) | Bool | Enum { .. },
-                    Integer { .. } | Float(_) | Bool
+                    Integer { .. } | Float(_) | Enum { .. },
+                    Integer { .. } | Float(_)
                 )
+                | (Bool, Integer { .. })
                 | (
                     Pointer(_) | Ref(_) | RefMut(_) | Slice { .. },
                     Integer { .. } | Pointer(_)
@@ -2699,6 +2700,13 @@ impl SemanticAnalyzer {
 
                 let right_type = self.check_expression(right, expected_type);
                 match &right_type {
+                    Type::Integer {
+                        signed: Signedness::Unsigned,
+                        ..
+                    } => {
+                        self.error(format!("Cannot negate unsigned type {right_type}"), span);
+                        Type::Unknown
+                    }
                     Type::Integer { .. } | Type::Float(_) | Type::ParamType(_) => right_type,
                     _ => {
                         self.error(

@@ -575,6 +575,15 @@ fn test_nested_negation() {
 }
 
 #[test]
+fn test_unsigned_negation_is_refused() {
+    let errors = analyze("fn main() { var x: u32 = 5; var y = -x; }");
+    assert!(
+        errors[0].contains("Cannot negate unsigned type u32"),
+        "{errors:?}"
+    );
+}
+
+#[test]
 fn test_dereference_non_pointer_error() {
     let input = "
             fn main() {
@@ -1120,6 +1129,9 @@ fn test_cast_needs_a_conversion_that_exists() {
         ("p as *u8", "Cannot cast P to *u8"),
         ("1 as Color", "Cannot cast i32 to Color"),
         ("2.5 as Color", "Cannot cast f64 to Color"),
+        ("p.x as bool", "Cannot cast i32 to bool"),
+        ("2.5 as bool", "Cannot cast f64 to bool"),
+        ("true as f64", "Cannot cast bool to f64"),
     ] {
         let input = format!(
             "struct P {{ x: i32 }} enum Color {{ Red }} fn main() {{ var p = P {{ x: 1 }}; var r = {cast}; }}"
