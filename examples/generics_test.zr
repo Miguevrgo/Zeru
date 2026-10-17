@@ -14,6 +14,7 @@ struct Pair<T: Eq> {
 
     fn swap(self) Pair<T> { return Pair { first: self.second, second: self.first }; }
     fn same(self) bool { return self.first == self.second; }
+    fn with<U>(self, extra: U) (T, U) { return (self.first, extra); }
 }
 
 struct Counter<T: Num> {
@@ -49,6 +50,8 @@ fn identity<T>(x: T) T { return x; }
 fn first<T, U>(a: T, b: U) T { return a; }
 
 fn second<T, U>(a: T, b: U) U { return b; }
+
+fn head<T: Eq>(p: Pair<T>) T { return p.first; }
 
 fn make() Pair<i64> { return Pair { first: 10, second: 20 }; }
 
@@ -103,6 +106,10 @@ fn main() {
     if largest(big, small) != big { exit(23); }
     var wide: i64 = 5000000000;
     if largest(wide, 7) != wide { exit(24); }
+    if largest(7, wide) != wide { exit(25); }
+    if head(made) != 10 { exit(26); }
+    if !made.with(true).1 { exit(27); }
+    if made.with(2.5).1 != 2.5 { exit(28); }
 
     var wrapped = Wrap { inner: Square { side: 3 } };
     if wrapped.inner.area() != 9 { exit(15); }

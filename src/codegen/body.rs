@@ -344,7 +344,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 ExpressionKind::BorrowRefMut(inner) => (inner.as_ref(), true),
                 _ => (iterable, false),
             };
-            let (container, shape, count) = match self.compile_lvalue(place) {
+            let (container, shape, count) = match self.place_of(place) {
                 Some((container, BasicTypeEnum::ArrayType(array))) => {
                     let len = usize_type.const_int(array.len() as u64, false);
                     (container, Some(array), len)
@@ -996,21 +996,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         signed: bool,
         span: Span,
     ) -> BasicValueEnum<'ctx> {
-        let plain = match operator {
-            Token::PlusEq => Token::Plus,
-            Token::MinusEq => Token::Minus,
-            Token::StarEq => Token::Star,
-            Token::SlashEq => Token::Slash,
-            Token::ModEq => Token::Mod,
-            Token::BitAndEq => Token::BitAnd,
-            Token::BitOrEq => Token::BitOr,
-            Token::BitXorEq => Token::BitXor,
-            Token::BitLShiftEq => Token::ShiftLeft,
-            Token::BitRShiftEq => Token::ShiftRight,
-            Token::PlusWrapEq => Token::PlusWrap,
-            Token::MinusWrapEq => Token::MinusWrap,
-            Token::StarWrapEq => Token::StarWrap,
-            _ => return self.unsupported_operator(operator, span),
+        let Some(plain) = operator.compound_base() else {
+            return self.unsupported_operator(operator, span);
         };
 
         self.apply_arith(lhs, rhs, &plain, signed)

@@ -97,6 +97,27 @@ pub enum Token {
     Illegal(String),
 }
 
+impl Token {
+    pub fn compound_base(&self) -> Option<Token> {
+        Some(match self {
+            Token::PlusEq => Token::Plus,
+            Token::MinusEq => Token::Minus,
+            Token::StarEq => Token::Star,
+            Token::SlashEq => Token::Slash,
+            Token::ModEq => Token::Mod,
+            Token::BitAndEq => Token::BitAnd,
+            Token::BitOrEq => Token::BitOr,
+            Token::BitXorEq => Token::BitXor,
+            Token::BitLShiftEq => Token::ShiftLeft,
+            Token::BitRShiftEq => Token::ShiftRight,
+            Token::PlusWrapEq => Token::PlusWrap,
+            Token::MinusWrapEq => Token::MinusWrap,
+            Token::StarWrapEq => Token::StarWrap,
+            _ => return None,
+        })
+    }
+}
+
 /// A token as it is written in the source, for error messages.
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {

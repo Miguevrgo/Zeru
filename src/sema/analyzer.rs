@@ -70,6 +70,7 @@ pub struct SemanticAnalyzer {
     generic_structs: HashMap<String, Statement>,
     generic_functions: HashMap<String, Statement>,
     instantiations: Vec<Statement>,
+    instances: HashMap<String, (String, Vec<Type>)>,
 
     in_instance: bool,
 
@@ -100,6 +101,7 @@ impl SemanticAnalyzer {
             generic_structs: HashMap::new(),
             generic_functions: HashMap::new(),
             instantiations: Vec::new(),
+            instances: HashMap::new(),
             in_instance: false,
             loops: Vec::new(),
             locked: Vec::new(),
@@ -175,8 +177,8 @@ impl SemanticAnalyzer {
         self.privates = std::mem::take(&mut program.privates);
         self.take_generics(program);
         self.scan_types(&program.statements);
-        self.scan_functions(&program.statements);
         let generic_functions: Vec<_> = self.generic_functions.values().cloned().collect();
+        self.scan_functions(&program.statements);
         self.scan_functions(&generic_functions);
         self.analyze_bodies(&mut program.statements);
 
@@ -194,11 +196,33 @@ impl SemanticAnalyzer {
         program.statements.retain(|stmt| {
             let duplicate = match &stmt.kind {
                 StatementKind::Struct {
-                    name, type_params, ..
-                } if !type_params.is_empty() => self
-                    .generic_structs
-                    .insert(name.clone(), stmt.clone())
-                    .map(|_| format!("Type {name} is already defined")),
+                    name,
+                    type_params,
+                    methods,
+                    ..
+                } if !type_params.is_empty() => {
+                    for method in methods {
+                        if let StatementKind::Function {
+                            name: method_name,
+                            type_params: own,
+                            ..
+                        } = &method.kind
+                            && let Some(param) =
+                                own.iter().find(|p| type_params.iter().any(|q| q.name == p.name))
+                        {
+                            self.error(
+                                format!(
+                                    "Type parameter '{}' of '{method_name}' is already a parameter of {name}",
+                                    param.name
+                                ),
+                                method.span,
+                            );
+                        }
+                    }
+                    self.generic_structs
+                        .insert(name.clone(), stmt.clone())
+                        .map(|_| format!("Type {name} is already defined"))
+                }
                 StatementKind::Function {
                     name, type_params, ..
                 } if !type_params.is_empty() => self
@@ -221,6 +245,27 @@ impl SemanticAnalyzer {
         self.in_instance = true;
         for mut decl in std::mem::take(&mut self.instantiations) {
             self.check_statement_top_level(&mut decl);
+            if let StatementKind::Struct {
+                name,
+                methods: added,
+                ..
+            } = &mut decl.kind
+                && let Some(methods) =
+                    program
+                        .statements
+                        .iter_mut()
+                        .find_map(|stmt| match &mut stmt.kind {
+                            StatementKind::Struct {
+                                name: owner,
+                                methods,
+                                ..
+                            } if owner == name => Some(methods),
+                            _ => None,
+                        })
+            {
+                methods.append(added);
+                continue;
+            }
             program.statements.push(decl);
         }
         self.in_instance = false;
@@ -246,12 +291,6 @@ impl SemanticAnalyzer {
             return None;
         }
 
-        for (param, arg) in type_params.iter().zip(args) {
-            if let Some(bound) = &param.bound {
-                self.check_bound(base, &param.name, bound, arg, span);
-            }
-        }
-
         let subs: Substitutions = type_params
             .iter()
             .zip(args)
@@ -262,7 +301,22 @@ impl SemanticAnalyzer {
             return Some(name);
         }
 
+        let mut satisfied = true;
+        for (param, arg) in type_params.iter().zip(args) {
+            if let Some(bound) = &param.bound {
+                satisfied &= self.check_bound(base, &param.name, bound, arg, span);
+            }
+        }
+        if !satisfied {
+            return None;
+        }
+
         self.struct_defs.insert(name.clone(), Vec::new());
+        self.instances
+            .insert(name.clone(), (base.to_string(), args.to_vec()));
+        if args.iter().any(|arg| self.mentions_param(arg)) {
+            return Some(name);
+        }
 
         let concrete = instantiate(&decl, name.clone(), &subs);
         self.scan_struct_fields(&concrete);
@@ -271,23 +325,56 @@ impl SemanticAnalyzer {
         Some(name)
     }
 
+    /// Whether `ty` still names a type parameter, as `Pair<T>` in a generic
+    /// signature does. Such an instance is only matched against, never built.
+    fn mentions_param(&self, ty: &Type) -> bool {
+        match ty {
+            Type::ParamType(_) => true,
+            Type::Struct(name) => self
+                .instances
+                .get(name)
+                .is_some_and(|(_, args)| args.iter().any(|arg| self.mentions_param(arg))),
+            Type::Pointer(inner)
+            | Type::Ref(inner)
+            | Type::RefMut(inner)
+            | Type::Optional(inner)
+            | Type::Slice { elem_type: inner }
+            | Type::Vec { elem_type: inner }
+            | Type::Array {
+                elem_type: inner, ..
+            } => self.mentions_param(inner),
+            Type::Result { ok_type, err_type } => {
+                self.mentions_param(ok_type) || self.mentions_param(err_type)
+            }
+            Type::Tuple(types) => types.iter().any(|ty| self.mentions_param(ty)),
+            _ => false,
+        }
+    }
+
     /// Report an argument that does not meet what the parameter asks of it, so
     /// the complaint lands on the bound instead of deep in a method body.
-    fn check_bound(&mut self, base: &str, param: &str, bound: &str, arg: &Type, span: Span) {
+    fn check_bound(
+        &mut self,
+        base: &str,
+        param: &str,
+        bound: &str,
+        arg: &Type,
+        span: Span,
+    ) -> bool {
         let satisfied = match bound {
-            "Eq" => matches!(
-                arg,
-                Type::Integer { .. }
-                    | Type::Float(_)
-                    | Type::Bool
-                    | Type::Enum(_)
-                    | Type::Pointer(_)
-            ),
+            _ if matches!(arg, Type::ParamType(_)) => true,
+            "Eq" => match arg {
+                Type::Enum(name) => !self.enum_has_data(name),
+                _ => matches!(
+                    arg,
+                    Type::Integer { .. } | Type::Float(_) | Type::Bool | Type::Pointer(_)
+                ),
+            },
             "Ord" | "Num" => matches!(arg, Type::Integer { .. } | Type::Float(_)),
             _ if self.trait_defs.contains_key(bound) => self.has_trait_methods(arg, bound),
             _ => {
                 self.error(format!("Unknown trait '{bound}' in a bound"), span);
-                return;
+                return false;
             }
         };
 
@@ -297,6 +384,7 @@ impl SemanticAnalyzer {
                 span,
             );
         }
+        satisfied
     }
 
     /// A type meets a trait by having its methods; there is no separate way to
@@ -542,6 +630,10 @@ impl SemanticAnalyzer {
                         } = &method.kind
                         {
                             let full_name = format!("{struct_name}::{method_name}");
+                            if !type_params.is_empty() {
+                                self.generic_functions
+                                    .insert(full_name.clone(), method.clone());
+                            }
                             self.register_function(
                                 full_name,
                                 params,
@@ -719,6 +811,7 @@ impl SemanticAnalyzer {
                         body,
                         ..
                     } = &mut method.kind
+                        && type_params.is_empty()
                     {
                         let full_name = format!("{struct_name}::{name}");
                         self.check_function_body(&full_name, params, body, type_params, span);
@@ -927,6 +1020,9 @@ impl SemanticAnalyzer {
                 if self.generic_structs.contains_key(name) {
                     self.check_visible(name, span);
                     let args: Vec<Type> = args.iter().map(|a| self.resolve_spec(a, span)).collect();
+                    if args.contains(&Type::Unknown) {
+                        return Type::Unknown;
+                    }
                     return match self.instantiate_struct(name, &args, span) {
                         Some(name) => Type::Struct(name),
                         None => Type::Unknown,
@@ -1465,6 +1561,7 @@ impl SemanticAnalyzer {
     fn check_assign(
         &mut self,
         target: &mut Expression,
+        operator: &crate::token::Token,
         value: &mut Expression,
         span: Span,
     ) -> Type {
@@ -1528,6 +1625,14 @@ impl SemanticAnalyzer {
                     "Type mismatch in assignment. Expected {}, got {}.",
                     resolved_target, val_type
                 ),
+                span,
+            );
+        } else if let Some(base) = operator.compound_base()
+            && resolved_target != Type::Unknown
+            && !Self::operator_applies(&base, &resolved_target)
+        {
+            self.error(
+                format!("Operator '{operator}' cannot be applied to {resolved_target}"),
                 span,
             );
         }
@@ -1978,6 +2083,9 @@ impl SemanticAnalyzer {
                 {
                     Some(instance.clone())
                 }
+                Some(Type::Unknown) if self.generic_structs.contains_key(type_name) => {
+                    return Type::Unknown;
+                }
                 _ if self.generic_structs.contains_key(type_name) => {
                     self.error(
                         format!("Cannot tell what {type_name}'s type arguments are here; give the variable a type, as in var x: {type_name}<..> = {type_name}.{name}()"),
@@ -2142,8 +2250,14 @@ impl SemanticAnalyzer {
                     return Type::Unknown;
                 }
                 let full_name = format!("{struct_name}::{method_name}");
-                self.check_call_mut(&full_name, arguments, Some(obj_type), span)
-                    .0
+                let (ty, subs) = self.check_call_mut(&full_name, arguments, Some(obj_type), span);
+                if let Some(instance) = self.instantiate_function(&full_name, &subs, span)
+                    && let ExpressionKind::Get { name, .. } = &mut function.kind
+                    && let Some((_, method)) = instance.rsplit_once("::")
+                {
+                    *name = method.to_string();
+                }
+                ty
             }
             CallKind::Unknown => {
                 self.error("Invalid call expression".into(), span);
@@ -2252,6 +2366,13 @@ impl SemanticAnalyzer {
             return Type::Unknown;
         };
 
+        let written: Vec<String> = fields.iter().map(|(field, _)| field.clone()).collect();
+        if let Some(dup) = Self::first_duplicate(&written) {
+            self.error(
+                format!("Field '{dup}' is given twice in struct literal {name}"),
+                span,
+            );
+        }
         for (field_name, _) in fields.iter() {
             if !def_fields.iter().any(|(n, _)| n == field_name) {
                 self.error(
@@ -2784,19 +2905,12 @@ impl SemanticAnalyzer {
     }
 
     fn check_borrow(&mut self, inner: &mut Expression, kind: Borrow, span: Span) -> Type {
-        let inner_kind = inner.kind.clone();
         let inner_type = self.check_expression(inner, None);
 
         if kind == Borrow::Mutable {
             self.require_mutable(inner, span);
         }
-        if !matches!(
-            inner_kind,
-            ExpressionKind::Identifier(_)
-                | ExpressionKind::Get { .. }
-                | ExpressionKind::Index { .. }
-                | ExpressionKind::Dereference(_)
-        ) {
+        if !Self::is_assignable(inner) {
             self.error("Cannot create reference to a temporary value".into(), span);
         }
 
@@ -2852,7 +2966,14 @@ impl SemanticAnalyzer {
 
             ExpressionKind::Identifier(name) => self.check_identifier(name, span),
 
-            ExpressionKind::Assign { target, value, .. } => self.check_assign(target, value, span),
+            ExpressionKind::Assign {
+                target,
+                operator,
+                value,
+            } => {
+                let operator = operator.clone();
+                self.check_assign(target, &operator, value, span)
+            }
 
             ExpressionKind::Infix {
                 left,
@@ -3149,11 +3270,16 @@ impl SemanticAnalyzer {
                     call_span,
                 );
             } else {
-                for i in 0..args.len() {
-                    let expected = Self::substitute_params(&expected_args[i], &substitutions);
+                let (literals, others): (Vec<usize>, Vec<usize>) =
+                    (0..args.len()).partition(|&i| Self::is_number_literal(&args[i]));
+                for i in others.into_iter().chain(literals) {
+                    let expected =
+                        self.substitute_params(&expected_args[i], &substitutions, call_span);
                     let arg_span = args[i].span;
                     let arg_type = self.check_expression(&mut args[i], Some(&expected));
-                    Self::bind_params(&expected_args[i], &arg_type, &mut substitutions);
+                    self.bind_params(&expected_args[i], &arg_type, &mut substitutions);
+                    let expected =
+                        self.substitute_params(&expected_args[i], &substitutions, call_span);
 
                     if !expected.accepts(&arg_type) {
                         self.error(format!("Argument {} type mismatch.", i + 1), arg_span);
@@ -3165,7 +3291,7 @@ impl SemanticAnalyzer {
                 }
             }
             return (
-                Self::substitute_params(&ret_type, &substitutions),
+                self.substitute_params(&ret_type, &substitutions, call_span),
                 substitutions,
             );
         }
@@ -3176,7 +3302,7 @@ impl SemanticAnalyzer {
 
     /// Record what each type parameter in `param` stands for, read off the
     /// argument's type in the same position: `*T` given a `*i64` makes T i64.
-    fn bind_params(param: &Type, arg: &Type, subs: &mut HashMap<String, Type>) {
+    fn bind_params(&self, param: &Type, arg: &Type, subs: &mut HashMap<String, Type>) {
         match (param, arg) {
             (Type::ParamType(name), _) => {
                 subs.entry(name.clone()).or_insert_with(|| arg.clone());
@@ -3189,11 +3315,21 @@ impl SemanticAnalyzer {
             | (Type::Vec { elem_type: p }, Type::Vec { elem_type: a })
             | (Type::Array { elem_type: p, .. }, Type::Array { elem_type: a, .. })
             | (Type::Result { ok_type: p, .. }, Type::Result { ok_type: a, .. }) => {
-                Self::bind_params(p, a, subs)
+                self.bind_params(p, a, subs)
             }
             (Type::Tuple(params), Type::Tuple(args)) => {
                 for (p, a) in params.iter().zip(args) {
-                    Self::bind_params(p, a, subs);
+                    self.bind_params(p, a, subs);
+                }
+            }
+            (Type::Struct(p), Type::Struct(a)) => {
+                if let (Some((p_base, params)), Some((a_base, args))) =
+                    (self.instances.get(p), self.instances.get(a))
+                    && p_base == a_base
+                {
+                    for (p, a) in params.iter().zip(args) {
+                        self.bind_params(p, a, subs);
+                    }
                 }
             }
             _ => {}
@@ -3219,8 +3355,10 @@ impl SemanticAnalyzer {
             match subs.get(&param.name) {
                 Some(Type::Unknown) => return None,
                 Some(ty) => {
-                    if let Some(bound) = &param.bound {
-                        self.check_bound(name, &param.name, bound, ty, span);
+                    if let Some(bound) = &param.bound
+                        && !self.check_bound(name, &param.name, bound, ty, span)
+                    {
+                        return None;
                     }
                     specs.insert(param.name.clone(), ty.to_spec());
                 }
@@ -3239,7 +3377,18 @@ impl SemanticAnalyzer {
 
         let instance = mangle(name, type_params, &specs);
         if self.symbols.lookup(&instance).is_none() {
-            let concrete = instantiate(&decl, instance.clone(), &specs);
+            let concrete = match instance.rsplit_once("::") {
+                Some((owner, method)) if self.struct_defs.contains_key(owner) => Statement {
+                    kind: StatementKind::Struct {
+                        name: owner.to_string(),
+                        type_params: Vec::new(),
+                        fields: Vec::new(),
+                        methods: vec![instantiate(&decl, method.to_string(), &specs)],
+                    },
+                    ..decl.clone()
+                },
+                _ => instantiate(&decl, instance.clone(), &specs),
+            };
             self.scan_functions(std::slice::from_ref(&concrete));
             self.instantiations.push(concrete);
         }
@@ -3248,8 +3397,19 @@ impl SemanticAnalyzer {
 
     /// Replace the type parameters of a generic signature with what the call
     /// site inferred, so the caller sees a concrete type.
-    fn substitute_params(ty: &Type, subs: &HashMap<String, Type>) -> Type {
-        let boxed = |inner: &Type| Box::new(Self::substitute_params(inner, subs));
+    fn substitute_params(&mut self, ty: &Type, subs: &HashMap<String, Type>, span: Span) -> Type {
+        if let Type::Struct(name) = ty
+            && let Some((base, args)) = self.instances.get(name).cloned()
+        {
+            let args: Vec<Type> = args
+                .iter()
+                .map(|t| self.substitute_params(t, subs, span))
+                .collect();
+            return self
+                .instantiate_struct(&base, &args, span)
+                .map_or_else(|| ty.clone(), Type::Struct);
+        }
+        let mut boxed = |inner: &Type| Box::new(self.substitute_params(inner, subs, span));
 
         match ty {
             Type::ParamType(name) => subs.get(name).cloned().unwrap_or_else(|| ty.clone()),
@@ -3271,12 +3431,7 @@ impl SemanticAnalyzer {
                 ok_type: boxed(ok_type),
                 err_type: boxed(err_type),
             },
-            Type::Tuple(types) => Type::Tuple(
-                types
-                    .iter()
-                    .map(|t| Self::substitute_params(t, subs))
-                    .collect(),
-            ),
+            Type::Tuple(types) => Type::Tuple(types.iter().map(|t| *boxed(t)).collect()),
             _ => ty.clone(),
         }
     }

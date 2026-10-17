@@ -949,6 +949,49 @@ fn test_bound_rejects_an_argument_that_does_not_meet_it() {
 }
 
 #[test]
+fn test_invalid_programs_are_refused() {
+    for (input, message) in [
+        (
+            "struct H { v: Vec<i64> } fn mk() H { return H { v: Vec.new() }; } fn main() { var p: *Vec<i64> = &mk().v; }",
+            "Cannot create reference to a temporary value",
+        ),
+        (
+            "struct P { x: i32, y: i32 } fn main() { var p = P { x: 1, y: 2, x: 3 }; }",
+            "Field 'x' is given twice",
+        ),
+        (
+            "fn main() { var b = true; b += true; }",
+            "Operator '+=' cannot be applied to bool",
+        ),
+        (
+            "fn main() { var s: str = \"ab\"; s += \"c\"; }",
+            "Operator '+=' cannot be applied to str",
+        ),
+        (
+            "struct B<T> { v: T, fn f<T>(self, x: T) T { return x; } } fn main() { }",
+            "Type parameter 'T' of 'f' is already a parameter of B",
+        ),
+        (
+            "struct Set<K: Eq> { k: K } enum E { A(i32) } fn main() { var s: Set<E> = Set { k: E.A(1) }; }",
+            "asks for K: Eq, which E does not satisfy",
+        ),
+    ] {
+        let errors = analyze(input);
+        assert!(
+            errors.iter().any(|e| e.contains(message)),
+            "{input}: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn test_unknown_type_argument_is_reported_once() {
+    let errors =
+        analyze("struct Pair<T> { a: T } fn main() { var p: Pair<Nope> = Pair { a: 1 }; }");
+    assert_eq!(errors, ["Unknown type 'Nope'"]);
+}
+
+#[test]
 fn test_unknown_trait_in_a_bound_is_reported() {
     let errors = analyze(
         "
