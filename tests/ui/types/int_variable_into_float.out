@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Type mismatch for variable 'x'. Annotated as f32 but got i32
+   ╭─[ tests/ui/types/int_variable_into_float.zr:3:5 ]
+   │
+ 3 │     var x: f32 = i;
+   │     ───────┬───────
+   │            ╰───────── Type mismatch for variable 'x'. Annotated as f32 but got i32
+───╯
+[-] Error: aborting due to previous error

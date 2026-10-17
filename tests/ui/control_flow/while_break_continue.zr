@@ -1,0 +1,11 @@
+fn main() {
+    var i = 0;
+    var seen = 0;
+    while i < 10 {
+        i += 1;
+        if i % 2 == 0 { continue; }
+        if i > 7 { break; }
+        seen += i;
+    }
+    println("{} {}", i, seen);
+}

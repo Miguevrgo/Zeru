@@ -1,0 +1,4 @@
+fn main() {
+    print("buffered");
+    exit(0);
+}

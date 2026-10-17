@@ -1,0 +1,5 @@
+struct S { n: i32, fn bump(var self) { self.n += 1; } }
+fn main() {
+    var s = S { n: 1 };
+    S.bump(s);
+}

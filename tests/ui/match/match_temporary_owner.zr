@@ -1,0 +1,7 @@
+fn listed() Vec<i64>? { return [1, 2, 3]; }
+fn main() {
+    match listed() {
+        Some(v) => { println("{}", v[2]); }
+        None => { }
+    }
+}

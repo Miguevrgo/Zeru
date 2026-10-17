@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Field 'x' is given twice in struct literal P
+   ╭─[ tests/ui/structs/field_given_twice.zr:3:13 ]
+   │
+ 3 │     var p = P { x: 1, y: 2, x: 3 };
+   │             ───────────┬──────────
+   │                        ╰──────────── Field 'x' is given twice in struct literal P
+───╯
+[-] Error: aborting due to previous error

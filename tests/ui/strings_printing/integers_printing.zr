@@ -1,0 +1,6 @@
+fn main() {
+    var a: u8 = 255;
+    var b: i16 = -32768;
+    var c: usize = 0;
+    println("{} {} {} {}", a, b, c, -1);
+}

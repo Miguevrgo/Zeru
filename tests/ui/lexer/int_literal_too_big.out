@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Integer literal '18446744073709551616' is out of range
+   ╭─[ tests/ui/lexer/int_literal_too_big.zr:2:18 ]
+   │
+ 2 │     var x: u64 = 18446744073709551616;
+   │                  ──────────┬─────────
+   │                            ╰─────────── Integer literal '18446744073709551616' is out of range
+───╯
+[-] Error: aborting due to previous error

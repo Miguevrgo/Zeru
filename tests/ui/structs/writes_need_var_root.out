@@ -1,0 +1,38 @@
+status: compile error
+-- stderr
+Error: Cannot modify 'p', which is not declared 'var'
+   ╭─[ tests/ui/structs/writes_need_var_root.zr:5:5 ]
+   │
+ 5 │     p.x = 2;
+   │     ───┬───
+   │        ╰───── Cannot modify 'p', which is not declared 'var'
+───╯
+Error: Cannot modify 'a', which is not declared 'var'
+   ╭─[ tests/ui/structs/writes_need_var_root.zr:7:5 ]
+   │
+ 7 │     a[0] = 3;
+   │     ────┬───
+   │         ╰───── Cannot modify 'a', which is not declared 'var'
+───╯
+Error: Cannot modify 'v', which is not declared 'var'
+   ╭─[ tests/ui/structs/writes_need_var_root.zr:9:5 ]
+   │
+ 9 │     v.push(1);
+   │     ────┬────
+   │         ╰────── Cannot modify 'v', which is not declared 'var'
+───╯
+Error: Cannot modify 'p', which is not declared 'var'
+    ╭─[ tests/ui/structs/writes_need_var_root.zr:10:5 ]
+    │
+ 10 │     p.bump();
+    │     ────┬───
+    │         ╰───── Cannot modify 'p', which is not declared 'var'
+────╯
+Error: Cannot modify 'n', which is not declared 'var'
+    ╭─[ tests/ui/structs/writes_need_var_root.zr:12:9 ]
+    │
+ 12 │     set(&n);
+    │         ─┬
+    │          ╰── Cannot modify 'n', which is not declared 'var'
+────╯
+[-] Error: aborting due to previous error

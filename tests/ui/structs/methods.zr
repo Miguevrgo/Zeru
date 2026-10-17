@@ -1,0 +1,16 @@
+struct Vector3 {
+    x: f32,
+    y: f32,
+    z: f32,
+    fn length_squared(self) f32 { return self.x * self.x + self.y * self.y + self.z * self.z; }
+    fn scale(var self, factor: f32) {
+        self.x = self.x * factor;
+        self.y = self.y * factor;
+        self.z = self.z * factor;
+    }
+}
+fn main() {
+    var v = Vector3 { x: 1.0, y: 2.0, z: 3.0 };
+    v.scale(2.0);
+    println("{} {}", v.length_squared(), v.y);
+}

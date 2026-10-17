@@ -1,0 +1,7 @@
+trait T {
+    fn a(self)
+    fn b(self) i32
+}
+fn main() {
+    println("parsed");
+}

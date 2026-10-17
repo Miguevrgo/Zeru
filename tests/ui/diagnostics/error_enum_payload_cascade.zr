@@ -1,0 +1,7 @@
+enum E { Bad(i32) }
+fn f() i32!E { return Err(E::Bad(1)); }
+fn main() {
+    var r = f();
+    var s = 0;
+    match r { Ok(v) => { s = v; } Err(c) => { s = 1; } }
+}

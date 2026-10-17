@@ -1,0 +1,5 @@
+fn main() {
+    var a: Array<i32, 3> = [1, 2, 3];
+    for x in a { var y = x * 10; print("{} ", y); }
+    println("| {}", a[0]);
+}

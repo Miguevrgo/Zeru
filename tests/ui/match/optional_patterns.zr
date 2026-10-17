@@ -1,0 +1,11 @@
+fn main() {
+    var o: i64? = 5;
+    var total: i64 = 0;
+    match o {
+        Some(v) => { total += v; }
+        None => { }
+    }
+    var n: i64? = None;
+    var d = match n { Some(v) => v, None => -1 };
+    println("{} {}", total, d);
+}

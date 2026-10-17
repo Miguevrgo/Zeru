@@ -1,0 +1,5 @@
+fn eat(v: Vec<i32>) { }
+fn main() {
+    var v: Vec<i32> = Vec.new();
+    while true { eat(v); }
+}

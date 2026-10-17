@@ -1,0 +1,5 @@
+//@ checked
+fn main() {
+    var x: i8 = -128 % -1;
+    println("{}", x);
+}

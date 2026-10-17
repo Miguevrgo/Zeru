@@ -1,0 +1,10 @@
+trait Printable { fn print(self); }
+struct Doc { n: i32, fn print(self) { println("doc {}", self.n); } }
+fn show<T: Printable>(x: T) T {
+    x.print();
+    return x;
+}
+fn main() {
+    var d = show(Doc { n: 3 });
+    println("{}", d.n);
+}

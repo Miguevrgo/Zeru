@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot reassign constant variable 'x'.
+   ╭─[ tests/ui/vec/element_constant_in_for.zr:3:18 ]
+   │
+ 3 │     for x in v { x = 2; }
+   │                  ──┬──
+   │                    ╰──── Cannot reassign constant variable 'x'.
+───╯
+[-] Error: aborting due to previous error

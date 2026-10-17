@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Invalid digit in base 2 literal '102'
+   ╭─[ tests/ui/lexer/binary_bad_digit.zr:2:13 ]
+   │
+ 2 │     var a = 0b102;
+   │             ──┬──
+   │               ╰──── Invalid digit in base 2 literal '102'
+───╯
+[-] Error: aborting due to previous error

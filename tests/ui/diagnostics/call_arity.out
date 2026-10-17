@@ -1,0 +1,24 @@
+status: compile error
+-- stderr
+Error: Function 'add' expects 2 arguments, got 1
+   ╭─[ tests/ui/diagnostics/call_arity.zr:3:5 ]
+   │
+ 3 │     add(10);
+   │     ───┬───
+   │        ╰───── Function 'add' expects 2 arguments, got 1
+───╯
+Error: Function 'add' expects 2 arguments, got 3
+   ╭─[ tests/ui/diagnostics/call_arity.zr:4:5 ]
+   │
+ 4 │     add(1, 2, 3);
+   │     ──────┬─────
+   │           ╰─────── Function 'add' expects 2 arguments, got 3
+───╯
+Error: Function 'add' expects 2 arguments, got 1
+   ╭─[ tests/ui/diagnostics/call_arity.zr:5:18 ]
+   │
+ 5 │     var x: i32 = add(1);
+   │                  ───┬──
+   │                     ╰──── Function 'add' expects 2 arguments, got 1
+───╯
+[-] Error: aborting due to previous error

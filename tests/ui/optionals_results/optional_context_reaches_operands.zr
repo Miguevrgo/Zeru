@@ -1,0 +1,12 @@
+fn doubled(a: i64) i64? { return a * 2; }
+fn takes(x: i64?) i64 { return x orelse 0; }
+fn main() {
+    var a: i64 = 3;
+    var b: i64 = 4;
+    var sum: i64? = a + b;
+    var neg: i64? = -a;
+    var n: i32 = 7;
+    var p: *i32 = &n;
+    var read: i32? = *p;
+    println("{} {} {} {} {}", doubled(a).unwrap(), sum.unwrap(), neg.unwrap(), read.unwrap(), takes(a + 1));
+}

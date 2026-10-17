@@ -1,0 +1,8 @@
+fn pick<T>(x: T, y: T, take_x: bool) T {
+    var result: T = y;
+    if take_x { result = x; }
+    return result;
+}
+fn main() {
+    println("{} {}", pick(1, 2, true), pick(1.5, 2.5, false));
+}

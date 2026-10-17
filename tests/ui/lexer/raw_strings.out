@@ -1,0 +1,7 @@
+status: exit 0
+-- stdout
+C:\Users\name\file.txt
+{"name": "Zeru"}
+Line 1
+Line 2 with "quotes"
+22

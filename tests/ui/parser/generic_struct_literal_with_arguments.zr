@@ -1,0 +1,4 @@
+struct B<T> { v: T }
+fn main() {
+    var b = B<i32> { v: 1 };
+}

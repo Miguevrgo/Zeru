@@ -1,0 +1,4 @@
+fn main() {
+    var v: Vec<Vec<i32>> = Vec.new();
+    var x = v.get(0);
+}

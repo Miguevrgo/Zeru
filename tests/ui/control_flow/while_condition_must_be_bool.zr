@@ -1,0 +1,4 @@
+fn main() {
+    var i: i32 = 1;
+    while i { }
+}

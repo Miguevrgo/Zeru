@@ -1,0 +1,16 @@
+struct Probe {
+    id: i64,
+    log: *i64,
+    fn drop(var self) { *self.log = *self.log * 10 + self.id; }
+}
+fn probe(id: i64, log: *i64) Probe { return Probe { id: id, log: log }; }
+fn leaves_early(at: *i64, early: bool) { var first = probe(1, at); if early { return; } var second = probe(2, at); }
+fn main() {
+    var log: i64 = 0;
+    var at: *i64 = &log;
+    {
+        leaves_early(at, true);
+        leaves_early(at, false);
+    }
+    println("dropped: {}", log);
+}

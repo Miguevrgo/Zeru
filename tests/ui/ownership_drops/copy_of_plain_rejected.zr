@@ -1,0 +1,5 @@
+struct P { x: i32 }
+fn main() {
+    var p = P { x: 1 };
+    var q = p.copy();
+}

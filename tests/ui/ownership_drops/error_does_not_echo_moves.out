@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Use of moved value 'v'. Value was previously moved and is no longer valid
+   ╭─[ tests/ui/ownership_drops/error_does_not_echo_moves.zr:4:5 ]
+   │
+ 4 │     v.push(1);
+   │     ┬
+   │     ╰── Use of moved value 'v'. Value was previously moved and is no longer valid
+───╯
+[-] Error: aborting due to previous error

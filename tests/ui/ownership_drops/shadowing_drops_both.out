@@ -1,0 +1,4 @@
+status: exit 0
+-- stdout
+shadowed
+dropped: 21

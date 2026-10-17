@@ -1,0 +1,4 @@
+struct A { x: i32, fn drop(self) { } }
+struct B { x: i32, fn drop(var self, x: i32) { } }
+struct C { x: i32, fn drop(var self) i32 { return 0; } }
+fn main() { }

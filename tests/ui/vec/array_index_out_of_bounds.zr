@@ -1,0 +1,6 @@
+//@ checked
+fn main() {
+    var a: Array<i32, 2> = [1, 2];
+    var i: usize = 5;
+    println("{}", a[i]);
+}

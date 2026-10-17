@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Unknown struct type 'UnknownStruct'
+   ╭─[ tests/ui/structs/unknown_struct.zr:2:13 ]
+   │
+ 2 │     var p = UnknownStruct { x: 1.0 };
+   │             ────────────┬───────────
+   │                         ╰───────────── Unknown struct type 'UnknownStruct'
+───╯
+[-] Error: aborting due to previous error

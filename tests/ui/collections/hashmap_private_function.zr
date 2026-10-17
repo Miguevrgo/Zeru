@@ -1,0 +1,4 @@
+import std.collections.hashmap;
+fn main() {
+    var at = hashmap::slot(1, 7);
+}

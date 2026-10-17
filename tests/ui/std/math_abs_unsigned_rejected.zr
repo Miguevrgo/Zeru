@@ -1,0 +1,5 @@
+import std.math;
+fn main() {
+    var a: u32 = 7;
+    var b = math::abs(a);
+}

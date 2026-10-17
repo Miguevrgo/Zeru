@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Call a struct's function with '.': Box.empty()
+   ╭─[ tests/ui/structs/static_function_with_colons.zr:3:13 ]
+   │
+ 3 │     var b = Box::empty();
+   │             ─────┬────
+   │                  ╰────── Call a struct's function with '.': Box.empty()
+───╯
+[-] Error: aborting due to previous error

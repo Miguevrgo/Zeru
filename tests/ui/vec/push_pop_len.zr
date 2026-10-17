@@ -1,0 +1,8 @@
+fn main() {
+    var v: Vec<i64> = Vec.new();
+    v.push(100);
+    v.push(200);
+    v.push(300);
+    var popped = v.pop();
+    println("{} {} {} {}", v.len(), v.is_empty(), popped.unwrap(), v[1]);
+}

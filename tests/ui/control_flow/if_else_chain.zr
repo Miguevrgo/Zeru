@@ -1,0 +1,12 @@
+fn classify(n: i32) str {
+    if n > 5 {
+        return "big";
+    } else if n == 5 {
+        return "five";
+    } else {
+        return "small";
+    }
+}
+fn main() {
+    println("{} {} {}", classify(9), classify(5), classify(1));
+}

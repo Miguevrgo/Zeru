@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'measure' asks for T: Area, which Blob does not satisfy
+   ╭─[ tests/ui/traits/bound_not_met_by_methods.zr:5:13 ]
+   │
+ 5 │     var n = measure(Blob { s: 1 });
+   │             ───────────┬──────────
+   │                        ╰──────────── 'measure' asks for T: Area, which Blob does not satisfy
+───╯
+[-] Error: aborting due to previous error

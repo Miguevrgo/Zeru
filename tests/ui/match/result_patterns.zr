@@ -1,0 +1,7 @@
+fn main() {
+    var r: i32! = Err(4);
+    var code = match r { Ok(v) => v, Err(e) => e * 10 };
+    var g: i32! = Ok(3);
+    var v = match g { Ok(v) => v, Err(e) => e };
+    println("{} {}", code, v);
+}

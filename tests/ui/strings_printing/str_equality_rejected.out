@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Operator '==' cannot be applied to str
+   ╭─[ tests/ui/strings_printing/str_equality_rejected.zr:3:13 ]
+   │
+ 3 │     var b = a == "x";
+   │             ────┬───
+   │                 ╰───── Operator '==' cannot be applied to str
+───╯
+[-] Error: aborting due to previous error

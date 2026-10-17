@@ -1,0 +1,11 @@
+enum Kept { One(Vec<i64>), Nothing }
+fn total(k: Kept) i64 {
+    return match k {
+        Kept::One(v) => v[0] + v[1],
+        Kept::Nothing => 0
+    };
+}
+fn main() {
+    var k = Kept::One([3, 4]);
+    println("{} {}", total(k), total(Kept::Nothing));
+}

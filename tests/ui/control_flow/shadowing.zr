@@ -1,0 +1,10 @@
+fn main() {
+    var raw: i32 = 500;
+    var raw: f32 = (raw as f32) / 100.0;
+    var x = 1;
+    {
+        var x = 2;
+        println("{}", x);
+    }
+    println("{} {}", raw, x);
+}

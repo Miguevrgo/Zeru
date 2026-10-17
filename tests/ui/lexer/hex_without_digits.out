@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Base 16 literal has no digits
+   ╭─[ tests/ui/lexer/hex_without_digits.zr:2:13 ]
+   │
+ 2 │     var a = 0x;
+   │             ─┬
+   │              ╰── Base 16 literal has no digits
+───╯
+[-] Error: aborting due to previous error

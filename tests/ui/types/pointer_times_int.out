@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Binary operation '*' requires operands of same type. Got *u8 and i32
+   ╭─[ tests/ui/types/pointer_times_int.zr:3:20 ]
+   │
+ 3 │     var bad: *u8 = ptr * 2;
+   │                    ───┬───
+   │                       ╰───── Binary operation '*' requires operands of same type. Got *u8 and i32
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot reassign constant variable 'x'.
+   ╭─[ tests/ui/constants/parameter_is_constant.zr:2:5 ]
+   │
+ 2 │     x += 1;
+   │     ───┬──
+   │        ╰──── Cannot reassign constant variable 'x'.
+───╯
+[-] Error: aborting due to previous error

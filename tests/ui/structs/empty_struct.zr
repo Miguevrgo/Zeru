@@ -1,0 +1,5 @@
+struct Empty { }
+fn main() {
+    var e = Empty { };
+    println("empty");
+}

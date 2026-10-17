@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Expected ';', found 'println'
+   ╭─[ tests/ui/parser/missing_semicolon.zr:2:13 ]
+   │
+ 2 │     var x = 1
+   │             ┬
+   │             ╰── Expected ';', found 'println'
+───╯
+[-] Error: aborting due to previous error

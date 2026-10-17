@@ -1,0 +1,3 @@
+status: signal 6
+-- stderr
+panic at tests/ui/vec/capacity_overflow.zr:3:5: arithmetic overflow

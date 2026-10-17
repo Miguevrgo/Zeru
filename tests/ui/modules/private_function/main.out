@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'lib::hidden' is private to module 'lib'; mark it pub
+   ╭─[ tests/ui/modules/private_function/main.zr:3:13 ]
+   │
+ 3 │     var x = lib::hidden();
+   │             ──────┬──────
+   │                   ╰──────── 'lib::hidden' is private to module 'lib'; mark it pub
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,11 @@
+import std.fs;
+fn main() {
+    var path = "ui_fs_roundtrip.txt\0" as *u8;
+    var text = "zeru writes" as *u8;
+    var wrote = fs::write_file(path, text, 11).unwrap();
+    var buf: Array<u8, 32> = [0; 32];
+    var read = fs::read_file(path, &buf[0], 32).unwrap();
+    println("{} {} {} {}", wrote, read, fs::exists(path), fs::file_size(path).unwrap());
+    fs::unlink(path).unwrap();
+    println("{} {}", fs::exists(path), buf[0]);
+}

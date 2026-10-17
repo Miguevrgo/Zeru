@@ -1,0 +1,5 @@
+status: exit 0
+-- stdout
+in consume
+after consume
+dropped: 1

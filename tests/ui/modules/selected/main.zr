@@ -1,0 +1,6 @@
+import lib.util::{twice, Counter};
+fn main() {
+    var c = Counter { n: twice(4) };
+    c.bump();
+    println("{}", c.n);
+}

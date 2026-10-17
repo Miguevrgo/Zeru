@@ -1,0 +1,4 @@
+fn main() {
+    var t: (i64, bool)? = (2, true);
+    println("{}", t.is_some());
+}

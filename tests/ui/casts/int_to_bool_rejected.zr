@@ -1,0 +1,4 @@
+fn main() {
+    var n: i32 = 4;
+    var b = n as bool;
+}

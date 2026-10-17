@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: Function 'nope' not defined
+   ╭─[ tests/ui/diagnostics/not_echoed.zr:2:13 ]
+   │
+ 2 │     var x = nope(3);
+   │             ───┬───
+   │                ╰───── Function 'nope' not defined
+───╯
+Error: Cannot call method on non-struct type i32
+   ╭─[ tests/ui/diagnostics/not_echoed.zr:4:13 ]
+   │
+ 4 │     var y = a.foo();
+   │             ───┬───
+   │                ╰───── Cannot call method on non-struct type i32
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,2 @@
+pub fn rectangle(w: i32, h: i32) i32 { return w * h; }
+pub fn scale(value: i32, by: i32) i32 { return value * by; }

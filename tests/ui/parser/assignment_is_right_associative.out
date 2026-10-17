@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Type mismatch in assignment. Expected i32, got void
+   ╭─[ tests/ui/parser/assignment_is_right_associative.zr:4:5 ]
+   │
+ 4 │     a = b = 5;
+   │     ────┬────
+   │         ╰────── Type mismatch in assignment. Expected i32, got void
+───╯
+[-] Error: aborting due to previous error

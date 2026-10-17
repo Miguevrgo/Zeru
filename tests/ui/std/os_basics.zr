@@ -1,0 +1,9 @@
+import std.os;
+fn main() {
+    var a = os::clock_ns().unwrap();
+    os::sleep_ms(1).unwrap();
+    var b = os::clock_ns().unwrap();
+    var host: Array<u8, 65> = [0; 65];
+    println("{} {} {}", os::getpid() > 0, b > a, os::hostname(&host[0], 0).unwrap());
+    println("{}", os::sleep_ms(-5).is_err());
+}

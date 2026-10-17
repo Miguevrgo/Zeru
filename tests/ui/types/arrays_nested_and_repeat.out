@@ -1,0 +1,3 @@
+status: exit 0
+-- stdout
+9 1.0 0.0

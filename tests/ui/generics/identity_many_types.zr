@@ -1,0 +1,6 @@
+struct P { x: i32 }
+fn identity<T>(x: T) T { return x; }
+fn main() {
+    var p = identity(P { x: 4 });
+    println("{} {} {} {}", identity(1), identity(2.5), identity(true), p.x);
+}

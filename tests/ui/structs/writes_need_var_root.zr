@@ -1,0 +1,13 @@
+struct P { x: i32, fn bump(var self) { self.x += 1; } }
+fn set(p: *i32) { *p = 2; }
+fn main() {
+    const p = P { x: 1 };
+    p.x = 2;
+    const a: Array<i32, 2> = [1, 2];
+    a[0] = 3;
+    const v: Vec<i32> = Vec.new();
+    v.push(1);
+    p.bump();
+    const n: i32 = 1;
+    set(&n);
+}

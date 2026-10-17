@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'S::A' carries 1 value(s), got 2
+   ╭─[ tests/ui/enums/variant_too_many_values.zr:3:13 ]
+   │
+ 3 │     var s = S::A(1, 2);
+   │             ─────┬────
+   │                  ╰────── 'S::A' carries 1 value(s), got 2
+───╯
+[-] Error: aborting due to previous error

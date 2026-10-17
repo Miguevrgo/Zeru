@@ -1,0 +1,5 @@
+struct S { next: S }
+struct A { b: B }
+struct B { a: A }
+struct K { kids: Array<K, 2> }
+fn main() { }

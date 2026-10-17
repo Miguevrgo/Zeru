@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot change 'v' while a loop or match around it refers into 'v'
+   ╭─[ tests/ui/vec/change_while_iterating.zr:3:23 ]
+   │
+ 3 │     for x in &var v { v.push(2); }
+   │                       ────┬────
+   │                           ╰────── Cannot change 'v' while a loop or match around it refers into 'v'
+───╯
+[-] Error: aborting due to previous error

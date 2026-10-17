@@ -1,0 +1,5 @@
+struct S {
+    fn get(self) i32 { return 1; }
+    x: i32,
+}
+fn main() { }

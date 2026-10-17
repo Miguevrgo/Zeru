@@ -1,0 +1,4 @@
+fn main() {
+    var x: i32 = 1;
+    var result = match x { 0 => 100, 1 => true, default => 0 };
+}

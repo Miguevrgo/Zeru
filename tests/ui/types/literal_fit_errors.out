@@ -1,0 +1,59 @@
+status: compile error
+-- stderr
+Error: Literal -1 does not fit in u64
+   ╭─[ tests/ui/types/literal_fit_errors.zr:2:18 ]
+   │
+ 2 │     var a: u64 = -1;
+   │                  ─┬
+   │                   ╰── Literal -1 does not fit in u64
+───╯
+Error: Literal -129 does not fit in i8
+   ╭─[ tests/ui/types/literal_fit_errors.zr:3:17 ]
+   │
+ 3 │     var b: i8 = -129;
+   │                 ──┬─
+   │                   ╰─── Literal -129 does not fit in i8
+───╯
+Error: Literal 128 does not fit in i8
+   ╭─[ tests/ui/types/literal_fit_errors.zr:4:17 ]
+   │
+ 4 │     var c: i8 = 128;
+   │                 ─┬─
+   │                  ╰─── Literal 128 does not fit in i8
+───╯
+Error: Literal 256 does not fit in u8
+   ╭─[ tests/ui/types/literal_fit_errors.zr:5:17 ]
+   │
+ 5 │     var d: u8 = 256;
+   │                 ─┬─
+   │                  ╰─── Literal 256 does not fit in u8
+───╯
+Error: Literal 32768 does not fit in i16
+   ╭─[ tests/ui/types/literal_fit_errors.zr:6:18 ]
+   │
+ 6 │     var e: i16 = 32768;
+   │                  ──┬──
+   │                    ╰──── Literal 32768 does not fit in i16
+───╯
+Error: Literal 65536 does not fit in u16
+   ╭─[ tests/ui/types/literal_fit_errors.zr:7:18 ]
+   │
+ 7 │     var f: u16 = 65536;
+   │                  ──┬──
+   │                    ╰──── Literal 65536 does not fit in u16
+───╯
+Error: Literal 18446744073709551615 does not fit in i64
+   ╭─[ tests/ui/types/literal_fit_errors.zr:8:18 ]
+   │
+ 8 │     var g: i64 = 18446744073709551615;
+   │                  ──────────┬─────────
+   │                            ╰─────────── Literal 18446744073709551615 does not fit in i64
+───╯
+Error: Literal 3000000000 does not fit in i32, the type a literal takes when nothing says otherwise; annotate a wider type
+   ╭─[ tests/ui/types/literal_fit_errors.zr:9:13 ]
+   │
+ 9 │     var h = 3000000000;
+   │             ─────┬────
+   │                  ╰────── Literal 3000000000 does not fit in i32, the type a literal takes when nothing says otherwise; annotate a wider type
+───╯
+[-] Error: aborting due to previous error

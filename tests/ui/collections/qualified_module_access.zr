@@ -1,0 +1,6 @@
+import std.collections.hashmap;
+fn main() {
+    var m: hashmap::HashMap<i64, bool> = hashmap::HashMap.new();
+    m.insert(1, true);
+    println("{}", m.get(1).unwrap());
+}

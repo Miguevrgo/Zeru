@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot write through a slice, which may point at read-only memory
+   ╭─[ tests/ui/strings_printing/str_write_rejected.zr:3:5 ]
+   │
+ 3 │     text[0] = 65;
+   │     ──────┬─────
+   │           ╰─────── Cannot write through a slice, which may point at read-only memory
+───╯
+[-] Error: aborting due to previous error

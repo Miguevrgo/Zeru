@@ -1,0 +1,16 @@
+fn eat(v: Vec<i32>) { }
+fn main() {
+    var v: Vec<i32> = Vec.new();
+    while true { eat(v); break; }
+    var w: Vec<i32> = Vec.new();
+    var i = 0;
+    while i < 3 { eat(w); w = Vec.new(); i += 1; }
+    var x: Vec<i32> = Vec.new();
+    var c = false;
+    if c { eat(x); return; }
+    eat(x);
+    var a: Vec<i64> = Vec.new();
+    var n = 1;
+    var picked = match n { 1 => a, default => a };
+    println("fine");
+}

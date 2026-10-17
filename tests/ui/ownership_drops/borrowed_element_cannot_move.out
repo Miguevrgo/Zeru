@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot move 'v', which is borrowed; call .copy() on it
+   ╭─[ tests/ui/ownership_drops/borrowed_element_cannot_move.zr:4:23 ]
+   │
+ 4 │     for v in vv { eat(v); }
+   │                       ┬
+   │                       ╰── Cannot move 'v', which is borrowed; call .copy() on it
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,5 @@
+fn main() {
+    var a: i32 = 300;
+    var b: i64 = -1;
+    println("{} {} {}", a as u8, a as i8, b as u32);
+}

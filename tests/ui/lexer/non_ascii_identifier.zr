@@ -1,0 +1,4 @@
+fn main() {
+    var aé = 1;
+    println("{}", aé);
+}

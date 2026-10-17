@@ -1,0 +1,9 @@
+fn pair() (i32, bool) { return (7, true); }
+fn main() {
+    var t: (i64, bool) = (2, false);
+    t.0 = 5;
+    t.1 = !t.1;
+    var nested: ((i32, i32), bool) = ((1, 2), true);
+    var p = pair();
+    println("{} {} {} {} {}", t.0, t.1, nested.0.1, p.0, p.1);
+}

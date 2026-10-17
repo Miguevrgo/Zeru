@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Expected an expression, found 'end of file'
+   ╭─[ tests/ui/diagnostics/error_at_end_of_file.zr:3:1 ]
+   │
+ 3 │
+   │ ┬
+   │ ╰── Expected an expression, found 'end of file'
+───╯
+[-] Error: aborting due to previous error

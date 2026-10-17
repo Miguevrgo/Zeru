@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Function 'f' declares parameter 'a' twice
+   ╭─[ tests/ui/diagnostics/duplicate_parameter.zr:1:1 ]
+   │
+ 1 │ fn f(a: i32, a: i32) { }
+   │ ──────────┬─────────
+   │           ╰─────────── Function 'f' declares parameter 'a' twice
+───╯
+[-] Error: aborting due to previous error

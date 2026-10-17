@@ -1,0 +1,4 @@
+status: exit 0
+-- stdout
+removed 1
+dropped: 12

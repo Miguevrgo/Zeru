@@ -1,0 +1,5 @@
+import std.collections.hashmap::{HashMap};
+fn main() {
+    var map: HashMap<i64, i64> = HashMap.new();
+    var f = map.find(1);
+}

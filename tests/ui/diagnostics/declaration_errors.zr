@@ -1,0 +1,6 @@
+fn f(a: Strng) { }
+fn g() { }
+fn g() { }
+fn h(a: i32, a: i32) { }
+struct S { a: Strng }
+fn main() { }

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Trait 'Foo' is already defined
+   ╭─[ tests/ui/traits/duplicate_trait.zr:2:1 ]
+   │
+ 2 │ trait Foo { }
+   │ ──────┬──────
+   │       ╰──────── Trait 'Foo' is already defined
+───╯
+[-] Error: aborting due to previous error

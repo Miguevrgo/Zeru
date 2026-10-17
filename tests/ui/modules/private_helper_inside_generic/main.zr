@@ -1,0 +1,4 @@
+import lib;
+fn main() {
+    println("{}", lib::wrapped(5));
+}

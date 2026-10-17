@@ -1,0 +1,24 @@
+status: compile error
+-- stderr
+Error: Type parameter 'T' of 'f' is already a parameter of B
+   ╭─[ tests/ui/generics/method_parameter_reuses_struct_parameter.zr:3:5 ]
+   │
+ 3 │     fn f<T>(self, x: T) T { return x; }
+   │     ──────────┬──────────
+   │               ╰──────────── Type parameter 'T' of 'f' is already a parameter of B
+───╯
+Error: Argument 1 type mismatch
+   ╭─[ tests/ui/generics/method_parameter_reuses_struct_parameter.zr:7:23 ]
+   │
+ 7 │     println("{}", b.f(true));
+   │                       ──┬─
+   │                         ╰─── Argument 1 type mismatch
+───╯
+Error: Cannot tell what 'T' is in this call to 'B__i64_::f'
+   ╭─[ tests/ui/generics/method_parameter_reuses_struct_parameter.zr:7:19 ]
+   │
+ 7 │     println("{}", b.f(true));
+   │                   ────┬────
+   │                       ╰────── Cannot tell what 'T' is in this call to 'B__i64_::f'
+───╯
+[-] Error: aborting due to previous error

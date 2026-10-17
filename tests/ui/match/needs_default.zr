@@ -1,0 +1,4 @@
+fn main() {
+    var x: i32 = 1;
+    var r = match x { 0 => 1, 1 => 2 };
+}

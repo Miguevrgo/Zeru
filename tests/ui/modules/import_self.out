@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Expected a name, found 'self'
+   ╭─[ tests/ui/modules/import_self.zr:1:8 ]
+   │
+ 1 │ import self;
+   │        ──┬─
+   │          ╰─── Expected a name, found 'self'
+───╯
+[-] Error: aborting due to previous error

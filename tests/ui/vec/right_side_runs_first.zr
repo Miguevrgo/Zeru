@@ -1,0 +1,13 @@
+struct Growing {
+    v: Vec<i64>,
+    fn grow(var self) i64 {
+        var i: i64 = 0;
+        while i < 100000 { self.v.push(i); i += 1; }
+        return 7;
+    }
+}
+fn main() {
+    var g = Growing { v: [1] };
+    g.v[0] = g.grow();
+    println("{} {}", g.v[0], g.v.len());
+}

@@ -1,0 +1,6 @@
+fn main() {
+    var g: i32 = (1 << 31) + 0;
+    var h: u8 = 255 - 1 + 1;
+    var z: i64 = 1 << 63;
+    println("{} {} {}", g, h, z);
+}

@@ -1,0 +1,4 @@
+fn main() {
+    var v: Vec<i64> = Vec.new();
+    v.insert(true, 1);
+}

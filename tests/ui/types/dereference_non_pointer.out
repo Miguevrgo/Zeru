@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot dereference type i32
+   ╭─[ tests/ui/types/dereference_non_pointer.zr:3:18 ]
+   │
+ 3 │     var y: i32 = *x;
+   │                  ─┬
+   │                   ╰── Cannot dereference type i32
+───╯
+[-] Error: aborting due to previous error

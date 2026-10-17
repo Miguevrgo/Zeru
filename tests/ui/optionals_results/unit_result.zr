@@ -1,0 +1,7 @@
+fn check(n: i32) ()! {
+    if n < 0 { return Err(1); }
+    return Ok(());
+}
+fn main() {
+    println("{} {}", check(1).is_ok(), check(-1).is_err());
+}

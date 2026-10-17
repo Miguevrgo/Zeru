@@ -1,0 +1,5 @@
+fn main() {
+    println("tab[\t] quote[\"] slash[\\] hex[\x41]");
+    var s: str = "a\nb";
+    println("{}", s.len());
+}

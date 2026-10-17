@@ -1,0 +1,24 @@
+status: compile error
+-- stderr
+Error: Cannot infer Vec element type. Please add a type annotation
+   ╭─[ tests/ui/diagnostics/unknown_inferred_cascade.zr:3:19 ]
+   │
+ 3 │     var a = ident(Vec.new());
+   │                   ────┬────
+   │                       ╰────── Cannot infer Vec element type. Please add a type annotation
+───╯
+Error: Unknown type '<unknown>'
+   ╭─[ tests/ui/diagnostics/unknown_inferred_cascade.zr:1:1 ]
+   │
+ 1 │ fn ident<T>(x: T) T { return x; }
+   │ ─────────┬─────────
+   │          ╰─────────── Unknown type '<unknown>'
+───╯
+Error: Unknown type '<unknown>'
+   ╭─[ tests/ui/diagnostics/unknown_inferred_cascade.zr:1:1 ]
+   │
+ 1 │ fn ident<T>(x: T) T { return x; }
+   │ ─────────┬─────────
+   │          ╰─────────── Unknown type '<unknown>'
+───╯
+[-] Error: aborting due to previous error

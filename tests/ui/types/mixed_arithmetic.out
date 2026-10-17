@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Binary operation '+' requires operands of same type. Got i32 and f32
+   ╭─[ tests/ui/types/mixed_arithmetic.zr:4:13 ]
+   │
+ 4 │     var c = a + b;
+   │             ──┬──
+   │               ╰──── Binary operation '+' requires operands of same type. Got i32 and f32
+───╯
+[-] Error: aborting due to previous error

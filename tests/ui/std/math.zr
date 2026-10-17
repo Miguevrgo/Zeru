@@ -1,0 +1,7 @@
+import std.math;
+fn main() {
+    println("{} {} {} {}", math::abs(-4), math::min(3, 5), math::max(3.5, 2.0), math::clamp(9, 0, 5));
+    println("{} {} {}", math::pow(3, 4), math::is_power_of_two(64), math::is_power_of_two(65));
+    println("{} {}", math::div_euclid(-7, 2), math::mod_euclid(-7, 2));
+    println("{}", math::PI);
+}

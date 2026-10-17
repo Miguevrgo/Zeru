@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: An error type is an enum, not u8
+   ╭─[ tests/ui/optionals_results/error_type_must_be_enum.zr:1:1 ]
+   │
+ 1 │ fn f() i32!u8 { return Ok(1); }
+   │ ──────┬──────
+   │       ╰──────── An error type is an enum, not u8
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,7 @@
+fn main() {
+    var x = 1; // trailing
+    /* block
+       comment */
+    var y = /* inline */ 2;
+    println("{}", x + y);
+}

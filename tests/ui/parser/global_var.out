@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Global variables ('var') are not allowed. Use 'const' for constants or move 'var' inside a function
+   ╭─[ tests/ui/parser/global_var.zr:1:1 ]
+   │
+ 1 │ var counter: i32 = 0;
+   │ ─┬─
+   │  ╰─── Global variables ('var') are not allowed. Use 'const' for constants or move 'var' inside a function
+───╯
+[-] Error: aborting due to previous error

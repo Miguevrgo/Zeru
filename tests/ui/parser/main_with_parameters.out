@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Function 'main' must not take arguments
+   ╭─[ tests/ui/parser/main_with_parameters.zr:1:1 ]
+   │
+ 1 │ fn main(a: i32) { }
+   │ ───────┬───────
+   │        ╰───────── Function 'main' must not take arguments
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: The format has 2 '{}' but 1 value(s) follow it
+   ╭─[ tests/ui/strings_printing/format_argument_count.zr:2:5 ]
+   │
+ 2 │     println("{} {}", 1);
+   │     ─────────┬─────────
+   │              ╰─────────── The format has 2 '{}' but 1 value(s) follow it
+───╯
+[-] Error: aborting due to previous error

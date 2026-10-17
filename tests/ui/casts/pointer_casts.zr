@@ -1,0 +1,8 @@
+fn main() {
+    var x: i64 = 77;
+    var p: *i64 = &x;
+    var raw = p as i64;
+    var back = raw as *i64;
+    var text = "hi" as *u8;
+    println("{} {}", *back, *text);
+}

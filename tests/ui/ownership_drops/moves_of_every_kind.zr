@@ -1,0 +1,18 @@
+struct S { v: Vec<i64> }
+fn take(v: Vec<i64>) { }
+fn main() {
+    var a: Vec<i64> = Vec.new();
+    var row = [a];
+    take(a);
+    var b: Vec<i64> = Vec.new();
+    var pair = (b, 1);
+    take(b);
+    var c: Vec<i64> = Vec.new();
+    var outer: Vec<Vec<i64>> = Vec.new();
+    outer.push(c);
+    take(c);
+    var d: Vec<i64> = Vec.new();
+    var e: Vec<i64> = Vec.new();
+    e = d;
+    take(d);
+}

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Type 'Foo' is already defined
+   ╭─[ tests/ui/structs/duplicate_type.zr:2:1 ]
+   │
+ 2 │ struct Foo { y: i32 }
+   │ ──────────┬──────────
+   │           ╰──────────── Type 'Foo' is already defined
+───╯
+[-] Error: aborting due to previous error

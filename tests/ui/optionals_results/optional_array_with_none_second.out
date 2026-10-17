@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'None' can only be assigned to optional types, got i64
+   ╭─[ tests/ui/optionals_results/optional_array_with_none_second.zr:3:33 ]
+   │
+ 3 │     var a: Array<i64?, 2> = [x, None];
+   │                                 ──┬─
+   │                                   ╰─── 'None' can only be assigned to optional types, got i64
+───╯
+[-] Error: aborting due to previous error

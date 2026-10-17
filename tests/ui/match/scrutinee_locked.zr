@@ -1,0 +1,7 @@
+fn main() {
+    var o: i32? = 1;
+    match o {
+        Some(v) => { o = None; }
+        None => { }
+    }
+}

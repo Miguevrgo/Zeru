@@ -1,0 +1,2 @@
+fn hidden() i32 { return 1; }
+pub fn open() i32 { return hidden(); }

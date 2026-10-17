@@ -1,0 +1,45 @@
+status: compile error
+-- stderr
+Error: Constant 300 does not fit in u8
+   ╭─[ tests/ui/constants/overflow_at_compile_time.zr:2:17 ]
+   │
+ 2 │     var a: u8 = 200 + 100;
+   │                 ────┬────
+   │                     ╰────── Constant 300 does not fit in u8
+───╯
+Error: Shift by 40 is out of range for i32
+   ╭─[ tests/ui/constants/overflow_at_compile_time.zr:3:18 ]
+   │
+ 3 │     var b: i32 = 1 << 40;
+   │                  ───┬───
+   │                     ╰───── Shift by 40 is out of range for i32
+───╯
+Error: Constant 128 does not fit in i8
+   ╭─[ tests/ui/constants/overflow_at_compile_time.zr:4:19 ]
+   │
+ 4 │     var c: i8 = -(64 * 2);
+   │                   ───┬──
+   │                      ╰──── Constant 128 does not fit in i8
+───╯
+Error: Constant 2147483648 does not fit in i32
+   ╭─[ tests/ui/constants/overflow_at_compile_time.zr:5:13 ]
+   │
+ 5 │     var d = 2147483647 + 1;
+   │             ───────┬──────
+   │                    ╰──────── Constant 2147483648 does not fit in i32
+───╯
+Error: Constant 65536 does not fit in u16
+   ╭─[ tests/ui/constants/overflow_at_compile_time.zr:7:9 ]
+   │
+ 7 │     e = 65535 + 1;
+   │         ────┬────
+   │             ╰────── Constant 65536 does not fit in u16
+───╯
+Error: Literal 1e40 does not fit in f32
+   ╭─[ tests/ui/constants/overflow_at_compile_time.zr:8:18 ]
+   │
+ 8 │     var f: f32 = 1e40;
+   │                  ──┬─
+   │                    ╰─── Literal 1e40 does not fit in f32
+───╯
+[-] Error: aborting due to previous error

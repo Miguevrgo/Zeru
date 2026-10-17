@@ -1,0 +1,9 @@
+fn largest<T: Ord>(a: T, b: T) T { if a > b { return a; } return b; }
+fn total<T: Num>(a: T, b: T) T { return a + b; }
+fn same<T: Eq>(a: T, b: T) bool { return a == b; }
+fn main() {
+    var big: u32 = 3000000000;
+    var small: u32 = 1;
+    var wide: i64 = 5000000000;
+    println("{} {} {} {}", largest(big, small), largest(7, wide), total(1.5, 2.0), same(3, 3));
+}

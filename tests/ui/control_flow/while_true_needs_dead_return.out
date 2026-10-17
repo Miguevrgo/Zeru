@@ -1,0 +1,12 @@
+status: compile error
+-- stderr
+Error: Function 'spin' can finish without returning a value
+   ╭─[ tests/ui/control_flow/while_true_needs_dead_return.zr:3:5 ]
+   │
+ 3 │ ╭─▶     while true {
+   ┆ ┆
+ 6 │ ├─▶     }
+   │ │
+   │ ╰─────────── Function 'spin' can finish without returning a value
+───╯
+[-] Error: aborting due to previous error

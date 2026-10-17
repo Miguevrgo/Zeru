@@ -1,0 +1,5 @@
+const ROW: Array<i32, 2> = [1, 2];
+fn sum(row: Array<i32, 2>) i32 { return row[0] + row[1]; }
+fn main() {
+    println("{} {}", sum(ROW), sum(ROW));
+}

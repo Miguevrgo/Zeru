@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Break/Continue can only be used inside loops
+   ╭─[ tests/ui/control_flow/continue_outside_loop.zr:2:5 ]
+   │
+ 2 │     continue;
+   │     ────┬────
+   │         ╰────── Break/Continue can only be used inside loops
+───╯
+[-] Error: aborting due to previous error

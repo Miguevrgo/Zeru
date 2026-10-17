@@ -1,0 +1,6 @@
+fn main() {
+    var s: i32 = -8;
+    var u: u32 = 8;
+    var big: u64 = 1;
+    println("{} {} {} {}", s >> 1, u >> 1, big << 63, s << 2);
+}

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'try' passes its i32 error on, which a function returning void cannot
+   ╭─[ tests/ui/optionals_results/try_in_main.zr:3:13 ]
+   │
+ 3 │     var x = try f();
+   │             ───┬───
+   │                ╰───── 'try' passes its i32 error on, which a function returning void cannot
+───╯
+[-] Error: aborting due to previous error

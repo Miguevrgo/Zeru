@@ -1,0 +1,5 @@
+fn main() {
+    var a: Array<i32, 3> = [1, 2, 3];
+    for x in &var a { x *= 2; }
+    println("{} {} {}", a[0], a[1], a[2]);
+}

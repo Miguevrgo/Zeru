@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: Cannot modify 'self', which is not declared 'var'
+   ╭─[ tests/ui/structs/self_must_be_var.zr:3:18 ]
+   │
+ 3 │     fn t(self) { self.v = self.v + 1; }
+   │                  ─────────┬─────────
+   │                           ╰─────────── Cannot modify 'self', which is not declared 'var'
+───╯
+Error: Cannot modify 'self', which is not declared 'var'
+   ╭─[ tests/ui/structs/self_must_be_var.zr:4:18 ]
+   │
+ 4 │     fn u(self) { self.v += 1; }
+   │                  ─────┬─────
+   │                       ╰─────── Cannot modify 'self', which is not declared 'var'
+───╯
+[-] Error: aborting due to previous error

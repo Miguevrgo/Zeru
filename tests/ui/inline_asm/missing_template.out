@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Expected assembly template string, found '42'
+   ╭─[ tests/ui/inline_asm/missing_template.zr:2:20 ]
+   │
+ 2 │     asm volatile ( 42 );
+   │                    ─┬
+   │                     ╰── Expected assembly template string, found '42'
+───╯
+[-] Error: aborting due to previous error

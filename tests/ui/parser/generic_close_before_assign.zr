@@ -1,0 +1,6 @@
+fn main() {
+    var v: Vec<i32>= Vec.new();
+    var w: Vec<Vec<i32>>= Vec.new();
+    v.push(3);
+    println("{} {}", v.len(), w.len());
+}

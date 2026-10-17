@@ -1,0 +1,19 @@
+struct Probe {
+    id: i64,
+    log: *i64,
+    fn drop(var self) { *self.log = *self.log * 10 + self.id; }
+}
+fn probe(id: i64, log: *i64) Probe { return Probe { id: id, log: log }; }
+struct Holder { probe: Probe, probes: Vec<Probe> }
+fn main() {
+    var log: i64 = 0;
+    var at: *i64 = &log;
+    {
+        {
+            var h = Holder { probe: probe(1, at), probes: [probe(2, at), probe(3, at)] };
+            h.probe = probe(4, at);
+            println("replaced");
+        }
+    }
+    println("dropped: {}", log);
+}

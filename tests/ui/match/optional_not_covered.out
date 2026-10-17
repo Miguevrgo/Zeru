@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Match does not cover None; add an arm for each or a 'default' arm
+   ╭─[ tests/ui/match/optional_not_covered.zr:3:13 ]
+   │
+ 3 │     var x = match o { Some(v) => 1 };
+   │             ────────────┬───────────
+   │                         ╰───────────── Match does not cover None; add an arm for each or a 'default' arm
+───╯
+[-] Error: aborting due to previous error

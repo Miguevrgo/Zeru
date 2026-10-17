@@ -1,0 +1,5 @@
+status: exit 0
+-- stdout
+len 2
+cleared
+dropped: 4123

@@ -1,0 +1,24 @@
+status: compile error
+-- stderr
+Error: Type mismatch for variable 'a'. Annotated as i32 but got bool
+   ╭─[ tests/ui/diagnostics/several_errors_reported.zr:2:5 ]
+   │
+ 2 │     var a: i32 = true;
+   │     ─────────┬────────
+   │              ╰────────── Type mismatch for variable 'a'. Annotated as i32 but got bool
+───╯
+Error: Type mismatch for variable 'b'. Annotated as bool but got i32
+   ╭─[ tests/ui/diagnostics/several_errors_reported.zr:3:5 ]
+   │
+ 3 │     var b: bool = 1;
+   │     ────────┬───────
+   │             ╰───────── Type mismatch for variable 'b'. Annotated as bool but got i32
+───╯
+Error: Undeclared variable 'missing'
+   ╭─[ tests/ui/diagnostics/several_errors_reported.zr:4:13 ]
+   │
+ 4 │     var c = missing;
+   │             ───┬───
+   │                ╰───── Undeclared variable 'missing'
+───╯
+[-] Error: aborting due to previous error

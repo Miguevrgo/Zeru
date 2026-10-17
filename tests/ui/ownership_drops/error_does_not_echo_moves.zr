@@ -1,0 +1,5 @@
+fn main() {
+    var v: Vec<i32> = Vec.new();
+    var w = v;
+    v.push(1);
+}

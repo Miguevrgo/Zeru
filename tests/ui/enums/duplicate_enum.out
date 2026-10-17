@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Type 'Color' is already defined
+   ╭─[ tests/ui/enums/duplicate_enum.zr:2:1 ]
+   │
+ 2 │ enum Color { Blue }
+   │ ─────────┬─────────
+   │          ╰─────────── Type 'Color' is already defined
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,6 @@
+const Z: i32 = 0;
+fn main() {
+    var Z: i32 = 3;
+    var r = match 3 { Z => 1, default => 2 };
+    println("{}", r);
+}

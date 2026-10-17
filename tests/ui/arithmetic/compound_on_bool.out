@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Operator '+=' cannot be applied to bool
+   ╭─[ tests/ui/arithmetic/compound_on_bool.zr:3:5 ]
+   │
+ 3 │     b += true;
+   │     ────┬────
+   │         ╰────── Operator '+=' cannot be applied to bool
+───╯
+[-] Error: aborting due to previous error

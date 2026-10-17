@@ -1,0 +1,7 @@
+fn main() {
+    var a: Vec<Vec<i64>> = [[1, 2], [3]];
+    var b = a.copy();
+    b[0][0] = 99;
+    b.push([4]);
+    println("{} {} {} {}", a[0][0], b[0][0], a.len(), b.len());
+}

@@ -1,0 +1,4 @@
+status: exit 0
+-- stdout
+asm says hi
+12

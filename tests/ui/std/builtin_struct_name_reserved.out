@@ -1,0 +1,87 @@
+status: compile error
+-- stderr
+Error: Type 'OutStream' is already defined
+   ╭─[ tests/ui/std/builtin_struct_name_reserved.zr:1:1 ]
+   │
+ 1 │ struct OutStream { x: i32 }
+   │ ─────────────┬─────────────
+   │              ╰─────────────── Type 'OutStream' is already defined
+───╯
+Error: Struct 'OutStream' has no field 'buffer'
+     ╭─[ std/builtin.zr:118:29 ]
+     │
+ 118 │         var buf_ptr: *u8 = &self.buffer[0];
+     │                             ─────┬─────
+     │                                  ╰─────── Struct 'OutStream' has no field 'buffer'
+─────╯
+Error: Struct 'OutStream' has no field 'index'
+     ╭─[ std/builtin.zr:120:22 ]
+     │
+ 120 │         while done < self.index {
+     │                      ─────┬────
+     │                           ╰────── Struct 'OutStream' has no field 'index'
+─────╯
+Error: Struct 'OutStream' has no field 'fd'
+     ╭─[ std/builtin.zr:121:47 ]
+     │
+ 121 │             var written = syscall3(SYS_WRITE, self.fd as i64, (buf_ptr + done) as i64, (self.index - done) as i64);
+     │                                               ───┬───
+     │                                                  ╰───── Struct 'OutStream' has no field 'fd'
+─────╯
+Error: Struct 'OutStream' has no field 'index'
+     ╭─[ std/builtin.zr:121:89 ]
+     │
+ 121 │             var written = syscall3(SYS_WRITE, self.fd as i64, (buf_ptr + done) as i64, (self.index - done) as i64);
+     │                                                                                         ─────┬────
+     │                                                                                              ╰────── Struct 'OutStream' has no field 'index'
+─────╯
+Error: Struct 'OutStream' has no field 'index'
+     ╭─[ std/builtin.zr:123:17 ]
+     │
+ 123 │                 self.index = 0;
+     │                 ─────┬────
+     │                      ╰────── Struct 'OutStream' has no field 'index'
+─────╯
+Error: Struct 'OutStream' has no field 'index'
+     ╭─[ std/builtin.zr:128:9 ]
+     │
+ 128 │         self.index = 0;
+     │         ─────┬────
+     │              ╰────── Struct 'OutStream' has no field 'index'
+─────╯
+Error: Struct 'OutStream' has no field 'index'
+     ╭─[ std/builtin.zr:137:44 ]
+     │
+ 137 │             var space_left: usize = 4096 - self.index;
+     │                                            ─────┬────
+     │                                                 ╰────── Struct 'OutStream' has no field 'index'
+─────╯
+Error: Struct 'OutStream' has no field 'buffer'
+     ╭─[ std/builtin.zr:147:17 ]
+     │
+ 147 │                 self.buffer[self.index + copy_idx] = *src_ptr;
+     │                 ─────┬─────
+     │                      ╰─────── Struct 'OutStream' has no field 'buffer'
+─────╯
+Error: Struct 'OutStream' has no field 'index'
+     ╭─[ std/builtin.zr:147:29 ]
+     │
+ 147 │                 self.buffer[self.index + copy_idx] = *src_ptr;
+     │                             ─────┬────
+     │                                  ╰────── Struct 'OutStream' has no field 'index'
+─────╯
+Error: Struct 'OutStream' has no field 'index'
+     ╭─[ std/builtin.zr:151:13 ]
+     │
+ 151 │             self.index += to_copy;
+     │             ─────┬────
+     │                  ╰────── Struct 'OutStream' has no field 'index'
+─────╯
+Error: Struct 'OutStream' has no field 'index'
+     ╭─[ std/builtin.zr:155:16 ]
+     │
+ 155 │             if self.index == 4096 {
+     │                ─────┬────
+     │                     ╰────── Struct 'OutStream' has no field 'index'
+─────╯
+[-] Error: aborting due to previous error

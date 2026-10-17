@@ -1,0 +1,6 @@
+//@ checked
+fn main() {
+    var k: i32 = 0;
+    var y = 3 + 10 / k;
+    println("{}", y);
+}

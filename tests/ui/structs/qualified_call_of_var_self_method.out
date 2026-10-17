@@ -1,0 +1,3 @@
+status: compile error
+-- stderr
+[-] Error: LLVM error: "Call parameter type does not match function signature!\n  %s_load = load %S, ptr %s, align 4\n ptr  call void @\"S::bump\"(%S %s_load)\n"

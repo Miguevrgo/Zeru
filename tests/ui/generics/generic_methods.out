@@ -1,0 +1,4 @@
+status: exit 0
+-- stdout
+5 true 2.5
+2

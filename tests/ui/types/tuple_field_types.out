@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Type mismatch for variable 't'. Annotated as (i32, bool) but got (bool, i32)
+   ╭─[ tests/ui/types/tuple_field_types.zr:2:5 ]
+   │
+ 2 │     var t: (i32, bool) = (true, 42);
+   │     ────────────────┬───────────────
+   │                     ╰───────────────── Type mismatch for variable 't'. Annotated as (i32, bool) but got (bool, i32)
+───╯
+[-] Error: aborting due to previous error

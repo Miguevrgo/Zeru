@@ -1,0 +1,2 @@
+var counter: i32 = 0;
+fn main() { }

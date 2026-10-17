@@ -1,0 +1,5 @@
+fn main() {
+    var x: i64 = 0;
+    var p = x as *u8;
+    var q: bool = x as *u8;
+}

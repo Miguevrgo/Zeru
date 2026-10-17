@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Type mismatch for variable 'o'. Annotated as Box__i64_? but got Box__i32_
+   ╭─[ tests/ui/generics/optional_expected_generic_literal.zr:3:5 ]
+   │
+ 3 │     var o: Box<i64>? = Box { v: 3 };
+   │     ────────────────┬───────────────
+   │                     ╰───────────────── Type mismatch for variable 'o'. Annotated as Box__i64_? but got Box__i32_
+───╯
+[-] Error: aborting due to previous error

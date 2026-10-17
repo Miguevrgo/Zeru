@@ -1,0 +1,4 @@
+fn f() i32! { return Ok(1); }
+fn main() {
+    var x = try f();
+}

@@ -1,0 +1,4 @@
+fn main() {
+    var s: str = "ab";
+    s += "c";
+}

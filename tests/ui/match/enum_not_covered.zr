@@ -1,0 +1,5 @@
+enum Color { Red, Green, Blue }
+fn main() {
+    var c = Color::Red;
+    var r = match c { Color::Red => 1 };
+}

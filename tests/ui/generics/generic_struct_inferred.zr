@@ -1,0 +1,10 @@
+struct Pair<T: Eq> {
+    first: T,
+    second: T,
+    fn same(self) bool { return self.first == self.second; }
+}
+fn main() {
+    var a = Pair { first: 1, second: 1 };
+    var b: Pair<i64> = Pair { first: 5000000000, second: 2 };
+    println("{} {} {}", a.same(), b.same(), b.first);
+}

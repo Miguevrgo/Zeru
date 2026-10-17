@@ -1,0 +1,13 @@
+struct S {
+    n: i64,
+    fn id<T>(self, x: T) T { return x; }
+    fn twice<T>(self, x: T) T { return self.id(self.id(x)); }
+    fn bump<T>(var self, x: T) T { self.n += 1; return x; }
+}
+fn main() {
+    var s = S { n: 0 };
+    println("{} {} {}", s.id(5), s.id(true), s.twice(2.5));
+    s.bump(1);
+    s.bump(false);
+    println("{}", s.n);
+}

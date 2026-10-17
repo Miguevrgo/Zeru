@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Unknown generic type or invalid args: Wrapper
+   ╭─[ tests/ui/types/unknown_generic_type.zr:2:5 ]
+   │
+ 2 │     var a: Wrapper<i32> = 1;
+   │     ────────────┬───────────
+   │                 ╰───────────── Unknown generic type or invalid args: Wrapper
+───╯
+[-] Error: aborting due to previous error

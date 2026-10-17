@@ -1,0 +1,3 @@
+status: signal 6
+-- stderr
+panic at tests/ui/constants/constant_division_by_zero.zr:3:5: division by zero, or MIN / -1

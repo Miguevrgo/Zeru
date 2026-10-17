@@ -1,0 +1,4 @@
+pub struct Thing {
+    n: i32,
+    fn secret(self) i32 { return self.n; }
+}

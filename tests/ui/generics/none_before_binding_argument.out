@@ -1,0 +1,24 @@
+status: compile error
+-- stderr
+Error: Unknown type 'T'. Did you mean 'i8'?
+   ╭─[ tests/ui/generics/none_before_binding_argument.zr:1:1 ]
+   │
+ 1 │ fn two<T>(x: T?, y: T) T { return y; }
+   │ ────────────┬───────────
+   │             ╰───────────── Unknown type 'T'. Did you mean 'i8'?
+───╯
+Error: Unknown type 'T'. Did you mean 'i8'?
+   ╭─[ tests/ui/generics/none_before_binding_argument.zr:1:1 ]
+   │
+ 1 │ fn two<T>(x: T?, y: T) T { return y; }
+   │ ────────────┬───────────
+   │             ╰───────────── Unknown type 'T'. Did you mean 'i8'?
+───╯
+Error: Unknown type 'T'. Did you mean 'i8'?
+   ╭─[ tests/ui/generics/none_before_binding_argument.zr:1:1 ]
+   │
+ 1 │ fn two<T>(x: T?, y: T) T { return y; }
+   │ ────────────┬───────────
+   │             ╰───────────── Unknown type 'T'. Did you mean 'i8'?
+───╯
+[-] Error: aborting due to previous error

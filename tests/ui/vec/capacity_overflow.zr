@@ -1,0 +1,6 @@
+//@ checked
+fn main() {
+    var v: Vec<i64> = Vec.with_capacity(2305843009213693953);
+    v.push(1);
+    println("{}", v.len());
+}

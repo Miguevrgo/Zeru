@@ -1,0 +1,5 @@
+import std.net;
+fn main() {
+    var udp = net::UdpSocket.bind(net::ip4(127, 0, 0, 1), 0).unwrap();
+    println("{}", udp.close().is_ok());
+}

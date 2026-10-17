@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Type mismatch for variable 't'. Annotated as (i64, bool)? but got (i32, bool)
+   ╭─[ tests/ui/optionals_results/optional_of_tuple.zr:2:5 ]
+   │
+ 2 │     var t: (i64, bool)? = (2, true);
+   │     ────────────────┬───────────────
+   │                     ╰───────────────── Type mismatch for variable 't'. Annotated as (i64, bool)? but got (i32, bool)
+───╯
+[-] Error: aborting due to previous error

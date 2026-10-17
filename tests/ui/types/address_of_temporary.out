@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot create reference to a temporary value
+   ╭─[ tests/ui/types/address_of_temporary.zr:2:21 ]
+   │
+ 2 │     var ptr: *i32 = &42;
+   │                     ─┬─
+   │                      ╰─── Cannot create reference to a temporary value
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,4 @@
+status: exit 0
+-- stdout
+got 5
+dropped: 5

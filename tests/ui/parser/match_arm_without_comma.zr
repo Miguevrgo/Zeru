@@ -1,0 +1,5 @@
+fn main() {
+    var a = 2;
+    var r = match a { 1 => 10 2 => 20, default => 0 };
+    println("{}", r);
+}

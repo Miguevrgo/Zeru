@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: While condition must be boolean, got: i32
+   ╭─[ tests/ui/control_flow/while_condition_must_be_bool.zr:3:11 ]
+   │
+ 3 │     while i { }
+   │           ┬
+   │           ╰── While condition must be boolean, got: i32
+───╯
+[-] Error: aborting due to previous error

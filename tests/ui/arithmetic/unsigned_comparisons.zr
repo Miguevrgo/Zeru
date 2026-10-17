@@ -1,0 +1,6 @@
+fn main() {
+    var big: u32 = 3000000000;
+    var small: u32 = 1;
+    var x: u64 = 18446744073709551615;
+    println("{} {} {}", big > small, x > 0, small >= big);
+}

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Function 'util::name' is already defined
+   ╭─[ tests/ui/modules/same_last_name/b/util.zr:1:5 ]
+   │
+ 1 │ pub fn name() i32 { return 2; }
+   │     ──────┬──────
+   │           ╰──────── Function 'util::name' is already defined
+───╯
+[-] Error: aborting due to previous error

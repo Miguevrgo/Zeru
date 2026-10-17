@@ -1,0 +1,5 @@
+//@ checked
+fn main() {
+    var z: i32 = 0;
+    println("{}", 10 / z);
+}

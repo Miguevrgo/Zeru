@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: An error enum carries no values, and Fail does
+   ╭─[ tests/ui/enums/error_enum_with_payload.zr:2:1 ]
+   │
+ 2 │ fn spend(n: i64) i64!Fail {
+   │ ────────────┬────────────
+   │             ╰────────────── An error enum carries no values, and Fail does
+───╯
+[-] Error: aborting due to previous error

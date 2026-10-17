@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'A' is already defined
+   ╭─[ tests/ui/constants/constant_clashes_with_function.zr:2:1 ]
+   │
+ 2 │ const A: i32 = 2;
+   │ ────────┬────────
+   │         ╰────────── 'A' is already defined
+───╯
+[-] Error: aborting due to previous error

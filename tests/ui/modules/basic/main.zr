@@ -1,0 +1,6 @@
+import geom.area;
+import shapes;
+fn main() {
+    var r = shapes::Rect { w: 2, h: 5 };
+    println("{} {} {}", area::rectangle(3, 4), r.area(), shapes::doubled(r));
+}

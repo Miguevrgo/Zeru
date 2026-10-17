@@ -1,0 +1,5 @@
+status: exit 0
+-- stdout
+inside 2
+consumed
+dropped: 12

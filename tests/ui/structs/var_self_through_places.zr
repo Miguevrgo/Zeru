@@ -1,0 +1,13 @@
+struct C { n: i32, fn bump(var self) { self.n += 1; } }
+struct Holder { c: C, cs: Array<C, 2> }
+fn main() {
+    var h = Holder { c: C { n: 0 }, cs: [C { n: 10 }, C { n: 20 }] };
+    h.c.bump();
+    h.cs[1].bump();
+    var v: Vec<C> = Vec.new();
+    v.push(C { n: 5 });
+    v[0].bump();
+    var p: *C = &h.c;
+    p.bump();
+    println("{} {} {}", h.c.n, h.cs[1].n, v[0].n);
+}

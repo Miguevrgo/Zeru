@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Type mismatch for variable 'r'. Annotated as i64 but got i32
+   ╭─[ tests/ui/generics/expected_type_does_not_infer.zr:3:5 ]
+   │
+ 3 │     var r: i64 = id(5);
+   │     ─────────┬─────────
+   │              ╰─────────── Type mismatch for variable 'r'. Annotated as i64 but got i32
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,3 @@
+status: exit 0
+-- stdout
+3840 65535 61455 240 false false

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot cast i32 to bool
+   ╭─[ tests/ui/casts/int_to_bool_rejected.zr:3:13 ]
+   │
+ 3 │     var b = n as bool;
+   │             ────┬────
+   │                 ╰────── Cannot cast i32 to bool
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,4 @@
+fn main() {
+    println("leaving");
+    exit(3);
+}

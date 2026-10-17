@@ -1,0 +1,6 @@
+//@ checked
+fn main() {
+    var z: f64 = 0.0;
+    var nan = z / z;
+    println("{}", nan as i64);
+}

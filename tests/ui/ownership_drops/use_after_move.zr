@@ -1,0 +1,7 @@
+fn take(v: Vec<i64>) { }
+fn main() {
+    var a: Vec<i64> = Vec.new();
+    var s = S { v: a };
+    take(a);
+}
+struct S { v: Vec<i64> }

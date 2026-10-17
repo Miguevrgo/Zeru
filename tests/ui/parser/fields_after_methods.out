@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: Struct 'S': Fields must be declared before methods
+   ╭─[ tests/ui/parser/fields_after_methods.zr:2:34 ]
+   │
+ 2 │     fn get(self) i32 { return 1; }
+   │                                  ┬
+   │                                  ╰── Struct 'S': Fields must be declared before methods
+───╯
+Error: Unexpected '}' at top level, expected fn, struct, enum, trait, const or import
+   ╭─[ tests/ui/parser/fields_after_methods.zr:4:1 ]
+   │
+ 4 │ }
+   │ ┬
+   │ ╰── Unexpected '}' at top level, expected fn, struct, enum, trait, const or import
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,5 @@
+fn main() {
+    var a: f64 = 1.5;
+    var b: f32 = 2.25;
+    println("{} {}", a as f32, b as f64);
+}

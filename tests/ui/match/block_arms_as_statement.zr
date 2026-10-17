@@ -1,0 +1,10 @@
+fn main() {
+    var n = 3;
+    var log = 0;
+    match n {
+        1 => { log = 10; }
+        3 => { log = 30; }
+        default => { log = -1; }
+    }
+    println("{}", log);
+}

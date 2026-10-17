@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: Index 5 is outside the array's 0..2
+   ╭─[ tests/ui/vec/constant_index_checked_at_compile_time.zr:3:15 ]
+   │
+ 3 │     var v = a[5];
+   │               ┬
+   │               ╰── Index 5 is outside the array's 0..2
+───╯
+Error: Index must be an integer, got bool
+   ╭─[ tests/ui/vec/constant_index_checked_at_compile_time.zr:4:15 ]
+   │
+ 4 │     var w = a[true];
+   │               ──┬─
+   │                 ╰─── Index must be an integer, got bool
+───╯
+[-] Error: aborting due to previous error

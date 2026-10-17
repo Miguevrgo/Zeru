@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: A pattern binds names, as in Some(x); match the value inside again
+   ╭─[ tests/ui/match/pattern_with_literal_payload.zr:3:28 ]
+   │
+ 3 │     var x = match o { Some(1) => 1, default => 0 };
+   │                            ┬
+   │                            ╰── A pattern binds names, as in Some(x); match the value inside again
+───╯
+[-] Error: aborting due to previous error

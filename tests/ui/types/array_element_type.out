@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Type mismatch for variable 'arr'. Annotated as Array<i32, 3> but got Array<f64, 3>
+   ╭─[ tests/ui/types/array_element_type.zr:2:5 ]
+   │
+ 2 │     var arr: Array<i32, 3> = [1.0, 2.0, 3.0];
+   │     ────────────────────┬────────────────────
+   │                         ╰────────────────────── Type mismatch for variable 'arr'. Annotated as Array<i32, 3> but got Array<f64, 3>
+───╯
+[-] Error: aborting due to previous error

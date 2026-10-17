@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Function 'Point::unknown_method' not defined
+   ╭─[ tests/ui/structs/unknown_method.zr:4:5 ]
+   │
+ 4 │     p.unknown_method();
+   │     ─────────┬────────
+   │              ╰────────── Function 'Point::unknown_method' not defined
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,4 @@
+const MESSAGE: str = "Hello";
+fn main() {
+    println("{} {}", MESSAGE, MESSAGE.len());
+}

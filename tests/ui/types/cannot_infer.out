@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot infer Vec element type. Please add a type annotation
+   ╭─[ tests/ui/types/cannot_infer.zr:2:13 ]
+   │
+ 2 │     var v = Vec.new();
+   │             ────┬────
+   │                 ╰────── Cannot infer Vec element type. Please add a type annotation
+───╯
+[-] Error: aborting due to previous error

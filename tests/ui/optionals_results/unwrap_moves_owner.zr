@@ -1,0 +1,5 @@
+fn main() {
+    var o: Vec<i32>? = None;
+    var a = o.unwrap();
+    var b = o.is_some();
+}

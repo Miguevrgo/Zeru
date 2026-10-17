@@ -1,0 +1,6 @@
+trait Area { fn area(self) i64; }
+struct Blob { s: i64 }
+fn measure<T: Area>(x: T) i64 { return x.area(); }
+fn main() {
+    var n = measure(Blob { s: 1 });
+}

@@ -1,5 +1,5 @@
 // Language behaviour test. Every check exits with its own code, so a failure
-// says exactly which one broke. Run by ci/compile_suite.py in all safety modes.
+// says exactly which one broke. Run by tests/ui.rs in all safety modes.
 
 enum Color { Red, Green, Blue }
 

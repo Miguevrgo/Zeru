@@ -1,0 +1,4 @@
+struct Pair<T: Nonesuch> { first: T, second: T }
+fn main() {
+    var p = Pair { first: 1, second: 2 };
+}

@@ -1,0 +1,3 @@
+status: signal 6
+-- stderr
+panic at tests/ui/casts/negative_float_to_unsigned.zr:4:5: float out of range for the integer type

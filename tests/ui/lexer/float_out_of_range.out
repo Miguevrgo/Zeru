@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Float literal '1e400' is out of range
+   ╭─[ tests/ui/lexer/float_out_of_range.zr:2:18 ]
+   │
+ 2 │     var x: f64 = 1e400;
+   │                  ──┬──
+   │                    ╰──── Float literal '1e400' is out of range
+───╯
+[-] Error: aborting due to previous error

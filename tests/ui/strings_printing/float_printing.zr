@@ -1,0 +1,12 @@
+fn main() {
+    var tiny: f64 = 1e-7;
+    var third: f64 = 1.0 / 3.0;
+    var pi: f64 = 3.14159265358979;
+    var huge: f64 = 1e300;
+    var neg_zero: f64 = -0.0;
+    var sum: f64 = 0.1 + 0.2;
+    var whole: f64 = 42.0;
+    var small: f32 = 0.1;
+    println("{} {} {} {}", tiny, third, pi, sum);
+    println("{} {} {} {}", huge, neg_zero, whole, small);
+}

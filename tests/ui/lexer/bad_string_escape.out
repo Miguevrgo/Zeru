@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: '\x' takes two hex digits, as in '\x41'
+   ╭─[ tests/ui/lexer/bad_string_escape.zr:2:13 ]
+   │
+ 2 │     var s = "\xZ1";
+   │             ───┬──
+   │                ╰──── '\x' takes two hex digits, as in '\x41'
+───╯
+[-] Error: aborting due to previous error

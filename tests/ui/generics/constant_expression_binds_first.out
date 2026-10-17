@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Argument 2 type mismatch
+   ╭─[ tests/ui/generics/constant_expression_binds_first.zr:4:22 ]
+   │
+ 4 │     var r = g(1 + 1, x);
+   │                      ┬
+   │                      ╰── Argument 2 type mismatch
+───╯
+[-] Error: aborting due to previous error

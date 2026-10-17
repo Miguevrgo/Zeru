@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Missing 'fn main'
+   ╭─[ tests/ui/parser/empty_file.zr:2:1 ]
+   │
+ 2 │
+   │ ┬
+   │ ╰── Missing 'fn main'
+───╯
+[-] Error: aborting due to previous error

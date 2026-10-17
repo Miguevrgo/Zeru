@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Expected an expression, found 'end of file'
+   ╭─[ tests/ui/parser/expression_at_eof.zr:2:1 ]
+   │
+ 2 │
+   │ ┬
+   │ ╰── Expected an expression, found 'end of file'
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,20 @@
+const N: i32 = 2147483647;
+const S: i32 = 40;
+const K: i64 = 9223372036854775807;
+fn f(N: i32) i32 { return N + 1; }
+fn g(S: i32) i32 { return 1 << S; }
+struct M {
+    a: i64,
+    fn twice(self) i64 {
+        var K: i64 = 1;
+        return K * 2;
+    }
+}
+fn main() {
+    var N: i32 = 1;
+    var y = N + 1;
+    var t: i32 = 0;
+    for N in 0..3 { t += N + 1; }
+    var m = M { a: 0 };
+    println("{} {} {} {} {}", y, f(5), g(3), m.twice(), t);
+}

@@ -1,0 +1,4 @@
+import lib;
+fn main() {
+    var x = lib::hidden();
+}

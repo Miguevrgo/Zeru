@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'H' asks for T: Shape, which Bad does not satisfy
+   ╭─[ tests/ui/generics/bound_not_met_once.zr:5:5 ]
+   │
+ 5 │     var h: H<Bad> = H { v: Bad { x: 2 } };
+   │     ───────────────────┬──────────────────
+   │                        ╰──────────────────── 'H' asks for T: Shape, which Bad does not satisfy
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,15 @@
+fn write(fd: i64, buf: *u8, len: i64) i64 {
+    var result: i64 = 0;
+    var nr: i64 = 1;
+    asm volatile (
+        "syscall"
+        : "={rax}" (result)
+        : "{rax}" (nr), "{rdi}" (fd), "{rsi}" (buf), "{rdx}" (len)
+        : "rcx", "r11", "memory"
+    );
+    return result;
+}
+fn main() {
+    var n = write(1, "asm says hi\n" as *u8, 12);
+    println("{}", n);
+}

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'S::A' carries 1 value(s): write S::A(...)
+   ╭─[ tests/ui/enums/variant_needs_values.zr:3:13 ]
+   │
+ 3 │     var s = S::A;
+   │             ──┬─
+   │               ╰─── 'S::A' carries 1 value(s): write S::A(...)
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,7 @@
+enum E { A }
+fn f() i32!E { return Err(E::A); }
+fn g() i32! {
+    var x = try f();
+    return Ok(x);
+}
+fn main() { }

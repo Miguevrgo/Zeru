@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Vec::insert() index or count must be usize
+   ╭─[ tests/ui/vec/insert_wrong_index_type.zr:3:5 ]
+   │
+ 3 │     v.insert(true, 1);
+   │     ────────┬────────
+   │             ╰────────── Vec::insert() index or count must be usize
+───╯
+[-] Error: aborting due to previous error

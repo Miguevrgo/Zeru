@@ -40,8 +40,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-targets -- -D warnings
 
-  # Build and unit-test the compiler itself on every free runner class, so a
-  # host-specific assumption in codegen shows up here rather than in a release.
+  # Build and test the compiler on every free runner class, so a host-specific
+  # assumption in codegen shows up here rather than in a release. The UI tests in
+  # tests/ui.rs build and run Zeru programs, which std/builtin.zr ties to x86_64
+  # Linux through raw syscalls, so they only run on that runner.
   test:
     name: Test (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -64,40 +66,12 @@ jobs:
           key: ${{ matrix.name }}
       - run: cargo test --release --verbose
 
-  # End-to-end check: every example and std module has to compile, link, and
-  # (for the examples, which self-check through their exit codes) run clean.
-  # The debug run also requires everything under ci/reject to be refused, with
-  # the complaint each of those files says it expects.
-  #
-  # x86_64 Linux only: std/builtin.zr reaches the kernel through inline `syscall`
-  # asm with Linux call numbers, so a Zeru program cannot be built anywhere else
-  # yet. Add runners once std grows a portable syscall layer.
-  compile-suite:
-    name: Compile Suite
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-llvm
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: linux-x86_64
-      - run: cargo build --release
-      - name: Debug
-        run: python3 ci/compile_suite.py
-      - name: Release safe
-        if: ${{ !cancelled() }}
-        run: python3 ci/compile_suite.py --release-safe
-      - name: Release fast
-        if: ${{ !cancelled() }}
-        run: python3 ci/compile_suite.py --release-fast
-
   # Single gate to require in branch protection: adding or renaming a job above
   # then needs no settings change.
   ci:
     name: CI
     if: always()
-    needs: [format, clippy, test, compile-suite]
+    needs: [format, clippy, test]
     runs-on: ubuntu-latest
     steps:
       - name: Check that every job succeeded

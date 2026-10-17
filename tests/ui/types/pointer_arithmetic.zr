@@ -1,0 +1,7 @@
+fn main() {
+    var a: Array<u8, 4> = [10, 20, 30, 40];
+    var p: *u8 = &a[0];
+    var q: *u8 = p + 2;
+    var r: *u8 = q - 1;
+    println("{} {}", *q, *r);
+}

@@ -1,0 +1,5 @@
+import std.fs;
+fn main() {
+    var r = fs::open("no/such/file\0" as *u8, fs::O_RDONLY, 0);
+    println("{} {}", r.is_err(), r.unwrap_err());
+}

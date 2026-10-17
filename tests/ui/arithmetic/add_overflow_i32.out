@@ -1,0 +1,3 @@
+status: signal 6
+-- stderr
+panic at tests/ui/arithmetic/add_overflow_i32.zr:4:5: arithmetic overflow

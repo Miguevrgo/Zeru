@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: Cannot tell what 'T' is here, name the type
+   ╭─[ tests/ui/diagnostics/unknown_struct_literal_in_generic_call.zr:4:24 ]
+   │
+ 4 │     var s = pick(true, Stack { items: [7] }, Stack { items: [8] });
+   │                        ──────────┬─────────
+   │                                  ╰─────────── Cannot tell what 'T' is here, name the type
+───╯
+Error: Cannot tell what 'T' is here, name the type
+   ╭─[ tests/ui/diagnostics/unknown_struct_literal_in_generic_call.zr:4:46 ]
+   │
+ 4 │     var s = pick(true, Stack { items: [7] }, Stack { items: [8] });
+   │                                              ──────────┬─────────
+   │                                                        ╰─────────── Cannot tell what 'T' is here, name the type
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,9 @@
+fn loud(v: bool) bool {
+    println("evaluated {}", v);
+    return v;
+}
+fn main() {
+    var a = loud(false) && loud(true);
+    var b = loud(true) || loud(false);
+    println("{} {}", a, b);
+}

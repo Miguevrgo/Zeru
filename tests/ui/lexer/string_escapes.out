@@ -1,0 +1,4 @@
+status: exit 0
+-- stdout
+tab[	] quote["] slash[\] hex[A]
+3

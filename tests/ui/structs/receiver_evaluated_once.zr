@@ -1,0 +1,8 @@
+struct Counter { n: i32, fn get(self) i32 { return self.n; } }
+fn make() Counter {
+    println("made");
+    return Counter { n: 4 };
+}
+fn main() {
+    println("{}", make().get());
+}

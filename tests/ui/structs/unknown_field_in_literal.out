@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Unknown field 'y' in struct 'Point'
+   ╭─[ tests/ui/structs/unknown_field_in_literal.zr:3:13 ]
+   │
+ 3 │     var p = Point { x: 1.0, y: 2.0 };
+   │             ────────────┬───────────
+   │                         ╰───────────── Unknown field 'y' in struct 'Point'
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,5 @@
+import std.collections.hashmap::{HashMap};
+enum Shape { Circle(f64), Empty }
+fn main() {
+    var m: HashMap<Shape, i64> = HashMap.new();
+}

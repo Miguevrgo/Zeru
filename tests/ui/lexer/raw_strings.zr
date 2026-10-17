@@ -1,0 +1,10 @@
+fn main() {
+    var path = `C:\Users\name\file.txt`;
+    var json = `{"name": "Zeru"}`;
+    var lines = `Line 1
+Line 2 with "quotes"`;
+    println("{}", path);
+    println("{}", json);
+    println("{}", lines);
+    println("{}", path.len());
+}

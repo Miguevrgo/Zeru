@@ -1,6 +1,0 @@
-// expect: not found
-import nonesuch.thing;
-
-fn main() {
-    exit(0);
-}

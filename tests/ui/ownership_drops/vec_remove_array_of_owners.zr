@@ -1,0 +1,14 @@
+struct Probe {
+    id: i64,
+    log: *i64,
+    fn drop(var self) { *self.log = *self.log * 10 + self.id; }
+}
+fn probe(id: i64, log: *i64) Probe { return Probe { id: id, log: log }; }
+fn main() {
+    var log: i64 = 0;
+    var at: *i64 = &log;
+    {
+        { var vs: Vec<Array<Probe, 1>> = [[probe(1, at)], [probe(2, at)]]; var first = vs.remove(0); println("removed {}", first[0].id); }
+    }
+    println("dropped: {}", log);
+}

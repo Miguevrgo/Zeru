@@ -1,0 +1,10 @@
+struct Stack<T> {
+    items: Vec<T>,
+    fn fold<A>(self, i: A, s: A) A { return i + s; }
+}
+struct Inv { log: Stack<i64> }
+fn main() {
+    var s: Stack<i64> = Stack { items: [1] };
+    var inv = Inv { log: Stack { items: [2] } };
+    println("{} {}", s.fold(1, 2), inv.log.fold(3, 4));
+}

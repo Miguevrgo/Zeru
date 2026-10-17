@@ -1,0 +1,22 @@
+fn sort(v: *Vec<i64>) {
+    var n = (*v).len();
+    var i: usize = 0;
+    while i < n {
+        var j: usize = 0;
+        while j + 1 < n - i {
+            if (*v)[j] > (*v)[j + 1] {
+                var t = (*v)[j];
+                (*v)[j] = (*v)[j + 1];
+                (*v)[j + 1] = t;
+            }
+            j += 1;
+        }
+        i += 1;
+    }
+}
+fn main() {
+    var v: Vec<i64> = [5, 3, 9, 1, 4];
+    sort(&v);
+    for x in v { print("{} ", x); }
+    println("");
+}

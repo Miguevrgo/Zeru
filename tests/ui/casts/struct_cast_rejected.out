@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: Cannot cast P to i32
+   ╭─[ tests/ui/casts/struct_cast_rejected.zr:4:13 ]
+   │
+ 4 │     var a = p as i32;
+   │             ────┬───
+   │                 ╰───── Cannot cast P to i32
+───╯
+Error: Cannot cast P to *u8
+   ╭─[ tests/ui/casts/struct_cast_rejected.zr:5:13 ]
+   │
+ 5 │     var b = p as *u8;
+   │             ────┬───
+   │                 ╰───── Cannot cast P to *u8
+───╯
+[-] Error: aborting due to previous error

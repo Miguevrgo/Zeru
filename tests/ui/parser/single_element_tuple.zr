@@ -1,0 +1,5 @@
+fn main() {
+    var single = (42,);
+    var unit: () = ();
+    println("{}", single.0);
+}

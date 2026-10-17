@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Function 'syscall1' is already defined
+   ╭─[ tests/ui/std/builtin_names_reserved.zr:1:1 ]
+   │
+ 1 │ fn syscall1(a: i64) i64 { return a; }
+   │ ───────────┬───────────
+   │            ╰───────────── Function 'syscall1' is already defined
+───╯
+[-] Error: aborting due to previous error

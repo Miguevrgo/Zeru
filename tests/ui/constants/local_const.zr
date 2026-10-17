@@ -1,0 +1,6 @@
+fn main() {
+    const LIMIT: i32 = 3;
+    var i = 0;
+    while i < LIMIT { i += 1; }
+    println("{}", i);
+}

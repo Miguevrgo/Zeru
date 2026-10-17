@@ -1,0 +1,7 @@
+import geom.area;
+pub struct Rect {
+    w: i32,
+    h: i32,
+    pub fn area(self) i32 { return area::rectangle(self.w, self.h); }
+}
+pub fn doubled(r: Rect) i32 { return area::scale(r.area(), 2); }

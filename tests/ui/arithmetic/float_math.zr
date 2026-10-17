@@ -1,0 +1,6 @@
+fn main() {
+    var a: f64 = 7.5;
+    var b: f64 = 2.0;
+    var c: f32 = 1.25;
+    println("{} {} {} {} {} {}", a + b, a - b, a * b, a / b, a % b, c * 4.0);
+}

@@ -1,0 +1,6 @@
+fn main() {
+    var x: f32 = 10;
+    var y: f64 = -3;
+    var z = 2.5 * 2;
+    println("{} {} {}", x, y, z);
+}

@@ -1,0 +1,5 @@
+enum S { A(i32), B }
+fn main() {
+    var s = S::A(1);
+    if s == S::B { }
+}

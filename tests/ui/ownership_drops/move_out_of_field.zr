@@ -1,0 +1,5 @@
+struct S { v: Vec<i64> }
+fn main() {
+    var s = S { v: Vec.new() };
+    var v = s.v;
+}

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: A match has one 'default' arm
+   ╭─[ tests/ui/match/two_defaults.zr:3:37 ]
+   │
+ 3 │     var r = match x { default => 1, default => 2 };
+   │                                     ───┬───
+   │                                        ╰───── A match has one 'default' arm
+───╯
+[-] Error: aborting due to previous error

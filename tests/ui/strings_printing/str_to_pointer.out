@@ -1,0 +1,3 @@
+status: exit 0
+-- stdout
+65 66

@@ -1,0 +1,11 @@
+fn main() {
+    var v: Vec<u8> = Vec.with_capacity(4);
+    var start = v.capacity();
+    v.push(1);
+    v.reserve(16);
+    var reserved = v.capacity() >= 17;
+    v.shrink_to_fit();
+    var shrunk = v.capacity();
+    v.clear();
+    println("{} {} {} {}", start, reserved, shrunk, v.len());
+}

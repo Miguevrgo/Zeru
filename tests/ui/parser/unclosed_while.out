@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Expected '}', found 'end of file'
+   ╭─[ tests/ui/parser/unclosed_while.zr:4:1 ]
+   │
+ 4 │
+   │ ┬
+   │ ╰── Expected '}', found 'end of file'
+───╯
+[-] Error: aborting due to previous error

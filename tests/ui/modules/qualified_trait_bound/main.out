@@ -1,0 +1,24 @@
+status: compile error
+-- stderr
+Error: Expected ',', found '::'
+   ╭─[ tests/ui/modules/qualified_trait_bound/main.zr:3:14 ]
+   │
+ 3 │ fn use_it<T: lib::Go>(t: T) i32 { return t.go(); }
+   │              ─┬─
+   │               ╰─── Expected ',', found '::'
+───╯
+Error: Unexpected 'return' at top level, expected fn, struct, enum, trait, const or import
+   ╭─[ tests/ui/modules/qualified_trait_bound/main.zr:3:35 ]
+   │
+ 3 │ fn use_it<T: lib::Go>(t: T) i32 { return t.go(); }
+   │                                   ───┬──
+   │                                      ╰──── Unexpected 'return' at top level, expected fn, struct, enum, trait, const or import
+───╯
+Error: Unexpected '}' at top level, expected fn, struct, enum, trait, const or import
+   ╭─[ tests/ui/modules/qualified_trait_bound/main.zr:3:50 ]
+   │
+ 3 │ fn use_it<T: lib::Go>(t: T) i32 { return t.go(); }
+   │                                                  ┬
+   │                                                  ╰── Unexpected '}' at top level, expected fn, struct, enum, trait, const or import
+───╯
+[-] Error: aborting due to previous error

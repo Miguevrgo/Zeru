@@ -1,0 +1,6 @@
+//@ checked
+fn main() {
+    var z: u64 = 0;
+    var x: u64 = 10;
+    println("{}", x % z);
+}

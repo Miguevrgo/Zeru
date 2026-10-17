@@ -1,0 +1,4 @@
+import std.collections.hashmap::{HashMap};
+fn main() {
+    var m: HashMap<str, i64> = HashMap.new();
+}

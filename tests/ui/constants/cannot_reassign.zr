@@ -1,0 +1,6 @@
+const G: i32 = 100;
+fn main() {
+    const x = 10;
+    x = 20;
+    G = 200;
+}

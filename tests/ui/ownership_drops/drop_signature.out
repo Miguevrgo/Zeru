@@ -1,0 +1,24 @@
+status: compile error
+-- stderr
+Error: A 'drop' method takes only 'var self' and returns nothing
+   ╭─[ tests/ui/ownership_drops/drop_signature.zr:1:20 ]
+   │
+ 1 │ struct A { x: i32, fn drop(self) { } }
+   │                    ──────┬──────
+   │                          ╰──────── A 'drop' method takes only 'var self' and returns nothing
+───╯
+Error: A 'drop' method takes only 'var self' and returns nothing
+   ╭─[ tests/ui/ownership_drops/drop_signature.zr:2:20 ]
+   │
+ 2 │ struct B { x: i32, fn drop(var self, x: i32) { } }
+   │                    ────────────┬────────────
+   │                                ╰────────────── A 'drop' method takes only 'var self' and returns nothing
+───╯
+Error: A 'drop' method takes only 'var self' and returns nothing
+   ╭─[ tests/ui/ownership_drops/drop_signature.zr:3:20 ]
+   │
+ 3 │ struct C { x: i32, fn drop(var self) i32 { return 0; } }
+   │                    ──────────┬──────────
+   │                              ╰──────────── A 'drop' method takes only 'var self' and returns nothing
+───╯
+[-] Error: aborting due to previous error

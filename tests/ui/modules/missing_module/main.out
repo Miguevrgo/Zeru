@@ -1,0 +1,3 @@
+status: compile error
+-- stderr
+[-] Error: module 'nonesuch.thing' not found at tests/ui/modules/missing_module/nonesuch/thing.zr

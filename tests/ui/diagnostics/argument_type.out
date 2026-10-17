@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Argument 1 type mismatch
+   ╭─[ tests/ui/diagnostics/argument_type.zr:3:13 ]
+   │
+ 3 │     process(3.14);
+   │             ──┬─
+   │               ╰─── Argument 1 type mismatch
+───╯
+[-] Error: aborting due to previous error

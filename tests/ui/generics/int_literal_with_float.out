@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Argument 2 type mismatch
+   ╭─[ tests/ui/generics/int_literal_with_float.zr:4:26 ]
+   │
+ 4 │     println("{}", add(1, 2.5));
+   │                          ─┬─
+   │                           ╰─── Argument 2 type mismatch
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,6 @@
+//@ checked
+fn main() {
+    var n: i32 = 40;
+    var x: i32 = 1;
+    println("{}", x << n);
+}

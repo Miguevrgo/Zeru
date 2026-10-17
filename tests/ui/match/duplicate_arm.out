@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: This value is already matched by an earlier arm
+   ╭─[ tests/ui/match/duplicate_arm.zr:3:31 ]
+   │
+ 3 │     var r = match x { 1 => 1, 1 => 2, default => 3 };
+   │                               ┬
+   │                               ╰── This value is already matched by an earlier arm
+───╯
+[-] Error: aborting due to previous error

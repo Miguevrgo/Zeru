@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: A global constant must be made of literals, other constants, enum variants and operators on them
+   ╭─[ tests/ui/constants/global_needs_constants.zr:2:19 ]
+   │
+ 2 │ const BASE: i32 = base();
+   │                   ───┬──
+   │                      ╰──── A global constant must be made of literals, other constants, enum variants and operators on them
+───╯
+[-] Error: aborting due to previous error

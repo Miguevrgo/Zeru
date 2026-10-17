@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'lib::Thing::secret' is private to module 'lib'; mark it pub
+   ╭─[ tests/ui/modules/private_method/main.zr:4:13 ]
+   │
+ 4 │     var x = t.secret();
+   │             ─────┬────
+   │                  ╰────── 'lib::Thing::secret' is private to module 'lib'; mark it pub
+───╯
+[-] Error: aborting due to previous error

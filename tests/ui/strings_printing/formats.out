@@ -1,0 +1,4 @@
+status: exit 0
+-- stdout
+1 2.5 true {}
+no newline 3 items cost 2.5 (all in stock: true)

@@ -1,0 +1,4 @@
+import a;
+fn main() {
+    println("{}", a::ping(3));
+}

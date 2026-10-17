@@ -1,0 +1,3 @@
+fn main() {
+    var arr: Array<i32, 5> = [1, 2, 3];
+}

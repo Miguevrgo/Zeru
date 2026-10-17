@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Use of moved value 'a'. Value was previously moved and is no longer valid
+   ╭─[ tests/ui/ownership_drops/use_after_move.zr:5:10 ]
+   │
+ 5 │     take(a);
+   │          ┬
+   │          ╰── Use of moved value 'a'. Value was previously moved and is no longer valid
+───╯
+[-] Error: aborting due to previous error

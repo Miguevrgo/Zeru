@@ -1,0 +1,9 @@
+enum Mode { Fast, Slow }
+const BASE: i32 = 4;
+const SPAN: i64 = (BASE * 2 + 1) as i64;
+const NAME: str = "zeru";
+const DEFAULT_MODE: Mode = Mode::Slow;
+const PI: f64 = 3.14159265359;
+fn main() {
+    println("{} {} {} {} {}", BASE, SPAN, NAME, DEFAULT_MODE as i32, PI);
+}

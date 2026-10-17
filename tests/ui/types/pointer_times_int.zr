@@ -1,0 +1,4 @@
+fn main() {
+    var ptr: *u8 = "hello" as *u8;
+    var bad: *u8 = ptr * 2;
+}

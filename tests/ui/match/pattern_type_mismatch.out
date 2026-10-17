@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: A pattern of type bool cannot match a value of type i32
+   ╭─[ tests/ui/match/pattern_type_mismatch.zr:3:23 ]
+   │
+ 3 │     var r = match x { true => 1, default => 2 };
+   │                       ──┬─
+   │                         ╰─── A pattern of type bool cannot match a value of type i32
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,4 @@
+fn f() i32 { }
+fn g(n: i32) bool { if n > 0 { return true; } }
+fn h(n: i32?) i32 { match n { Some(v) => { return v; } None => { } } }
+fn main() { }

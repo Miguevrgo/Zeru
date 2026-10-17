@@ -1,0 +1,15 @@
+import std.net;
+fn main() {
+    var ip = net::ip4(127, 0, 0, 1);
+    var listener = net::TcpListener.bind(ip, 47613).unwrap();
+    var client = net::TcpStream.connect(ip, 47613).unwrap();
+    var server = listener.accept().unwrap();
+    var out: Array<u8, 3> = [104, 105, 33];
+    client.write_all(&out[0], 3).unwrap();
+    var got: Array<u8, 3> = [0; 3];
+    var n = server.read(&got[0], 3).unwrap();
+    println("{} {} {} {}", n, got[0], got[1], got[2]);
+    server.close();
+    client.close();
+    listener.close();
+}

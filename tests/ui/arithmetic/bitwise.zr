@@ -1,0 +1,9 @@
+fn main() {
+    var a: u32 = 0xFF00 & 0x0F0F;
+    var b: u32 = 0xFF00 | 0x00FF;
+    var c: u32 = 0xFF00 ^ 0x0F0F;
+    var d: u8 = !0x0F;
+    var e = true & false;
+    var f = true ^ true;
+    println("{} {} {} {} {} {}", a, b, c, d, e, f);
+}

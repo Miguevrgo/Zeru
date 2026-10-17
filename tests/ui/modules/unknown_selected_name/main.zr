@@ -1,0 +1,4 @@
+import lib::{nope};
+fn main() {
+    println("compiled");
+}

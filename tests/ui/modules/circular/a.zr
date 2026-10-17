@@ -1,0 +1,2 @@
+import b;
+pub fn ping(n: i32) i32 { if n == 0 { return 0; } return b::pong(n - 1) + 1; }

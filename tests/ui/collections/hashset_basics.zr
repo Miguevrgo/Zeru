@@ -1,0 +1,8 @@
+import std.collections.hashset::{HashSet};
+fn main() {
+    var s: HashSet<i64> = HashSet.new();
+    println("{} {}", s.insert(3), s.insert(3));
+    s.insert(4);
+    println("{} {} {}", s.contains(3), s.contains(5), s.len());
+    println("{} {}", s.remove(3), s.len());
+}

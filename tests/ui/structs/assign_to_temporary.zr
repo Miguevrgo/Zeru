@@ -1,0 +1,9 @@
+struct S { a: i32 }
+fn make() S { return S { a: 1 }; }
+fn arr() Array<i32, 2> { return [1, 2]; }
+fn main() {
+    make().a = 5;
+    arr()[0] = 5;
+    S { a: 1 }.a = 5;
+    1 + 2 = 3;
+}

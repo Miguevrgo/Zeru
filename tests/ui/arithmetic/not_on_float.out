@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: '!' applies to a bool or an integer, not f64
+   ╭─[ tests/ui/arithmetic/not_on_float.zr:2:13 ]
+   │
+ 2 │     var f = !1.5;
+   │             ──┬─
+   │               ╰─── '!' applies to a bool or an integer, not f64
+───╯
+[-] Error: aborting due to previous error

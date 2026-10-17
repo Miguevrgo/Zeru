@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Type mismatch for variable 'x'. Annotated as i32 but got bool
+   ╭─[ tests/ui/types/annotated_mismatch.zr:2:5 ]
+   │
+ 2 │     var x: i32 = true;
+   │     ─────────┬────────
+   │              ╰────────── Type mismatch for variable 'x'. Annotated as i32 but got bool
+───╯
+[-] Error: aborting due to previous error

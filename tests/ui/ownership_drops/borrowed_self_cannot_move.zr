@@ -1,0 +1,2 @@
+struct S { v: Vec<i32>, fn take(self) S { return self; } }
+fn main() { }

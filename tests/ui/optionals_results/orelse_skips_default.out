@@ -1,0 +1,4 @@
+status: exit 0
+-- stdout
+default evaluated
+4 0

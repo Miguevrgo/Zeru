@@ -1,0 +1,4 @@
+status: exit 0
+-- stdout
+9
+9 5 3 1

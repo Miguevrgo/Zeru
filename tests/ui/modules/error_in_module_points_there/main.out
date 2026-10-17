@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Invalid return type. Function expects i32, returning bool
+   ╭─[ tests/ui/modules/error_in_module_points_there/lib.zr:1:23 ]
+   │
+ 1 │ pub fn broken() i32 { return true; }
+   │                       ──────┬─────
+   │                             ╰─────── Invalid return type. Function expects i32, returning bool
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: &Vec<i64> is not iterable
+   ╭─[ tests/ui/control_flow/for_in_borrowed_vec.zr:4:14 ]
+   │
+ 4 │     for x in r { println("{}", x); }
+   │              ┬
+   │              ╰── &Vec<i64> is not iterable
+───╯
+[-] Error: aborting due to previous error

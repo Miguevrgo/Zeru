@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Type mismatch for variable 'v'. Annotated as Vec<i64> but got Vec<bool>
+   ╭─[ tests/ui/vec/literal_wrong_element.zr:2:5 ]
+   │
+ 2 │     var v: Vec<i64> = [true];
+   │     ────────────┬────────────
+   │                 ╰────────────── Type mismatch for variable 'v'. Annotated as Vec<i64> but got Vec<bool>
+───╯
+[-] Error: aborting due to previous error

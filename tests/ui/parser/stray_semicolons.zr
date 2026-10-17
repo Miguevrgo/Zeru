@@ -1,0 +1,5 @@
+;
+const A: i32 = 1;;
+fn main() {
+    println("{}", A);
+}

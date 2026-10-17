@@ -1,0 +1,3 @@
+const LIMIT: i32 = 1;
+const LIMIT: i32 = 2;
+fn main() { }

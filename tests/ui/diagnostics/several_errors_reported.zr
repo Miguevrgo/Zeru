@@ -1,0 +1,5 @@
+fn main() {
+    var a: i32 = true;
+    var b: bool = 1;
+    var c = missing;
+}

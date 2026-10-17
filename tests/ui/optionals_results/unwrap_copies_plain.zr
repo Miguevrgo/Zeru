@@ -1,0 +1,6 @@
+fn main() {
+    var o: i32? = 1;
+    var a = o.unwrap();
+    var b = o.unwrap();
+    println("{} {}", a, b);
+}

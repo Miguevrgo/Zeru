@@ -1,0 +1,4 @@
+import lib;
+fn main() {
+    var t = lib::Inner { n: 1 };
+}

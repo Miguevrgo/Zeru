@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'LIMIT' is already defined
+   ╭─[ tests/ui/constants/duplicate_constant.zr:2:1 ]
+   │
+ 2 │ const LIMIT: i32 = 2;
+   │ ──────────┬──────────
+   │           ╰──────────── 'LIMIT' is already defined
+───╯
+[-] Error: aborting due to previous error

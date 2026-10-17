@@ -1,0 +1,9 @@
+fn main() {
+    var x: u32 = 5;
+    var below = 3 < x;
+    var f: f32 = 1.5;
+    var doubled: f32 = 2.0 * f;
+    var neg: i64 = 7;
+    var diff = -1 - neg;
+    println("{} {} {}", below, doubled, diff);
+}

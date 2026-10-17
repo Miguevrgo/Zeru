@@ -1,0 +1,10 @@
+fn main() {
+    var a: u8 = 'a';
+    var nl: u8 = '\n';
+    var tab: u8 = '\t';
+    var quote: u8 = '\'';
+    var slash: u8 = '\\';
+    var hex: u8 = '\x41';
+    var zero: u8 = '\0';
+    println("{} {} {} {} {} {} {}", a, nl, tab, quote, slash, hex, zero);
+}

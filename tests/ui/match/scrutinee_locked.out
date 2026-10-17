@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot change 'o' while a loop or match around it refers into 'o'
+   ╭─[ tests/ui/match/scrutinee_locked.zr:4:22 ]
+   │
+ 4 │         Some(v) => { o = None; }
+   │                      ────┬───
+   │                          ╰───── Cannot change 'o' while a loop or match around it refers into 'o'
+───╯
+[-] Error: aborting due to previous error

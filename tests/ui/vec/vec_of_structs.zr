@@ -1,0 +1,10 @@
+struct Item { id: i32, qty: i32 }
+fn main() {
+    var items: Vec<Item> = Vec.new();
+    items.push(Item { id: 1, qty: 3 });
+    items.push(Item { id: 2, qty: 5 });
+    items[0].qty += 10;
+    var total = 0;
+    for it in items { total += it.qty; }
+    println("{} {}", items[0].qty, total);
+}

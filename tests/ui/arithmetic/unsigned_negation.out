@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot negate unsigned type u32
+   ╭─[ tests/ui/arithmetic/unsigned_negation.zr:3:13 ]
+   │
+ 3 │     var y = -x;
+   │             ─┬
+   │              ╰── Cannot negate unsigned type u32
+───╯
+[-] Error: aborting due to previous error

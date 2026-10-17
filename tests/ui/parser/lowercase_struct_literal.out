@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: Expected ';', found '{'
+   ╭─[ tests/ui/parser/lowercase_struct_literal.zr:3:13 ]
+   │
+ 3 │     var v = p { x: 1 };
+   │             ┬
+   │             ╰── Expected ';', found '{'
+───╯
+Error: Unexpected '}' at top level, expected fn, struct, enum, trait, const or import
+   ╭─[ tests/ui/parser/lowercase_struct_literal.zr:4:1 ]
+   │
+ 4 │ }
+   │ ┬
+   │ ╰── Unexpected '}' at top level, expected fn, struct, enum, trait, const or import
+───╯
+[-] Error: aborting due to previous error

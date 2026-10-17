@@ -1,0 +1,31 @@
+status: compile error
+-- stderr
+Error: Use of moved value 'a'. Value was previously moved and is no longer valid
+   ╭─[ tests/ui/ownership_drops/moves_of_every_kind.zr:6:10 ]
+   │
+ 6 │     take(a);
+   │          ┬
+   │          ╰── Use of moved value 'a'. Value was previously moved and is no longer valid
+───╯
+Error: Use of moved value 'b'. Value was previously moved and is no longer valid
+   ╭─[ tests/ui/ownership_drops/moves_of_every_kind.zr:9:10 ]
+   │
+ 9 │     take(b);
+   │          ┬
+   │          ╰── Use of moved value 'b'. Value was previously moved and is no longer valid
+───╯
+Error: Use of moved value 'c'. Value was previously moved and is no longer valid
+    ╭─[ tests/ui/ownership_drops/moves_of_every_kind.zr:13:10 ]
+    │
+ 13 │     take(c);
+    │          ┬
+    │          ╰── Use of moved value 'c'. Value was previously moved and is no longer valid
+────╯
+Error: Use of moved value 'd'. Value was previously moved and is no longer valid
+    ╭─[ tests/ui/ownership_drops/moves_of_every_kind.zr:17:10 ]
+    │
+ 17 │     take(d);
+    │          ┬
+    │          ╰── Use of moved value 'd'. Value was previously moved and is no longer valid
+────╯
+[-] Error: aborting due to previous error

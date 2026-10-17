@@ -1,0 +1,5 @@
+//@ checked
+fn main() {
+    var f: f64 = 1e20;
+    println("{}", f as i32);
+}

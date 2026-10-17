@@ -1,0 +1,12 @@
+fn add(a: i64, b: i64) i64 {
+    var out: i64 = 0;
+    asm (
+        "lea ($1, $2), $0"
+        : "=r" (out)
+        : "r" (a), "r" (b)
+    );
+    return out;
+}
+fn main() {
+    println("{}", add(40, 2));
+}

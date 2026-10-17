@@ -1,0 +1,14 @@
+enum E { A, B }
+fn f(fail: bool) i32!E {
+    if fail { return Err(E::B); }
+    return Ok(10);
+}
+fn g(fail: bool) i32!E {
+    var x = try f(fail);
+    return Ok(x + 1);
+}
+fn main() {
+    println("{} {}", g(false) catch 0, g(true) catch 0);
+    var e: E = g(true).unwrap_err();
+    println("{}", e == E::B);
+}

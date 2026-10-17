@@ -1,0 +1,4 @@
+fn main() {
+    /* outer /* inner */ still outer */
+    println("done");
+}

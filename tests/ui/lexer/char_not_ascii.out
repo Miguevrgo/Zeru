@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: '\x80' is not ASCII
+   ╭─[ tests/ui/lexer/char_not_ascii.zr:2:17 ]
+   │
+ 2 │     var c: u8 = '\x80';
+   │                 ───┬──
+   │                    ╰──── '\x80' is not ASCII
+───╯
+[-] Error: aborting due to previous error

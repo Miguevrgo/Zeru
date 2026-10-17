@@ -1,0 +1,2 @@
+trait M { fn pass<U>(self, u: U) U; }
+fn main() { }

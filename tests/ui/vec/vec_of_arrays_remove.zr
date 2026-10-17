@@ -1,0 +1,7 @@
+fn main() {
+    var vs: Vec<Array<i64, 3>> = [[1, 2, 3], [4, 5, 6]];
+    var e: Array<i64, 3> = [7, 8, 9];
+    vs.insert(0, e);
+    var f = vs.remove(1);
+    println("{} | {} {}", f[0], vs[0][0], vs[1][0]);
+}

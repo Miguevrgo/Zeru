@@ -1,0 +1,4 @@
+fn main() {
+    var p: *u8 = "AB" as *u8;
+    println("{} {}", *p, *(p + 1));
+}

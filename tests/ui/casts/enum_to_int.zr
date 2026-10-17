@@ -1,0 +1,4 @@
+enum Color { Red, Green, Blue }
+fn main() {
+    println("{} {}", Color::Green as i32, Color::Blue as u8);
+}

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Constant 400 does not fit in u8
+   ╭─[ tests/ui/constants/overflow_through_global.zr:4:18 ]
+   │
+ 4 │     var y = take(A + A);
+   │                  ──┬──
+   │                    ╰──── Constant 400 does not fit in u8
+───╯
+[-] Error: aborting due to previous error

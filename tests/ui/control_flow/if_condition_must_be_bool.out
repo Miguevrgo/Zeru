@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: If condition must be boolean, got i32
+   ╭─[ tests/ui/control_flow/if_condition_must_be_bool.zr:3:8 ]
+   │
+ 3 │     if i { }
+   │        ┬
+   │        ╰── If condition must be boolean, got i32
+───╯
+[-] Error: aborting due to previous error

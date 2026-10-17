@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Function 'main' must return void, not i32
+   ╭─[ tests/ui/parser/main_returns_value.zr:1:1 ]
+   │
+ 1 │ fn main() i32 { return 0; }
+   │ ──────┬──────
+   │       ╰──────── Function 'main' must return void, not i32
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,6 @@
+fn main() {
+    var a: i32 = 5;
+    var b = -a as i64;
+    var c = !a as u32;
+    println("{} {}", b, c);
+}

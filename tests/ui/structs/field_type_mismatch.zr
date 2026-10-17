@@ -1,0 +1,5 @@
+struct Point { x: f32, y: f32 }
+fn main() {
+    var p = Point { x: true, y: 2.0 };
+    p.x = false;
+}

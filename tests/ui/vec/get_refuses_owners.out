@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Vec::get() cannot copy out a Vec<i32>; index it and call .copy()
+   ╭─[ tests/ui/vec/get_refuses_owners.zr:3:13 ]
+   │
+ 3 │     var x = v.get(0);
+   │             ────┬───
+   │                 ╰───── Vec::get() cannot copy out a Vec<i32>; index it and call .copy()
+───╯
+[-] Error: aborting due to previous error

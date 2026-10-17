@@ -1,0 +1,9 @@
+fn pick(n: i32) i32 {
+    match n {
+        0 => { return 100; }
+        default => { return n * 2; }
+    }
+}
+fn main() {
+    println("{} {}", pick(0), pick(4));
+}

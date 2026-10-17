@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Unexpected character '@'
+   ╭─[ tests/ui/lexer/illegal_character.zr:2:15 ]
+   │
+ 2 │     var x = 1 @ 2;
+   │               ┬
+   │               ╰── Unexpected character '@'
+───╯
+[-] Error: aborting due to previous error

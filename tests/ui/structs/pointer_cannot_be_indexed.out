@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot index *Array<i32, 4> directly, write (*p)[i]
+   ╭─[ tests/ui/structs/pointer_cannot_be_indexed.zr:1:38 ]
+   │
+ 1 │ fn f(p: *Array<i32, 4>) i32 { return p[0]; }
+   │                                      ──┬─
+   │                                        ╰─── Cannot index *Array<i32, 4> directly, write (*p)[i]
+───╯
+[-] Error: aborting due to previous error

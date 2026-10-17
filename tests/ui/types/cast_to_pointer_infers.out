@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Type mismatch for variable 'q'. Annotated as bool but got *u8
+   ╭─[ tests/ui/types/cast_to_pointer_infers.zr:4:5 ]
+   │
+ 4 │     var q: bool = x as *u8;
+   │     ───────────┬───────────
+   │                ╰───────────── Type mismatch for variable 'q'. Annotated as bool but got *u8
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,7 @@
+struct Box<T> {
+    v: T,
+    fn wrap(self) Box<Box<T>> { return Box { v: self }; }
+}
+fn main() {
+    var b: Box<i64> = Box { v: 1 };
+}

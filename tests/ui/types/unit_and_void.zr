@@ -1,0 +1,6 @@
+fn nothing() { }
+fn main() {
+    var u: () = ();
+    nothing();
+    println("ok");
+}

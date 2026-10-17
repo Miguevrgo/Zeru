@@ -1,0 +1,6 @@
+trait Tr { fn go(self) i64; }
+struct A { x: i64, fn go(self) bool { return true; } }
+fn f<T: Tr>(t: T) i64 { return t.go(); }
+fn main() {
+    var r = f(A { x: 1 });
+}

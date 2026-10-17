@@ -1,0 +1,6 @@
+fn main() {
+    var x: u8 = 1;
+    println("{} {} {} {{}}", x, 2.5, true);
+    print("no newline ");
+    println("{} items cost {} ({} in stock: {})", 3, 2.5, "all", true);
+}

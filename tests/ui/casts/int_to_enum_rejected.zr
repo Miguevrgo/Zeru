@@ -1,0 +1,5 @@
+enum Color { Red }
+fn main() {
+    var c = 1 as Color;
+    var d = 2.5 as Color;
+}

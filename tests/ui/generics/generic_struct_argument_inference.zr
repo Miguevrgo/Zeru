@@ -1,0 +1,6 @@
+struct Pair<T> { a: T, b: T }
+fn first<T>(p: Pair<T>) T { return p.a; }
+fn make() Pair<i32> { return Pair { a: 4, b: 5 }; }
+fn main() {
+    println("{}", first(make()));
+}

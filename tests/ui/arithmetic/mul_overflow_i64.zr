@@ -1,0 +1,6 @@
+//@ checked
+fn main() {
+    var x: i64 = 9223372036854775807;
+    var y = x * 2;
+    println("{}", y);
+}

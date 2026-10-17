@@ -1,0 +1,7 @@
+fn main() {
+    var hex: i32 = 0xFF;
+    var oct: i32 = 0o1047;
+    var bin: i32 = 0b010110;
+    var big: u64 = 0xFFFF_FFFF_FFFF_FFFF;
+    println("{} {} {} {}", hex, oct, bin, big);
+}

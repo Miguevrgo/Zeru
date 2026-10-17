@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Parameter 'a' cannot be void
+   ╭─[ tests/ui/types/void_parameter.zr:1:1 ]
+   │
+ 1 │ fn f(a: void) { }
+   │ ──────┬──────
+   │       ╰──────── Parameter 'a' cannot be void
+───╯
+[-] Error: aborting due to previous error

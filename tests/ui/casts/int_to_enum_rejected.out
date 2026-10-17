@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: Cannot cast i32 to Color
+   ╭─[ tests/ui/casts/int_to_enum_rejected.zr:3:13 ]
+   │
+ 3 │     var c = 1 as Color;
+   │             ─────┬────
+   │                  ╰────── Cannot cast i32 to Color
+───╯
+Error: Cannot cast f64 to Color
+   ╭─[ tests/ui/casts/int_to_enum_rejected.zr:4:13 ]
+   │
+ 4 │     var d = 2.5 as Color;
+   │             ──────┬─────
+   │                   ╰─────── Cannot cast f64 to Color
+───╯
+[-] Error: aborting due to previous error

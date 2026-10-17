@@ -1,0 +1,7 @@
+struct S { v: Vec<i64> }
+fn keep(s: S) { }
+fn main() {
+    var s = S { v: Vec.new() };
+    var r: S! = Ok(s);
+    keep(s);
+}
