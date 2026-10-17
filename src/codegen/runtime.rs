@@ -154,17 +154,32 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
+    fn stride(&self, elem_type: BasicTypeEnum<'ctx>) -> IntValue<'ctx> {
+        elem_type
+            .size_of()
+            .unwrap_or(self.usize_type().const_int(1, false))
+    }
+
     pub(super) fn bytes_for(
         &self,
         elem_type: BasicTypeEnum<'ctx>,
         count: IntValue<'ctx>,
     ) -> IntValue<'ctx> {
-        let stride = elem_type
-            .size_of()
-            .unwrap_or(self.usize_type().const_int(1, false));
         self.builder
-            .build_int_mul(count, stride, "byte_size")
+            .build_int_mul(count, self.stride(elem_type), "byte_size")
             .unwrap()
+    }
+
+    /// `bytes_for` a buffer about to be allocated, trapping on overflow.
+    fn bytes_to_allocate(
+        &mut self,
+        elem_type: BasicTypeEnum<'ctx>,
+        count: IntValue<'ctx>,
+    ) -> IntValue<'ctx> {
+        let stride = self.stride(elem_type);
+        self.apply_int_arith(count, stride, &Token::Star, false)
+            .unwrap()
+            .into_int_value()
     }
 
     pub(super) fn zero_value_for(&self, ty: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
@@ -520,7 +535,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     }
 
     pub(super) fn alloc_buffer(
-        &self,
+        &mut self,
         elem_type: BasicTypeEnum<'ctx>,
         count: IntValue<'ctx>,
     ) -> PointerValue<'ctx> {
@@ -529,7 +544,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ALLOC_FN,
             self.ptr_type().fn_type(&[usize_type.into()], false),
         );
-        let size = self.bytes_for(elem_type, count);
+        let size = self.bytes_to_allocate(elem_type, count);
         self.call_ptr(alloc_fn, &[size.into()], "buffer")
     }
 
@@ -905,7 +920,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             let ptr_field = this.vec_field_ptr(vec_ptr, VEC_PTR, "ptr_field");
             let data = this.load_ptr(ptr_field, "data");
             let old_size = this.bytes_for(elem_type, cap);
-            let new_size = this.bytes_for(elem_type, new_cap);
+            let new_size = this.bytes_to_allocate(elem_type, new_cap);
             let resized = this.resize_buffer(data, old_size, new_size);
             this.builder.build_store(ptr_field, resized).unwrap();
             this.builder.build_store(cap_field, new_cap).unwrap();

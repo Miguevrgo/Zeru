@@ -606,7 +606,16 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         expr: &Expression,
         expected_type: Option<BasicTypeEnum<'ctx>>,
     ) -> BasicValueEnum<'ctx> {
-        let result = self.compile_expression_inner(expr, expected_type);
+        let payload = expr.ty.as_ref().and_then(|ty| self.llvm_type_of(ty));
+        let inner_expected = match (expected_type, payload) {
+            (Some(BasicTypeEnum::StructType(expected)), Some(payload))
+                if expected == self.option_type(payload) =>
+            {
+                Some(payload)
+            }
+            _ => expected_type,
+        };
+        let result = self.compile_expression_inner(expr, inner_expected);
 
         if let Some(BasicTypeEnum::StructType(expected)) = expected_type
             && expected == self.option_type(result.get_type())
@@ -828,18 +837,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         value: &Expression,
         span: Span,
     ) -> BasicValueEnum<'ctx> {
+        let expected = target.ty.as_ref().and_then(|ty| self.llvm_type_of(ty));
+        let rhs = self.compile_expression(value, expected);
         let Some((ptr, ty)) = self.compile_lvalue(target) else {
             self.error("Invalid assignment target", target.span);
             return self.dummy_val();
         };
 
         let stored = if *operator == Token::Assign {
-            let stored = self.compile_expression(value, Some(ty));
             self.drop_overwritten(target, ptr);
-            stored
+            rhs
         } else {
             let current = self.load(ty, ptr, "cur_val");
-            let rhs = self.compile_expression(value, Some(ty));
             let signed = !Self::is_unsigned_expr(target);
             self.apply_compound_op(current, rhs, operator, signed, span)
         };
@@ -1033,7 +1042,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     /// The operations that can go wrong emit a check first: `+ - *` trap on
     /// overflow, `/ %` on a zero divisor, and shifts on an oversized amount.
     /// All three are skipped in ReleaseFast.
-    fn apply_int_arith(
+    pub(super) fn apply_int_arith(
         &mut self,
         l: IntValue<'ctx>,
         r: IntValue<'ctx>,
