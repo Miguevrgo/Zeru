@@ -310,7 +310,7 @@ struct FileHandle {
 
 ---
 
-## 6. Vec<T> Specification
+## 6. `Vec<T>` Specification
 
 `Vec<T>` is a **built-in type** (no import required), representing a dynamically-sized array.
 
@@ -449,7 +449,7 @@ C    Zig    Rust    Zeru(fast)    Zeru(safe)    C++    Go    Java
 - [ ] Implement gen-ref checking in codegen
 - [x] Add compile mode flags
 
-### Phase 3: Vec<T>
+### Phase 3: `Vec<T>`
 
 - [x] Implement Vec struct and methods
 - [x] Index operator codegen

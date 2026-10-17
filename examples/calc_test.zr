@@ -99,7 +99,7 @@ struct Parser {
 
     fn atom(var self) i64!CalcError {
         var current = self.current;
-            match current {
+        match current {
             Token::Num(n) => {
                 try self.advance();
                 return Ok(n);
@@ -108,7 +108,7 @@ struct Parser {
                 try self.advance();
                 var inner = try self.expr();
                 var current = self.current;
-            match current {
+                match current {
                     Token::Close => { try self.advance(); }
                     default => { return Err(CalcError::Unclosed); }
                 }

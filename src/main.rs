@@ -16,7 +16,7 @@ use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
-#[command(version)]
+#[command(version, about = "The Zeru compiler")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -24,22 +24,33 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    #[command(about = "Compile a .zr file into build/")]
     Build {
         file: PathBuf,
-        #[arg(long, conflicts_with = "release_fast")]
+        #[arg(
+            long,
+            conflicts_with = "release_fast",
+            help = "Optimize, keep runtime checks"
+        )]
         release_safe: bool,
-        #[arg(long)]
+        #[arg(long, help = "Optimize, drop runtime checks")]
         release_fast: bool,
-        #[arg(long)]
+        #[arg(long, help = "Keep the LLVM IR in build/")]
         emit_ir: bool,
     },
+    #[command(about = "Compile a .zr file and run it")]
     Run {
         file: PathBuf,
-        #[arg(long, conflicts_with = "release_fast")]
+        #[arg(
+            long,
+            conflicts_with = "release_fast",
+            help = "Optimize, keep runtime checks"
+        )]
         release_safe: bool,
-        #[arg(long)]
+        #[arg(long, help = "Optimize, drop runtime checks")]
         release_fast: bool,
     },
+    #[command(about = "Remove the build/ directory")]
     Clean,
 }
 
