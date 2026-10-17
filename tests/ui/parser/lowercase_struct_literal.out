@@ -7,11 +7,4 @@ Error: Expected ';', found '{'
    │             ┬
    │             ╰── Expected ';', found '{'
 ───╯
-Error: Unexpected '}' at top level, expected fn, struct, enum, trait, const or import
-   ╭─[ tests/ui/parser/lowercase_struct_literal.zr:4:1 ]
-   │
- 4 │ }
-   │ ┬
-   │ ╰── Unexpected '}' at top level, expected fn, struct, enum, trait, const or import
-───╯
 [-] Error: aborting due to previous error

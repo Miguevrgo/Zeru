@@ -409,12 +409,19 @@ impl<'a> Lexer<'a> {
     fn read_char(&mut self) -> Token {
         let value = match self.advance() {
             Some('\\') => self.read_escape(),
-            Some('\'') | None => Err("Empty character literal".to_string()),
+            Some('\'') => return Token::Illegal("Empty character literal".to_string()),
+            None => return Token::Illegal("Unterminated character literal".to_string()),
             Some(c) if c.is_ascii() => Ok(c as u8),
             Some(_) => Err("Non-ASCII character literal".to_string()),
         };
         if self.peek() != Some(&'\'') {
-            return Token::Illegal("A character literal holds one character".to_string());
+            while let Some(c) = self.peek().copied().filter(|&c| c != '\n') {
+                self.advance();
+                if c == '\'' {
+                    return Token::Illegal("A character literal holds one character".to_string());
+                }
+            }
+            return Token::Illegal("Unterminated character literal".to_string());
         }
         self.advance();
         value.map_or_else(Token::Illegal, |byte| Token::Int(u64::from(byte)))

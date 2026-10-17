@@ -8,11 +8,4 @@ Error: Unterminated String
    │ │
    │ ╰─────── Unterminated String
 ───╯
-Error: Expected '}', found 'end of file'
-   ╭─[ tests/ui/lexer/unterminated_string.zr:4:1 ]
-   │
- 4 │
-   │ ┬
-   │ ╰── Expected '}', found 'end of file'
-───╯
 [-] Error: aborting due to previous error

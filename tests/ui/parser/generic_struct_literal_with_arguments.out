@@ -7,11 +7,4 @@ Error: Expected an expression, found '{'
    │                    ┬
    │                    ╰── Expected an expression, found '{'
 ───╯
-Error: Unexpected '}' at top level, expected fn, struct, enum, trait, const or import
-   ╭─[ tests/ui/parser/generic_struct_literal_with_arguments.zr:4:1 ]
-   │
- 4 │ }
-   │ ┬
-   │ ╰── Unexpected '}' at top level, expected fn, struct, enum, trait, const or import
-───╯
 [-] Error: aborting due to previous error

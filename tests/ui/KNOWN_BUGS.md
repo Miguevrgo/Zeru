@@ -13,10 +13,10 @@ A refactor that fixes one of these changes its snapshot; bless it and drop the l
 
 ## Accepted or rejected wrongly
 
+- modules/qualified_trait_bound: `T: lib::Go` does not parse
 - generics/duplicate_type_parameters: `fn f<T, T>` and `struct B<T, T>` are accepted
 - modules/private_trait: a private trait can be imported and used
 - modules/unknown_selected_name: importing a name the module lacks is accepted
-- modules/qualified_trait_bound: `T: lib::Go` does not parse
 - generics/expected_type_does_not_infer: `var r: i64 = id(5)` is refused; the annotation does not bind T
 - generics/optional_expected_generic_literal: `var o: Box<i64>? = Box { v: 3 }` is refused
 - generics/none_before_binding_argument: `two(None, n)` fails while the argument after binds T
@@ -41,10 +41,6 @@ A refactor that fixes one of these changes its snapshot; bless it and drop the l
 - std/builtin_struct_name_reserved: a user struct named like a prelude one cascades into errors inside std/builtin.zr
 - std/builtin_names_reserved: prelude helpers such as `syscall1` take names from user code
 - modules/same_last_name: `import a.util; import b.util;` is reported as a duplicate function inside b/util.zr
-- parser/fields_after_methods, parser/generic_struct_literal_with_arguments, parser/lowercase_struct_literal, parser/one_error_cascades, traits/generic_trait_method, modules/qualified_trait_bound: one syntax error cascades into "Unexpected '}' at top level" or "Global variables"
-- lexer/char_too_long: one bad literal is reported twice
-- lexer/unterminated_char: says "holds one character" instead of unterminated
-- lexer/unterminated_string: a follow-up "Expected '}'" error
 - types/tuple_length: one mismatch is reported twice
 - types/array_length_not_a_number: a follow-up mismatch against `Array<i32, 0>`
 - diagnostics/declaration_errors: errors are not reported in source order

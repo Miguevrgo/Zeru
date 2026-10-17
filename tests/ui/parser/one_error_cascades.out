@@ -7,25 +7,4 @@ Error: Expected ';', found '{'
    │             ┬
    │             ╰── Expected ';', found '{'
 ───╯
-Error: Global variables ('var') are not allowed. Use 'const' for constants or move 'var' inside a function
-   ╭─[ tests/ui/parser/one_error_cascades.zr:4:5 ]
-   │
- 4 │     var w = 2;
-   │     ─┬─
-   │      ╰─── Global variables ('var') are not allowed. Use 'const' for constants or move 'var' inside a function
-───╯
-Error: Unexpected 'println' at top level, expected fn, struct, enum, trait, const or import
-   ╭─[ tests/ui/parser/one_error_cascades.zr:5:5 ]
-   │
- 5 │     println("{}", w);
-   │     ───┬───
-   │        ╰───── Unexpected 'println' at top level, expected fn, struct, enum, trait, const or import
-───╯
-Error: Unexpected '}' at top level, expected fn, struct, enum, trait, const or import
-   ╭─[ tests/ui/parser/one_error_cascades.zr:6:1 ]
-   │
- 6 │ }
-   │ ┬
-   │ ╰── Unexpected '}' at top level, expected fn, struct, enum, trait, const or import
-───╯
 [-] Error: aborting due to previous error

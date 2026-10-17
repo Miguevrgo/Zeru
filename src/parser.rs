@@ -24,6 +24,9 @@ pub struct Parser<'a> {
     pending: Option<Token>,
 
     code_seen: bool,
+
+    /// How many braces are open, counting the current token.
+    depth: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -39,6 +42,7 @@ impl<'a> Parser<'a> {
             no_struct_literal: false,
             pending: None,
             code_seen: false,
+            depth: 0,
         };
 
         p.next_token();
@@ -50,6 +54,11 @@ impl<'a> Parser<'a> {
     fn next_token(&mut self) {
         self.current_token = std::mem::replace(&mut self.peek_token, Token::Eof);
         self.current_span = self.peek_span;
+        match self.current_token {
+            Token::LBrace => self.depth += 1,
+            Token::RBrace => self.depth = self.depth.saturating_sub(1),
+            _ => {}
+        }
 
         if let Some(token) = self.pending.take() {
             self.peek_token = token;
@@ -68,28 +77,62 @@ impl<'a> Parser<'a> {
         self.peek_span = span;
     }
 
-    fn synchronize(&mut self) {
+    /// Skip the rest of a broken statement in the block opened at `depth`:
+    /// through its `;`, or up to where the next statement or the block's `}`
+    /// starts. Braces inside the statement are skipped whole.
+    fn synchronize(&mut self, depth: usize) {
         self.panic_mode = false;
 
-        while self.current_token != Token::Eof {
+        while self.current_token != Token::Eof && self.depth >= depth {
+            if self.depth > depth {
+                self.next_token();
+                continue;
+            }
             if self.current_token == Token::Semicolon {
                 return;
             }
-
-            match self.peek_token {
+            if matches!(
+                self.peek_token,
                 Token::Var
-                | Token::Fn
-                | Token::Const
-                | Token::Struct
-                | Token::Enum
-                | Token::If
-                | Token::While
-                | Token::For
-                | Token::Return
-                | Token::RBrace => return,
-                _ => {}
+                    | Token::Fn
+                    | Token::Const
+                    | Token::Struct
+                    | Token::Enum
+                    | Token::If
+                    | Token::While
+                    | Token::For
+                    | Token::Return
+                    | Token::RBrace
+            ) {
+                return;
             }
+            self.next_token();
+        }
+    }
 
+    /// Skip the rest of a broken top-level item: through the `}` or `;` that
+    /// ends it, or up to where the next item starts.
+    fn skip_item(&mut self) {
+        self.panic_mode = false;
+
+        while self.current_token != Token::Eof {
+            if self.depth == 0 {
+                if matches!(self.current_token, Token::RBrace | Token::Semicolon) {
+                    return;
+                }
+                if matches!(
+                    self.peek_token,
+                    Token::Fn
+                        | Token::Struct
+                        | Token::Enum
+                        | Token::Trait
+                        | Token::Const
+                        | Token::Import
+                        | Token::Pub
+                ) {
+                    return;
+                }
+            }
             self.next_token();
         }
     }
@@ -113,12 +156,12 @@ impl<'a> Parser<'a> {
                 Token::Semicolon => None,
                 Token::Var => {
                     self.error_current("Global variables ('var') are not allowed. Use 'const' for constants or move 'var' inside a function");
-                    self.synchronize();
+                    self.skip_item();
                     None
                 }
                 _ => {
                     self.error_current(&format!("Unexpected '{}' at top level, expected fn, struct, enum, trait, const or import", self.current_token));
-                    self.synchronize();
+                    self.skip_item();
                     None
                 }
             };
@@ -126,7 +169,7 @@ impl<'a> Parser<'a> {
             if let Some(statement) = stmt {
                 statements.push(statement);
             } else if self.panic_mode {
-                self.synchronize();
+                self.skip_item();
             }
 
             if self.peek_token_is(&Token::Eof) {
@@ -806,13 +849,17 @@ impl<'a> Parser<'a> {
 
     fn parse_block_statement(&mut self) -> Vec<Statement> {
         let mut block = Vec::new();
+        let depth = self.depth;
         self.next_token();
 
         while !self.cur_token_is(&Token::RBrace) && !self.cur_token_is(&Token::Eof) {
             match self.parse_statement() {
                 Some(stmt) => block.push(stmt),
-                None if self.panic_mode => self.synchronize(),
+                None if self.panic_mode => self.synchronize(depth),
                 None => {}
+            }
+            if self.cur_token_is(&Token::RBrace) && self.depth < depth {
+                break;
             }
             self.next_token();
         }
@@ -821,7 +868,7 @@ impl<'a> Parser<'a> {
             && self
                 .errors
                 .last()
-                .is_none_or(|e| e.span != self.current_span)
+                .is_none_or(|e| e.span.end < self.current_span.start)
         {
             self.error_current("Expected '}', found 'end of file'");
         }
