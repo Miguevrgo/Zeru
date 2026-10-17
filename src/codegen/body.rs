@@ -444,15 +444,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     fn compile_bool(&mut self, expr: &Expression) -> IntValue<'ctx> {
         let bool_type = self.context.bool_type();
         let mark = self.temporaries.len();
-        let value = self.compile_expression(expr, Some(bool_type.into()));
+        let value = self
+            .compile_expression(expr, Some(bool_type.into()))
+            .into_int_value();
         self.drop_temporaries(mark);
-        match value {
-            BasicValueEnum::IntValue(v) => v,
-            _ => {
-                self.error("Condition must be a boolean", expr.span);
-                bool_type.const_zero()
-            }
-        }
+        value
     }
 
     fn compile_loop_body(
@@ -1285,7 +1281,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         expr: &Expression,
     ) -> BasicValueEnum<'ctx> {
         if matches!(operator, Token::And | Token::Or) {
-            return self.lower_short_circuit(left, operator, right, expr.span);
+            return self.lower_short_circuit(left, operator, right);
         }
         if matches!(operator, Token::Catch | Token::Orelse) {
             return self.lower_fallback(left, right);
@@ -1485,7 +1481,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         left: &Expression,
         operator: &Token,
         right: &Expression,
-        span: Span,
     ) -> BasicValueEnum<'ctx> {
         let bool_type = self.context.bool_type();
         let Some(current_fn) = self.current_fn else {
@@ -1493,7 +1488,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         };
         let is_and = *operator == Token::And;
 
-        let lhs = self.truthy(left, span);
+        let lhs = self
+            .compile_expression(left, Some(bool_type.into()))
+            .into_int_value();
         let entry_block = self.builder.get_insert_block().unwrap();
         let rhs_block = self.context.append_basic_block(current_fn, "rhs_eval");
         let merge_block = self.context.append_basic_block(current_fn, "merge");
@@ -1508,7 +1505,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             .unwrap();
 
         self.builder.position_at_end(rhs_block);
-        let rhs = self.truthy(right, span);
+        let rhs = self
+            .compile_expression(right, Some(bool_type.into()))
+            .into_int_value();
         let rhs_end_block = self.builder.get_insert_block().unwrap();
         self.builder
             .build_unconditional_branch(merge_block)
@@ -1524,23 +1523,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         phi.add_incoming(&[(&short_circuit_value, entry_block), (&rhs, rhs_end_block)]);
 
         phi.as_basic_value()
-    }
-
-    /// Lower `expr` to an `i1`, comparing wider integers against zero.
-    fn truthy(&mut self, expr: &Expression, span: Span) -> IntValue<'ctx> {
-        let bool_type = self.context.bool_type();
-        let BasicValueEnum::IntValue(v) = self.compile_expression(expr, Some(bool_type.into()))
-        else {
-            self.error("'&&' and '||' require boolean or integer operands", span);
-            return bool_type.const_zero();
-        };
-
-        if v.get_type().get_bit_width() == 1 {
-            return v;
-        }
-        self.builder
-            .build_int_compare(IntPredicate::NE, v, v.get_type().const_zero(), "tobool")
-            .unwrap()
     }
 
     fn lower_cast(&mut self, left: &Expression, cast: &Expression) -> BasicValueEnum<'ctx> {

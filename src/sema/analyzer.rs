@@ -3,9 +3,10 @@ use crate::{
     errors::{Span, ZeruError},
     generics::{Substitutions, instantiate, mangle, map_types},
     sema::{
-        symbol_table::{Moves, SymbolTable},
+        symbol_table::{Moves, Symbol, SymbolTable},
         types::{FloatWidth, IntWidth, Signedness, Type},
     },
+    token::Token,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -168,7 +169,7 @@ impl SemanticAnalyzer {
 
     pub fn signature(&self, name: &str) -> Option<(&[Type], &Type)> {
         match self.symbols.lookup(name)? {
-            super::symbol_table::Symbol::Function { params, ret_type } => Some((params, ret_type)),
+            Symbol::Function { params, ret_type } => Some((params, ret_type)),
             _ => None,
         }
     }
@@ -221,7 +222,7 @@ impl SemanticAnalyzer {
                     }
                     self.generic_structs
                         .insert(name.clone(), stmt.clone())
-                        .map(|_| format!("Type {name} is already defined"))
+                        .map(|_| format!("Type '{name}' is already defined"))
                 }
                 StatementKind::Function {
                     name, type_params, ..
@@ -400,7 +401,7 @@ impl SemanticAnalyzer {
         methods.iter().all(|(method, params, _)| {
             matches!(
                 self.symbols.lookup(&format!("{name}::{method}")),
-                Some(super::symbol_table::Symbol::Function { params: have, .. })
+                Some(Symbol::Function { params: have, .. })
                     if have.len() == params.len()
             )
         })
@@ -497,7 +498,7 @@ impl SemanticAnalyzer {
             match &stmt.kind {
                 StatementKind::Struct { name, .. } => {
                     if self.struct_defs.contains_key(name) || self.enum_defs.contains_key(name) {
-                        self.error(format!("Type {name} is already defined"), stmt.span);
+                        self.error(format!("Type '{name}' is already defined"), stmt.span);
                         continue;
                     }
 
@@ -576,18 +577,17 @@ impl SemanticAnalyzer {
         };
         let outer_item = std::mem::replace(&mut self.current_item, name.clone());
 
-        let mut resolved: Vec<(String, Type)> = Vec::with_capacity(fields.len());
-        for (field_name, spec) in fields {
-            if resolved.iter().any(|(seen, _)| seen == field_name) {
-                self.error(
-                    format!("Struct '{name}' declares field '{field_name}' twice"),
-                    stmt.span,
-                );
-                continue;
-            }
-            let ty = self.resolve_spec(spec, stmt.span);
-            resolved.push((field_name.clone(), ty));
+        let names: Vec<String> = fields.iter().map(|(field, _)| field.clone()).collect();
+        if let Some(field_name) = Self::first_duplicate(&names) {
+            self.error(
+                format!("Struct '{name}' declares field '{field_name}' twice"),
+                stmt.span,
+            );
         }
+        let resolved = fields
+            .iter()
+            .map(|(field_name, spec)| (field_name.clone(), self.resolve_spec(spec, stmt.span)))
+            .collect();
 
         if let Some(fields) = self.struct_defs.get_mut(name) {
             *fields = resolved;
@@ -849,7 +849,7 @@ impl SemanticAnalyzer {
                 matches!(expr.ty, Some(Type::Enum(_)))
                     || matches!(
                         self.symbols.lookup(name),
-                        Some(super::symbol_table::Symbol::Var { is_const: true, .. })
+                        Some(Symbol::Var { is_const: true, .. })
                     )
             }
             ExpressionKind::Prefix { right: inner, .. }
@@ -954,7 +954,7 @@ impl SemanticAnalyzer {
         };
         self.current_item = name.to_string();
 
-        if let super::symbol_table::Symbol::Function {
+        if let Symbol::Function {
             ret_type,
             params: params_type_def,
         } = function_symbol
@@ -1106,28 +1106,19 @@ impl SemanticAnalyzer {
             return Type::Enum(name.to_string());
         }
 
-        static PRIMITIVES: &[(&str, Signedness, IntWidth)] = &[
-            ("i8", Signedness::Signed, IntWidth::W8),
-            ("u8", Signedness::Unsigned, IntWidth::W8),
-            ("i16", Signedness::Signed, IntWidth::W16),
-            ("u16", Signedness::Unsigned, IntWidth::W16),
-            ("i32", Signedness::Signed, IntWidth::W32),
-            ("u32", Signedness::Unsigned, IntWidth::W32),
-            ("i64", Signedness::Signed, IntWidth::W64),
-            ("u64", Signedness::Unsigned, IntWidth::W64),
-            ("isize", Signedness::Signed, IntWidth::WSize),
-            ("usize", Signedness::Unsigned, IntWidth::WSize),
-        ];
-        for (type_name, signed, width) in PRIMITIVES {
-            if name == *type_name {
-                return Type::Integer {
-                    signed: *signed,
-                    width: *width,
-                };
-            }
-        }
-
+        let int = |signed, width| Type::Integer { signed, width };
+        let (s, u) = (Signedness::Signed, Signedness::Unsigned);
         match name {
+            "i8" => return int(s, IntWidth::W8),
+            "u8" => return int(u, IntWidth::W8),
+            "i16" => return int(s, IntWidth::W16),
+            "u16" => return int(u, IntWidth::W16),
+            "i32" => return int(s, IntWidth::W32),
+            "u32" => return int(u, IntWidth::W32),
+            "i64" => return int(s, IntWidth::W64),
+            "u64" => return int(u, IntWidth::W64),
+            "isize" => return int(s, IntWidth::WSize),
+            "usize" => return int(u, IntWidth::WSize),
             "f32" => return Type::Float(FloatWidth::W32),
             "f64" => return Type::Float(FloatWidth::W64),
             "bool" => return Type::Bool,
@@ -1193,7 +1184,7 @@ impl SemanticAnalyzer {
             if value_type == Type::Unknown && self.errors.len() == reported {
                 self.error(
                     format!(
-                        "Cannot infer type for variable '{}'. Please add a type annotation.",
+                        "Cannot infer type for variable '{}'. Please add a type annotation",
                         name
                     ),
                     span,
@@ -1504,11 +1495,11 @@ impl SemanticAnalyzer {
         }
         if let Some(symbol) = self.symbols.lookup(name).cloned() {
             match symbol {
-                super::symbol_table::Symbol::Var { ty, moved_at, .. } => {
+                Symbol::Var { ty, moved_at, .. } => {
                     if moved_at.is_some() {
                         self.error(
                                 format!(
-                                    "Use of moved value '{}'. Value was previously moved and is no longer valid.",
+                                    "Use of moved value '{}'. Value was previously moved and is no longer valid",
                                     name
                                 ),
                                 span,
@@ -1528,7 +1519,7 @@ impl SemanticAnalyzer {
                 .get_all_scopes()
                 .iter()
                 .flatten()
-                .filter(|(_, symbol)| matches!(symbol, super::symbol_table::Symbol::Var { .. }))
+                .filter(|(_, symbol)| matches!(symbol, Symbol::Var { .. }))
                 .map(|(var_name, _)| var_name.as_str())
                 .collect();
             if let Some(similar) = self.find_closest_match(name, &variables) {
@@ -1540,7 +1531,7 @@ impl SemanticAnalyzer {
                     span,
                 );
             } else {
-                self.error(format!("Undeclared variable '{name}'."), span);
+                self.error(format!("Undeclared variable '{name}'"), span);
             }
             Type::Unknown
         }
@@ -1573,9 +1564,7 @@ impl SemanticAnalyzer {
         }
 
         let target_type = if let ExpressionKind::Identifier(name) = &target.kind {
-            if let Some(super::symbol_table::Symbol::Var { is_const, ty, .. }) =
-                self.symbols.lookup(name).cloned()
-            {
+            if let Some(Symbol::Var { is_const, ty, .. }) = self.symbols.lookup(name).cloned() {
                 if is_const {
                     self.error(
                         format!("Cannot reassign constant variable '{}'.", name),
@@ -1622,7 +1611,7 @@ impl SemanticAnalyzer {
         {
             self.error(
                 format!(
-                    "Type mismatch in assignment. Expected {}, got {}.",
+                    "Type mismatch in assignment. Expected {}, got {}",
                     resolved_target, val_type
                 ),
                 span,
@@ -1657,9 +1646,7 @@ impl SemanticAnalyzer {
         }
         match &place.kind {
             ExpressionKind::Identifier(name) => {
-                if let Some(super::symbol_table::Symbol::Var { is_const: true, .. }) =
-                    self.symbols.lookup(name)
-                {
+                if let Some(Symbol::Var { is_const: true, .. }) = self.symbols.lookup(name) {
                     self.error(
                         format!("Cannot modify '{name}', which is not declared 'var'"),
                         span,
@@ -1710,7 +1697,7 @@ impl SemanticAnalyzer {
         }
         match &expr.kind {
             ExpressionKind::Identifier(name) if !self.symbols.is_global(name) => {
-                if let Some(super::symbol_table::Symbol::Var {
+                if let Some(Symbol::Var {
                     is_borrowed: true, ..
                 }) = self.symbols.lookup(name)
                 {
@@ -1736,7 +1723,7 @@ impl SemanticAnalyzer {
     fn check_infix(
         &mut self,
         left: &mut Expression,
-        operator: &crate::token::Token,
+        operator: &Token,
         right: &mut Expression,
         expected_type: Option<&Type>,
         span: Span,
@@ -1749,10 +1736,7 @@ impl SemanticAnalyzer {
         }
 
         if let Type::Pointer(_) = &l_ty
-            && matches!(
-                operator,
-                crate::token::Token::Plus | crate::token::Token::Minus
-            )
+            && matches!(operator, Token::Plus | Token::Minus)
             && matches!(r_ty, Type::Integer { .. })
         {
             return l_ty;
@@ -1761,7 +1745,7 @@ impl SemanticAnalyzer {
         if !l_ty.accepts(&r_ty) {
             self.error(
                 format!(
-                    "Binary operation '{operator}' requires operands of same type. Got {} and {}.",
+                    "Binary operation '{operator}' requires operands of same type. Got {} and {}",
                     l_ty, r_ty
                 ),
                 span,
@@ -1788,20 +1772,17 @@ impl SemanticAnalyzer {
         }
 
         match operator {
-            crate::token::Token::Eq
-            | crate::token::Token::NotEq
-            | crate::token::Token::Lt
-            | crate::token::Token::Gt
-            | crate::token::Token::Leq
-            | crate::token::Token::Geq => Type::Bool,
+            Token::Eq | Token::NotEq | Token::Lt | Token::Gt | Token::Leq | Token::Geq => {
+                Type::Bool
+            }
 
             _ => l_ty,
         }
     }
 
     /// Whether `operator` means something for operands of type `ty`.
-    fn operator_applies(operator: &crate::token::Token, ty: &Type) -> bool {
-        use crate::token::Token as T;
+    fn operator_applies(operator: &Token, ty: &Type) -> bool {
+        use Token as T;
         let number = matches!(ty, Type::Integer { .. } | Type::Float(_));
         match operator {
             _ if matches!(ty, Type::ParamType(_)) => true,
@@ -1846,7 +1827,7 @@ impl SemanticAnalyzer {
         match &expr.kind {
             ExpressionKind::Int(_) | ExpressionKind::Float(_) => true,
             ExpressionKind::Prefix {
-                operator: crate::token::Token::Minus,
+                operator: Token::Minus,
                 right,
             } => Self::is_number_literal(right),
             _ => false,
@@ -1855,10 +1836,7 @@ impl SemanticAnalyzer {
 
     /// What a plain `T!` fails with: an i32 code.
     fn error_type() -> Type {
-        Type::Integer {
-            signed: Signedness::Signed,
-            width: IntWidth::W32,
-        }
+        Type::I32
     }
 
     /// `print("x is {}", x)`: a literal format with one `{}` per argument,
@@ -1904,10 +1882,7 @@ impl SemanticAnalyzer {
 
     fn str_type() -> Type {
         Type::Slice {
-            elem_type: Box::new(Type::Integer {
-                signed: Signedness::Unsigned,
-                width: IntWidth::W8,
-            }),
+            elem_type: Box::new(Type::U8),
         }
     }
 
@@ -2025,18 +2000,18 @@ impl SemanticAnalyzer {
     fn check_fallback(
         &mut self,
         value: &mut Expression,
-        operator: &crate::token::Token,
+        operator: &Token,
         fallback: &mut Expression,
         span: Span,
     ) -> Type {
         let ty = self.check_expression(value, None);
         let payload = match (operator, &ty) {
-            (crate::token::Token::Catch, Type::Result { ok_type, .. })
-            | (crate::token::Token::Orelse, Type::Optional(ok_type)) => ok_type.as_ref().clone(),
+            (Token::Catch, Type::Result { ok_type, .. })
+            | (Token::Orelse, Type::Optional(ok_type)) => ok_type.as_ref().clone(),
             (_, Type::Unknown) => Type::Unknown,
             _ => {
                 let wants = match operator {
-                    crate::token::Token::Catch => "a T! value",
+                    Token::Catch => "a T! value",
                     _ => "a T? value",
                 };
                 self.error(format!("'{operator}' takes {wants}, not {ty}"), span);
@@ -2145,7 +2120,7 @@ impl SemanticAnalyzer {
                     elem_type.as_ref().clone()
                 } else {
                     self.error(
-                        "Cannot infer Vec element type. Please add a type annotation.".into(),
+                        "Cannot infer Vec element type. Please add a type annotation".into(),
                         span,
                     );
                     Type::Unknown
@@ -2196,10 +2171,7 @@ impl SemanticAnalyzer {
 
                 if let Type::Slice { .. } = &obj_type {
                     if method_name == "len" && arguments.is_empty() {
-                        return Type::Integer {
-                            signed: Signedness::Unsigned,
-                            width: IntWidth::WSize,
-                        };
+                        return Type::USIZE;
                     }
                     self.error(format!("Slice has no method '{}'", method_name), span);
                     return Type::Unknown;
@@ -2212,20 +2184,8 @@ impl SemanticAnalyzer {
                     self.consume(object, &obj_type);
                 }
 
-                if let Type::Result { ok_type, err_type } = &obj_type {
-                    let (ok_type, err_type) = (ok_type.clone(), err_type.clone());
-                    return self.check_result_method(
-                        &method_name,
-                        &ok_type,
-                        &err_type,
-                        arguments,
-                        span,
-                    );
-                }
-
-                if let Type::Optional(inner) = &obj_type {
-                    let inner = inner.as_ref().clone();
-                    return self.check_option_method(&method_name, &inner, arguments, span);
+                if matches!(obj_type, Type::Result { .. } | Type::Optional(_)) {
+                    return self.check_fallible_method(&method_name, &obj_type, arguments, span);
                 }
 
                 let struct_name = match &obj_type {
@@ -2297,7 +2257,7 @@ impl SemanticAnalyzer {
                 );
             }
         } else if obj_type != Type::Unknown {
-            self.error("Cannot access property on non-struct type.".into(), span);
+            self.error("Cannot access property on non-struct type".into(), span);
         }
         Type::Unknown
     }
@@ -2363,7 +2323,7 @@ impl SemanticAnalyzer {
         let name = &self.instantiate_from_literal(name, fields, expected_type, span);
 
         let Some(def_fields) = self.struct_defs.get(name).cloned() else {
-            self.error(format!("Unknown struct type '{name}'."), span);
+            self.error(format!("Unknown struct type '{name}'"), span);
             return Type::Unknown;
         };
 
@@ -2395,7 +2355,7 @@ impl SemanticAnalyzer {
                 if !def_type.accepts(&expr_type) && expr_type != Type::Unknown {
                     self.error(
                         format!(
-                            "Type mismatch: Field '{}' in struct '{}' expected {}, got {}.",
+                            "Type mismatch: Field '{}' in struct '{}' expected {}, got {}",
                             def_name, name, def_type, expr_type
                         ),
                         field_span,
@@ -2649,7 +2609,7 @@ impl SemanticAnalyzer {
     }
 
     pub fn constant_value(&self, expr: &Expression) -> Option<i128> {
-        use crate::token::Token as T;
+        use Token as T;
         match &expr.kind {
             ExpressionKind::Int(value) => Some(i128::from(*value)),
             ExpressionKind::Boolean(value) => Some(i128::from(*value)),
@@ -2684,14 +2644,14 @@ impl SemanticAnalyzer {
 
     fn check_prefix(
         &mut self,
-        operator: &crate::token::Token,
+        operator: &Token,
         right: &mut Expression,
         expected_type: Option<&Type>,
         span: Span,
     ) -> Type {
         let operator = operator.clone();
         match &operator {
-            crate::token::Token::Minus => {
+            Token::Minus => {
                 if let ExpressionKind::Int(value) = right.kind {
                     let ty = self.check_int_literal(value, true, expected_type, span);
                     right.ty = Some(ty.clone());
@@ -2717,7 +2677,7 @@ impl SemanticAnalyzer {
                     }
                 }
             }
-            crate::token::Token::Bang => {
+            Token::Bang => {
                 let right_type = self.check_expression(right, expected_type);
                 match right_type {
                     Type::Bool | Type::Integer { .. } | Type::ParamType(_) | Type::Unknown => {
@@ -2738,13 +2698,7 @@ impl SemanticAnalyzer {
 
     fn check_index(&mut self, left: &mut Expression, index: &mut Expression, span: Span) -> Type {
         let left_type = self.check_expression(left, None);
-        let index_type = self.check_expression(
-            index,
-            Some(&Type::Integer {
-                signed: Signedness::Unsigned,
-                width: IntWidth::WSize,
-            }),
-        );
+        let index_type = self.check_expression(index, Some(&Type::USIZE));
 
         if !matches!(index_type, Type::Integer { .. } | Type::Unknown) {
             self.error(
@@ -2818,7 +2772,7 @@ impl SemanticAnalyzer {
             if !first_type.accepts(&elem_type) {
                 self.error(
                     format!(
-                        "Array element at index {} type mismatch. Expected {}, got {}.",
+                        "Array element at index {} type mismatch. Expected {}, got {}",
                         i, first_type, elem_type
                     ),
                     elem_span,
@@ -2985,7 +2939,7 @@ impl SemanticAnalyzer {
 
             ExpressionKind::Infix {
                 left,
-                operator: operator @ (crate::token::Token::Catch | crate::token::Token::Orelse),
+                operator: operator @ (Token::Catch | Token::Orelse),
                 right,
             } => {
                 let operator = operator.clone();
@@ -3101,10 +3055,7 @@ impl SemanticAnalyzer {
                         );
                     }
                 }
-                Type::Integer {
-                    signed: Signedness::Signed,
-                    width: IntWidth::W64,
-                }
+                Type::I64
             }
         }
     }
@@ -3134,10 +3085,6 @@ impl SemanticAnalyzer {
         arguments: &mut [Expression],
         span: Span,
     ) -> Type {
-        let usize_type = Type::Integer {
-            signed: Signedness::Unsigned,
-            width: IntWidth::WSize,
-        };
         let vec_type = || Type::Vec {
             elem_type: Box::new(elem_type.clone()),
         };
@@ -3151,8 +3098,8 @@ impl SemanticAnalyzer {
         let arity_ok = self.expect_arity(&full_name, arguments, arity, span);
 
         if arity_ok && method_name != "push" && arity > 0 {
-            let arg_type = self.check_expression(&mut arguments[0], Some(&usize_type));
-            if !usize_type.accepts(&arg_type) {
+            let arg_type = self.check_expression(&mut arguments[0], Some(&Type::USIZE));
+            if !Type::USIZE.accepts(&arg_type) {
                 self.error(format!("{full_name}() index or count must be usize"), span);
             }
         }
@@ -3181,7 +3128,7 @@ impl SemanticAnalyzer {
             "get" => Type::Optional(Box::new(elem_type.clone())),
             "remove" => elem_type.clone(),
             "pop" => Type::Optional(Box::new(elem_type.clone())),
-            "len" | "capacity" => usize_type,
+            "len" | "capacity" => Type::USIZE,
             "is_empty" => Type::Bool,
             _ => {
                 self.error(format!("Vec<T> has no method '{method_name}'"), span);
@@ -3190,41 +3137,24 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn check_option_method(
+    fn check_fallible_method(
         &mut self,
         method_name: &str,
-        inner: &Type,
+        ty: &Type,
         arguments: &mut [Expression],
         span: Span,
     ) -> Type {
         self.expect_arity(method_name, arguments, 0, span);
 
-        match method_name {
-            "is_some" | "is_none" => Type::Bool,
-            "unwrap" => inner.clone(),
-            _ => {
-                self.error(format!("Optional has no method '{method_name}'"), span);
-                Type::Unknown
+        match (ty, method_name) {
+            (Type::Optional(_), "is_some" | "is_none")
+            | (Type::Result { .. }, "is_ok" | "is_err") => Type::Bool,
+            (Type::Optional(inner) | Type::Result { ok_type: inner, .. }, "unwrap") => {
+                inner.as_ref().clone()
             }
-        }
-    }
-
-    fn check_result_method(
-        &mut self,
-        method_name: &str,
-        ok_type: &Type,
-        err_type: &Type,
-        arguments: &mut [Expression],
-        span: Span,
-    ) -> Type {
-        self.expect_arity(method_name, arguments, 0, span);
-
-        match method_name {
-            "is_ok" | "is_err" => Type::Bool,
-            "unwrap" => ok_type.clone(),
-            "unwrap_err" => err_type.clone(),
+            (Type::Result { err_type, .. }, "unwrap_err") => err_type.as_ref().clone(),
             _ => {
-                self.error(format!("Result type has no method '{method_name}'"), span);
+                self.error(format!("{ty} has no method '{method_name}'"), span);
                 Type::Unknown
             }
         }
@@ -3240,9 +3170,7 @@ impl SemanticAnalyzer {
         call_span: Span,
     ) -> (Type, HashMap<String, Type>) {
         self.check_visible(name, call_span);
-        if let Some(super::symbol_table::Symbol::Function { params, ret_type }) =
-            self.symbols.lookup(name).cloned()
-        {
+        if let Some(Symbol::Function { params, ret_type }) = self.symbols.lookup(name).cloned() {
             let mut expected_args = params.clone();
             let mut substitutions: HashMap<String, Type> = HashMap::new();
 
@@ -3290,7 +3218,7 @@ impl SemanticAnalyzer {
                         self.substitute_params(&expected_args[i], &substitutions, call_span);
 
                     if !expected.accepts(&arg_type) {
-                        self.error(format!("Argument {} type mismatch.", i + 1), arg_span);
+                        self.error(format!("Argument {} type mismatch", i + 1), arg_span);
                     }
 
                     if !matches!(expected, Type::Ref(_) | Type::RefMut(_)) {
@@ -3304,7 +3232,7 @@ impl SemanticAnalyzer {
             );
         }
 
-        self.error(format!("Function '{name}' not defined."), call_span);
+        self.error(format!("Function '{name}' not defined"), call_span);
         (Type::Unknown, HashMap::new())
     }
 

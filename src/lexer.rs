@@ -450,75 +450,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_raw_string_simple() {
-        let mut lexer = Lexer::new("`hello world`");
-        let (token, _) = lexer.next_token();
-        match token {
-            Token::StringLit(bytes) => {
-                assert_eq!(String::from_utf8(bytes).unwrap(), "hello world");
-            }
-            _ => panic!("Expected StringLit"),
+    fn test_raw_strings() {
+        for (source, expected) in [
+            ("`hello world`", "hello world"),
+            ("`C:\\Users\\file.txt`", "C:\\Users\\file.txt"),
+            ("`{\"name\": \"value\"}`", "{\"name\": \"value\"}"),
+            ("`\\d+\\.\\d+`", "\\d+\\.\\d+"),
+            ("`Line 1\nLine 2\nLine 3`", "Line 1\nLine 2\nLine 3"),
+            ("``", ""),
+        ] {
+            let token = Lexer::new(source).next_token().0;
+            assert_eq!(token, Token::StringLit(expected.into()), "{source}");
         }
-    }
-
-    #[test]
-    fn test_raw_string_with_backslashes() {
-        let mut lexer = Lexer::new("`C:\\Users\\file.txt`");
-        let (token, _) = lexer.next_token();
-        match token {
-            Token::StringLit(bytes) => {
-                assert_eq!(String::from_utf8(bytes).unwrap(), "C:\\Users\\file.txt");
-            }
-            _ => panic!("Expected StringLit"),
-        }
-    }
-
-    #[test]
-    fn test_raw_string_with_quotes() {
-        let mut lexer = Lexer::new("`{\"name\": \"value\"}`");
-        let (token, _) = lexer.next_token();
-        match token {
-            Token::StringLit(bytes) => {
-                assert_eq!(String::from_utf8(bytes).unwrap(), "{\"name\": \"value\"}");
-            }
-            _ => panic!("Expected StringLit"),
-        }
-    }
-
-    #[test]
-    fn test_raw_string_with_special_chars() {
-        let mut lexer = Lexer::new("`\\d+\\.\\d+`");
-        let (token, _) = lexer.next_token();
-        match token {
-            Token::StringLit(bytes) => {
-                assert_eq!(String::from_utf8(bytes).unwrap(), "\\d+\\.\\d+");
-            }
-            _ => panic!("Expected StringLit"),
-        }
-    }
-
-    #[test]
-    fn test_raw_string_multiline() {
-        let mut lexer = Lexer::new("`Line 1\nLine 2\nLine 3`");
-        let (token, _) = lexer.next_token();
-        match token {
-            Token::StringLit(bytes) => {
-                assert_eq!(String::from_utf8(bytes).unwrap(), "Line 1\nLine 2\nLine 3");
-            }
-            _ => panic!("Expected StringLit"),
-        }
-    }
-
-    #[test]
-    fn test_raw_string_empty() {
-        let mut lexer = Lexer::new("``");
-        let (token, _) = lexer.next_token();
-        match token {
-            Token::StringLit(bytes) => {
-                assert_eq!(String::from_utf8(bytes).unwrap(), "");
-            }
-            _ => panic!("Expected StringLit"),
-        }
+        assert_eq!(
+            Lexer::new("`unterminated").next_token().0,
+            Token::Illegal("Unterminated raw string".to_string())
+        );
     }
 
     #[test]
@@ -600,18 +547,6 @@ mod tests {
                 matches!(Lexer::new(bad).next_token().0, Token::Illegal(_)),
                 "{bad}"
             );
-        }
-    }
-
-    #[test]
-    fn test_raw_string_unterminated() {
-        let mut lexer = Lexer::new("`unterminated");
-        let (token, _) = lexer.next_token();
-        match token {
-            Token::Illegal(msg) => {
-                assert_eq!(msg, "Unterminated raw string");
-            }
-            _ => panic!("Expected Illegal token for unterminated string"),
         }
     }
 }

@@ -818,7 +818,7 @@ fn test_duplicate_declarations_are_rejected() {
         ("enum E { A, A }", "declares variant 'A' twice"),
         (
             "struct Foo { x: i32 } struct Foo { y: i32 }",
-            "Type Foo is already defined",
+            "Type 'Foo' is already defined",
         ),
         (
             "enum Color { Red } enum Color { Blue }",
@@ -877,7 +877,7 @@ fn test_assignment_is_right_associative() {
     let errors = analyze("fn main() { var a: i32 = 0; var b: i32 = 0; a = b = 5; }");
     assert_eq!(
         errors,
-        ["Type mismatch in assignment. Expected i32, got void."]
+        ["Type mismatch in assignment. Expected i32, got void"]
     );
 }
 
