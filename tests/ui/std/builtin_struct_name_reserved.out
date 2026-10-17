@@ -1,10 +1,1 @@
-status: compile error
--- stderr
-Error: Type 'OutStream' is already defined
-   ╭─[ tests/ui/std/builtin_struct_name_reserved.zr:1:1 ]
-   │
- 1 │ struct OutStream { x: i32 }
-   │ ─────────────┬─────────────
-   │              ╰─────────────── Type 'OutStream' is already defined
-───╯
-[-] Error: aborting due to previous error
+status: exit 0

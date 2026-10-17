@@ -154,10 +154,12 @@ fn load(
         SourceModule {
             name: None,
             program: prelude,
+            std: true,
         },
         SourceModule {
             name: None,
             program: root,
+            std: false,
         },
     ];
     let dir = path.parent().unwrap_or(Path::new("."));
@@ -186,11 +188,12 @@ fn load(
                 &mut sources,
                 &mut errors,
             );
-            loaded.insert(short.clone(), import);
             modules.push(SourceModule {
-                name: Some(short),
+                name: Some(short.clone()),
                 program,
+                std: import.starts_with("std."),
             });
+            loaded.insert(short, import);
         }
         next += 1;
     }

@@ -16,7 +16,6 @@ A change that fixes one of these changes its snapshot; bless it and drop the lin
 
 - optionals_results/ok_needs_context: `var r = Ok(1);` compiles, as an `i32!`
 - control_flow/for_in_borrowed_vec: `for x in &v` is refused while `for x in &var v` works
-- std/builtin_names_reserved: prelude helpers such as `syscall1` take names from user code
 - parser/match_arm_without_comma, parser/trait_method_without_semicolon: separators are optional there
 - lexer/non_ascii_identifier: non-ASCII identifiers are accepted while strings refuse non-ASCII
 - lexer/nested_block_comment: block comments do not nest

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Function 'syscall1' not defined
+   ╭─[ tests/ui/std/prelude_private_function.zr:1:13 ]
+   │
+ 1 │ fn main() { syscall1(60, 0); }
+   │             ───────┬───────
+   │                    ╰───────── Function 'syscall1' not defined
+───╯
+[-] Error: aborting due to previous error

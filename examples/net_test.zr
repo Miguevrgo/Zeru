@@ -5,12 +5,6 @@ fn main() {
     if bind_r.is_err() { exit(1); }
     var listener = bind_r.unwrap();
 
-    var sock_fd: i64 = syscall3(41, net::AF_INET, net::SOCK_STREAM, 0);
-    if sock_fd < 0 { exit(2); }
-    var stream = net::TcpStream { fd: sock_fd };
-
-    stream.shutdown(net::SHUT_RDWR);
-    stream.close();
     listener.close();
 
     var ip: u32 = net::ip4(127, 0, 0, 1);

@@ -829,7 +829,7 @@ impl<'a> Checker<'a> {
 
     /// The prelude functions generated code calls on its own.
     fn runtime(&mut self) -> Option<tir::Runtime> {
-        let global = ModuleId::GLOBAL;
+        let global = ModuleId::PRELUDE;
         let stream = self.items.lookup_type(global, "OutStream")?;
         let stream_ty = self.types.intern(TyKind::Adt(stream, Vec::new()));
         self.note_adt(stream_ty, Span::default());
@@ -872,7 +872,7 @@ fn generics_of(decl: &Statement) -> &[TypeParameter] {
 impl Checker<'_> {
     fn is_main(&self, def: DefId) -> bool {
         let item = self.items.item(def);
-        item.owner.is_none() && item.module == ModuleId::GLOBAL && item.name == "main"
+        item.owner.is_none() && item.module == ModuleId::ROOT && item.name == "main"
     }
 }
 

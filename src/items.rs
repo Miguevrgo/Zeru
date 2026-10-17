@@ -15,8 +15,11 @@ pub struct DefId(pub u32);
 pub struct ModuleId(pub u32);
 
 impl ModuleId {
-    /// The scope the prelude and the root file share.
-    pub const GLOBAL: ModuleId = ModuleId(0);
+    /// The prelude, part of every program: what it marks `pub` every module
+    /// sees, and the rest only the standard library.
+    pub const PRELUDE: ModuleId = ModuleId(0);
+    /// The file being compiled, whose items every module sees.
+    pub const ROOT: ModuleId = ModuleId(1);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,15 +59,18 @@ pub struct Item<'a> {
     pub owner: Option<DefId>,
 }
 
-/// A parsed file and the name its importers call it by. The prelude and the
-/// root file have none: what they declare is reachable from everywhere.
+/// A parsed file and the name its importers call it by. The prelude comes
+/// first and the root file second; neither has a name.
 pub struct SourceModule {
     pub name: Option<String>,
     pub program: Program,
+    /// Part of the standard library, which may use the prelude's own items.
+    pub std: bool,
 }
 
 struct Module {
     name: Option<String>,
+    std: bool,
     scope: HashMap<(Namespace, String), DefId>,
     imported: HashMap<String, (ModuleId, String)>,
 }
@@ -86,20 +92,14 @@ impl<'a> Items<'a> {
             methods: HashMap::new(),
             errors: Vec::new(),
         };
-        let global = ModuleId::GLOBAL;
         for source in sources {
-            let id = match &source.name {
-                None if !items.modules.is_empty() => global,
-                _ => {
-                    let id = ModuleId(items.modules.len() as u32);
-                    items.modules.push(Module {
-                        name: source.name.clone(),
-                        scope: HashMap::new(),
-                        imported: HashMap::new(),
-                    });
-                    id
-                }
-            };
+            let id = ModuleId(items.modules.len() as u32);
+            items.modules.push(Module {
+                name: source.name.clone(),
+                std: source.std,
+                scope: HashMap::new(),
+                imported: HashMap::new(),
+            });
             if let Some(name) = &source.name {
                 items.by_name.insert(name.clone(), id);
             }
@@ -107,12 +107,8 @@ impl<'a> Items<'a> {
                 items.declare(id, statement);
             }
         }
-        for source in sources {
-            let id = source
-                .name
-                .as_ref()
-                .map_or(global, |name| items.by_name[name]);
-            items.import(id, &source.program);
+        for (at, source) in sources.iter().enumerate() {
+            items.import(ModuleId(at as u32), &source.program);
         }
         items
     }
@@ -292,10 +288,10 @@ impl<'a> Items<'a> {
                 .get(&(namespace, name.clone()))
                 .copied();
         }
-        self.modules[ModuleId::GLOBAL.0 as usize]
-            .scope
-            .get(&key)
-            .copied()
+        [ModuleId::ROOT, ModuleId::PRELUDE]
+            .into_iter()
+            .filter_map(|module| self.modules[module.0 as usize].scope.get(&key).copied())
+            .find(|&def| self.visible(def, from))
     }
 
     pub fn lookup_type(&self, from: ModuleId, path: &str) -> Option<DefId> {
@@ -314,7 +310,10 @@ impl<'a> Items<'a> {
     /// the prelude or the root file, and anything of its own module.
     pub fn visible(&self, def: DefId, from: ModuleId) -> bool {
         let item = self.item(def);
-        item.is_pub || item.module == from || self.modules[item.module.0 as usize].name.is_none()
+        item.is_pub
+            || item.module == from
+            || item.module == ModuleId::ROOT
+            || item.module == ModuleId::PRELUDE && self.modules[from.0 as usize].std
     }
 
     /// The error for using `def` where it is not visible.
