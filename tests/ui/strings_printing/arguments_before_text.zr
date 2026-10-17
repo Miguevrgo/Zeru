@@ -1,0 +1,11 @@
+fn noisy(n: i64) i64 {
+    println("evaluating {}", n);
+    return n * 10;
+}
+fn main() {
+    println("first {} then {}", noisy(1), noisy(2));
+    var s = "old";
+    var t = s;
+    println("{} {}", s, noisy(3));
+    println("{}", t);
+}

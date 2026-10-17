@@ -1,0 +1,8 @@
+status: exit 0
+-- stdout
+evaluating 1
+evaluating 2
+first 10 then 20
+evaluating 3
+old 30
+old

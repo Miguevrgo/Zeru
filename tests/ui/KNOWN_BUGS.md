@@ -11,7 +11,6 @@ A change that fixes one of these changes its snapshot; bless it and drop the lin
 ## Diagnostics
 
 - arithmetic/divide_by_zero and every other panic snapshot, diagnostics/runtime_panic_location: the panic points at the start of the statement, not the failing expression
-- generics/recursive_generic_method: eager checking of a generic struct's methods never ends on a method returning `Box<Box<T>>`; it is cut off with an error
 
 ## Pending a language decision
 

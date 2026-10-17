@@ -758,14 +758,15 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         let stream = if stderr { err } else { out };
         let runtime = &self.program.runtime;
         let (write_bytes, flush) = (runtime.write_bytes, runtime.flush);
+        let lowered: Vec<Val<'ctx>> = values.iter().map(|value| self.snapshot(value)).collect();
         for (at, piece) in pieces.iter().enumerate() {
             if !piece.is_empty() {
                 let text = self.const_bytes(piece);
                 let len = self.usize_type().const_int(piece.len() as u64, false);
                 self.call_fn(write_bytes, &[stream.into(), text.into(), len.into()]);
             }
-            if let Some(value) = values.get(at) {
-                self.print_value(stream, value);
+            if let (Some(value), Some(&val)) = (values.get(at), lowered.get(at)) {
+                self.print_value(stream, value.ty, val);
             }
         }
         if newline {
@@ -776,7 +777,20 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         }
     }
 
-    fn print_value(&mut self, stream: PointerValue<'ctx>, value: &'a Expr) {
+    /// The value of `value` as it is now, kept apart from the place it was
+    /// read from, so what later arguments do cannot change it.
+    fn snapshot(&mut self, value: &'a Expr) -> Val<'ctx> {
+        match self.expr(value) {
+            Val::Mem(src) => {
+                let slot = self.alloca(value.ty, "printed");
+                self.copy_bits(slot, src, value.ty);
+                Val::Mem(slot)
+            }
+            other => other,
+        }
+    }
+
+    fn print_value(&mut self, stream: PointerValue<'ctx>, ty: Ty, lowered: Val<'ctx>) {
         let runtime = &self.program.runtime;
         let (write_bytes, write_int, write_uint, write_float) = (
             runtime.write_bytes,
@@ -785,8 +799,6 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             runtime.write_float,
         );
         let i64_type = self.context.i64_type();
-        let ty = value.ty;
-        let lowered = self.expr(value);
         match (self.types().kind(ty), lowered) {
             (TyKind::Bool, Val::Imm(flag)) => {
                 let flag = flag.into_int_value();

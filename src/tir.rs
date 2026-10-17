@@ -200,6 +200,7 @@ pub enum ExprKind {
     Fallback(Box<Expr>, Box<Expr>),
     Block(Block),
 
+    /// Every value evaluated first, in order, then the text written.
     Print {
         stderr: bool,
         newline: bool,
