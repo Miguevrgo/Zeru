@@ -994,6 +994,17 @@ fn test_invalid_programs_are_refused() {
 }
 
 #[test]
+fn test_unmet_bound_is_reported_once() {
+    let errors = analyze(
+        "trait Shape { fn area(self) i64; } struct Bad { x: i64 } struct H<T: Shape> { v: T } fn main() { var h: H<Bad> = H { v: Bad { x: 2 } }; }",
+    );
+    assert_eq!(
+        errors,
+        ["'H' asks for T: Shape, which Bad does not satisfy"]
+    );
+}
+
+#[test]
 fn test_unknown_type_argument_is_reported_once() {
     let errors =
         analyze("struct Pair<T> { a: T } fn main() { var p: Pair<Nope> = Pair { a: 1 }; }");
@@ -1080,7 +1091,12 @@ fn test_literal_at_the_edge_of_its_type_fits() {
             var f: i32? = -5;
             var g: i32 = (1 << 31) + 0;
             var h: u8 = 255 - 1 + 1;
+            var N: i32 = 1;
+            var i = N + 1;
         }
+        const N: i32 = 2147483647;
+        fn shifted(S: i32) i32 { return 1 << S; }
+        const S: i32 = 40;
     ";
     let errors = analyze(input);
     assert!(errors.is_empty(), "{errors:?}");

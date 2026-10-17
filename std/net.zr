@@ -55,8 +55,9 @@ pub struct TcpListener {
         return Ok(TcpListener { fd: fd });
     }
 
-    pub fn accept(self) i64! {
-        return sys_result(syscall3(SYS_ACCEPT, self.fd, 0, 0));
+    pub fn accept(self) TcpStream! {
+        var fd = try sys_result(syscall3(SYS_ACCEPT, self.fd, 0, 0));
+        return Ok(TcpStream { fd: fd });
     }
 
     pub fn close(self) i64! {
