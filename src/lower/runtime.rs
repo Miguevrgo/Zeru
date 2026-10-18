@@ -21,6 +21,24 @@ use super::{Lower, Val};
 
 pub(super) const FLUSH_FN: &str = "__zeru_flush";
 
+/// The global symbols start.s defines.
+pub(super) const SYMBOLS: [&str; 14] = [
+    "_start",
+    "__zeru_start",
+    "__zeru_detect_simd",
+    "__zeru_simd",
+    "memcpy",
+    "memmove",
+    "memset",
+    "memcmp",
+    "bcmp",
+    "trunc",
+    "truncf",
+    "fmod",
+    "fmodf",
+    "abort",
+];
+
 impl<'a, 'ctx> Lower<'a, 'ctx> {
     /// A read-only global holding `bytes` and a terminating NUL, which a
     /// syscall taking a C string needs; a `\0` inside is kept as data.
@@ -730,8 +748,8 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         self.heap = Some(global.as_pointer_value());
     }
 
-    /// `__zeru_flush`, which writes out what both streams hold: run as the
-    /// program ends, by `exit`, and before a panic aborts.
+    /// `__zeru_flush`, which writes out what both streams hold: run as
+    /// `main` returns, by `exit`, and before a panic aborts.
     pub(super) fn create_flush(&mut self) {
         let streams = self.streams.expect("streams come first");
         let function = self.module.add_function(
@@ -746,24 +764,27 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             }
             this.builder.build_return(None).unwrap();
         });
+    }
+
+    /// `__zeru_start`, which `_start` in start.s calls with no libc under it:
+    /// `main`, then the flush, giving back `main`'s exit code.
+    pub(super) fn create_start(&mut self) {
+        self.module.set_inline_assembly(include_str!("start.s"));
+        let Some(main) = self.program.functions.iter().position(|f| f.exported) else {
+            return;
+        };
+        let flush = self.flush.expect("the flush comes first");
         let i32_type = self.context.i32_type();
-        let ptr_type = self.ptr_type();
-        let entry_type = self
-            .context
-            .struct_type(&[i32_type.into(), ptr_type.into(), ptr_type.into()], false);
-        let entry = entry_type.const_named_struct(&[
-            i32_type.const_int(65535, false).into(),
-            function.as_global_value().as_pointer_value().into(),
-            ptr_type.const_null().into(),
-        ]);
-        let entries = entry_type.const_array(&[entry]);
-        let global = self.module.add_global(
-            entries.get_type(),
-            Some(AddressSpace::default()),
-            "llvm.global_dtors",
-        );
-        global.set_linkage(Linkage::Appending);
-        global.set_initializer(&entries);
+        let function = self
+            .module
+            .add_function("__zeru_start", i32_type.fn_type(&[], false), None);
+        self.in_helper(function, |this| {
+            let code = this
+                .call_fn(FnId(main as u32), &[])
+                .expect("main gives a code");
+            this.builder.build_call(flush, &[], "").unwrap();
+            this.builder.build_return(Some(&code)).unwrap();
+        });
     }
 
     /// The format's text around each `{}` is written as it is, each value by

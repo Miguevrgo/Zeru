@@ -1,0 +1,23 @@
+fn main() {
+    var a: f64 = 7.5;
+    var b: f64 = -7.5;
+    var c: f64 = 2.25;
+    println("{} {} {} {}", a % 2.0, b % 2.0, a % -2.0, c % 0.5);
+    var f: f32 = 7.75;
+    var g: f32 = -3.5;
+    println("{} {}", f % 2.5, g % 2.0);
+    var xs: Array<f64, 7> = [2.7, -2.7, 0.5, -0.5, 1e15 + 0.5, 4503599627370497.0, -123456.999];
+    for x in xs { print("{} ", x as i64); }
+    println("");
+    var h: f32 = -9.99;
+    println("{} {}", h as i32, (h * -1.0) as u8);
+    var v: Vec<i64> = Vec.new();
+    for i in 0..1000 { v.insert(0, i as i64); }
+    var removed: i64 = 0;
+    for i in 0..500 { removed += v.remove(0); }
+    println("{} {} {} {}", v.len(), v[0], v[499], removed);
+    var big: Array<i64, 4096> = [3; 4096];
+    var other = big;
+    other[4095] = 1;
+    println("{} {}", big[4095] + other[0], other[4095]);
+}

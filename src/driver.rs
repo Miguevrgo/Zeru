@@ -1,6 +1,6 @@
 //! The pipeline: load and parse every file, collect the items, type check
 //! into the typed IR, lower that to LLVM, emit an object file and link it
-//! with the system C compiler.
+//! statically, with no libc, through the system C compiler.
 
 use inkwell::context::Context;
 use inkwell::passes::PassBuilderOptions;
@@ -108,7 +108,7 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
         .arg(&object_path)
         .arg("-o")
         .arg(&exe_path)
-        .arg("-lm")
+        .args(["-nostdlib", "-static", "-no-pie"])
         .status()?;
     std::fs::remove_file(object_path)?;
     if !link.success() {

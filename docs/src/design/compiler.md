@@ -11,7 +11,7 @@ source ─▶ lexer ─▶ parser ─▶ items ─▶ check ─▶ lower ─▶ 
 
 | Pass | Files | Produces |
 |---|---|---|
-| Driver | `driver.rs` | Loads the prelude, the root file and every imported module, runs the passes, has LLVM optimize and emit an object file, and links it with the system C compiler |
+| Driver | `driver.rs` | Loads the prelude, the root file and every imported module, runs the passes, has LLVM optimize and emit an object file, and links it statically with no libc: `lower/start.s` gives the entry point and the few functions LLVM calls by name |
 | Lexer, parser | `lexer.rs`, `parser.rs`, `ast.rs` | A token list per file, which the parser walks with one cursor into a syntax tree. The tree is never changed after parsing |
 | Items | `items.rs` | A `DefId` for every function, method, struct, enum, trait and constant, and a scope per module |
 | Check | `check/` | The typed IR of every function instance, or the errors |

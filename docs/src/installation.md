@@ -9,7 +9,7 @@ The first step is to install Zeru. There are some releases provided under github
 
 * Rust (latest stable)
 * LLVM 21 or newer
-* A C compiler (`cc`), which links the programs Zeru builds
+* A C compiler (`cc`), only as the linker: programs Zeru builds are static and use no libc
 
 ## Building
 

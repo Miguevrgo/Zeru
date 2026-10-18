@@ -122,6 +122,7 @@ pub fn lower<'ctx>(
     }
     lower.init_globals();
     lower.create_flush();
+    lower.create_start();
     for at in 0..program.functions.len() {
         lower.define(FnId(at as u32));
     }
@@ -181,10 +182,16 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         ty != Types::VOID && !self.is_scalar(ty)
     }
 
+    /// A function named as one of start.s takes another symbol, since the
+    /// runtime's are global.
     fn declare(&mut self, function: &Function) -> FunctionValue<'ctx> {
         let fn_type = self.signature(function);
         let linkage = (!function.exported).then_some(Linkage::Internal);
-        self.module.add_function(&function.symbol, fn_type, linkage)
+        let symbol = match runtime::SYMBOLS.contains(&function.symbol.as_str()) {
+            true => format!("{}.zeru", function.symbol),
+            false => function.symbol.clone(),
+        };
+        self.module.add_function(&symbol, fn_type, linkage)
     }
 
     fn define(&mut self, id: FnId) {
