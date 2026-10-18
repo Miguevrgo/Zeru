@@ -197,15 +197,39 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         Val::Imm(self.builder.build_load(llvm, ptr, "load").unwrap())
     }
 
+    /// Copy a value of `ty`. One made of a few scalars goes through
+    /// registers, as rustc does with a scalar pair: a block copy right after
+    /// the parts were stored one by one stalls the processor.
     pub(super) fn copy_bits(&mut self, dst: PointerValue<'ctx>, src: PointerValue<'ctx>, ty: Ty) {
-        if self.is_scalar(ty) {
-            let llvm = self.llvm_ty(ty);
-            let value = self.builder.build_load(llvm, src, "bits").unwrap();
-            self.builder.build_store(dst, value).unwrap();
+        let llvm = self.llvm_ty(ty);
+        let mut leaves = Vec::new();
+        if scalar_leaves(llvm, &mut vec![0], &mut leaves) {
+            let i32_type = self.context.i32_type();
+            for (path, leaf) in leaves {
+                let indices: Vec<IntValue> = path
+                    .iter()
+                    .map(|&at| i32_type.const_int(u64::from(at), false))
+                    .collect();
+                let (from, to) = unsafe {
+                    (
+                        self.builder
+                            .build_in_bounds_gep(llvm, src, &indices, "from")
+                            .unwrap(),
+                        self.builder
+                            .build_in_bounds_gep(llvm, dst, &indices, "to")
+                            .unwrap(),
+                    )
+                };
+                let value = self.builder.build_load(leaf, from, "part").unwrap();
+                self.builder.build_store(to, value).unwrap();
+            }
             return;
         }
+        let align = self.target.get_abi_alignment(&llvm);
         let size = self.size_of(ty);
-        self.builder.build_memmove(dst, 1, src, 1, size).unwrap();
+        self.builder
+            .build_memmove(dst, align, src, align, size)
+            .unwrap();
     }
 
     fn build_into(&mut self, expr: &'a Expr, dst: PointerValue<'ctx>) {
@@ -826,4 +850,31 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         self.builder.position_at_end(merge);
         self.load_val(slot, ty)
     }
+}
+
+/// The scalars `ty` is made of, each with the indices that reach it from
+/// `path`; false when part of it is no scalar or the parts are too many to
+/// be worth copying one by one.
+fn scalar_leaves<'ctx>(
+    ty: BasicTypeEnum<'ctx>,
+    path: &mut Vec<u32>,
+    leaves: &mut Vec<(Vec<u32>, BasicTypeEnum<'ctx>)>,
+) -> bool {
+    let parts: Vec<BasicTypeEnum> = match ty {
+        BasicTypeEnum::StructType(shape) => shape.get_field_types(),
+        BasicTypeEnum::ArrayType(array) if array.len() <= 4 => {
+            vec![array.get_element_type(); array.len() as usize]
+        }
+        BasicTypeEnum::IntType(_) | BasicTypeEnum::FloatType(_) | BasicTypeEnum::PointerType(_) => {
+            leaves.push((path.clone(), ty));
+            return leaves.len() <= 4;
+        }
+        _ => return false,
+    };
+    parts.into_iter().enumerate().all(|(at, part)| {
+        path.push(at as u32);
+        let fits = scalar_leaves(part, path, leaves);
+        path.pop();
+        fits
+    })
 }
