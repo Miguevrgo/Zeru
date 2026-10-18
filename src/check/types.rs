@@ -45,6 +45,9 @@ impl Checker<'_> {
                     .collect();
                 self.intern_or_error(TyKind::Tuple(parts.clone()), &parts)
             }
+            TypeSpec::Pointer(inner) if **inner == TypeSpec::Named("void".to_string()) => {
+                self.types.intern(TyKind::Ptr(Types::VOID))
+            }
             TypeSpec::Pointer(inner) => self.wrap(inner, scope, span, TyKind::Ptr),
             TypeSpec::Optional(inner) => self.wrap(inner, scope, span, TyKind::Optional),
             TypeSpec::Slice(inner) => self.wrap(inner, scope, span, TyKind::Slice),

@@ -39,10 +39,12 @@ pub enum Receiver {
     Mutable,
 }
 
-/// How many types a type argument may be made of before checking is taken
-/// to never end, as rustc's type length limit: a generic that asks for
-/// itself at a larger type, as `f((x, x))` inside `f`, would go on forever.
-const MAX_TYPE_SIZE: usize = 128;
+/// How many types a type argument may be made of, and how deeply nested,
+/// before checking is taken to never end, as rustc's type length and
+/// recursion limits: a generic that asks for itself at a larger type, as
+/// `f((x, x))` or `f(Box { v: x })` inside `f`, would go on forever.
+const MAX_TYPE_SIZE: usize = 1 << 16;
+const MAX_TYPE_DEPTH: usize = 32;
 
 struct StructDef {
     fields: Vec<(String, Ty)>,
@@ -681,7 +683,7 @@ impl<'a> Checker<'a> {
         let TyKind::Adt(def, args) = self.types.kind(ty).clone() else {
             return;
         };
-        if self.types.larger_than(ty, MAX_TYPE_SIZE) {
+        if self.types.too_big(ty, MAX_TYPE_SIZE, MAX_TYPE_DEPTH) {
             let base = self.items.item(def).name.clone();
             self.error(
                 format!("Checking the methods of '{base}' asks for ever deeper instances of it, without end"),

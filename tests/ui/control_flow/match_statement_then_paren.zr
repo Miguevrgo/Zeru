@@ -1,0 +1,7 @@
+fn main() {
+    var t = (1, 2);
+    var x = 1;
+    match x { 1 => { println("one"); }, default => {} }
+    (t.0) = 5;
+    println("{}", t.0);
+}

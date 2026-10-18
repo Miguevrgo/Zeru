@@ -111,10 +111,11 @@ impl FnCx<'_, '_> {
             self.deferred.push(DeferredCall { def, args, span });
             return Some(FnId(u32::MAX - (self.deferred.len() as u32 - 1)));
         }
-        if args
-            .iter()
-            .any(|&arg| self.cx.types.larger_than(arg, super::MAX_TYPE_SIZE))
-        {
+        if args.iter().any(|&arg| {
+            self.cx
+                .types
+                .too_big(arg, super::MAX_TYPE_SIZE, super::MAX_TYPE_DEPTH)
+        }) {
             let name = self.cx.items.item(def).name.clone();
             self.error(
                 format!("Checking '{name}' asks for ever larger instances of it, without end"),

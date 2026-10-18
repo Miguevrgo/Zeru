@@ -247,25 +247,27 @@ impl Types {
         })
     }
 
-    /// Whether `ty`, written out in full, is made of more than `limit` types.
-    pub fn larger_than(&self, ty: Ty, limit: usize) -> bool {
-        let mut parts = vec![ty];
+    /// Whether `ty`, written out in full, is made of more than `size` types
+    /// or nests them more than `depth` deep.
+    pub fn too_big(&self, ty: Ty, size: usize, depth: usize) -> bool {
+        let mut parts = vec![(ty, 1)];
         let mut count = 0;
-        while let Some(ty) = parts.pop() {
+        while let Some((ty, level)) = parts.pop() {
             count += 1;
-            if count > limit {
+            if count > size || level > depth {
                 return true;
             }
+            let inner = |t: &Ty| (*t, level + 1);
             match self.kind(ty) {
-                TyKind::Adt(_, args) | TyKind::Tuple(args) => parts.extend(args),
-                TyKind::Result(ok, err) => parts.extend([*ok, *err]),
-                TyKind::Array(inner, _)
-                | TyKind::Vec(inner)
-                | TyKind::Slice(inner)
-                | TyKind::Ptr(inner)
-                | TyKind::Ref(inner)
-                | TyKind::RefMut(inner)
-                | TyKind::Optional(inner) => parts.push(*inner),
+                TyKind::Adt(_, args) | TyKind::Tuple(args) => parts.extend(args.iter().map(inner)),
+                TyKind::Result(ok, err) => parts.extend([inner(ok), inner(err)]),
+                TyKind::Array(t, _)
+                | TyKind::Vec(t)
+                | TyKind::Slice(t)
+                | TyKind::Ptr(t)
+                | TyKind::Ref(t)
+                | TyKind::RefMut(t)
+                | TyKind::Optional(t) => parts.push(inner(t)),
                 _ => {}
             }
         }

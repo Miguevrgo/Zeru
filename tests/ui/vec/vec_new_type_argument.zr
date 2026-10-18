@@ -1,0 +1,7 @@
+fn main() {
+    var v = Vec.new<i32>();
+    v.push(3);
+    var w = Vec.with_capacity<u8>(4);
+    w.push(7);
+    println("{} {}", v[0], w[0]);
+}

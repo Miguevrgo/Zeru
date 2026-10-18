@@ -1,0 +1,11 @@
+struct W<T> {
+    v: T,
+    fn get(self) T { return self.v; }
+}
+fn id<T>(x: T) T { return x; }
+fn main() {
+    var t = ("s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s", "s");
+    var w = W { v: t };
+    var u = id(w.get());
+    println("{}", u.69);
+}

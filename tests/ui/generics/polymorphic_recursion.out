@@ -7,6 +7,6 @@ Error: Checking 'f' asks for ever larger instances of it, without end
    │         ────────┬───────
    │                 ╰───────── Checking 'f' asks for ever larger instances of it, without end
    │                 │
-   │                 ╰───────── in 'f<((((((i32, i32), (i32, i32)), ((i32, i32), (i32, i32))), (((i32, i32), (i32, i32)), ((i32, i32), (i32, i32)))), ((((i32, i32), (i32, i32)), ((i32, i32), (i32, i32))), (((i32, i32), (i32, i32)), ((i32, i32), (i32, i32))))), (((((i32, i32), (i32, i32)), ((i32, i32), (i32, i32))), (((i32, i32), (i32, i32)), ((i32, i32), (i32, i32)))), ((((i32, i32), (i32, i32)), ((i32, i32), (i32, i32))), (((i32, i32), (i32, i32)), ((i32, i32), (i32, i32))))))>', instantiated here
+   │                 ╰───────── in 'f<(((((((((((((((i32, i32), (i32, i32)), ((i32, i32), (i32, i32))), (((i32, i32), (i32, i32)), ((i32, i32), (i32, i32)))...', instantiated here
 ───╯
 [-] Error: aborting due to previous error

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Expected '=', found '!='
+   ╭─[ tests/ui/parser/not_equal_after_spaced_type.zr:2:12 ]
+   │
+ 2 │     var j: i32 != 4;
+   │            ─┬─
+   │             ╰─── Expected '=', found '!='
+───╯
+[-] Error: aborting due to previous error

@@ -37,13 +37,7 @@ const MAX_NESTING: usize = 256;
 
 /// What may follow a `match` in statement position and continue it as an
 /// expression, as in rustc's `expr_is_complete`.
-const POSTFIX_STARTS: [Token; 5] = [
-    Token::Dot,
-    Token::LBracket,
-    Token::LParen,
-    Token::Question,
-    Token::Bang,
-];
+const POSTFIX_STARTS: [Token; 3] = [Token::Dot, Token::Question, Token::Bang];
 
 const ITEM_STARTS: [Token; 7] = [
     Token::Fn,
@@ -400,7 +394,11 @@ impl Parser {
     /// to the `=` after it, as in `i32!= 3`.
     fn parse_annotation(&mut self) -> Option<TypeSpec> {
         let ty = self.parse_type()?;
-        if !self.at(&Token::NotEq) || matches!(ty, TypeSpec::Optional(_) | TypeSpec::Result(_)) {
+        let touching = self.span().start == self.prev_span().end;
+        if !touching
+            || !self.at(&Token::NotEq)
+            || matches!(ty, TypeSpec::Optional(_) | TypeSpec::Result(_))
+        {
             return Some(ty);
         }
         self.split_token(Token::Bang, Token::Assign);
@@ -563,7 +561,7 @@ impl Parser {
         let condition = self.parse_condition()?;
         let then_branch = Box::new(self.parse_block()?);
         let else_branch = match self.eat(&Token::Else) {
-            true if self.at(&Token::If) => Some(Box::new(self.nested(Self::parse_if_statement)?)),
+            true if self.at(&Token::If) => Some(Box::new(self.parse_if_statement()?)),
             true => Some(Box::new(self.parse_block()?)),
             false => None,
         };
@@ -759,6 +757,9 @@ impl Parser {
         let saved = (self.pos, self.errors.len(), self.panic_mode, self.brackets);
         let splits = self.splits.len();
         if let Some(type_args) = self.parse_generic_arguments()
+            && !type_args
+                .iter()
+                .any(|arg| matches!(arg, TypeSpec::IntLiteral(_)))
             && self.eat(&Token::LParen)
         {
             let arguments =

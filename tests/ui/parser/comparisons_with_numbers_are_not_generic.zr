@@ -1,0 +1,7 @@
+fn show(a: bool, b: bool) { println("{} {}", a, b); }
+fn main() {
+    var i = 1;
+    var j = 5;
+    var k = 2;
+    show(i < 3, j > (k));
+}

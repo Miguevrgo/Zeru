@@ -55,10 +55,11 @@ impl FnCx<'_, '_> {
                 return self.error_expr(span);
             }
         };
-        if !type_args.is_empty()
-            && !matches!(call.kind, ExprKind::Call(..))
-            && !self.cx.types.is_error(call.ty)
-        {
+        let takes_types = matches!(
+            call.kind,
+            ExprKind::Call(..) | ExprKind::Builtin(Builtin::VecNew | Builtin::VecWithCapacity, _)
+        );
+        if !type_args.is_empty() && !takes_types && !self.cx.types.is_error(call.ty) {
             self.error(format!("'{name}' takes no type arguments"), span);
         }
         call
@@ -167,7 +168,7 @@ impl FnCx<'_, '_> {
             && self.local(type_name).is_none()
         {
             if type_name == "Vec" {
-                return self.vec_static(name, args, expected, span);
+                return self.vec_static(name, type_args, args, expected, span);
             }
             if let Some(def) = self.cx.items.lookup_type(self.scope.module, type_name)
                 && self.cx.items.item(def).kind == ItemKind::Struct
@@ -623,10 +624,27 @@ impl FnCx<'_, '_> {
     fn vec_static(
         &mut self,
         name: &str,
+        type_args: &[TypeSpec],
         args: &[Expression],
-        expected: Option<Ty>,
+        mut expected: Option<Ty>,
         span: Span,
     ) -> Expr {
+        match type_args {
+            [] => {}
+            [elem] => {
+                let scope = self.scope.clone();
+                let elem = self.cx.resolve_type(elem, &scope, span);
+                expected = Some(self.cx.intern_or_error(TyKind::Vec(elem), &[elem]));
+            }
+            _ => {
+                self.error(
+                    format!("'Vec' takes 1 type argument(s), got {}", type_args.len()),
+                    span,
+                );
+                self.check_args_only(args);
+                return self.error_expr(span);
+            }
+        }
         let (ty, elem) = match expected.map(|ty| (ty, self.cx.types.kind(ty).clone())) {
             Some((ty, TyKind::Vec(elem))) => (ty, elem),
             Some((ty, _)) if self.cx.types.is_error(ty) => {

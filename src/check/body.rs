@@ -138,10 +138,14 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
     if !args.is_empty() {
         let id = fx.cx.instances[&(def, args.to_vec())];
         let origin = fx.cx.instance_origin(id);
+        let shown = match symbol.len() > 120 {
+            true => format!("{}...", &symbol[..120]),
+            false => symbol.clone(),
+        };
         for error in &mut fx.cx.errors[errors_before..] {
             error
                 .notes
-                .push((format!("in '{symbol}', instantiated here"), origin));
+                .push((format!("in '{shown}', instantiated here"), origin));
         }
     }
     tir::Function {
