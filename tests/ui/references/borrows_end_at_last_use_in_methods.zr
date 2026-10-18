@@ -36,5 +36,5 @@ fn main() {
     println("{} {}", total, v.len());
     var opt: (&i64)? = None;
     if v.len() > 2 { opt = v.get(2); }
-    println("{}", opt.copy() orelse -1);
+    println("{}", opt.copy().unwrap());
 }

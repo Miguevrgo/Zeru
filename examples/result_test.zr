@@ -1,25 +1,31 @@
 // Result type (T!) integration test
-// Tests is_ok, is_err, unwrap, unwrap_err, error enums, try, catch and orelse
+// Tests is_ok, is_err, unwrap, unwrap_err, and propagation with ? and !
 // Uses exit codes to verify behavior
 
-enum ParseError { Empty, NotDigit }
+const EMPTY: i32 = 1;
+const NOT_DIGIT: i32 = 2;
 
-fn digit(c: u8) i32!ParseError {
-    if c < '0' || c > '9' { return Err(ParseError::NotDigit); }
+fn digit(c: u8) i32! {
+    if c < '0' || c > '9' { return Err(NOT_DIGIT); }
     return Ok((c - '0') as i32);
 }
 
-// `try` hands an error back to the caller as it is.
-fn number(text: str) i32!ParseError {
-    if text.len() == 0 { return Err(ParseError::Empty); }
+// `!` hands an error back to the caller as it is.
+fn number(text: str) i32! {
+    if text.len() == 0 { return Err(EMPTY); }
     var total = 0;
-    for i in 0..text.len() { total = total * 10 + try digit(text[i]); }
+    for i in 0..text.len() { total = total * 10 + digit(text[i])!; }
     return Ok(total);
 }
 
 fn first(items: Vec<i64>) i64? {
     if items.is_empty() { return None; }
     return items[0];
+}
+
+// `?` hands a missing value back to the caller.
+fn first_doubled(items: Vec<i64>) i64? {
+    return first(items)? * 2;
 }
 
 fn divide(a: i32, b: i32) i32! {
@@ -104,11 +110,11 @@ fn main() {
     }
 
     if number("123").unwrap() != 123 { exit(20); }
-    if number("1x").unwrap_err() != ParseError::NotDigit { exit(21); }
-    if number("").unwrap_err() != ParseError::Empty { exit(22); }
-    if (number("9z") catch -1) != -1 || (number("42") catch 0) != 42 { exit(23); }
-    if (first(Vec.new()) orelse 5) != 5 || (first([3]) orelse 5) != 3 { exit(24); }
-    if (name(0) orelse "none").len() != 4 || name(1).is_none() { exit(25); }
+    if number("1x").unwrap_err() != NOT_DIGIT { exit(21); }
+    if number("").unwrap_err() != EMPTY { exit(22); }
+    if number("9z").is_ok() || number("42").unwrap() != 42 { exit(23); }
+    if first_doubled(Vec.new()).is_some() || first_doubled([3]).unwrap() != 6 { exit(24); }
+    if name(0).is_some() || name(1).is_none() { exit(25); }
     if pair().unwrap().1 != 2 || sign(None) != 0 { exit(26); }
 
     println("result: all tests passed");

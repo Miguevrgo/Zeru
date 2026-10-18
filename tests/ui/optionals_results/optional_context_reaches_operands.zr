@@ -1,5 +1,5 @@
 fn doubled(a: i64) i64? { return a * 2; }
-fn takes(x: i64?) i64 { return x orelse 0; }
+fn takes(x: i64?) i64 { return x.unwrap(); }
 fn main() {
     var a: i64 = 3;
     var b: i64 = 4;

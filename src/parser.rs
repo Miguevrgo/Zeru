@@ -347,11 +347,7 @@ impl Parser {
             return Some(TypeSpec::Optional(Box::new(base)));
         }
         if self.eat(&Token::Bang) {
-            let error = match self.peek() {
-                Token::Identifier(_) => Some(Box::new(self.parse_named_type()?)),
-                _ => None,
-            };
-            return Some(TypeSpec::Result(Box::new(base), error));
+            return Some(TypeSpec::Result(Box::new(base)));
         }
         Some(base)
     }
@@ -812,7 +808,6 @@ impl Parser {
                 Token::Minus | Token::Bang => {
                     self.parse_prefix(|operator, right| ExpressionKind::Prefix { operator, right })
                 }
-                Token::Try => self.parse_prefix(|_, operand| ExpressionKind::Try(operand)),
                 Token::Star => self.parse_prefix(|_, expr| ExpressionKind::Dereference(expr)),
                 Token::BitAnd => self.parse_borrow_expression(),
                 Token::Match => self.parse_match_expression(),
@@ -990,6 +985,10 @@ impl Parser {
                 self.bump();
                 ExpressionKind::Get { object: left, name }
             }
+            Token::Question | Token::Bang => ExpressionKind::Try {
+                operator,
+                value: left,
+            },
             Token::As => ExpressionKind::Cast {
                 left,
                 target: self.parse_type()?,
@@ -1085,7 +1084,6 @@ impl Parser {
 enum Precedence {
     Lowest,
     Assignment,
-    Fallback,
     LogicalOr,
     LogicalAnd,
     Equals,
@@ -1119,7 +1117,6 @@ fn token_precedence(token: &Token) -> Precedence {
         | Token::MinusWrapEq
         | Token::StarWrapEq => Precedence::Assignment,
 
-        Token::Catch | Token::Orelse => Precedence::Fallback,
         Token::Or => Precedence::LogicalOr,
         Token::And => Precedence::LogicalAnd,
 
@@ -1137,7 +1134,7 @@ fn token_precedence(token: &Token) -> Precedence {
 
         Token::As => Precedence::Cast,
         Token::LParen => Precedence::Call,
-        Token::Dot | Token::LBracket => Precedence::Index,
+        Token::Dot | Token::LBracket | Token::Question | Token::Bang => Precedence::Index,
         _ => Precedence::Lowest,
     }
 }

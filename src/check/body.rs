@@ -387,11 +387,6 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 values.iter().flat_map(|v| self.loans_of(v)).collect()
             }
             ExprKind::Struct(fields) => fields.iter().flat_map(|(_, v)| self.loans_of(v)).collect(),
-            ExprKind::Fallback(value, fallback) => {
-                let mut loans = self.loans_of(value);
-                loans.extend(self.loans_of(fallback));
-                loans
-            }
             ExprKind::Match { scrutinee, arms } => {
                 let mut loans = self.place_loans(scrutinee, None);
                 for arm in arms {

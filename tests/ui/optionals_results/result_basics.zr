@@ -6,5 +6,4 @@ fn main() {
     var a = half(8);
     var b = half(7);
     println("{} {} {} {}", a.is_ok(), b.is_err(), a.unwrap(), b.unwrap_err());
-    println("{}", half(3) catch -1);
 }

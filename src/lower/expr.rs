@@ -130,7 +130,6 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             }
             ExprKind::Match { scrutinee, arms } => self.match_expr(scrutinee, arms, expr.ty),
             ExprKind::Try(value) => self.try_expr(value, expr.ty),
-            ExprKind::Fallback(value, fallback) => self.fallback(value, fallback, expr.ty),
             ExprKind::Block(block) => {
                 self.block(block);
                 Val::Unit
@@ -794,8 +793,8 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         }
     }
 
-    /// `try value`: on an error, return it from the function, dropping what
-    /// the function owns; otherwise go on with the payload.
+    /// `value?`, `value!`: on None or an error, return it from the function,
+    /// dropping what the function owns; otherwise go on with the payload.
     fn try_expr(&mut self, value: &'a Expr, ty: Ty) -> Val<'ctx> {
         let result_ty = value.ty;
         let result = self.expr(value).ptr();
@@ -812,43 +811,17 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             .sret
             .unwrap_or_else(|| self.alloca(returned, "failure"));
         self.store_tag(out, returned, false);
-        let error = self.field_ptr(result, result_ty, 2);
-        let error_slot = self.field_ptr(out, returned, 2);
-        let error_ty = match self.types().kind(result_ty) {
-            TyKind::Result(_, error) => *error,
-            _ => unreachable!("try takes a result"),
-        };
-        self.copy_bits(error_slot, error, error_ty);
+        if let TyKind::Result(_, error_ty) = *self.types().kind(result_ty) {
+            let error = self.field_ptr(result, result_ty, 2);
+            let error_slot = self.field_ptr(out, returned, 2);
+            self.copy_bits(error_slot, error, error_ty);
+        }
         self.drop_everything();
         self.build_return(None);
 
         self.builder.position_at_end(ok);
         let payload = self.field_ptr(result, result_ty, 1);
         self.load_val(payload, ty)
-    }
-
-    /// `value orelse fallback`, `value catch fallback`: the payload when
-    /// there is one, else the fallback, evaluated only then.
-    fn fallback(&mut self, value: &'a Expr, fallback: &'a Expr, ty: Ty) -> Val<'ctx> {
-        let held_ty = value.ty;
-        let held = self.expr(value).ptr();
-        let has = self.load_field(held, held_ty, 0).into_int_value();
-        let slot = self.alloca(ty, "or");
-        let present = self.append("present");
-        let absent = self.append("fallback");
-        let merge = self.append("fallback_merge");
-        self.builder
-            .build_conditional_branch(has, present, absent)
-            .unwrap();
-        self.builder.position_at_end(present);
-        let payload = self.field_ptr(held, held_ty, 1);
-        self.copy_bits(slot, payload, ty);
-        self.builder.build_unconditional_branch(merge).unwrap();
-        self.builder.position_at_end(absent);
-        self.write(fallback, slot);
-        self.branch_if_open(merge);
-        self.builder.position_at_end(merge);
-        self.load_val(slot, ty)
     }
 }
 

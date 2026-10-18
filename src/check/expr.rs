@@ -1,5 +1,5 @@
 //! Expressions: literals, names, operators, casts, literals of structs,
-//! arrays and tuples, places, assignment, `try` and the fallbacks.
+//! arrays and tuples, places, assignment and `?`/`!`.
 
 use std::collections::HashMap;
 
@@ -91,18 +91,13 @@ impl FnCx<'_, '_> {
             } => self.assign(target, operator, value, span),
             ExpressionKind::Infix {
                 left,
-                operator: operator @ (Token::Catch | Token::Orelse),
-                right,
-            } => self.fallback(left, operator, right, span),
-            ExpressionKind::Infix {
-                left,
                 operator,
                 right,
             } => self.infix(left, operator, right, expected, span),
             ExpressionKind::Prefix { operator, right } => {
                 self.prefix(operator, right, expected, span)
             }
-            ExpressionKind::Try(value) => self.try_expr(value, span),
+            ExpressionKind::Try { operator, value } => self.try_expr(operator, value, span),
             ExpressionKind::Block(statements) => {
                 let block = self.block(statements);
                 self.mk(ExprKind::Block(block), Types::VOID, span)
@@ -1034,69 +1029,38 @@ impl FnCx<'_, '_> {
         self.mk(ExprKind::Tuple(values), ty, span)
     }
 
-    /// `try value`: the payload of a `T!`, or a return with its error, which
-    /// the function must be able to return.
-    fn try_expr(&mut self, value: &Expression, span: Span) -> Expr {
+    /// `value?` on a `T?`, `value!` on a `T!`: the payload, or a return of
+    /// the None or the error, which the function must return in kind.
+    fn try_expr(&mut self, operator: &Token, value: &Expression, span: Span) -> Expr {
         let mut value = self.expr(value, None);
-        let TyKind::Result(ok, err) = *self.cx.types.kind(value.ty) else {
-            if !self.cx.types.is_error(value.ty) {
+        let ok = match (operator, self.cx.types.kind(value.ty)) {
+            (Token::Question, TyKind::Optional(ok)) | (Token::Bang, TyKind::Result(ok, _)) => *ok,
+            (_, TyKind::Error) => return self.error_expr(span),
+            _ => {
                 let shown = self.ty(value.ty);
-                self.error(format!("'try' takes a T! value, not {shown}"), span);
+                self.error(
+                    format!("'{operator}' takes a T{operator} value, not {shown}"),
+                    span,
+                );
+                return self.error_expr(span);
             }
-            return self.error_expr(span);
         };
         let ret = self.ret_ty();
-        let passes =
-            matches!(self.cx.types.kind(ret), TyKind::Result(_, returned) if *returned == err);
+        let passes = matches!(
+            (operator, self.cx.types.kind(ret)),
+            (Token::Question, TyKind::Optional(_)) | (Token::Bang, TyKind::Result(..))
+        );
         if !passes {
-            let (err, ret) = (self.ty(err), self.ty(ret));
+            let ret = self.ty(ret);
             self.error(
-                format!("'try' passes its {err} error on, which a function returning {ret} cannot"),
+                format!(
+                    "'{operator}' returns from a function returning {ret}, which is no T{operator}"
+                ),
                 span,
             );
         }
         self.consume(&mut value);
         self.mk(ExprKind::Try(Box::new(value)), ok, span)
-    }
-
-    /// `value catch fallback` for a `T!`, `value orelse fallback` for a `T?`:
-    /// the payload, or the fallback, evaluated only when there is none.
-    fn fallback(
-        &mut self,
-        value: &Expression,
-        operator: &Token,
-        fallback: &Expression,
-        span: Span,
-    ) -> Expr {
-        let mut value = self.expr(value, None);
-        let payload = match (operator, self.cx.types.kind(value.ty)) {
-            (Token::Catch, TyKind::Result(ok, _)) | (Token::Orelse, TyKind::Optional(ok)) => *ok,
-            (_, TyKind::Error) => {
-                self.expr(fallback, None);
-                return self.error_expr(span);
-            }
-            _ => {
-                let wants = if *operator == Token::Catch {
-                    "a T! value"
-                } else {
-                    "a T? value"
-                };
-                let shown = self.ty(value.ty);
-                self.error(format!("'{operator}' takes {wants}, not {shown}"), span);
-                return self.error_expr(span);
-            }
-        };
-        let replacement = self.expr(fallback, Some(payload));
-        let mut replacement = self.coerce_or(replacement, payload, fallback.span, |want, got| {
-            format!("The fallback must be {want}, got {got}")
-        });
-        self.consume(&mut value);
-        self.consume(&mut replacement);
-        self.mk(
-            ExprKind::Fallback(Box::new(value), Box::new(replacement)),
-            payload,
-            span,
-        )
     }
 }
 

@@ -194,11 +194,8 @@ pub enum ExprKind {
         scrutinee: Place,
         arms: Vec<Arm>,
     },
-    /// `try value`: the payload, or a return of the error.
+    /// `value?` or `value!`: the payload, or a return of the None or error.
     Try(Box<Expr>),
-    /// `value orelse fallback` and `value catch fallback`: the payload, or
-    /// the fallback, evaluated only when there is none.
-    Fallback(Box<Expr>, Box<Expr>),
     Block(Block),
 
     /// Every value evaluated first, in order, then the text written.

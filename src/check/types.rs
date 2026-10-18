@@ -50,33 +50,7 @@ impl Checker<'_> {
             TypeSpec::Slice(inner) => self.wrap(inner, scope, span, TyKind::Slice),
             TypeSpec::Ref(inner) => self.wrap(inner, scope, span, TyKind::Ref),
             TypeSpec::RefMut(inner) => self.wrap(inner, scope, span, TyKind::RefMut),
-            TypeSpec::Result(ok, error) => {
-                let ok = self.resolve_type(ok, scope, span);
-                let error = match error {
-                    None => Types::I32,
-                    Some(error) => {
-                        let error = self.resolve_type(error, scope, span);
-                        match self.is_enum(error) {
-                            Some(def) if self.enum_has_data(def) => {
-                                let shown = self.types.show(error);
-                                self.error(
-                                    format!("An error enum carries no values, and {shown} does"),
-                                    span,
-                                );
-                                Types::ERROR
-                            }
-                            Some(_) => error,
-                            None if self.types.is_error(error) => error,
-                            None => {
-                                let shown = self.types.show(error);
-                                self.error(format!("An error type is an enum, not {shown}"), span);
-                                Types::ERROR
-                            }
-                        }
-                    }
-                };
-                self.intern_or_error(TyKind::Result(ok, error), &[ok, error])
-            }
+            TypeSpec::Result(ok) => self.wrap(ok, scope, span, |ok| TyKind::Result(ok, Types::I32)),
         }
     }
 

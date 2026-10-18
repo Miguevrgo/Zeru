@@ -67,7 +67,7 @@ pub fn rename(old_path: *u8, new_path: *u8) i64! {
 pub fn file_size(path: *u8) i64! {
     var buf: Array<u8, 144> = [0; 144];
     var ptr: *u8 = &buf[0];
-    try sys_result(syscall2(SYS_STAT, path as i64, ptr as i64));
+    sys_result(syscall2(SYS_STAT, path as i64, ptr as i64))!;
     var size_ptr: *i64 = (&buf[48]) as *i64;
     return Ok(*size_ptr);
 }
@@ -85,7 +85,7 @@ pub fn fsync(fd: i64) i64! {
 }
 
 pub fn read_file(path: *u8, buf: *u8, buf_size: usize) i64! {
-    var fd = try open(path, O_RDONLY, 0);
+    var fd = open(path, O_RDONLY, 0)!;
     var total: usize = 0;
     while total < buf_size {
         var n = read(fd, buf + total, buf_size - total);
@@ -98,7 +98,7 @@ pub fn read_file(path: *u8, buf: *u8, buf_size: usize) i64! {
 }
 
 pub fn write_file(path: *u8, data: *u8, len: usize) i64! {
-    var fd = try open(path, O_WRONLY | O_CREAT | O_TRUNC, PERM_644);
+    var fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, PERM_644)!;
     var total: usize = 0;
     while total < len {
         var n = write(fd, data + total, len - total);

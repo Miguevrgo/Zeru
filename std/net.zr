@@ -44,7 +44,7 @@ pub struct TcpListener {
     fd: i64,
 
     pub fn bind(ip: u32, port: u16) TcpListener! {
-        var fd = try sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_STREAM, 0));
+        var fd = sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_STREAM, 0))!;
         var one: i32 = 1;
         syscall5(SYS_SETSOCKOPT, fd, SOL_SOCKET, SO_REUSEADDR, (&one) as i64, 4);
         var addr = make_addr(ip, port);
@@ -56,7 +56,7 @@ pub struct TcpListener {
     }
 
     pub fn accept(self) TcpStream! {
-        var fd = try sys_result(syscall3(SYS_ACCEPT, self.fd, 0, 0));
+        var fd = sys_result(syscall3(SYS_ACCEPT, self.fd, 0, 0))!;
         return Ok(TcpStream { fd: fd });
     }
 
@@ -70,7 +70,7 @@ pub struct TcpStream {
     fd: i64,
 
     pub fn connect(ip: u32, port: u16) TcpStream! {
-        var fd = try sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_STREAM, 0));
+        var fd = sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_STREAM, 0))!;
         var addr = make_addr(ip, port);
         var r: i64 = syscall3(SYS_CONNECT, fd, (&addr[0]) as i64, 16);
         if r < 0 { syscall1(SYS_CLOSE, fd); return Err((-r) as i32); }
@@ -89,7 +89,7 @@ pub struct TcpStream {
         var total: i64 = 0;
         var remaining: usize = len;
         while remaining > 0 {
-            var n = try sys_result(syscall3(SYS_WRITE, self.fd, (buf + total as usize) as i64, remaining as i64));
+            var n = sys_result(syscall3(SYS_WRITE, self.fd, (buf + total as usize) as i64, remaining as i64))!;
             total = total + n;
             remaining = remaining - n as usize;
         }
@@ -100,7 +100,7 @@ pub struct TcpStream {
         var total: i64 = 0;
         var remaining: usize = buf_size;
         while remaining > 0 {
-            var n = try sys_result(syscall3(SYS_READ, self.fd, (buf + total as usize) as i64, remaining as i64));
+            var n = sys_result(syscall3(SYS_READ, self.fd, (buf + total as usize) as i64, remaining as i64))!;
             if n == 0 { break; }
             total = total + n;
             remaining = remaining - n as usize;
@@ -122,7 +122,7 @@ pub struct UdpSocket {
     fd: i64,
 
     pub fn bind(ip: u32, port: u16) UdpSocket! {
-        var fd = try sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_DGRAM, 0));
+        var fd = sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_DGRAM, 0))!;
         var addr = make_addr(ip, port);
         var r: i64 = syscall3(SYS_BIND, fd, (&addr[0]) as i64, 16);
         if r < 0 { syscall1(SYS_CLOSE, fd); return Err((-r) as i32); }

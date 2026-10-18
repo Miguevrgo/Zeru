@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: '?' returns from a function returning i32!, which is no T?
+   ╭─[ tests/ui/optionals_results/question_in_result_fn.zr:3:13 ]
+   │
+ 3 │     var x = f()?;
+   │             ──┬─
+   │               ╰─── '?' returns from a function returning i32!, which is no T?
+───╯
+[-] Error: aborting due to previous error

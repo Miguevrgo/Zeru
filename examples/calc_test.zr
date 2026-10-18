@@ -8,11 +8,9 @@ enum Token {
     End
 }
 
-enum CalcError {
-    BadChar,
-    Unclosed,
-    DivByZero
-}
+const BAD_CHAR: i32 = 1;
+const UNCLOSED: i32 = 2;
+const DIV_BY_ZERO: i32 = 3;
 
 struct Lexer {
     text: str,
@@ -22,14 +20,14 @@ struct Lexer {
         return Lexer { text: text, at: 0 };
     }
 
-    fn peek(self) u8? {
-        if self.at >= self.text.len() { return None; }
+    fn peek(self) u8 {
+        if self.at >= self.text.len() { return 0; }
         return self.text[self.at];
     }
 
-    fn next(var self) Token!CalcError {
-        while (self.peek() orelse 0) == ' ' { self.at += 1; }
-        var c = self.peek() orelse 0;
+    fn next(var self) Token! {
+        while self.peek() == ' ' { self.at += 1; }
+        var c = self.peek();
         if c == 0 { return Ok(Token::End); }
         self.at += 1;
         match c {
@@ -41,13 +39,13 @@ struct Lexer {
             ')' => { return Ok(Token::Close); }
             default => { }
         }
-        if c < '0' || c > '9' { return Err(CalcError::BadChar); }
+        if c < '0' || c > '9' { return Err(BAD_CHAR); }
         var value = (c - '0') as i64;
-        var d = self.peek() orelse 0;
+        var d = self.peek();
         while d >= '0' && d <= '9' {
             value = value * 10 + (d - '0') as i64;
             self.at += 1;
-            d = self.peek() orelse 0;
+            d = self.peek();
         }
         return Ok(Token::Num(value));
     }
@@ -57,20 +55,20 @@ struct Parser {
     lexer: Lexer,
     current: Token,
 
-    fn advance(var self) i64!CalcError {
-        self.current = try self.lexer.next();
+    fn advance(var self) i64! {
+        self.current = self.lexer.next()!;
         return Ok(0);
     }
 
-    fn expr(var self) i64!CalcError {
-        var left = try self.term();
+    fn expr(var self) i64! {
+        var left = self.term()!;
         while true {
             var current = self.current;
             match current {
                 Token::Op(op) => {
                     if op != '+' && op != '-' { return Ok(left); }
-                    try self.advance();
-                    var right = try self.term();
+                    self.advance()!;
+                    var right = self.term()!;
                     left = match op { '+' => left + right, default => left - right };
                 }
                 default => { return Ok(left); }
@@ -79,16 +77,16 @@ struct Parser {
         return Ok(left);
     }
 
-    fn term(var self) i64!CalcError {
-        var left = try self.atom();
+    fn term(var self) i64! {
+        var left = self.atom()!;
         while true {
             var current = self.current;
             match current {
                 Token::Op(op) => {
                     if op != '*' && op != '/' { return Ok(left); }
-                    try self.advance();
-                    var right = try self.atom();
-                    if op == '/' && right == 0 { return Err(CalcError::DivByZero); }
+                    self.advance()!;
+                    var right = self.atom()!;
+                    if op == '/' && right == 0 { return Err(DIV_BY_ZERO); }
                     left = match op { '*' => left * right, default => left / right };
                 }
                 default => { return Ok(left); }
@@ -97,39 +95,39 @@ struct Parser {
         return Ok(left);
     }
 
-    fn atom(var self) i64!CalcError {
+    fn atom(var self) i64! {
         var current = self.current;
         match current {
             Token::Num(n) => {
-                try self.advance();
+                self.advance()!;
                 return Ok(n);
             }
             Token::Open => {
-                try self.advance();
-                var inner = try self.expr();
+                self.advance()!;
+                var inner = self.expr()!;
                 var current = self.current;
                 match current {
-                    Token::Close => { try self.advance(); }
-                    default => { return Err(CalcError::Unclosed); }
+                    Token::Close => { self.advance()!; }
+                    default => { return Err(UNCLOSED); }
                 }
                 return Ok(inner);
             }
-            default => { return Err(CalcError::BadChar); }
+            default => { return Err(BAD_CHAR); }
         }
     }
 }
 
-fn eval(text: str) i64!CalcError {
+fn eval(text: str) i64! {
     var parser = Parser { lexer: Lexer.new(text), current: Token::End };
-    try parser.advance();
+    parser.advance()!;
     return parser.expr();
 }
 
 fn main() {
-    if (eval("2 * (3 + 4) - 5") catch -1) != 9 { exit(1); }
-    if (eval("100 / 7 / 2") catch -1) != 7 { exit(2); }
+    if eval("2 * (3 + 4) - 5").unwrap() != 9 { exit(1); }
+    if eval("100 / 7 / 2").unwrap() != 7 { exit(2); }
     var bad = eval("1 / 0");
     if !bad.is_err() { exit(3); }
-    println("calc: {}", eval("1 + 2 * 3") catch -1);
+    println("calc: {}", eval("1 + 2 * 3").unwrap());
     exit(0);
 }

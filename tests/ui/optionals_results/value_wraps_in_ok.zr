@@ -4,5 +4,5 @@ fn half(n: i32) i32! {
 }
 fn main() {
     var r: i32! = 5;
-    println("{} {} {}", r catch 0, half(8) catch -1, half(3) catch -1);
+    println("{} {} {}", r.unwrap(), half(8).unwrap(), half(3).unwrap_err());
 }

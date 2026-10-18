@@ -5,5 +5,5 @@ fn find_positive(x: i32) i32? {
 fn main() {
     var a = find_positive(5);
     var b = find_positive(-1);
-    println("{} {} {} {}", a.is_some(), b.is_none(), a.unwrap(), b orelse 7);
+    println("{} {} {}", a.is_some(), b.is_none(), a.unwrap());
 }

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Expected '{', found 'u8'
+   ╭─[ tests/ui/optionals_results/result_takes_no_error_type.zr:1:11 ]
+   │
+ 1 │ fn f() i32!u8 { return Ok(1); }
+   │           ┬
+   │           ╰── Expected '{', found 'u8'
+───╯
+[-] Error: aborting due to previous error

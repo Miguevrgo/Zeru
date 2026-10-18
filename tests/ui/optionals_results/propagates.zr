@@ -1,0 +1,19 @@
+fn f(fail: bool) i32! {
+    if fail { return Err(2); }
+    return Ok(10);
+}
+fn g(fail: bool) i32! {
+    var x = f(fail)!;
+    return Ok(x + 1);
+}
+fn half(n: i32) i32? {
+    if n % 2 != 0 { return None; }
+    return n / 2;
+}
+fn quarter(n: i32) i32? {
+    return half(half(n)?);
+}
+fn main() {
+    println("{} {}", g(false).unwrap(), g(true).unwrap_err());
+    println("{} {}", quarter(8).unwrap(), quarter(5).is_none());
+}

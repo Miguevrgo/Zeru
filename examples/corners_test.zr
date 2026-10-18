@@ -114,8 +114,8 @@ fn main() {
     var n: i32 = 7;
     var p: *i32 = &n;
     var read: i32? = *p;
-    if (doubled(a) orelse 0) != 6 { exit(21); }
-    if (sum orelse 0) != 7 || (neg orelse 0) != -3 || (read orelse 0) != 7 { exit(22); }
+    if doubled(a).unwrap() != 6 { exit(21); }
+    if sum.unwrap() != 7 || neg.unwrap() != -3 || read.unwrap() != 7 { exit(22); }
 
     var g = Growing { v: [1] };
     g.v[0] = g.grow();

@@ -26,7 +26,7 @@ pub enum TypeSpec {
     Tuple(Vec<TypeSpec>),
     Pointer(Box<TypeSpec>),
     Optional(Box<TypeSpec>),
-    Result(Box<TypeSpec>, Option<Box<TypeSpec>>),
+    Result(Box<TypeSpec>),
     Slice(Box<TypeSpec>),
     Ref(Box<TypeSpec>),
     RefMut(Box<TypeSpec>),
@@ -168,7 +168,11 @@ pub enum ExpressionKind {
     BorrowRef(Box<Expression>),
     BorrowRefMut(Box<Expression>),
     Dereference(Box<Expression>),
-    Try(Box<Expression>),
+    /// `value?` or `value!`: the payload, or a return of the missing value.
+    Try {
+        operator: Token,
+        value: Box<Expression>,
+    },
     Block(Vec<Statement>),
     Tuple(Vec<Expression>),
     InlineAsm {
@@ -246,7 +250,7 @@ impl Expression {
             | E::BorrowRef(inner)
             | E::BorrowRefMut(inner)
             | E::Dereference(inner)
-            | E::Try(inner) => inner.names(seen),
+            | E::Try { value: inner, .. } => inner.names(seen),
             E::Infix { left, right, .. }
             | E::Assign {
                 target: left,

@@ -33,7 +33,7 @@ pub fn sleep_ms(ms: i64) i64! {
 
 pub fn clock_ns() i64! {
     var ts: Array<u8, 16> = [0; 16];
-    try sys_result(syscall2(SYS_CLOCK_GETTIME, 1, (&ts[0]) as i64));
+    sys_result(syscall2(SYS_CLOCK_GETTIME, 1, (&ts[0]) as i64))!;
     var sec: *i64 = (&ts[0]) as *i64;
     var nsec: *i64 = (&ts[8]) as *i64;
     return Ok((*sec) * 1000000000 + (*nsec));
@@ -41,7 +41,7 @@ pub fn clock_ns() i64! {
 
 pub fn time() i64! {
     var ts: Array<u8, 16> = [0; 16];
-    try sys_result(syscall2(SYS_CLOCK_GETTIME, 0, (&ts[0]) as i64));
+    sys_result(syscall2(SYS_CLOCK_GETTIME, 0, (&ts[0]) as i64))!;
     var sec: *i64 = (&ts[0]) as *i64;
     return Ok(*sec);
 }
@@ -49,7 +49,7 @@ pub fn time() i64! {
 pub fn hostname(buf: *u8, size: usize) i64! {
     if size == 0 { return Ok(0); }
     var utsname: Array<u8, 390> = [0; 390];
-    try sys_result(syscall1(SYS_UNAME, (&utsname[0]) as i64));
+    sys_result(syscall1(SYS_UNAME, (&utsname[0]) as i64))!;
     var i: usize = 0;
     while i < 64 && i < size - 1 {
         var src: *u8 = &utsname[65 + i];
