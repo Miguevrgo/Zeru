@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: 'hashmap::slot' is private to module 'hashmap'; mark it pub
+Error: 'hashmap::hash' is private to module 'hashmap'; mark it pub
    ╭─[ tests/ui/collections/hashmap_private_function.zr:3:14 ]
    │
- 3 │     var at = hashmap::slot(1, 7);
-   │              ─────────┬─────────
-   │                       ╰─────────── 'hashmap::slot' is private to module 'hashmap'; mark it pub
+ 3 │     var at = hashmap::hash(1);
+   │              ────────┬───────
+   │                      ╰───────── 'hashmap::hash' is private to module 'hashmap'; mark it pub
 ───╯
 [-] Error: aborting due to previous error

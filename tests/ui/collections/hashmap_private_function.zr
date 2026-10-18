@@ -1,4 +1,4 @@
 import std.collections.hashmap;
 fn main() {
-    var at = hashmap::slot(1, 7);
+    var at = hashmap::hash(1);
 }

@@ -1,43 +1,93 @@
 // Zeru Standard Library - HashMap
-// Open addressing over slots that double once three quarters are taken.
+// A SwissTable, as Rust's hashbrown: one control byte per slot, sixteen of
+// them per group, compared all at once with SSE2.
 // A key is an integer, a bool or an enum, hashed by its bits.
 
-// Where probing for `bits` starts: Fibonacci hashing, the bits times 2^64
-// over the golden ratio, wrapping, with the high half kept.
-fn slot(bits: u64, mask: usize) usize {
-    return ((bits *% 11400714819323198485) >> 32) as usize & mask;
+// A control byte: a slot never used, one whose entry was removed, or else
+// the top seven bits of its key's hash.
+const EMPTY: u64 = 255;
+const DELETED: u64 = 128;
+
+// Fibonacci hashing: the bits times 2^64 over the golden ratio, wrapping.
+fn hash(bits: u64) u64 {
+    return bits *% 11400714819323198485;
+}
+
+// The slots of the group whose control bytes are `low` and `high` holding
+// `byte`, one bit each, and those never used.
+fn scan(low: u64, high: u64, byte: u32) (u32, u32) {
+    var hits: u32 = 0;
+    var empty: u32 = 0;
+    asm (
+        "movq $2, %xmm0\n punpcklqdq $3, %xmm0\n movd $4, %xmm1\n punpcklbw %xmm1, %xmm1\n pshuflw $$0, %xmm1, %xmm1\n pshufd $$0, %xmm1, %xmm1\n pcmpeqb %xmm0, %xmm1\n pmovmskb %xmm1, $0\n pcmpeqd %xmm1, %xmm1\n pcmpeqb %xmm1, %xmm0\n pmovmskb %xmm0, $1"
+        : "=r" (hits), "=r" (empty)
+        : "r" (low), "x" (high), "r" (byte)
+        : "xmm0", "xmm1"
+    );
+    return (hits, empty);
+}
+
+// The slots of the group free to take, never used or removed.
+fn free_slots(low: u64, high: u64) u32 {
+    var free: u32 = 0;
+    asm (
+        "movq $1, %xmm0\n punpcklqdq $2, %xmm0\n pmovmskb %xmm0, $0"
+        : "=r" (free)
+        : "r" (low), "x" (high)
+        : "xmm0"
+    );
+    return free;
+}
+
+// The position of the lowest bit set in `bits`, which is not zero.
+fn lowest(bits: u32) usize {
+    var at: u32 = 0;
+    asm ("bsf $1, $0" : "=r" (at) : "r" (bits));
+    return at as usize;
 }
 
 pub struct HashMap<K: Eq, V> {
-    keys: Vec<K?>,
-    values: Vec<V?>,
+    groups: Vec<u64>,
+    slots: Vec<(K, V)?>,
     len: usize,
-    used: usize,
+    room: usize,
 
     pub fn new() HashMap<K, V> {
-        return HashMap { keys: Vec.new(), values: Vec.new(), len: 0, used: 0 };
+        return HashMap { groups: Vec.new(), slots: Vec.new(), len: 0, room: 0 };
     }
 
     // Store `value` under `key`, in place of what was there.
     pub fn insert(var self, key: K, value: V) {
         var found = self.find(key);
         if found.is_some() {
-            self.values[found.unwrap()] = value;
+            self.slots[found.unwrap()] = (key, value);
             return;
         }
-        if (self.used + 1) * 4 > self.keys.len() * 3 {
+        if self.room == 0 {
             self.grow();
         }
-        var mask = self.keys.len() - 1;
-        var at = slot(key as u64, mask);
-        while self.values[at].is_some() {
-            at = (at + 1) & mask;
+        self.place((key, value));
+    }
+
+    // Put `entry`, whose key no slot holds, in the first free slot of its
+    // search.
+    fn place(var self, entry: (K, V)) {
+        var bits = hash(entry.0 as u64);
+        var mask = self.groups.len() / 2 - 1;
+        var at = (bits >> 32) as usize & mask;
+        var stride: usize = 0;
+        var free = self.free_slots(at);
+        while free == 0 {
+            stride += 1;
+            at = (at + stride) & mask;
+            free = self.free_slots(at);
         }
-        if self.keys[at].is_none() {
-            self.used += 1;
+        var slot = at * 16 + lowest(free);
+        if self.control(slot) == EMPTY {
+            self.room -= 1;
         }
-        self.keys[at] = key;
-        self.values[at] = value;
+        self.set_control(slot, bits >> 57);
+        self.slots[slot] = entry;
         self.len += 1;
     }
 
@@ -47,8 +97,8 @@ pub struct HashMap<K: Eq, V> {
         if found.is_none() {
             return None;
         }
-        match self.values[found.unwrap()] {
-            Some(value) => { return &value; }
+        match self.slots[found.unwrap()] {
+            Some(entry) => { return &entry.1; }
             None => { return None; }
         }
     }
@@ -57,30 +107,31 @@ pub struct HashMap<K: Eq, V> {
         return self.find(key).is_some();
     }
 
-    // Drop the entry under `key`; false when there was none. Removed slots
-    // that end a probe run become unused again.
+    // Drop the entry under `key`; false when there was none. Its slot is
+    // never used again only if its group still has one never used, since
+    // then no search ever went past that group.
     pub fn remove(var self, key: K) bool {
         var found = self.find(key);
         if found.is_none() {
             return false;
         }
-        var mask = self.keys.len() - 1;
-        var at = found.unwrap();
-        self.values[at] = None;
+        var slot = found.unwrap();
+        self.slots[slot] = None;
         self.len -= 1;
-        while self.keys[at].is_some() && self.values[at].is_none() && self.keys[(at + 1) & mask].is_none() {
-            self.keys[at] = None;
-            self.used -= 1;
-            at = (at + mask) & mask;
+        if self.scan(slot / 16, 0).1 != 0 {
+            self.set_control(slot, EMPTY);
+            self.room += 1;
+        } else {
+            self.set_control(slot, DELETED);
         }
         return true;
     }
 
     pub fn clear(var self) {
-        self.keys.clear();
-        self.values.clear();
+        self.groups.clear();
+        self.slots.clear();
         self.len = 0;
-        self.used = 0;
+        self.room = 0;
     }
 
     pub fn len(self) usize {
@@ -91,52 +142,84 @@ pub struct HashMap<K: Eq, V> {
         return self.len == 0;
     }
 
-    // The slot holding `key`. Probing stops at a slot never used.
+    // The slot holding `key`: groups are searched in a triangular sequence
+    // until one has a slot never used.
     fn find(self, key: K) usize? {
-        if self.keys.is_empty() {
+        if self.groups.is_empty() {
             return None;
         }
-        var mask = self.keys.len() - 1;
-        var at = slot(key as u64, mask);
-        while self.keys[at].is_some() {
-            match self.keys[at] {
-                Some(held) => {
-                    if held == key && self.values[at].is_some() {
-                        return at;
+        var bits = hash(key as u64);
+        var top = (bits >> 57) as u32;
+        var mask = self.groups.len() / 2 - 1;
+        var at = (bits >> 32) as usize & mask;
+        var stride: usize = 0;
+        while true {
+            var found = self.scan(at, top);
+            var hits = found.0;
+            while hits != 0 {
+                var slot = at * 16 + lowest(hits);
+                match self.slots[slot] {
+                    Some(entry) => {
+                        if entry.0 == key {
+                            return slot;
+                        }
                     }
+                    None => { }
                 }
-                None => { }
+                hits = hits & (hits - 1);
             }
-            at = (at + 1) & mask;
+            if found.1 != 0 {
+                return None;
+            }
+            stride += 1;
+            at = (at + stride) & mask;
         }
-        return None;
     }
 
-    // Twice the slots when half or more hold entries, as many otherwise,
-    // or eight to start, with every entry placed again.
+    fn scan(self, group: usize, byte: u32) (u32, u32) {
+        return scan(self.groups[group * 2], self.groups[group * 2 + 1], byte);
+    }
+
+    fn free_slots(self, group: usize) u32 {
+        return free_slots(self.groups[group * 2], self.groups[group * 2 + 1]);
+    }
+
+    fn control(self, slot: usize) u64 {
+        return (self.groups[slot / 8] >> ((slot % 8) * 8) as u64) & 255;
+    }
+
+    fn set_control(var self, slot: usize, control: u64) {
+        var shift = ((slot % 8) * 8) as u64;
+        var word = slot / 8;
+        self.groups[word] = (self.groups[word] & !(255 << shift)) | (control << shift);
+    }
+
+    // Twice the groups when half or more of the slots hold entries, as many
+    // otherwise, or one to start; seven slots in eight may be taken.
     fn grow(var self) {
-        var size: usize = self.keys.len();
-        if self.len * 2 >= size {
-            size *= 2;
+        var count: usize = self.groups.len() / 2;
+        if self.len * 2 >= count * 16 {
+            count *= 2;
         }
-        if size == 0 {
-            size = 8;
+        if count == 0 {
+            count = 1;
         }
         var bigger: HashMap<K, V> = HashMap {
-            keys: Vec.with_capacity(size),
-            values: Vec.with_capacity(size),
+            groups: Vec.with_capacity(count * 2),
+            slots: Vec.with_capacity(count * 16),
             len: 0,
-            used: 0
+            room: count * 14
         };
-        for at in 0..size {
-            bigger.keys.push(None);
-            bigger.values.push(None);
+        for at in 0..count * 2 {
+            bigger.groups.push(18446744073709551615);
         }
-        while !self.keys.is_empty() {
-            var key = self.keys.pop().unwrap();
-            var value = self.values.pop().unwrap();
-            if value.is_some() {
-                bigger.insert(key.unwrap(), value.unwrap());
+        for at in 0..count * 16 {
+            bigger.slots.push(None);
+        }
+        while !self.slots.is_empty() {
+            var entry = self.slots.pop().unwrap();
+            if entry.is_some() {
+                bigger.place(entry.unwrap());
             }
         }
         self = bigger;
