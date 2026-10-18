@@ -28,12 +28,33 @@ impl FnCx<'_, '_> {
     }
 
     pub(super) fn expr(&mut self, e: &Expression, expected: Option<Ty>) -> Expr {
+        let expected = expected.map(|ty| self.resolve(ty));
         let errors = self.cx.errors.len();
         let expr = self.expr_inner(e, expected);
         if self.cx.errors.len() == errors {
             self.check_constant(&expr);
         }
         expr
+    }
+
+    /// `e` where its value is used, which something returning nothing has
+    /// not, as in C.
+    pub(super) fn value(&mut self, e: &Expression, expected: Option<Ty>) -> Expr {
+        let value = self.expr(e, expected);
+        if value.ty != Types::VOID {
+            return value;
+        }
+        let message = match &e.kind {
+            ExpressionKind::Call { function, .. } => match &function.kind {
+                ExpressionKind::Identifier(name) | ExpressionKind::Get { name, .. } => {
+                    format!("{name}() returns nothing, so it has no value to use")
+                }
+                _ => "This call returns nothing, so it has no value to use".into(),
+            },
+            _ => "This has no value to use".into(),
+        };
+        self.error(message, e.span);
+        self.error_expr(e.span)
     }
 
     /// The expected type a literal takes its own from: a `T?` hands down `T`.
@@ -64,7 +85,8 @@ impl FnCx<'_, '_> {
             }
             ExpressionKind::None => match expected.map(|ty| (ty, self.cx.types.kind(ty))) {
                 Some((ty, TyKind::Optional(_))) => self.mk(ExprKind::None, ty, span),
-                Some((ty, _)) if !self.cx.types.is_error(ty) => {
+                Some((ty, _)) if self.cx.types.is_error(ty) => self.error_expr(span),
+                Some((ty, _)) if !self.cx.types.contains_var(ty) => {
                     let shown = self.ty(ty);
                     self.error(
                         format!("'None' can only be assigned to optional types, got {shown}"),
@@ -72,7 +94,10 @@ impl FnCx<'_, '_> {
                     );
                     self.error_expr(span)
                 }
-                _ => self.error_expr(span),
+                _ => {
+                    self.error("Cannot tell the type of None here; annotate it", span);
+                    self.error_expr(span)
+                }
             },
             ExpressionKind::Identifier(name) => self.identifier(name, span),
             ExpressionKind::Get { .. }
@@ -104,8 +129,9 @@ impl FnCx<'_, '_> {
             }
             ExpressionKind::Call {
                 function,
+                type_args,
                 arguments,
-            } => self.call(function, arguments, expected, span),
+            } => self.call(function, type_args, arguments, expected, span),
             ExpressionKind::StructLiteral { name, fields } => {
                 self.struct_literal(name, fields, inner, span)
             }
@@ -181,8 +207,8 @@ impl FnCx<'_, '_> {
         };
         if let Some(ty) = expected.filter(|&t| self.cx.types.is_float(t)) {
             let exact = match self.cx.types.kind(ty) {
-                TyKind::F32 => (value as f32) as u64 == value,
-                _ => (value as f64) as u64 == value,
+                TyKind::F32 => (value as f32) as u128 == u128::from(value),
+                _ => (value as f64) as u128 == u128::from(value),
             };
             if !exact {
                 let shown = self.ty(ty);
@@ -408,14 +434,13 @@ impl FnCx<'_, '_> {
     }
 
     fn borrow(&mut self, inner: &Expression, mutable: bool, span: Span) -> Expr {
-        let assignable = is_assignable(inner);
         let (place, ty) = self.place(inner);
         if mutable {
             self.require_mutable(&place, inner, span);
         } else if let Some(root) = super::body::local_root(&place) {
             self.require_unchanging(root, span);
         }
-        if !assignable {
+        if self.temporary(&place, ty, inner) {
             self.error("Cannot create reference to a temporary value", span);
         }
         let kind = if mutable {
@@ -434,21 +459,6 @@ impl FnCx<'_, '_> {
         value: &Expression,
         span: Span,
     ) -> Expr {
-        if !is_assignable(target) {
-            self.error("Cannot assign to a temporary value", target.span);
-        }
-        if let ExpressionKind::Identifier(name) = &target.kind
-            && self.local(name).is_none()
-            && self
-                .cx
-                .items
-                .lookup_value(self.scope.module, name)
-                .is_some_and(|def| self.cx.items.item(def).kind == ItemKind::Const)
-        {
-            self.error(format!("Cannot reassign constant variable '{name}'"), span);
-            let _ = self.expr(value, None);
-            return self.mk(ExprKind::Void, Types::VOID, span);
-        }
         let revived = match &target.kind {
             ExpressionKind::Identifier(name) => self.local(name),
             _ => None,
@@ -457,6 +467,9 @@ impl FnCx<'_, '_> {
             Some(local) => (Place::Local(local), self.local_ty(local)),
             None => self.place(target),
         };
+        if self.temporary(&place, target_ty, target) {
+            self.error("Cannot assign to a temporary value", target.span);
+        }
         match revived {
             Some(local) if !self.local_mutable(local) => {
                 let name = self.local_name(local).to_string();
@@ -520,12 +533,47 @@ impl FnCx<'_, '_> {
                 value: Box::new(value),
             },
             None => ExprKind::Assign {
-                drop_old: self.cx.owns_heap(target_ty) && !matches!(place, Place::Deref(_)),
+                drop_old: self.cx.owns_heap(target_ty) && !self.writes_raw(&place),
                 place,
                 value: Box::new(value),
             },
         };
         self.mk(kind, Types::VOID, span)
+    }
+
+    /// Whether `place` is what a raw `*T` points at, which may hold no value
+    /// yet: writing there drops nothing, as Rust's `ptr::write`.
+    fn writes_raw(&self, place: &Place) -> bool {
+        matches!(place, Place::Deref(pointer) if matches!(self.cx.types.kind(pointer.ty), TyKind::Ptr(_)))
+    }
+
+    /// The constant whose value `place`, written as `ast`, is part of. A
+    /// constant is a value and not a place, as in rustc, so a write to it
+    /// would change only a copy.
+    pub(super) fn constant_written(&self, place: &Place, ast: &Expression) -> Option<String> {
+        if !super::body::in_temporary(place) {
+            return None;
+        }
+        let mut root = ast;
+        while let ExpressionKind::Get { object, .. } | ExpressionKind::Index { left: object, .. } =
+            &root.kind
+        {
+            root = object;
+        }
+        let ExpressionKind::Identifier(name) = &root.kind else {
+            return None;
+        };
+        let def = self.cx.items.lookup_value(self.scope.module, name)?;
+        (self.local(name).is_none() && self.cx.items.item(def).kind == ItemKind::Const)
+            .then(|| name.clone())
+    }
+
+    /// Whether `place` of type `ty`, written as `ast`, is a temporary value
+    /// that is not a constant's.
+    pub(super) fn temporary(&self, place: &Place, ty: Ty, ast: &Expression) -> bool {
+        super::body::in_temporary(place)
+            && !self.cx.types.is_error(ty)
+            && self.constant_written(place, ast).is_none()
     }
 
     /// The type of what `place` holds.
@@ -585,7 +633,7 @@ impl FnCx<'_, '_> {
             operator,
             Token::Eq | Token::NotEq | Token::Lt | Token::Gt | Token::Leq | Token::Geq
         );
-        let hint = if comparison { None } else { expected };
+        let hint = expected.filter(|&ty| !comparison && !self.cx.types.contains_var(ty));
         let (l, r) = self.operands(left, right, hint);
         let types = &self.cx.types;
         if types.is_error(l.ty) || types.is_error(r.ty) {
@@ -697,6 +745,7 @@ impl FnCx<'_, '_> {
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
+        let expected = expected.filter(|&ty| !self.cx.types.contains_var(ty));
         match operator {
             Token::Minus => {
                 if let ExpressionKind::Int(value) = right.kind {
@@ -826,7 +875,7 @@ impl FnCx<'_, '_> {
             let field_ty = declared[position].1;
             let checked = checked
                 .remove(&at)
-                .unwrap_or_else(|| self.expr(value, Some(field_ty)));
+                .unwrap_or_else(|| self.value(value, Some(field_ty)));
             let mut checked = self.coerce_or(checked, field_ty, value.span, |want, got| {
                 format!(
                     "Type mismatch: Field '{field}' in struct '{shown}' expected {want}, got {got}"
@@ -887,7 +936,7 @@ impl FnCx<'_, '_> {
                 );
                 return None;
             };
-            let value = self.expr(&fields[at].1, None);
+            let value = self.value(&fields[at].1, None);
             args.push(value.ty);
             checked.insert(at, value);
         }
@@ -912,10 +961,14 @@ impl FnCx<'_, '_> {
                     };
                     self.mk(ExprKind::Array(Vec::new()), ty, span)
                 }
-                _ => self.error_expr(span),
+                Some(ty) if self.cx.types.is_error(ty) => self.error_expr(span),
+                _ => {
+                    self.error("Cannot tell the type of [] here; annotate it", span);
+                    self.error_expr(span)
+                }
             };
         };
-        let first = self.expr(first, hint);
+        let first = self.value(first, hint);
         let (mut first, elem) = match hint {
             Some(hint) => match self.coerce(first, hint) {
                 Ok(first) => (first, hint),
@@ -932,7 +985,7 @@ impl FnCx<'_, '_> {
         self.consume(&mut first);
         let mut values = vec![first];
         for (at, element) in rest.iter().enumerate() {
-            let value = self.expr(element, Some(elem));
+            let value = self.value(element, Some(elem));
             let mut value = self.coerce_or(value, elem, element.span, |want, got| {
                 format!(
                     "Array element at index {} type mismatch. Expected {want}, got {got}",
@@ -960,7 +1013,7 @@ impl FnCx<'_, '_> {
         span: Span,
     ) -> Expr {
         let (hint, into_vec) = self.element_hint(expected);
-        let mut element = self.expr(value, hint);
+        let mut element = self.value(value, hint);
         if let Some(hint) = hint {
             element = self.coerce_or(element, hint, value.span, |want, got| {
                 format!("Array element at index 0 type mismatch. Expected {want}, got {got}")
@@ -1013,7 +1066,7 @@ impl FnCx<'_, '_> {
         let mut values = Vec::new();
         for (at, element) in elements.iter().enumerate() {
             let hint = wanted.as_ref().and_then(|parts| parts.get(at).copied());
-            let mut value = self.expr(element, hint);
+            let mut value = self.value(element, hint);
             if let Some(hint) = hint {
                 value = match self.coerce(value, hint) {
                     Ok(value) | Err(value) => value,
@@ -1061,17 +1114,6 @@ impl FnCx<'_, '_> {
         }
         self.consume(&mut value);
         self.mk(ExprKind::Try(Box::new(value)), ok, span)
-    }
-}
-
-/// Whether a write can reach `expr`: a place rooted in a variable or a
-/// dereference. A call result or a literal is a temporary.
-pub(super) fn is_assignable(expr: &Expression) -> bool {
-    match &expr.kind {
-        ExpressionKind::Identifier(_) | ExpressionKind::Dereference(_) => true,
-        ExpressionKind::Get { object, .. } => is_assignable(object),
-        ExpressionKind::Index { left, .. } => is_assignable(left),
-        _ => false,
     }
 }
 

@@ -1,0 +1,8 @@
+fn g<T>(x: T) { }
+fn h<T>(x: T?) { }
+fn two<A, B>() { }
+fn main() {
+    g(None);
+    h(None);
+    two();
+}

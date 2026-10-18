@@ -1,0 +1,20 @@
+struct Box<T> {
+    v: T,
+    fn make(v: T) Box<T> { return Box { v: v }; }
+}
+fn fill<T>(v: Vec<T>, x: T) usize { return v.len(); }
+fn wrap<T>(b: Box<T>, n: T) T { return b.v + n; }
+fn unbox<T>(b: Box<T>) T { return b.v; }
+fn empty<T>() Vec<T> { return Vec.new(); }
+fn first<T>(a: Array<T, 2>, x: T) T { return a[0] + x; }
+fn main() {
+    var x: i64 = 7;
+    println("{}", fill(Vec.with_capacity(10), x));
+    println("{}", fill(empty(), x));
+    println("{}", wrap(Box.make(7), 5));
+    println("{}", unbox(Box { v: x }));
+    var v: Vec<i32> = empty();
+    println("{}", v.len());
+    var big: i64 = 5000000000;
+    println("{}", first([1, 2], big));
+}

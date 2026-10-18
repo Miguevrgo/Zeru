@@ -1,15 +1,15 @@
 //! Calls: functions, methods, generic inference, the constructors of enums,
 //! results and Vecs, the built-in methods, and `print`.
 
-use crate::ast::{Expression, ExpressionKind, format_pieces};
+use crate::ast::{Expression, ExpressionKind, TypeSpec, format_pieces};
 use crate::errors::Span;
 use crate::items::{DefId, ItemKind};
 use crate::tir::{Arm, Builtin, Expr, ExprKind, Payload, Place};
 use crate::ty::{Ty, TyKind, Types};
 
+use super::Receiver;
 use super::body::FnCx;
 use super::expr::is_number_literal;
-use super::{Receiver, Sig};
 
 /// The built-in ways to write text: to stdout or stderr, with or without a
 /// newline after.
@@ -31,25 +31,37 @@ const VEC_MUTATORS: &[&str] = &[
 ];
 
 impl FnCx<'_, '_> {
+    /// A call, `type_args` given only to a function declared with type
+    /// parameters.
     pub(super) fn call(
         &mut self,
         function: &Expression,
+        type_args: &[TypeSpec],
         args: &[Expression],
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
-        match &function.kind {
-            ExpressionKind::Identifier(name) => {
-                self.named_call(name, function.span, args, expected, span)
-            }
-            ExpressionKind::Get { object, name } => {
-                self.method_call(object, name, args, expected, span)
-            }
+        let (call, name) = match &function.kind {
+            ExpressionKind::Identifier(name) => (
+                self.named_call(name, function.span, type_args, args, expected, span),
+                name,
+            ),
+            ExpressionKind::Get { object, name } => (
+                self.method_call(object, name, type_args, args, expected, span),
+                name,
+            ),
             _ => {
                 self.error("Invalid call expression", span);
-                self.error_expr(span)
+                return self.error_expr(span);
             }
+        };
+        if !type_args.is_empty()
+            && !matches!(call.kind, ExprKind::Call(..))
+            && !self.cx.types.is_error(call.ty)
+        {
+            self.error(format!("'{name}' takes no type arguments"), span);
         }
+        call
     }
 
     fn check_args_only(&mut self, args: &[Expression]) {
@@ -62,6 +74,7 @@ impl FnCx<'_, '_> {
         &mut self,
         name: &str,
         function_span: Span,
+        type_args: &[TypeSpec],
         args: &[Expression],
         expected: Option<Ty>,
         span: Span,
@@ -134,13 +147,18 @@ impl FnCx<'_, '_> {
             return self.error_expr(span);
         };
         self.cx.check_visible(def, module, span);
-        self.call_def(def, Vec::new(), None, args, expected, span)
+        let Some(known) = self.known_type_args(def, Vec::new(), type_args, span) else {
+            self.check_args_only(args);
+            return self.error_expr(span);
+        };
+        self.call_def(def, known, None, args, expected, span)
     }
 
     fn method_call(
         &mut self,
         object: &Expression,
         name: &str,
+        type_args: &[TypeSpec],
         args: &[Expression],
         expected: Option<Ty>,
         span: Span,
@@ -154,7 +172,13 @@ impl FnCx<'_, '_> {
             if let Some(def) = self.cx.items.lookup_type(self.scope.module, type_name)
                 && self.cx.items.item(def).kind == ItemKind::Struct
             {
-                return self.static_call(def, type_name, name, args, expected, span);
+                let Some((method, known)) =
+                    self.static_callee(def, type_name, name, type_args, expected, span)
+                else {
+                    self.check_args_only(args);
+                    return self.error_expr(span);
+                };
+                return self.call_def(method, known, None, args, expected, span);
             }
         }
 
@@ -170,11 +194,17 @@ impl FnCx<'_, '_> {
             && let TyKind::Optional(reference) = *self.cx.types.kind(ty)
             && let TyKind::Ref(inner) | TyKind::RefMut(inner) = *self.cx.types.kind(reference)
         {
+            if self.copies_drop(inner, span) {
+                return self.error_expr(span);
+            }
             return self.copy_referent(place, reference, inner, span);
         }
         let through = matches!(self.cx.types.kind(ty), TyKind::Ref(_) | TyKind::RefMut(_));
         let (place, ty) = self.through_ref(place, ty, object.span);
         if name == "copy" && args.is_empty() {
+            if self.copies_drop(ty, span) {
+                return self.error_expr(span);
+            }
             if self.cx.owns_heap(ty) {
                 return self.mk(ExprKind::Copy(place), ty, span);
             }
@@ -248,8 +278,12 @@ impl FnCx<'_, '_> {
                     Some(Receiver::Mutable) => self.require_mutable(&place, object, span),
                     _ => {}
                 }
+                let Some(known) = self.known_type_args(def, struct_args, type_args, span) else {
+                    self.check_args_only(args);
+                    return self.error_expr(span);
+                };
                 let receiver = self.address(place, struct_ty, object.span);
-                self.call_def(def, struct_args, Some(receiver), args, expected, span)
+                self.call_def(def, known, Some(receiver), args, expected, span)
             }
             _ => {
                 let shown = self.ty(ty);
@@ -260,6 +294,20 @@ impl FnCx<'_, '_> {
                 self.error_expr(span)
             }
         }
+    }
+
+    /// Report a `.copy()` of a `ty` that runs a `drop`, which would run once
+    /// for each copy.
+    fn copies_drop(&mut self, ty: Ty, span: Span) -> bool {
+        if !self.cx.runs_drop(ty) {
+            return false;
+        }
+        let shown = self.ty(ty);
+        self.error(
+            format!("Cannot copy {shown}: it runs a drop, or holds a value that does, which both copies would run"),
+            span,
+        );
+        true
     }
 
     /// `.copy()` on a `(&T)?`: a `T?` holding a copy of what it refers to,
@@ -300,33 +348,31 @@ impl FnCx<'_, '_> {
         self.mk(ExprKind::AddressOf(place), pointer, span)
     }
 
-    /// `Type.function(..)`, a struct's function that takes no `self`. A
-    /// generic struct's arguments come from the type the result goes to.
-    fn static_call(
+    /// The function `Type.name(..)` calls, a struct's function that takes no
+    /// `self`, and the type arguments known for it: all of them, a generic
+    /// struct's first, when written as in `Pair.make<i32>(..)`, or else
+    /// those of a generic struct, from the type the result goes to.
+    fn static_callee(
         &mut self,
         def: DefId,
         type_name: &str,
         name: &str,
-        args: &[Expression],
+        type_args: &[TypeSpec],
         expected: Option<Ty>,
         span: Span,
-    ) -> Expr {
+    ) -> Option<(DefId, Vec<Ty>)> {
         self.cx.check_visible(def, self.scope.module, span);
         let generic = !super::generics_of(self.cx.items.item(def).decl).is_empty();
-        let struct_args = if generic {
+        let struct_args = if generic && type_args.is_empty() {
             match expected.map(|ty| (ty, self.cx.types.kind(ty).clone())) {
                 Some((_, TyKind::Adt(d, args))) if d == def => args,
-                Some((ty, _)) if self.cx.types.is_error(ty) => {
-                    self.check_args_only(args);
-                    return self.error_expr(span);
-                }
+                Some((ty, _)) if self.cx.types.is_error(ty) => return None,
                 _ => {
                     self.error(
                         format!("Cannot tell what {type_name}'s type arguments are here; give the variable a type, as in var x: {type_name}<..> = {type_name}.{name}()"),
                         span,
                     );
-                    self.check_args_only(args);
-                    return self.error_expr(span);
+                    return None;
                 }
             }
         } else {
@@ -335,8 +381,7 @@ impl FnCx<'_, '_> {
         let Some(method) = self.cx.items.method(def, name) else {
             let shown = self.cx.items.item(def).name.clone();
             self.error(format!("Struct '{shown}' has no method '{name}'"), span);
-            self.check_args_only(args);
-            return self.error_expr(span);
+            return None;
         };
         self.cx.check_visible(method, self.scope.module, span);
         if self
@@ -349,19 +394,62 @@ impl FnCx<'_, '_> {
                 format!("'{full}' takes 'self'; call it on a value, as in x.{name}()"),
                 span,
             );
-            self.check_args_only(args);
-            return self.error_expr(span);
+            return None;
         }
-        self.call_def(method, struct_args, None, args, expected, span)
+        let known = self.known_type_args(method, struct_args, type_args, span)?;
+        Some((method, known))
     }
 
-    /// A call to `def`, with the arguments of its struct's type parameters
-    /// known, and those of its own inferred from the arguments: written
-    /// numbers and `None` last, since they fit whatever the others settle.
+    /// The type arguments of `def` known before its call is checked: `known`,
+    /// then those written, which must be all the rest.
+    fn known_type_args(
+        &mut self,
+        def: DefId,
+        mut known: Vec<Ty>,
+        written: &[TypeSpec],
+        span: Span,
+    ) -> Option<Vec<Ty>> {
+        if written.is_empty() {
+            return Some(known);
+        }
+        let wanted = self.cx.sig(def)?.generics.len() - known.len();
+        if written.len() != wanted {
+            let (full, got) = (self.cx.items.item(def).name.clone(), written.len());
+            self.error(
+                format!("'{full}' takes {wanted} type argument(s), got {got}"),
+                span,
+            );
+            return None;
+        }
+        let scope = self.scope.clone();
+        for spec in written {
+            known.push(self.cx.resolve_type(spec, &scope, span));
+        }
+        (!known.iter().any(|&ty| self.cx.types.is_error(ty))).then_some(known)
+    }
+
+    /// A call to `def`, with the type arguments `known` given, and the others
+    /// inferred: from the arguments, then from the type the result goes to,
+    /// then from written numbers and `None`, which fit whatever the others
+    /// settle.
     fn call_def(
         &mut self,
         def: DefId,
-        struct_args: Vec<Ty>,
+        known: Vec<Ty>,
+        receiver: Option<Expr>,
+        args: &[Expression],
+        expected: Option<Ty>,
+        span: Span,
+    ) -> Expr {
+        self.inference_root(expected, span, |this| {
+            this.generic_call(def, known, receiver, args, expected, span)
+        })
+    }
+
+    fn generic_call(
+        &mut self,
+        def: DefId,
+        known: Vec<Ty>,
         receiver: Option<Expr>,
         args: &[Expression],
         expected: Option<Ty>,
@@ -371,22 +459,12 @@ impl FnCx<'_, '_> {
         let Some(sig) = self.cx.sig(def) else {
             return self.error_expr(span);
         };
-        let Sig {
-            params,
-            generics,
-            own_generics,
-            ret,
-            ..
-        } = sig;
-        let mut subs: Vec<Option<Ty>> = struct_args.into_iter().map(Some).collect();
-        subs.resize(generics.len(), None);
-        let params: Vec<Ty> = params[usize::from(receiver.is_some())..].to_vec();
-
-        if args.len() != params.len() {
+        let skip = usize::from(receiver.is_some());
+        if args.len() != sig.params.len() - skip {
             self.error(
                 format!(
                     "Function '{full}' expects {} arguments, got {}",
-                    params.len(),
+                    sig.params.len() - skip,
                     args.len()
                 ),
                 span,
@@ -394,132 +472,54 @@ impl FnCx<'_, '_> {
             self.check_args_only(args);
             return self.error_expr(span);
         }
+        let mut generics = known;
+        for param in &sig.generics[generics.len()..] {
+            let var = self.new_var(&param.name, &full, span);
+            generics.push(var);
+        }
+        let params = self.cx.types.subst_all(&sig.params[skip..], &generics);
+        let ret = self.cx.types.subst(sig.ret, &generics);
 
-        let deferred =
-            |arg: &Expression| written_number(arg) || matches!(arg.kind, ExpressionKind::None);
-        let order: Vec<usize> = (0..args.len())
-            .filter(|&at| !deferred(&args[at]))
-            .chain((0..args.len()).filter(|&at| deferred(&args[at])))
-            .collect();
+        let (late, early): (Vec<usize>, Vec<usize>) =
+            (0..args.len()).partition(|&at| written_value(&args[at]));
         let mut checked: Vec<Option<Expr>> = (0..args.len()).map(|_| None).collect();
         let pending = self.pending_loans.len();
-        let mut poisoned = false;
-        let mut expected_bound = false;
-        for at in order {
-            if deferred(&args[at]) && !expected_bound {
-                expected_bound = true;
-                if let Some(expected) = expected {
-                    self.bind(ret, expected, &mut subs);
-                }
-            }
-            let hint = self.partial(params[at], &subs);
-            let value = self.expr(&args[at], Some(hint));
-            poisoned |= self.cx.types.is_error(value.ty);
-            self.bind(params[at], value.ty, &mut subs);
-            let target = self.partial(params[at], &subs);
-            let mut value = if self.cx.types.contains_param(target) {
-                value
-            } else {
-                let index = at + 1;
-                self.coerce_or(value, target, args[at].span, |want, got| {
-                    format!("Argument {index} type mismatch: expected {want}, got {got}")
-                })
-            };
-            if !matches!(
-                self.cx.types.kind(target),
-                TyKind::Ref(_) | TyKind::RefMut(_)
-            ) {
-                self.consume(&mut value);
-            }
-            let loans = self.loans_of(&value);
-            self.pending_loans.extend(loans);
-            checked[at] = Some(value);
+        for at in early {
+            checked[at] = Some(self.argument(&args[at], params[at], at));
+        }
+        if let Some(expected) = expected {
+            self.fits(expected, ret, false);
+        }
+        for at in late {
+            checked[at] = Some(self.argument(&args[at], params[at], at));
         }
         self.pending_loans.truncate(pending);
 
-        let mut resolved = Vec::with_capacity(subs.len());
-        for (param, sub) in generics.iter().zip(&subs) {
-            match sub {
-                Some(ty) if self.cx.types.is_error(*ty) => return self.error_expr(span),
-                Some(ty) => resolved.push(*ty),
-                None if poisoned => return self.error_expr(span),
-                None => {
-                    self.error(
-                        format!(
-                            "Cannot tell what '{}' is in this call to '{full}'",
-                            param.name
-                        ),
-                        span,
-                    );
-                    return self.error_expr(span);
-                }
-            }
-        }
-        let own_from = generics.len() - own_generics;
-        if !self
-            .cx
-            .check_bounds(def, &generics[own_from..], &resolved[own_from..], span)
-        {
+        let Some(id) = self.call_instance(def, generics, span) else {
             return self.error_expr(span);
-        }
-        let ret = self.cx.types.subst(ret, &resolved);
-        self.cx.note_types_in(ret, span);
-        let id = self.cx.instance(def, resolved, span);
+        };
         let mut values: Vec<Expr> = receiver.into_iter().collect();
         values.extend(checked.into_iter().map(Option::unwrap));
         self.mk(ExprKind::Call(id, values), ret, span)
     }
 
-    /// `ty` with the parameters known so far substituted.
-    fn partial(&mut self, ty: Ty, subs: &[Option<Ty>]) -> Ty {
-        let args: Vec<Ty> = subs
-            .iter()
-            .enumerate()
-            .map(|(at, sub)| sub.unwrap_or_else(|| self.cx.types.intern(TyKind::Param(at as u32))))
-            .collect();
-        self.cx.types.subst(ty, &args)
-    }
-
-    /// Record what each type parameter in `param` stands for, read off the
-    /// argument's type in the same position: `*T` given a `*i64` makes T i64.
-    fn bind(&mut self, param: Ty, arg: Ty, subs: &mut [Option<Ty>]) {
-        if self.cx.types.is_error(arg) {
-            return;
+    /// Argument `at` of a call, going where `param` is wanted.
+    fn argument(&mut self, arg: &Expression, param: Ty, at: usize) -> Expr {
+        let value = self.value(arg, Some(param));
+        let index = at + 1;
+        let mut value = self.coerce_or(value, param, arg.span, |want, got| {
+            format!("Argument {index} type mismatch: expected {want}, got {got}")
+        });
+        let param = self.resolve(param);
+        if !matches!(
+            self.cx.types.kind(param),
+            TyKind::Ref(_) | TyKind::RefMut(_)
+        ) {
+            self.consume(&mut value);
         }
-        let types = &self.cx.types;
-        match (types.kind(param).clone(), types.kind(arg).clone()) {
-            (TyKind::Param(at), _) => {
-                if subs[at as usize].is_none() && !types.contains_param(arg) {
-                    subs[at as usize] = Some(arg);
-                }
-            }
-            (TyKind::Ptr(p), TyKind::Ptr(a) | TyKind::RefMut(a))
-            | (TyKind::Ref(p), TyKind::Ref(a) | TyKind::RefMut(a))
-            | (TyKind::RefMut(p), TyKind::RefMut(a))
-            | (TyKind::Optional(p), TyKind::Optional(a))
-            | (TyKind::Slice(p), TyKind::Slice(a))
-            | (TyKind::Vec(p), TyKind::Vec(a))
-            | (TyKind::Array(p, _), TyKind::Array(a, _)) => self.bind(p, a, subs),
-            (TyKind::Result(p, pe), TyKind::Result(a, ae)) => {
-                self.bind(p, a, subs);
-                self.bind(pe, ae, subs);
-            }
-            (TyKind::Tuple(ps), TyKind::Tuple(args))
-            | (TyKind::Adt(_, ps), TyKind::Adt(_, args))
-                if ps.len() == args.len() =>
-            {
-                if let (TyKind::Adt(pd, _), TyKind::Adt(ad, _)) =
-                    (types.kind(param), types.kind(arg))
-                    && pd != ad
-                {
-                    return;
-                }
-                for (p, a) in ps.into_iter().zip(args) {
-                    self.bind(p, a, subs);
-                }
-            }
-            _ => {}
-        }
+        let loans = self.loans_of(&value);
+        self.pending_loans.extend(loans);
+        value
     }
 
     fn variant(
@@ -578,7 +578,7 @@ impl FnCx<'_, '_> {
             Some(TyKind::Result(ok, err)) => (Some(ok), err),
             _ => (None, Types::I32),
         };
-        let value = self.expr(arg, hint);
+        let value = self.value(arg, hint);
         let mut value = match hint {
             Some(hint) => match self.coerce(value, hint) {
                 Ok(value) | Err(value) => value,
@@ -629,6 +629,10 @@ impl FnCx<'_, '_> {
     ) -> Expr {
         let (ty, elem) = match expected.map(|ty| (ty, self.cx.types.kind(ty).clone())) {
             Some((ty, TyKind::Vec(elem))) => (ty, elem),
+            Some((ty, _)) if self.cx.types.is_error(ty) => {
+                self.check_args_only(args);
+                return self.error_expr(span);
+            }
             _ => {
                 self.error(
                     "Cannot infer Vec element type. Please add a type annotation",
@@ -841,11 +845,16 @@ impl FnCx<'_, '_> {
     }
 }
 
-/// A number written out, or arithmetic on such numbers: it fits whichever
-/// numeric type the rest of a call settles.
-fn written_number(expr: &Expression) -> bool {
+/// A number written out, `None`, or arithmetic, an array or a tuple of
+/// them: it fits whichever type the rest of a call settles.
+fn written_value(expr: &Expression) -> bool {
     match &expr.kind {
-        ExpressionKind::Infix { left, right, .. } => written_number(left) && written_number(right),
+        ExpressionKind::Infix { left, right, .. } => written_value(left) && written_value(right),
+        ExpressionKind::ArrayLiteral(items) | ExpressionKind::Tuple(items) => {
+            items.iter().all(written_value)
+        }
+        ExpressionKind::ArrayRepeat { value, .. } => written_value(value),
+        ExpressionKind::None => true,
         _ => is_number_literal(expr),
     }
 }

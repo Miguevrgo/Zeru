@@ -1,0 +1,38 @@
+status: compile error
+-- stderr
+Error: Cannot tell the type of None here; annotate it
+   ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:3:14 ]
+   │
+ 3 │     var a = [None, 5];
+   │              ──┬─
+   │                ╰─── Cannot tell the type of None here; annotate it
+───╯
+Error: Cannot tell the type of None here; annotate it
+   ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:4:14 ]
+   │
+ 4 │     var t = (None, 1);
+   │              ──┬─
+   │                ╰─── Cannot tell the type of None here; annotate it
+───╯
+Error: Cannot tell the type of None here; annotate it
+   ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:5:17 ]
+   │
+ 5 │     print("{}", None);
+   │                 ──┬─
+   │                   ╰─── Cannot tell the type of None here; annotate it
+───╯
+Error: Cannot tell the type of [] here; annotate it
+   ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:6:13 ]
+   │
+ 6 │     var e = [];
+   │             ─┬
+   │              ╰── Cannot tell the type of [] here; annotate it
+───╯
+Error: Cannot tell the type of None here; annotate it
+   ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:7:13 ]
+   │
+ 7 │     var b = None == x;
+   │             ──┬─
+   │               ╰─── Cannot tell the type of None here; annotate it
+───╯
+[-] Error: aborting due to previous error

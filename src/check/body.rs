@@ -9,6 +9,7 @@ use crate::items::DefId;
 use crate::tir::{self, Block, Expr, ExprKind, LocalId, Place, Stmt, StmtKind};
 use crate::ty::{Ty, TyKind, Types};
 
+use super::infer::{DeferredCall, Var};
 use super::{Checker, Receiver, Scope};
 
 pub(super) struct LocalInfo {
@@ -82,6 +83,8 @@ pub(super) struct FnCx<'c, 'a> {
     holders: Vec<LocalId>,
     /// Loans of call arguments already checked, held while the rest are.
     pub(super) pending_loans: Vec<Loan>,
+    pub(super) vars: Vec<Var>,
+    pub(super) deferred: Vec<DeferredCall>,
 }
 
 pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::Function {
@@ -170,6 +173,8 @@ impl<'c, 'a> FnCx<'c, 'a> {
             positions: Vec::new(),
             holders: Vec::new(),
             pending_loans: Vec::new(),
+            vars: Vec::new(),
+            deferred: Vec::new(),
         }
     }
 
@@ -187,7 +192,8 @@ impl<'c, 'a> FnCx<'c, 'a> {
         self.info[id.0 as usize].mutable
     }
 
-    pub(super) fn ty(&self, ty: Ty) -> String {
+    pub(super) fn ty(&mut self, ty: Ty) -> String {
+        let ty = self.resolve(ty);
         self.cx.types.show(ty)
     }
 
@@ -641,50 +647,26 @@ impl<'c, 'a> FnCx<'c, 'a> {
         if value.ty == target || types.is_error(value.ty) || types.is_error(target) {
             return Ok(value);
         }
-        if self.same_repr(target, value.ty) {
-            value.ty = target;
+        if self.fits(target, value.ty, false) {
+            value.ty = self.resolve(target);
             return Ok(value);
         }
-        let (inner, wrap): (Ty, fn(Box<Expr>) -> ExprKind) = match *types.kind(target) {
+        let target = self.resolve(target);
+        let (inner, wrap): (Ty, fn(Box<Expr>) -> ExprKind) = match *self.cx.types.kind(target) {
             TyKind::Optional(inner) => (inner, ExprKind::Some),
             TyKind::Result(inner, _) => (inner, ExprKind::Ok),
             _ => return Err(value),
         };
-        if !self.same_repr(inner, value.ty) {
+        if !self.fits(inner, value.ty, false) {
             return Err(value);
         }
-        value.ty = inner;
+        value.ty = self.resolve(inner);
         let span = value.span;
         Ok(Expr {
             kind: wrap(Box::new(value)),
             ty: target,
             span,
         })
-    }
-
-    /// Whether a value of `actual` is laid out as a `target` and may be used
-    /// as one: the same type, or pointers differing only in what they allow.
-    fn same_repr(&self, target: Ty, actual: Ty) -> bool {
-        let types = &self.cx.types;
-        if target == actual || types.is_error(target) || types.is_error(actual) {
-            return true;
-        }
-        match (types.kind(target), types.kind(actual)) {
-            (TyKind::Ptr(t), TyKind::Ptr(a) | TyKind::RefMut(a))
-            | (TyKind::Ref(t), TyKind::Ref(a) | TyKind::RefMut(a))
-            | (TyKind::RefMut(t), TyKind::RefMut(a))
-            | (TyKind::Optional(t), TyKind::Optional(a))
-            | (TyKind::Vec(t), TyKind::Vec(a))
-            | (TyKind::Slice(t), TyKind::Slice(a)) => self.same_repr(*t, *a),
-            (TyKind::Array(t, n), TyKind::Array(a, m)) => n == m && self.same_repr(*t, *a),
-            (TyKind::Result(t, te), TyKind::Result(a, ae)) => {
-                self.same_repr(*t, *a) && self.same_repr(*te, *ae)
-            }
-            (TyKind::Tuple(t), TyKind::Tuple(a)) => {
-                t.len() == a.len() && t.iter().zip(a).all(|(t, a)| self.same_repr(*t, *a))
-            }
-            _ => false,
-        }
     }
 
     /// `coerce`, reporting `message(target, actual)` when it cannot.
@@ -778,7 +760,10 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// `*T` or `&var T` may write and a `&T` may not.
     pub(super) fn require_mutable(&mut self, place: &Place, ast: &Expression, span: Span) {
         self.require_unlocked(ast, span);
-        self.require_var_root(place, span);
+        match self.constant_written(place, ast) {
+            Some(name) => self.error(format!("Cannot modify constant '{name}'"), span),
+            None => self.require_var_root(place, span),
+        }
     }
 
     fn require_var_root(&mut self, place: &Place, span: Span) {
@@ -859,23 +844,8 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     let scope = self.scope.clone();
                     self.cx.resolve_type(spec, &scope, span)
                 });
-                let errors = self.cx.errors.len();
-                let checked = self.expr(value, expected);
-                let ty = match expected {
-                    Some(ty) => ty,
-                    None if matches!(value.kind, ExpressionKind::None)
-                        && self.cx.errors.len() == errors =>
-                    {
-                        self.error(
-                            format!(
-                                "Cannot infer type for variable '{name}'. Please add a type annotation"
-                            ),
-                            span,
-                        );
-                        Types::ERROR
-                    }
-                    None => checked.ty,
-                };
+                let checked = self.value(value, expected);
+                let ty = expected.unwrap_or(checked.ty);
                 let mut value = self.coerce_or(checked, ty, span, |want, got| {
                     format!(
                         "Type mismatch for variable '{name}'. Annotated as {want} but got {got}"
@@ -1047,7 +1017,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             writable = true;
         } else if writable {
             self.require_mutable(&seq.0, inner, iterable.span);
-            if !super::expr::is_assignable(inner) {
+            if self.temporary(&seq.0, seq.1, inner) {
                 self.error(
                     "Cannot create reference to a temporary value",
                     iterable.span,
@@ -1136,6 +1106,16 @@ pub(super) fn local_root(place: &Place) -> Option<LocalId> {
         Place::Local(local) => Some(*local),
         Place::Field(base, _) | Place::Index(base, _) => local_root(base),
         Place::Deref(_) | Place::Temp(_) => None,
+    }
+}
+
+/// Whether `place` is part of a temporary value, not reached through a
+/// pointer.
+pub(super) fn in_temporary(place: &Place) -> bool {
+    match place {
+        Place::Field(base, _) | Place::Index(base, _) => in_temporary(base),
+        Place::Temp(_) => true,
+        Place::Local(_) | Place::Deref(_) => false,
     }
 }
 

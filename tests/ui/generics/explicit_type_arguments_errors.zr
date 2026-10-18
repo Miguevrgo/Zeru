@@ -1,0 +1,8 @@
+fn zero<T>() T { return 0; }
+fn main() {
+    var v: Vec<i32> = Vec.new();
+    var a = zero<i32, i64>();
+    var b = zero<Nope>();
+    print<i32>("{}", 1);
+    var n = v.len<i32>();
+}

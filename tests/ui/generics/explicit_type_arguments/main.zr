@@ -1,0 +1,23 @@
+import nums;
+struct Box<T> {
+    v: T,
+    fn make(v: T) Box<T> { return Box { v: v }; }
+    fn get(self) T { return self.v; }
+    fn wider<U>(self, extra: U) (T, U) { return (self.v, extra); }
+}
+fn zero<T>() T { return 0; }
+fn pair<A, B>(a: A, b: B) B { return b; }
+fn main() {
+    var a = 3;
+    var b = 4;
+    print("{} ", zero<i32>());
+    print("{} ", zero<u8>() + 255);
+    print("{} ", nums::big<i64>());
+    print("{} ", Box.make<i64>(5000000000).get());
+    var w = Box.make<i32>(1).wider<i64>(9);
+    print("{} ", w.1);
+    print("{} ", pair<i32, i64>(1, 2));
+    print("{} ", a < b);
+    print("{} ", a < b >> 1);
+    println("{}", (a < b) == (b > a));
+}

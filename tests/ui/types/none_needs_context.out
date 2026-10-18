@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: Cannot infer type for variable 'x'. Please add a type annotation
-   ╭─[ tests/ui/types/none_needs_context.zr:2:5 ]
+Error: Cannot tell the type of None here; annotate it
+   ╭─[ tests/ui/types/none_needs_context.zr:2:13 ]
    │
  2 │     var x = None;
-   │     ──────┬──────
-   │           ╰──────── Cannot infer type for variable 'x'. Please add a type annotation
+   │             ──┬─
+   │               ╰─── Cannot tell the type of None here; annotate it
 ───╯
 [-] Error: aborting due to previous error

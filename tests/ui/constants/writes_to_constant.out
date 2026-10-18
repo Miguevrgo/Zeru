@@ -1,0 +1,38 @@
+status: compile error
+-- stderr
+Error: Cannot modify constant 'ARR'
+    ╭─[ tests/ui/constants/writes_to_constant.zr:10:5 ]
+    │
+ 10 │     ARR[0] = 9;
+    │     ─────┬────
+    │          ╰────── Cannot modify constant 'ARR'
+────╯
+Error: Cannot modify constant 'K'
+    ╭─[ tests/ui/constants/writes_to_constant.zr:11:10 ]
+    │
+ 11 │     bump(&var K);
+    │          ───┬──
+    │             ╰──── Cannot modify constant 'K'
+────╯
+Error: Cannot modify constant 'K'
+    ╭─[ tests/ui/constants/writes_to_constant.zr:12:5 ]
+    │
+ 12 │     K = 6;
+    │     ──┬──
+    │       ╰──── Cannot modify constant 'K'
+────╯
+Error: Cannot modify constant 'K'
+    ╭─[ tests/ui/constants/writes_to_constant.zr:13:5 ]
+    │
+ 13 │     K += 1;
+    │     ───┬──
+    │        ╰──── Cannot modify constant 'K'
+────╯
+Error: Cannot modify constant 'ARR'
+    ╭─[ tests/ui/constants/writes_to_constant.zr:14:14 ]
+    │
+ 14 │     for x in &var ARR { x = 0; }
+    │              ────┬───
+    │                  ╰───── Cannot modify constant 'ARR'
+────╯
+[-] Error: aborting due to previous error

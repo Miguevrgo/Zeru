@@ -208,6 +208,77 @@ pub enum ExprKind {
     Asm(Box<Asm>),
 }
 
+impl Expr {
+    /// Call `f` on each expression directly inside this one, those in its
+    /// places included and those in the statements of a block not.
+    pub fn for_each_child(&mut self, f: &mut impl FnMut(&mut Expr)) {
+        match &mut self.kind {
+            ExprKind::Int(_)
+            | ExprKind::Float(_)
+            | ExprKind::Bool(_)
+            | ExprKind::Str(_)
+            | ExprKind::Void
+            | ExprKind::None
+            | ExprKind::Block(_) => {}
+            ExprKind::Read(place)
+            | ExprKind::Move(place)
+            | ExprKind::Copy(place)
+            | ExprKind::AddressOf(place) => place.for_each_expr(f),
+            ExprKind::Unary(_, value)
+            | ExprKind::Cast(value)
+            | ExprKind::ArrayRepeat(value, _)
+            | ExprKind::VecRepeat(value, _)
+            | ExprKind::Some(value)
+            | ExprKind::Ok(value)
+            | ExprKind::Err(value)
+            | ExprKind::Try(value) => f(value),
+            ExprKind::Binary(_, left, right)
+            | ExprKind::And(left, right)
+            | ExprKind::Or(left, right) => {
+                f(left);
+                f(right);
+            }
+            ExprKind::Call(_, values)
+            | ExprKind::Builtin(_, values)
+            | ExprKind::Tuple(values)
+            | ExprKind::Array(values)
+            | ExprKind::VecLiteral(values)
+            | ExprKind::Variant(_, values)
+            | ExprKind::Print { values, .. } => values.iter_mut().for_each(f),
+            ExprKind::Struct(fields) => fields.iter_mut().for_each(|(_, value)| f(value)),
+            ExprKind::Assign { place, value, .. }
+            | ExprKind::CompoundAssign { place, value, .. } => {
+                place.for_each_expr(f);
+                f(value);
+            }
+            ExprKind::Match { scrutinee, arms } => {
+                scrutinee.for_each_expr(f);
+                arms.iter_mut().for_each(|arm| f(&mut arm.body));
+            }
+            ExprKind::Asm(asm) => {
+                asm.outputs
+                    .iter_mut()
+                    .for_each(|place| place.for_each_expr(f));
+                asm.inputs.iter_mut().for_each(f);
+            }
+        }
+    }
+}
+
+impl Place {
+    fn for_each_expr(&mut self, f: &mut impl FnMut(&mut Expr)) {
+        match self {
+            Place::Local(_) => {}
+            Place::Field(base, _) => base.for_each_expr(f),
+            Place::Index(base, index) => {
+                base.for_each_expr(f);
+                f(index);
+            }
+            Place::Deref(value) | Place::Temp(value) => f(value),
+        }
+    }
+}
+
 /// Inline assembly, kept apart since it is large and rare.
 #[derive(Clone)]
 pub struct Asm {

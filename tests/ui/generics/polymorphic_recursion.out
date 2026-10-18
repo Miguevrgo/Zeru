@@ -1,0 +1,12 @@
+status: compile error
+-- stderr
+Error: Checking 'f' asks for ever larger instances of it, without end
+   ╭─[ tests/ui/generics/polymorphic_recursion.zr:3:9 ]
+   │
+ 3 │         f((x, x), n - 1);
+   │         ────────┬───────
+   │                 ╰───────── Checking 'f' asks for ever larger instances of it, without end
+   │                 │
+   │                 ╰───────── in 'f<((((((i32, i32), (i32, i32)), ((i32, i32), (i32, i32))), (((i32, i32), (i32, i32)), ((i32, i32), (i32, i32)))), ((((i32, i32), (i32, i32)), ((i32, i32), (i32, i32))), (((i32, i32), (i32, i32)), ((i32, i32), (i32, i32))))), (((((i32, i32), (i32, i32)), ((i32, i32), (i32, i32))), (((i32, i32), (i32, i32)), ((i32, i32), (i32, i32)))), ((((i32, i32), (i32, i32)), ((i32, i32), (i32, i32))), (((i32, i32), (i32, i32)), ((i32, i32), (i32, i32))))))>', instantiated here
+───╯
+[-] Error: aborting due to previous error

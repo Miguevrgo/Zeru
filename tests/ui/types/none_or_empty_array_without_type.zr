@@ -1,0 +1,8 @@
+fn main() {
+    var x: i32? = 5;
+    var a = [None, 5];
+    var t = (None, 1);
+    print("{}", None);
+    var e = [];
+    var b = None == x;
+}

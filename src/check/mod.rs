@@ -7,6 +7,7 @@ mod body;
 mod call;
 mod consts;
 mod expr;
+mod infer;
 mod pattern;
 mod types;
 
@@ -37,9 +38,10 @@ pub enum Receiver {
     Mutable,
 }
 
-/// How deeply generic structs may nest in one another before checking one
-/// is taken to never end.
-const MAX_NESTING: usize = 32;
+/// How many types a type argument may be made of before checking is taken
+/// to never end, as rustc's type length limit: a generic that asks for
+/// itself at a larger type, as `f((x, x))` inside `f`, would go on forever.
+const MAX_TYPE_SIZE: usize = 128;
 
 struct StructDef {
     fields: Vec<(String, Ty)>,
@@ -166,7 +168,7 @@ impl<'a> Checker<'a> {
         let owning = self
             .types
             .all()
-            .filter(|&ty| !self.types.contains_param(ty))
+            .filter(|&ty| self.types.is_concrete(ty))
             .collect::<Vec<_>>()
             .into_iter()
             .filter(|&ty| self.owns_heap(ty))
@@ -213,8 +215,7 @@ impl<'a> Checker<'a> {
                 let TyKind::Adt(def, args) = self.types.kind(ty).clone() else {
                     continue;
                 };
-                if self.types.contains_param(ty) || self.unsatisfied.contains(&(def, args.clone()))
-                {
+                if !self.types.is_concrete(ty) || self.unsatisfied.contains(&(def, args.clone())) {
                     continue;
                 }
                 if self.items.item(def).kind == ItemKind::Enum {
@@ -380,16 +381,9 @@ impl<'a> Checker<'a> {
                 }
                 continue;
             }
-            let ty = self.resolve_type(spec, &scope, span);
-            if ty == Types::VOID {
-                self.error(format!("Parameter '{param}' cannot be void"), span);
-            }
-            param_tys.push(ty);
+            param_tys.push(self.resolve_type(spec, &scope, span));
         }
-        let ret = match return_type {
-            Some(spec) => self.resolve_type(spec, &scope, span),
-            None => Types::VOID,
-        };
+        let ret = self.resolve_return(return_type.as_ref(), &scope, span);
 
         if self.is_main(def) {
             if !params.is_empty() {
@@ -531,10 +525,7 @@ impl<'a> Checker<'a> {
                 .filter(|(_, spec, _)| !is_self(spec))
                 .map(|(_, spec, _)| self.resolve_type(spec, &scope, span))
                 .collect();
-            let ret = match &method.return_type {
-                Some(spec) => self.resolve_type(spec, &scope, span),
-                None => Types::VOID,
-            };
+            let ret = self.resolve_return(method.return_type.as_ref(), &scope, span);
             shape.push(TraitMethod {
                 name: method.name.clone(),
                 takes_self: method
@@ -607,12 +598,20 @@ impl<'a> Checker<'a> {
     /// Whether a value of `ty` owns memory or has a `drop`: what is freed
     /// when it goes, copied deeply by `.copy()`, and moved rather than copied.
     pub(crate) fn owns_heap(&mut self, ty: Ty) -> bool {
-        self.owns_heap_past(ty, &mut Vec::new())
+        self.owns_past(ty, true, &mut Vec::new())
     }
 
-    fn owns_heap_past(&mut self, ty: Ty, seen: &mut Vec<Ty>) -> bool {
+    /// Whether a value of `ty` has a `drop` or holds one that does, which
+    /// both copies of a `.copy()` would run.
+    pub(crate) fn runs_drop(&mut self, ty: Ty) -> bool {
+        self.owns_past(ty, false, &mut Vec::new())
+    }
+
+    /// Whether `ty` has a `drop`, or with `vec`, owns memory, in itself or
+    /// in what it holds.
+    fn owns_past(&mut self, ty: Ty, vec: bool, seen: &mut Vec<Ty>) -> bool {
         match self.types.kind(ty).clone() {
-            TyKind::Vec(_) => true,
+            TyKind::Vec(inner) => vec || self.owns_past(inner, vec, seen),
             TyKind::Adt(def, _) if !seen.contains(&ty) => {
                 seen.push(ty);
                 match self.items.item(def).kind {
@@ -621,20 +620,20 @@ impl<'a> Checker<'a> {
                             || self
                                 .fields_of(ty)
                                 .into_iter()
-                                .any(|(_, field)| self.owns_heap_past(field, seen))
+                                .any(|(_, field)| self.owns_past(field, vec, seen))
                     }
                     _ => self
                         .variants_of(def)
                         .into_iter()
                         .flat_map(|(_, fields)| fields)
-                        .any(|field| self.owns_heap_past(field, seen)),
+                        .any(|field| self.owns_past(field, vec, seen)),
                 }
             }
             TyKind::Tuple(parts) => parts
                 .into_iter()
-                .any(|part| self.owns_heap_past(part, seen)),
+                .any(|part| self.owns_past(part, vec, seen)),
             TyKind::Array(inner, _) | TyKind::Optional(inner) | TyKind::Result(inner, _) => {
-                self.owns_heap_past(inner, seen)
+                self.owns_past(inner, vec, seen)
             }
             _ => false,
         }
@@ -675,18 +674,22 @@ impl<'a> Checker<'a> {
     /// Note that values of `ty` exist, so its layout and, for a generic
     /// struct, its methods are needed.
     pub(crate) fn note_adt(&mut self, ty: Ty, span: Span) {
-        if self.types.contains_param(ty) || !self.adts_seen.insert(ty) {
+        if !self.types.is_concrete(ty) || !self.adts_seen.insert(ty) {
             return;
         }
         let TyKind::Adt(def, args) = self.types.kind(ty).clone() else {
             return;
         };
-        if self.types.depth(ty) > MAX_NESTING {
+        if self.types.larger_than(ty, MAX_TYPE_SIZE) {
             let base = self.items.item(def).name.clone();
             self.error(
                 format!("Checking the methods of '{base}' asks for ever deeper instances of it, without end"),
                 span,
             );
+            return;
+        }
+        let generics = generics_of(self.items.item(def).decl).to_vec();
+        if !self.check_bounds(def, &generics, &args, span) {
             return;
         }
         for field in self.fields_of(ty).into_iter().map(|(_, ty)| ty) {

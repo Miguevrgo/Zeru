@@ -1,0 +1,17 @@
+struct S {
+    f: i32,
+    fn bump(var self) { self.f += 1; }
+}
+const ARR: Array<i32, 3> = [1, 2, 3];
+const K: i32 = 5;
+fn bump(r: &var i32) { *r = *r + 1; }
+fn make() S { return S { f: 1 }; }
+fn main() {
+    ARR[0] = 9;
+    bump(&var K);
+    K = 6;
+    K += 1;
+    for x in &var ARR { x = 0; }
+    make().bump();
+    println("{} {}", ARR[0], K);
+}

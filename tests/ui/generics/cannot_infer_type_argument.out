@@ -1,0 +1,31 @@
+status: compile error
+-- stderr
+Error: Cannot tell the type of None here; annotate it
+   ╭─[ tests/ui/generics/cannot_infer_type_argument.zr:5:7 ]
+   │
+ 5 │     g(None);
+   │       ──┬─
+   │         ╰─── Cannot tell the type of None here; annotate it
+───╯
+Error: Cannot tell what 'T' is in this call to 'h'
+   ╭─[ tests/ui/generics/cannot_infer_type_argument.zr:6:5 ]
+   │
+ 6 │     h(None);
+   │     ───┬───
+   │        ╰───── Cannot tell what 'T' is in this call to 'h'
+───╯
+Error: Cannot tell what 'A' is in this call to 'two'
+   ╭─[ tests/ui/generics/cannot_infer_type_argument.zr:7:5 ]
+   │
+ 7 │     two();
+   │     ──┬──
+   │       ╰──── Cannot tell what 'A' is in this call to 'two'
+───╯
+Error: Cannot tell what 'B' is in this call to 'two'
+   ╭─[ tests/ui/generics/cannot_infer_type_argument.zr:7:5 ]
+   │
+ 7 │     two();
+   │     ──┬──
+   │       ╰──── Cannot tell what 'B' is in this call to 'two'
+───╯
+[-] Error: aborting due to previous error

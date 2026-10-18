@@ -89,6 +89,9 @@ pub enum TyKind {
     Adt(DefId, Vec<Ty>),
     /// The type parameter at this position of the item being checked.
     Param(u32),
+    /// An inference variable of a generic call being checked. None is left
+    /// once the call is checked.
+    Infer(u32),
     Array(Ty, u64),
     Vec(Ty),
     Slice(Ty),
@@ -211,39 +214,62 @@ impl Types {
         self.as_int(ty).is_some() || self.is_float(ty)
     }
 
-    pub fn contains_param(&self, ty: Ty) -> bool {
+    /// Whether `ty` has a part for which `leaf` holds.
+    pub fn has(&self, ty: Ty, leaf: &dyn Fn(&TyKind) -> bool) -> bool {
         match self.kind(ty) {
-            TyKind::Param(_) => true,
             TyKind::Adt(_, args) | TyKind::Tuple(args) => {
-                args.iter().any(|&arg| self.contains_param(arg))
+                args.iter().any(|&arg| self.has(arg, leaf))
             }
-            TyKind::Result(ok, err) => self.contains_param(*ok) || self.contains_param(*err),
+            TyKind::Result(ok, err) => self.has(*ok, leaf) || self.has(*err, leaf),
             TyKind::Array(inner, _)
             | TyKind::Vec(inner)
             | TyKind::Slice(inner)
             | TyKind::Ptr(inner)
             | TyKind::Ref(inner)
             | TyKind::RefMut(inner)
-            | TyKind::Optional(inner) => self.contains_param(*inner),
-            _ => false,
+            | TyKind::Optional(inner) => self.has(*inner, leaf),
+            kind => leaf(kind),
         }
     }
 
-    /// How many types are nested inside one another to make `ty`.
-    pub fn depth(&self, ty: Ty) -> usize {
-        let deepest = |tys: &[Ty]| tys.iter().map(|&t| self.depth(t)).max().unwrap_or(0);
-        1 + match self.kind(ty) {
-            TyKind::Adt(_, args) | TyKind::Tuple(args) => deepest(args),
-            TyKind::Result(ok, err) => deepest(&[*ok, *err]),
-            TyKind::Array(inner, _)
-            | TyKind::Vec(inner)
-            | TyKind::Slice(inner)
-            | TyKind::Ptr(inner)
-            | TyKind::Ref(inner)
-            | TyKind::RefMut(inner)
-            | TyKind::Optional(inner) => self.depth(*inner),
-            _ => 0,
+    pub fn contains_param(&self, ty: Ty) -> bool {
+        self.has(ty, &|kind| matches!(kind, TyKind::Param(_)))
+    }
+
+    pub fn contains_var(&self, ty: Ty) -> bool {
+        self.has(ty, &|kind| matches!(kind, TyKind::Infer(_)))
+    }
+
+    /// Whether `ty` has no type parameter and no inference variable in it.
+    pub fn is_concrete(&self, ty: Ty) -> bool {
+        !self.has(ty, &|kind| {
+            matches!(kind, TyKind::Param(_) | TyKind::Infer(_))
+        })
+    }
+
+    /// Whether `ty`, written out in full, is made of more than `limit` types.
+    pub fn larger_than(&self, ty: Ty, limit: usize) -> bool {
+        let mut parts = vec![ty];
+        let mut count = 0;
+        while let Some(ty) = parts.pop() {
+            count += 1;
+            if count > limit {
+                return true;
+            }
+            match self.kind(ty) {
+                TyKind::Adt(_, args) | TyKind::Tuple(args) => parts.extend(args),
+                TyKind::Result(ok, err) => parts.extend([*ok, *err]),
+                TyKind::Array(inner, _)
+                | TyKind::Vec(inner)
+                | TyKind::Slice(inner)
+                | TyKind::Ptr(inner)
+                | TyKind::Ref(inner)
+                | TyKind::RefMut(inner)
+                | TyKind::Optional(inner) => parts.push(*inner),
+                _ => {}
+            }
         }
+        false
     }
 
     /// `ty` with each `Param(i)` replaced by `args[i]`.
@@ -251,21 +277,35 @@ impl Types {
         if args.is_empty() || !self.contains_param(ty) {
             return ty;
         }
+        self.replace(ty, &|kind| match kind {
+            TyKind::Param(at) => Some(args.get(*at as usize).copied().unwrap_or(Self::ERROR)),
+            _ => None,
+        })
+    }
+
+    /// `ty` with each parameter or variable in it replaced by what `leaf`
+    /// gives for it, if anything.
+    pub fn replace(&mut self, ty: Ty, leaf: &dyn Fn(&TyKind) -> Option<Ty>) -> Ty {
         let kind = match self.kind(ty).clone() {
-            TyKind::Param(at) => return args.get(at as usize).copied().unwrap_or(Self::ERROR),
-            TyKind::Adt(def, inner) => TyKind::Adt(def, self.subst_all(&inner, args)),
-            TyKind::Tuple(inner) => TyKind::Tuple(self.subst_all(&inner, args)),
-            TyKind::Result(ok, err) => TyKind::Result(self.subst(ok, args), self.subst(err, args)),
-            TyKind::Array(inner, len) => TyKind::Array(self.subst(inner, args), len),
-            TyKind::Vec(inner) => TyKind::Vec(self.subst(inner, args)),
-            TyKind::Slice(inner) => TyKind::Slice(self.subst(inner, args)),
-            TyKind::Ptr(inner) => TyKind::Ptr(self.subst(inner, args)),
-            TyKind::Ref(inner) => TyKind::Ref(self.subst(inner, args)),
-            TyKind::RefMut(inner) => TyKind::RefMut(self.subst(inner, args)),
-            TyKind::Optional(inner) => TyKind::Optional(self.subst(inner, args)),
-            other => other,
+            TyKind::Adt(def, inner) => TyKind::Adt(def, self.replace_all(&inner, leaf)),
+            TyKind::Tuple(inner) => TyKind::Tuple(self.replace_all(&inner, leaf)),
+            TyKind::Result(ok, err) => {
+                TyKind::Result(self.replace(ok, leaf), self.replace(err, leaf))
+            }
+            TyKind::Array(inner, len) => TyKind::Array(self.replace(inner, leaf), len),
+            TyKind::Vec(inner) => TyKind::Vec(self.replace(inner, leaf)),
+            TyKind::Slice(inner) => TyKind::Slice(self.replace(inner, leaf)),
+            TyKind::Ptr(inner) => TyKind::Ptr(self.replace(inner, leaf)),
+            TyKind::Ref(inner) => TyKind::Ref(self.replace(inner, leaf)),
+            TyKind::RefMut(inner) => TyKind::RefMut(self.replace(inner, leaf)),
+            TyKind::Optional(inner) => TyKind::Optional(self.replace(inner, leaf)),
+            other => return leaf(&other).unwrap_or(ty),
         };
         self.intern(kind)
+    }
+
+    fn replace_all(&mut self, tys: &[Ty], leaf: &dyn Fn(&TyKind) -> Option<Ty>) -> Vec<Ty> {
+        tys.iter().map(|&ty| self.replace(ty, leaf)).collect()
     }
 
     pub fn subst_all(&mut self, tys: &[Ty], args: &[Ty]) -> Vec<Ty> {
@@ -298,6 +338,7 @@ impl Types {
             TyKind::Adt(def, args) if args.is_empty() => self.adt_name(*def).into(),
             TyKind::Adt(def, args) => format!("{}<{}>", self.adt_name(*def), list(args)),
             TyKind::Param(at) => format!("T{at}"),
+            TyKind::Infer(_) => "_".into(),
             TyKind::Array(inner, len) => format!("Array<{}, {len}>", self.show(*inner)),
             TyKind::Vec(inner) => format!("Vec<{}>", self.show(*inner)),
             TyKind::Slice(inner) if *inner == Self::U8 => "str".into(),

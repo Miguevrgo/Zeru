@@ -1,0 +1,19 @@
+struct Handle {
+    fd: i32,
+    fn drop(var self) { println("closed {}", self.fd); }
+}
+struct Holder { h: Handle }
+fn main() {
+    var h = Handle { fd: 1 };
+    var a = h.copy();
+    var v: Vec<Handle> = Vec.new();
+    var b = v.copy();
+    var s = Holder { h: Handle { fd: 2 } };
+    var c = s.copy();
+    var t = (Handle { fd: 3 }, 4);
+    var d = t.copy();
+    var o: (&Handle)? = &h;
+    var e = o.copy();
+    var plain: Vec<i32> = [1, 2];
+    var f = plain.copy();
+}

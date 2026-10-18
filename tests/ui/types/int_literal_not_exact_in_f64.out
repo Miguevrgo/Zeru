@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: Literal 18446744073709551615 has no exact f64 value
+   ╭─[ tests/ui/types/int_literal_not_exact_in_f64.zr:2:18 ]
+   │
+ 2 │     var f: f64 = 18446744073709551615;
+   │                  ──────────┬─────────
+   │                            ╰─────────── Literal 18446744073709551615 has no exact f64 value
+───╯
+Error: Literal 18446744073709551615 has no exact f32 value
+   ╭─[ tests/ui/types/int_literal_not_exact_in_f64.zr:3:18 ]
+   │
+ 3 │     var g: f32 = 18446744073709551615;
+   │                  ──────────┬─────────
+   │                            ╰─────────── Literal 18446744073709551615 has no exact f32 value
+───╯
+[-] Error: aborting due to previous error

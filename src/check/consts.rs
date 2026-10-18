@@ -44,23 +44,12 @@ impl Checker<'_> {
             .as_ref()
             .map(|spec| self.resolve_type(spec, &scope, span));
         let mut cx = FnCx::for_constant(self, scope);
-        let errors = cx.cx.errors.len();
         let checked = cx.expr(value, expected);
         let checked = match expected {
             Some(ty) => cx.coerce_or(checked, ty, span, |want, got| {
                 format!("Type mismatch for variable '{name}'. Annotated as {want} but got {got}")
             }),
-            None => {
-                if cx.cx.types.is_error(checked.ty) && cx.cx.errors.len() == errors {
-                    cx.error(
-                        format!(
-                            "Cannot infer type for variable '{name}'. Please add a type annotation"
-                        ),
-                        span,
-                    );
-                }
-                checked
-            }
+            None => checked,
         };
         if !is_constant(value) {
             self.error(

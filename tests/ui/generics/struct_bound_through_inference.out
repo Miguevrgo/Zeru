@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'Num' asks for T: Num, which str does not satisfy
+   ╭─[ tests/ui/generics/struct_bound_through_inference.zr:4:13 ]
+   │
+ 4 │     var n = mk("str");
+   │             ────┬────
+   │                 ╰────── 'Num' asks for T: Num, which str does not satisfy
+───╯
+[-] Error: aborting due to previous error

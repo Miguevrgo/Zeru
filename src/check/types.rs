@@ -54,6 +54,21 @@ impl Checker<'_> {
         }
     }
 
+    /// A function's return type, which alone may be `void`, as it is when
+    /// none is written.
+    pub(super) fn resolve_return(
+        &mut self,
+        spec: Option<&TypeSpec>,
+        scope: &Scope,
+        span: Span,
+    ) -> Ty {
+        match spec {
+            None => Types::VOID,
+            Some(TypeSpec::Named(name)) if name == "void" => Types::VOID,
+            Some(spec) => self.resolve_type(spec, scope, span),
+        }
+    }
+
     fn wrap(&mut self, inner: &TypeSpec, scope: &Scope, span: Span, kind: fn(Ty) -> TyKind) -> Ty {
         let inner = self.resolve_type(inner, scope, span);
         self.intern_or_error(kind(inner), &[inner])
@@ -90,6 +105,13 @@ impl Checker<'_> {
         if name != "str"
             && let Some(ty) = self.types.primitive(name)
         {
+            if ty == Types::VOID {
+                self.error(
+                    "void has no values; only what a function returns can be void",
+                    span,
+                );
+                return Types::ERROR;
+            }
             return ty;
         }
         if name == "self" {

@@ -116,7 +116,7 @@ impl<'ctx> Lower<'_, 'ctx> {
                     .struct_type(&[context.i32_type().into(), area.into()], false)
                     .into()
             }
-            TyKind::Void | TyKind::Param(_) | TyKind::Error => {
+            TyKind::Void | TyKind::Param(_) | TyKind::Infer(_) | TyKind::Error => {
                 unreachable!("{} has no values", self.types().show(ty))
             }
         };

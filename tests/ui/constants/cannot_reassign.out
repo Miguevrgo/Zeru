@@ -7,11 +7,11 @@ Error: Cannot reassign constant variable 'x'
    │     ───┬──
    │        ╰──── Cannot reassign constant variable 'x'
 ───╯
-Error: Cannot reassign constant variable 'G'
+Error: Cannot modify constant 'G'
    ╭─[ tests/ui/constants/cannot_reassign.zr:5:5 ]
    │
  5 │     G = 200;
    │     ───┬───
-   │        ╰───── Cannot reassign constant variable 'G'
+   │        ╰───── Cannot modify constant 'G'
 ───╯
 [-] Error: aborting due to previous error

@@ -4,13 +4,17 @@ struct Probe {
     fn drop(var self) { *self.log = *self.log * 10 + self.id; }
 }
 fn probe(id: i64, log: *i64) Probe { return Probe { id: id, log: log }; }
+fn replace(slot: &var Probe, with: Probe) { *slot = with; }
 fn main() {
     var log: i64 = 0;
     var at: *i64 = &log;
     {
         var p = probe(1, at);
-        var twin = p.copy();
-        twin.id = 2;
+        replace(&var p, probe(2, at));
+        println("replaced: {}", log);
+        var raw: *Probe = &var p;
+        *raw = probe(3, at);
+        println("written raw: {}", log);
     }
     println("dropped: {}", log);
 }

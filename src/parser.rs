@@ -28,6 +28,7 @@ pub struct Parser {
     /// How many expressions, types, statements and patterns enclose the
     /// next token.
     nesting: usize,
+    splits: Vec<(usize, (Token, Span))>,
 }
 
 /// How deep code may nest, as Clang limits bracket depth: deeper code is an
@@ -88,6 +89,7 @@ impl Parser {
             depth: 0,
             brackets: 0,
             nesting: 0,
+            splits: Vec::new(),
         };
         p.report_illegal();
         p
@@ -482,6 +484,7 @@ impl Parser {
     /// Replace the next token by its one-character `first` and the `rest`.
     fn split_token(&mut self, first: Token, rest: Token) {
         let Span { start, end } = self.span();
+        self.splits.push((self.pos, self.tokens[self.pos].clone()));
         self.tokens[self.pos] = (first, Span::new(start, start + 1));
         self.tokens
             .insert(self.pos + 1, (rest, Span::new(start + 1, end)));
@@ -742,7 +745,39 @@ impl Parser {
         if !self.no_struct_literal && self.at(&Token::LBrace) {
             return self.parse_struct_literal(path, start);
         }
-        Some(self.expression(ExpressionKind::Identifier(path), start))
+        let name = self.expression(ExpressionKind::Identifier(path), start);
+        self.parse_explicit_call(name)
+    }
+
+    /// `function<T, ..>(..)`, a call given its type arguments, as in C++.
+    /// What does not read as types closed by `>` and followed by `(` is a
+    /// comparison, so the attempt is undone and `function` returned alone.
+    fn parse_explicit_call(&mut self, function: Expression) -> Option<Expression> {
+        if !self.at(&Token::Lt) {
+            return Some(function);
+        }
+        let saved = (self.pos, self.errors.len(), self.panic_mode, self.brackets);
+        let splits = self.splits.len();
+        if let Some(type_args) = self.parse_generic_arguments()
+            && self.eat(&Token::LParen)
+        {
+            let arguments =
+                self.allowing_struct_literals(|p| p.parse_expressions(&Token::RParen))?;
+            let start = function.span;
+            let kind = ExpressionKind::Call {
+                function: Box::new(function),
+                type_args,
+                arguments,
+            };
+            return Some(self.expression(kind, start));
+        }
+        for (at, token) in self.splits.drain(splits..).rev() {
+            self.tokens.remove(at + 1);
+            self.tokens[at] = token;
+        }
+        (self.pos, _, self.panic_mode, self.brackets) = saved;
+        self.errors.truncate(saved.1);
+        Some(function)
     }
 
     /// Read the condition of a construct whose body follows in braces.
@@ -1101,6 +1136,7 @@ impl Parser {
                     self.allowing_struct_literals(|p| p.parse_expressions(&Token::RParen))?;
                 ExpressionKind::Call {
                     function: left,
+                    type_args: Vec::new(),
                     arguments,
                 }
             }
@@ -1111,7 +1147,8 @@ impl Parser {
                     _ => return self.error_here("Expected a field name after '.'"),
                 };
                 self.bump();
-                ExpressionKind::Get { object: left, name }
+                let get = self.expression(ExpressionKind::Get { object: left, name }, start);
+                return self.parse_explicit_call(get);
             }
             Token::Question | Token::Bang => ExpressionKind::Try {
                 operator,

@@ -98,7 +98,7 @@ fn main() {
     { var v: Vec<Probe> = [probe(at), probe(at)]; var p = v.pop(); var r = v.remove(0); }
     expect(drops, 21, 15);
 
-    { var p = probe(at); var twin = p.copy(); }
+    { var p = probe(at); var twin = probe(at); }
     expect(drops, 23, 16);
 
     { var h = Holder { probe: probe(at), probes: [probe(at)] }; h.probe = probe(at); expect(drops, 24, 17); }
@@ -120,7 +120,7 @@ fn main() {
 
     { var k = Kept::Two(probe(at), probe(at)); }
     expect(drops, 36, 25);
-    { var k = Kept::One(probe(at)); var twin = k.copy(); k = Kept::Nothing; expect(drops, 37, 26); }
+    { var k = Kept::One(probe(at)); var twin = Kept::One(probe(at)); k = Kept::Nothing; expect(drops, 37, 26); }
     expect(drops, 38, 27);
     { var k = Kept::One(probe(at)); match k { Kept::One(p) => { expect(drops, 38, 28); } default => { } } }
     expect(drops, 39, 29);

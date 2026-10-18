@@ -132,6 +132,7 @@ pub enum ExpressionKind {
 
     Call {
         function: Box<Expression>,
+        type_args: Vec<TypeSpec>,
         arguments: Vec<Expression>,
     },
 
@@ -292,6 +293,7 @@ impl Expression {
             E::Call {
                 function,
                 arguments,
+                ..
             } => {
                 function.names(seen);
                 arguments.iter().for_each(|a| a.names(seen));
