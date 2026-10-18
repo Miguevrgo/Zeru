@@ -1,0 +1,26 @@
+enum Shape { Circle(i64), Square(i64), Rect(i64, i64), Dot }
+
+const SEVEN: i32 = 7;
+
+fn size(s: Shape) i64 {
+    return match s {
+        Shape::Circle(r) | Shape::Square(r) => r,
+        Shape::Rect(w, _) => w,
+        Shape::Dot => 0,
+    };
+}
+
+fn main() {
+    for i in -1..9 {
+        var name = match i {
+            1 | 2 => "one or two",
+            -1 | SEVEN => "minus one or seven",
+            5 => "five",
+            default => "other",
+        };
+        println("{} {}", i, name);
+    }
+    var r: i32! = Err(4);
+    var v = match r { Ok(x) | Err(x) => x };
+    println("{} {} {} {}", size(Shape::Circle(3)), size(Shape::Square(4)), size(Shape::Rect(5, 6)), v);
+}

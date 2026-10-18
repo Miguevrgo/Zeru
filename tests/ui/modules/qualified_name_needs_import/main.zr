@@ -1,0 +1,8 @@
+import std.collections.hashset;
+import a;
+import b;
+
+fn main() {
+    var m: hashmap::HashMap<i32, i32> = hashmap::HashMap.new();
+    println("{}", a::fa());
+}

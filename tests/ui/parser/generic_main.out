@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Function 'main' must not take type parameters
+   ╭─[ tests/ui/parser/generic_main.zr:1:1 ]
+   │
+ 1 │ fn main<T>() { }
+   │ ──────┬─────
+   │       ╰─────── Function 'main' must not take type parameters
+───╯
+[-] Error: aborting due to previous error

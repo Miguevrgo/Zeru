@@ -163,7 +163,7 @@ pub enum ExpressionKind {
     },
     Match {
         value: Box<Expression>,
-        arms: Vec<(Expression, Expression)>,
+        arms: Vec<(Pattern, Expression)>,
     },
     BorrowRef(Box<Expression>),
     BorrowRefMut(Box<Expression>),
@@ -182,6 +182,29 @@ pub enum ExpressionKind {
         clobbers: Vec<String>,
         is_volatile: bool,
     },
+}
+
+/// What a `match` arm takes, with a grammar of its own, as rustc's `Pat`.
+#[derive(Debug, Clone)]
+pub struct Pattern {
+    pub kind: PatternKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub enum PatternKind {
+    /// The arm taking every value no other arm takes.
+    Default,
+    /// A number, possibly negative, `true`, `false` or `None`.
+    Literal(Expression),
+    /// A constant or a variant, by its name.
+    Path(String),
+    /// A name inside a payload, bound to the value there; `_` binds nothing.
+    Binding(String),
+    /// `Some(p)`, `Ok(p)`, `Err(p)` or `E::V(p, q)`.
+    Payload { path: String, fields: Vec<Pattern> },
+    /// `p | q`: any of the alternatives.
+    Or(Vec<Pattern>),
 }
 
 #[derive(Debug, Clone)]
@@ -291,10 +314,39 @@ impl Expression {
             E::Int(_) | E::Float(_) | E::StringLit(_) | E::Boolean(_) | E::None => {}
         }
     }
+}
 
-    /// The `default` arm of a `match`, which the parser writes as a name.
-    pub fn is_default_pattern(&self) -> bool {
-        matches!(&self.kind, ExpressionKind::Identifier(name) if name == "default")
+/// Dropped down its left operand in a loop, since `a + b + c ..` and
+/// `a.b.c ..` nest one level per operator with no limit on how many.
+impl Drop for Expression {
+    fn drop(&mut self) {
+        use ExpressionKind as E;
+        let mut kind = std::mem::replace(&mut self.kind, E::None);
+        while let E::Infix { left, .. }
+        | E::Index { left, .. }
+        | E::Cast { left, .. }
+        | E::Call { function: left, .. }
+        | E::Get { object: left, .. }
+        | E::Try { value: left, .. } = &mut kind
+        {
+            kind = std::mem::replace(&mut left.kind, E::None);
+        }
+    }
+}
+
+impl Pattern {
+    /// Call `seen` with every name the pattern uses or binds.
+    pub fn names(&self, seen: &mut impl FnMut(&str)) {
+        match &self.kind {
+            PatternKind::Literal(expr) => expr.names(seen),
+            PatternKind::Path(name) | PatternKind::Binding(name) => seen(name),
+            PatternKind::Payload { path, fields } => {
+                seen(path);
+                fields.iter().for_each(|field| field.names(seen));
+            }
+            PatternKind::Or(alternatives) => alternatives.iter().for_each(|alt| alt.names(seen)),
+            PatternKind::Default => {}
+        }
     }
 }
 

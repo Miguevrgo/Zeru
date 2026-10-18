@@ -1,0 +1,24 @@
+status: compile error
+-- stderr
+Error: Unknown type 'hashmap::HashMap'
+   ╭─[ tests/ui/modules/qualified_name_needs_import/main.zr:6:5 ]
+   │
+ 6 │     var m: hashmap::HashMap<i32, i32> = hashmap::HashMap.new();
+   │     ─────────────────────────────┬─────────────────────────────
+   │                                  ╰─────────────────────────────── Unknown type 'hashmap::HashMap'
+───╯
+Error: Undeclared variable 'hashmap::HashMap'
+   ╭─[ tests/ui/modules/qualified_name_needs_import/main.zr:6:41 ]
+   │
+ 6 │     var m: hashmap::HashMap<i32, i32> = hashmap::HashMap.new();
+   │                                         ────────┬───────
+   │                                                 ╰───────── Undeclared variable 'hashmap::HashMap'
+───╯
+Error: Function 'b::fb' not defined
+   ╭─[ tests/ui/modules/qualified_name_needs_import/a.zr:2:12 ]
+   │
+ 2 │     return b::fb() + 1;
+   │            ───┬───
+   │               ╰───── Function 'b::fb' not defined
+───╯
+[-] Error: aborting due to previous error

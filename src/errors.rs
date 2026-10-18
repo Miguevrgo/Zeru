@@ -91,7 +91,11 @@ impl ZeruError {
             ReportKind::Error,
             (name.to_string(), range.clone()),
         )
-        .with_config(ariadne::Config::default().with_color(colored()))
+        .with_config(
+            ariadne::Config::default()
+                .with_color(colored())
+                .with_index_type(ariadne::IndexType::Byte),
+        )
         .with_message(message)
         .with_label(
             Label::new((name.to_string(), range))
@@ -207,10 +211,6 @@ pub enum CompileError {
     Unknown,
     #[error("LLVM error: {0}")]
     Llvm(#[from] LLVMString),
-    #[error("std library not found: install zeru or set ZERU_STD_PATH for local development")]
-    StdNotFound,
-    #[error("module '{}' not found at {}", .0, .1.display())]
-    ModuleNotFound(String, std::path::PathBuf),
     #[error("invalid path: must point to a .zr file with a valid UTF-8 name")]
     InvalidPath,
     #[error("linking failed: cc exited with {0}")]

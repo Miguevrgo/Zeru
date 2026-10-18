@@ -282,12 +282,12 @@ impl FnCx<'_, '_> {
         );
         let arms = vec![
             Arm {
-                tag: Some(1),
-                bindings: vec![(binding, Payload::SomeValue)],
+                tags: vec![1],
+                bindings: vec![(binding, vec![Payload::SomeValue])],
                 body: some,
             },
             Arm {
-                tag: None,
+                tags: Vec::new(),
                 bindings: Vec::new(),
                 body: self.mk(ExprKind::None, ty, span),
             },

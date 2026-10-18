@@ -1,0 +1,3 @@
+pub fn fa() i32 {
+    return b::fb() + 1;
+}

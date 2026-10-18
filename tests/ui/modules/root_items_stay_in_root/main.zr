@@ -1,0 +1,13 @@
+import std.fs;
+
+fn sys_result(r: i64) i64! {
+    println("the root's sys_result");
+    return Ok(r);
+}
+
+fn main() {
+    match fs::close(12345) {
+        Ok(_) => println("closed"),
+        Err(e) => println("error {}", e),
+    }
+}

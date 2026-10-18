@@ -20,11 +20,12 @@ source ─▶ lexer ─▶ parser ─▶ items ─▶ check ─▶ lower ─▶ 
 ## Names
 
 A name is resolved by looking it up, never by rewriting the source. Each module
-has a scope from names to `DefId`s, split into types, traits and values. Code
-reaches another module's items through `module::name`, or by the names a
-selective import brings in. The prelude and the root file share the global
-scope. A local shadows any item of the same name, because locals are looked up
-first, by the checker.
+has a scope from names to `DefId`s, split into types, traits and values. As in
+Go and Zig, a module sees its own items first, then the names its selective
+imports bring in, then the prelude's, and reaches the items of a module it
+imports through `module::name`. No module sees the root file's items, and a
+name imported twice is an error. A local shadows any item of the same name,
+because locals are looked up first, by the checker.
 
 ## Types
 

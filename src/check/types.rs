@@ -101,6 +101,7 @@ impl Checker<'_> {
                 .items
                 .iter()
                 .filter(|item| matches!(item.kind, ItemKind::Struct | ItemKind::Enum))
+                .filter(|item| self.items.lookup_type(scope.module, &item.name).is_some())
                 .map(|item| item.name.clone()),
         );
         match closest(name, &candidates) {

@@ -1,0 +1,10 @@
+fn main() {
+    var x = 5;
+    var p = &var x;
+    match x {
+        5 => println("five"),
+        default => println("other"),
+    }
+    *p = 6;
+    println("{}", x);
+}

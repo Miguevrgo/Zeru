@@ -1,0 +1,31 @@
+status: compile error
+-- stderr
+Error: Comparison operators cannot be chained
+   ╭─[ tests/ui/parser/chained_comparison.zr:6:19 ]
+   │
+ 6 │     var p = a < b == c;
+   │                   ─┬
+   │                    ╰── Comparison operators cannot be chained
+───╯
+Error: Comparison operators cannot be chained
+   ╭─[ tests/ui/parser/chained_comparison.zr:7:20 ]
+   │
+ 7 │     var q = a == b == c;
+   │                    ─┬
+   │                     ╰── Comparison operators cannot be chained
+───╯
+Error: Comparison operators cannot be chained
+   ╭─[ tests/ui/parser/chained_comparison.zr:8:20 ]
+   │
+ 8 │     var r = 3 == 3 == true;
+   │                    ─┬
+   │                     ╰── Comparison operators cannot be chained
+───╯
+Error: Comparison operators cannot be chained
+   ╭─[ tests/ui/parser/chained_comparison.zr:9:19 ]
+   │
+ 9 │     var s = 0 < x < 10;
+   │                   ┬
+   │                   ╰── Comparison operators cannot be chained
+───╯
+[-] Error: aborting due to previous error

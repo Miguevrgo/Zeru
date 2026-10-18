@@ -23,8 +23,8 @@ cargo build --release
 
 After building, you can use the executable located in `./target/release/zeru` to compile and run your `.zr` programs.
 
-> [!WARNING]
-> Note that compiling without installing the standard library will require to set the ZERU_STD_PATH env variable to the repository std/ folder in order to use the std.
+> [!NOTE]
+> The compiler uses the `std/` folder in the closest directory above its executable, so `./target/release/zeru` uses the repository's. Set the ZERU_STD_PATH env variable to use another one.
 
 ## Editor Support
 

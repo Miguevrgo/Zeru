@@ -1,0 +1,6 @@
+trait T {
+    fn m(self);
+    fn m(self) i32;
+}
+
+fn main() { }

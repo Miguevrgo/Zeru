@@ -1,0 +1,31 @@
+fn to_int(t: i64) i64? {
+    if t > 0 {
+        return t;
+    }
+    return None;
+}
+
+fn parse(t: i64) i64 {
+    var n = match to_int(t) {
+        Some(v) => v,
+        None => {
+            return -1;
+        },
+    };
+    return n * 2;
+}
+
+fn main() {
+    println("{} {}", parse(4), parse(-4));
+    var total = 0;
+    for i in 0..5 {
+        var add = match i {
+            3 => {
+                continue;
+            },
+            default => i,
+        };
+        total += add;
+    }
+    println("{}", total);
+}

@@ -395,6 +395,9 @@ impl<'a> Checker<'a> {
             if !params.is_empty() {
                 self.error("Function 'main' must not take arguments", span);
             }
+            if !type_params.is_empty() {
+                self.error("Function 'main' must not take type parameters", span);
+            }
             if ret != Types::VOID {
                 let shown = self.types.show(ret);
                 self.error(
@@ -514,6 +517,11 @@ impl<'a> Checker<'a> {
         };
         let scope = self.scope_of(def, &[]);
         let span = item.decl.span;
+        let names: Vec<String> = methods.iter().map(|m| m.name.clone()).collect();
+        if let Some(dup) = first_duplicate(&names) {
+            let message = format!("Trait '{}' declares method '{dup}' twice", item.name);
+            self.error(message, span);
+        }
         let mut shape = Vec::new();
         for method in methods {
             let is_self = |spec: &TypeSpec| matches!(spec, TypeSpec::Named(name) if name == "self");

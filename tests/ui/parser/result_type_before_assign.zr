@@ -1,0 +1,4 @@
+fn main() {
+    var x: i32!= 3;
+    println("{}", x.unwrap());
+}

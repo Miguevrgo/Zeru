@@ -1,2 +1,4 @@
 import nonesuch.thing;
-fn main() { }
+fn main() {
+    var x = ;
+}

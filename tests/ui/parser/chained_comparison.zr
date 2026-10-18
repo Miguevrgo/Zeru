@@ -1,0 +1,11 @@
+fn main() {
+    var a = 1;
+    var b = 2;
+    var c = true;
+    var x = 5;
+    var p = a < b == c;
+    var q = a == b == c;
+    var r = 3 == 3 == true;
+    var s = 0 < x < 10;
+    var t = (a < b) == (b < x);
+}

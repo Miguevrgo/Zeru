@@ -26,20 +26,30 @@ pub fn status(colour: &str, icon: char, verb: &str, detail: impl std::fmt::Displ
     eprintln!("  {colour}{icon} {verb:>VERB_WIDTH$}{reset} {detail}");
 }
 
-fn std_path() -> Result<PathBuf, CompileError> {
-    if let Ok(path) = std::env::var("ZERU_STD_PATH") {
-        return Ok(PathBuf::from(path));
+/// The standard library: `ZERU_STD_PATH`, or else the one beside the
+/// compiler, so a compiler always reads the std it was released with.
+fn std_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("ZERU_STD_PATH") {
+        return Some(path.into());
     }
-    let home = std::env::var("HOME").map_err(|_| CompileError::StdNotFound)?;
-    Ok(PathBuf::from(home).join(".zeru/std"))
+    std_beside(&std::env::current_exe().ok()?)
 }
 
-fn resolve_import(import: &str, root: &Path) -> Result<PathBuf, CompileError> {
+/// The `std` directory in the closest directory above `exe` that has one,
+/// as Zig finds its lib directory: `~/.zeru/std` for `~/.zeru/bin/zeru`,
+/// and the repository's for `target/release/zeru`.
+fn std_beside(exe: &Path) -> Option<PathBuf> {
+    exe.ancestors()
+        .map(|dir| dir.join("std"))
+        .find(|std| std.join("builtin.zr").is_file())
+}
+
+fn resolve_import(import: &str, root: &Path) -> Option<PathBuf> {
     let (base, relative) = match import.strip_prefix("std.") {
         Some(rest) => (std_path()?, rest),
         None => (root.to_path_buf(), import),
     };
-    Ok(base.join(relative.replace('.', "/")).with_extension("zr"))
+    Some(base.join(relative.replace('.', "/")).with_extension("zr"))
 }
 
 fn parse_file(
@@ -78,7 +88,7 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
     let start = std::time::Instant::now();
     let user_code = std::fs::read_to_string(path)?;
 
-    let (sources, modules, errors) = load(path, &user_code)?;
+    let (sources, modules, errors) = load(path, &user_code);
     let report = |errors: &[ZeruError]| {
         report_errors(errors, &sources);
         Err(CompileError::Unknown)
@@ -130,10 +140,7 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
 
 /// Parse the prelude, the root file and every module they import, each into
 /// a module of its own.
-fn load(
-    path: &Path,
-    user_code: &str,
-) -> Result<(Sources, Vec<SourceModule>, Vec<ZeruError>), CompileError> {
+fn load(path: &Path, user_code: &str) -> (Sources, Vec<SourceModule>, Vec<ZeruError>) {
     let mut sources = Sources::default();
     let mut errors = Vec::new();
     let prelude = parse_file(
@@ -188,9 +195,20 @@ fn load(
                 }
                 None => {}
             }
-            let file = resolve_import(&import, dir)?;
-            let source = std::fs::read_to_string(&file)
-                .map_err(|_| CompileError::ModuleNotFound(import.clone(), file.clone()))?;
+            let Some(file) = resolve_import(&import, dir) else {
+                errors.push(ZeruError::semantic(
+                    "The standard library is not beside the compiler; set ZERU_STD_PATH",
+                    span,
+                ));
+                continue;
+            };
+            let Ok(source) = std::fs::read_to_string(&file) else {
+                errors.push(ZeruError::semantic(
+                    format!("Module '{import}' not found at {}", file.display()),
+                    span,
+                ));
+                continue;
+            };
             let program = parse_file(
                 file.display().to_string(),
                 &source,
@@ -206,7 +224,7 @@ fn load(
         }
         next += 1;
     }
-    Ok((sources, modules, errors))
+    (sources, modules, errors)
 }
 
 fn imports(program: &Program) -> Vec<(String, Span)> {
@@ -218,4 +236,16 @@ fn imports(program: &Program) -> Vec<(String, Span)> {
             _ => None,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    #[test]
+    fn std_is_found_above_the_compiler() {
+        let exe = std::env::current_exe().unwrap();
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        assert_eq!(super::std_beside(&exe), Some(repo.join("std")));
+    }
 }

@@ -1,0 +1,6 @@
+import a::{f};
+import b::{f};
+
+fn main() {
+    println("{}", f());
+}

@@ -4,14 +4,14 @@ Error: Unexpected character 'é'
    ╭─[ tests/ui/lexer/non_ascii_identifier.zr:2:10 ]
    │
  2 │     var aé = 1;
-   │          ─┬
-   │           ╰── Unexpected character 'é'
+   │          ┬
+   │          ╰── Unexpected character 'é'
 ───╯
 Error: Unexpected character 'é'
-   ╭─[ tests/ui/lexer/non_ascii_identifier.zr:3:21 ]
+   ╭─[ tests/ui/lexer/non_ascii_identifier.zr:3:20 ]
    │
  3 │     println("{}", aé);
-   │                     ─┬
-   │                      ╰── Unexpected character 'é'
+   │                    ┬
+   │                    ╰── Unexpected character 'é'
 ───╯
 [-] Error: aborting due to previous error

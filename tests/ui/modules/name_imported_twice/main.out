@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'f' is already imported from 'a'
+   ╭─[ tests/ui/modules/name_imported_twice/main.zr:2:1 ]
+   │
+ 2 │ import b::{f};
+   │ ───────┬──────
+   │        ╰──────── 'f' is already imported from 'a'
+───╯
+[-] Error: aborting due to previous error

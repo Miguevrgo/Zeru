@@ -1,7 +1,8 @@
 //! Every declaration in the program gets a [`DefId`], and every module a scope
 //! mapping names to them. Names are resolved by looking them up, never by
 //! rewriting the source, so a local can shadow an item and two modules can
-//! both declare `min`.
+//! both declare `min`. As in Go and Zig, a module sees its own items, what it
+//! imports and, last, the prelude; never the items of the file importing it.
 
 use std::collections::HashMap;
 
@@ -18,7 +19,7 @@ impl ModuleId {
     /// The prelude, part of every program: what it marks `pub` every module
     /// sees, and the rest only the standard library.
     pub const PRELUDE: ModuleId = ModuleId(0);
-    /// The file being compiled, whose items every module sees.
+    /// The file being compiled.
     pub const ROOT: ModuleId = ModuleId(1);
 }
 
@@ -73,6 +74,7 @@ struct Module {
     std: bool,
     scope: HashMap<(Namespace, String), DefId>,
     imported: HashMap<String, (ModuleId, String)>,
+    modules: HashMap<String, ModuleId>,
 }
 
 pub struct Items<'a> {
@@ -99,6 +101,7 @@ impl<'a> Items<'a> {
                 std: source.std,
                 scope: HashMap::new(),
                 imported: HashMap::new(),
+                modules: HashMap::new(),
             });
             if let Some(name) = &source.name {
                 items.by_name.insert(name.clone(), id);
@@ -188,21 +191,21 @@ impl<'a> Items<'a> {
         }
     }
 
-    /// `import a.b::{x, y}` lets the importer say `x` for `b::x`.
+    /// `import a.b;` lets the importer say `b::x`, and `import a.b::{x, y}`
+    /// also `x` for `b::x`.
     fn import(&mut self, module: ModuleId, program: &Program) {
         for statement in &program.statements {
-            let StatementKind::Import {
-                path,
-                symbols: Some(symbols),
-            } = &statement.kind
-            else {
+            let StatementKind::Import { path, symbols } = &statement.kind else {
                 continue;
             };
             let short = path.last().cloned().unwrap_or_default();
             let Some(&target) = self.by_name.get(&short) else {
                 continue;
             };
-            for symbol in symbols {
+            self.modules[module.0 as usize]
+                .modules
+                .insert(short.clone(), target);
+            for symbol in symbols.iter().flatten() {
                 let found: Vec<DefId> = [Namespace::Type, Namespace::Trait, Namespace::Value]
                     .into_iter()
                     .filter_map(|ns| {
@@ -229,6 +232,14 @@ impl<'a> Items<'a> {
                 if declared_here {
                     self.errors.push(ZeruError::semantic(
                         format!("'{symbol}' is imported from '{short}' and also declared here"),
+                        statement.span,
+                    ));
+                    continue;
+                }
+                if let Some((other, _)) = self.modules[module.0 as usize].imported.get(symbol) {
+                    let other = self.module_name(*other).unwrap_or_default();
+                    self.errors.push(ZeruError::semantic(
+                        format!("'{symbol}' is already imported from '{other}'"),
                         statement.span,
                     ));
                     continue;
@@ -268,30 +279,27 @@ impl<'a> Items<'a> {
         self.modules[module.0 as usize].name.as_deref()
     }
 
-    /// The item `path` names from inside `from`: `x`, or `module::x`.
+    /// The item `path` names from inside `from`: `x`, or `module::x` of a
+    /// module `from` imports. A name is its own item, else one it imports,
+    /// else the prelude's.
     fn lookup(&self, from: ModuleId, namespace: Namespace, path: &str) -> Option<DefId> {
-        if let Some((module, name)) = path.split_once("::") {
-            let module = *self.by_name.get(module)?;
-            return self.modules[module.0 as usize]
+        let here = &self.modules[from.0 as usize];
+        let in_module = |module: ModuleId, name: &str| {
+            self.modules[module.0 as usize]
                 .scope
                 .get(&(namespace, name.to_string()))
-                .copied();
+                .copied()
+        };
+        if let Some((module, name)) = path.split_once("::") {
+            return in_module(*here.modules.get(module)?, name);
         }
-        let key = (namespace, path.to_string());
-        let here = &self.modules[from.0 as usize];
-        if let Some(&def) = here.scope.get(&key) {
+        if let Some(def) = in_module(from, path) {
             return Some(def);
         }
         if let Some((module, name)) = here.imported.get(path) {
-            return self.modules[module.0 as usize]
-                .scope
-                .get(&(namespace, name.clone()))
-                .copied();
+            return in_module(*module, name);
         }
-        [ModuleId::ROOT, ModuleId::PRELUDE]
-            .into_iter()
-            .filter_map(|module| self.modules[module.0 as usize].scope.get(&key).copied())
-            .find(|&def| self.visible(def, from))
+        in_module(ModuleId::PRELUDE, path).filter(|&def| self.visible(def, from))
     }
 
     pub fn lookup_type(&self, from: ModuleId, path: &str) -> Option<DefId> {

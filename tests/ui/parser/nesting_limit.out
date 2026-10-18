@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Code nests more than 256 levels deep
+   ╭─[ tests/ui/parser/nesting_limit.zr:8:14 ]
+   │
+ 8 │         ((((((((((((((((((((((((((((((((((((((((((((((((((
+   │              ┬
+   │              ╰── Code nests more than 256 levels deep
+───╯
+[-] Error: aborting due to previous error

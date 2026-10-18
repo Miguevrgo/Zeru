@@ -750,9 +750,11 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         let mut blocks = Vec::new();
         for arm in arms {
             let block = self.append("match_arm");
-            match arm.tag {
-                Some(value) => cases.push((Self::int_const(tag.get_type(), value), block)),
-                None => default = Some(block),
+            for &value in &arm.tags {
+                cases.push((Self::int_const(tag.get_type(), value), block));
+            }
+            if arm.tags.is_empty() {
+                default = Some(block);
             }
             blocks.push(block);
         }
@@ -768,14 +770,20 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
 
         for (arm, block) in arms.iter().zip(blocks) {
             self.builder.position_at_end(block);
-            for (local, payload) in &arm.bindings {
-                let address = match *payload {
-                    Payload::SomeValue | Payload::OkValue => self.field_ptr(place, subject, 1),
-                    Payload::ErrValue => self.field_ptr(place, subject, 2),
-                    Payload::Variant { variant, field } => {
-                        self.variant_field_ptr(place, subject, variant, field)
-                    }
-                };
+            for (local, payloads) in &arm.bindings {
+                let mut address = self.payload_ptr(place, subject, payloads[0]);
+                for (&value, &payload) in arm.tags.iter().zip(payloads).skip(1) {
+                    let here = self.payload_ptr(place, subject, payload);
+                    let value = Self::int_const(tag.get_type(), value);
+                    let b = &self.builder;
+                    let matched = b
+                        .build_int_compare(IntPredicate::EQ, tag, value, "alt")
+                        .unwrap();
+                    address = b
+                        .build_select(matched, here, address, "binding")
+                        .unwrap()
+                        .into_pointer_value();
+                }
                 self.addresses[local.0 as usize] = Some(address);
             }
             match result {
@@ -790,6 +798,22 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         match result {
             Some(slot) => self.load_val(slot, ty),
             None => Val::Unit,
+        }
+    }
+
+    /// Where `payload` lies inside the scrutinee at `place`.
+    fn payload_ptr(
+        &mut self,
+        place: PointerValue<'ctx>,
+        subject: Ty,
+        payload: Payload,
+    ) -> PointerValue<'ctx> {
+        match payload {
+            Payload::SomeValue | Payload::OkValue => self.field_ptr(place, subject, 1),
+            Payload::ErrValue => self.field_ptr(place, subject, 2),
+            Payload::Variant { variant, field } => {
+                self.variant_field_ptr(place, subject, variant, field)
+            }
         }
     }
 

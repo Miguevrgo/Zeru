@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Undeclared variable 'missing'
+   ╭─[ tests/ui/diagnostics/column_after_non_ascii.zr:2:33 ]
+   │
+ 2 │     var b: i32 = /* éééééééé */ missing;
+   │                                 ───┬───
+   │                                    ╰───── Undeclared variable 'missing'
+───╯
+[-] Error: aborting due to previous error

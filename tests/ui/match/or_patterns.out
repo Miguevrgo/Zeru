@@ -1,0 +1,13 @@
+status: exit 0
+-- stdout
+-1 minus one or seven
+0 other
+1 one or two
+2 one or two
+3 other
+4 other
+5 five
+6 other
+7 minus one or seven
+8 other
+3 4 5 4

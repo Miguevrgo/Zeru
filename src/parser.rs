@@ -1,7 +1,7 @@
 use crate::{
     ast::{
-        AsmOperand, Expression, ExpressionKind, PRIMITIVES, Program, Statement, StatementKind,
-        TraitMethod, TypeParameter, TypeSpec,
+        AsmOperand, Expression, ExpressionKind, PRIMITIVES, Pattern, PatternKind, Program,
+        Statement, StatementKind, TraitMethod, TypeParameter, TypeSpec,
     },
     errors::{Span, ZeruError},
     lexer::Lexer,
@@ -25,7 +25,24 @@ pub struct Parser {
     depth: usize,
     /// How many brackets are open, where a `;` may belong to an `[x; n]`.
     brackets: usize,
+    /// How many expressions, types, statements and patterns enclose the
+    /// next token.
+    nesting: usize,
 }
+
+/// How deep code may nest, as Clang limits bracket depth: deeper code is an
+/// error, not a stack overflow in the parser or a later pass.
+const MAX_NESTING: usize = 256;
+
+/// What may follow a `match` in statement position and continue it as an
+/// expression, as in rustc's `expr_is_complete`.
+const POSTFIX_STARTS: [Token; 5] = [
+    Token::Dot,
+    Token::LBracket,
+    Token::LParen,
+    Token::Question,
+    Token::Bang,
+];
 
 const ITEM_STARTS: [Token; 7] = [
     Token::Fn,
@@ -70,6 +87,7 @@ impl Parser {
             code_seen: false,
             depth: 0,
             brackets: 0,
+            nesting: 0,
         };
         p.report_illegal();
         p
@@ -123,6 +141,17 @@ impl Parser {
             self.bump();
         }
         found
+    }
+
+    /// Run `parse` one level deeper, refusing to go past `MAX_NESTING`.
+    fn nested<T>(&mut self, parse: impl FnOnce(&mut Self) -> Option<T>) -> Option<T> {
+        if self.nesting == MAX_NESTING {
+            return self.error_here(format!("Code nests more than {MAX_NESTING} levels deep"));
+        }
+        self.nesting += 1;
+        let parsed = parse(self);
+        self.nesting -= 1;
+        parsed
     }
 
     fn expect(&mut self, token: &Token) -> Option<()> {
@@ -272,27 +301,38 @@ impl Parser {
     fn parse_statement(&mut self) -> Option<Statement> {
         self.panic_mode = false;
 
-        match self.peek() {
-            Token::Var => self.parse_var_statement(false),
-            Token::Const => self.parse_var_statement(true),
-            Token::Return => self.parse_return_statement(),
-            Token::Fn => self.parse_function_statement(),
-            Token::If => self.parse_if_statement(),
-            Token::While => self.parse_while_statement(),
-            Token::For => self.parse_for_statement(),
-            Token::Struct => self.parse_struct_statement(),
-            Token::Enum => self.parse_enum_statement(),
-            Token::Break => self.parse_jump(StatementKind::Break),
-            Token::Continue => self.parse_jump(StatementKind::Continue),
-            Token::LBrace => self.parse_block(),
-            Token::Import => self.parse_import_statement(),
-            _ => self.parse_expression_statement(),
-        }
+        self.nested(|p| match p.peek() {
+            Token::Var => p.parse_var_statement(false),
+            Token::Const => p.parse_var_statement(true),
+            Token::Return => p.parse_return_statement(),
+            Token::Fn => p.parse_function_statement(),
+            Token::If => p.parse_if_statement(),
+            Token::While => p.parse_while_statement(),
+            Token::For => p.parse_for_statement(),
+            Token::Struct => p.parse_struct_statement(),
+            Token::Enum => p.parse_enum_statement(),
+            Token::Break => p.parse_jump(StatementKind::Break),
+            Token::Continue => p.parse_jump(StatementKind::Continue),
+            Token::LBrace => p.parse_block(),
+            Token::Import => p.parse_import_statement(),
+            _ => p.parse_expression_statement(),
+        })
     }
 
+    /// An expression and its `;`. A `match` ends the statement without one,
+    /// unless a postfix operator continues it, as in rustc.
     fn parse_expression_statement(&mut self) -> Option<Statement> {
         let start = self.span();
-        let expr = self.parse_expression(Precedence::Lowest)?;
+        let expr = match self.at(&Token::Match) {
+            true => {
+                let expr = self.parse_match_expression()?;
+                match self.at_any(&POSTFIX_STARTS) {
+                    true => self.parse_operators(expr, Precedence::Lowest)?,
+                    false => expr,
+                }
+            }
+            false => self.parse_expression(Precedence::Lowest)?,
+        };
         if !matches!(expr.kind, ExpressionKind::Match { .. }) {
             self.expect(&Token::Semicolon)?;
         }
@@ -312,7 +352,7 @@ impl Parser {
         self.bump();
         let name = self.expect_identifier()?;
         let type_annotation = match self.eat(&Token::Colon) {
-            true => Some(self.parse_type()?),
+            true => Some(self.parse_annotation()?),
             false => None,
         };
         self.expect(&Token::Assign)?;
@@ -329,27 +369,41 @@ impl Parser {
     }
 
     fn parse_type(&mut self) -> Option<TypeSpec> {
-        let base = match self.peek() {
-            Token::Str => {
-                self.bump();
-                TypeSpec::Slice(Box::new(TypeSpec::Named("u8".to_string())))
+        self.nested(|p| {
+            let base = match p.peek() {
+                Token::Str => {
+                    p.bump();
+                    TypeSpec::Slice(Box::new(TypeSpec::Named("u8".to_string())))
+                }
+                Token::Star => {
+                    p.bump();
+                    TypeSpec::Pointer(Box::new(p.parse_type()?))
+                }
+                Token::BitAnd => p.parse_reference_type()?,
+                Token::LParen => p.parse_parenthesized_type()?,
+                Token::Identifier(_) => p.parse_named_type()?,
+                _ => return p.error_here("Type identifier expected"),
+            };
+            if p.eat(&Token::Question) {
+                return Some(TypeSpec::Optional(Box::new(base)));
             }
-            Token::Star => {
-                self.bump();
-                TypeSpec::Pointer(Box::new(self.parse_type()?))
+            if p.eat(&Token::Bang) {
+                return Some(TypeSpec::Result(Box::new(base)));
             }
-            Token::BitAnd => self.parse_reference_type()?,
-            Token::LParen => self.parse_parenthesized_type()?,
-            Token::Identifier(_) => self.parse_named_type()?,
-            _ => return self.error_here("Type identifier expected"),
-        };
-        if self.eat(&Token::Question) {
-            return Some(TypeSpec::Optional(Box::new(base)));
+            Some(base)
+        })
+    }
+
+    /// The type of a `var` or `const`, whose `!` the lexer may have joined
+    /// to the `=` after it, as in `i32!= 3`.
+    fn parse_annotation(&mut self) -> Option<TypeSpec> {
+        let ty = self.parse_type()?;
+        if !self.at(&Token::NotEq) || matches!(ty, TypeSpec::Optional(_) | TypeSpec::Result(_)) {
+            return Some(ty);
         }
-        if self.eat(&Token::Bang) {
-            return Some(TypeSpec::Result(Box::new(base)));
-        }
-        Some(base)
+        self.split_token(Token::Bang, Token::Assign);
+        self.bump();
+        Some(TypeSpec::Result(Box::new(ty)))
     }
 
     /// `(T)` is `T`, as in an expression; `()`, `(T,)` and `(T, U)` are tuples.
@@ -422,8 +476,13 @@ impl Parser {
             Token::BitRShiftEq => Token::Geq,
             _ => return,
         };
+        self.split_token(Token::Gt, rest);
+    }
+
+    /// Replace the next token by its one-character `first` and the `rest`.
+    fn split_token(&mut self, first: Token, rest: Token) {
         let Span { start, end } = self.span();
-        self.tokens[self.pos] = (Token::Gt, Span::new(start, start + 1));
+        self.tokens[self.pos] = (first, Span::new(start, start + 1));
         self.tokens
             .insert(self.pos + 1, (rest, Span::new(start + 1, end)));
     }
@@ -501,7 +560,7 @@ impl Parser {
         let condition = self.parse_condition()?;
         let then_branch = Box::new(self.parse_block()?);
         let else_branch = match self.eat(&Token::Else) {
-            true if self.at(&Token::If) => Some(Box::new(self.parse_if_statement()?)),
+            true if self.at(&Token::If) => Some(Box::new(self.nested(Self::parse_if_statement)?)),
             true => Some(Box::new(self.parse_block()?)),
             false => None,
         };
@@ -675,19 +734,12 @@ impl Parser {
         Some(self.statement(StatementKind::Trait { name, methods }, start))
     }
 
-    /// A name, a qualified path like `module::Name`, or a struct literal when a
-    /// path naming a type is followed by a brace.
+    /// A name, a qualified path like `module::Name`, or a struct literal when
+    /// a brace follows the path where one may.
     fn parse_path_or_struct_literal(&mut self) -> Option<Expression> {
         let start = self.span();
         let path = self.parse_path(&Token::DoubleColon)?.join("::");
-
-        let names_a_type = path
-            .rsplit("::")
-            .next()
-            .and_then(|last| last.chars().next())
-            .is_some_and(char::is_uppercase);
-
-        if names_a_type && !self.no_struct_literal && self.at(&Token::LBrace) {
+        if !self.no_struct_literal && self.at(&Token::LBrace) {
             return self.parse_struct_literal(path, start);
         }
         Some(self.expression(ExpressionKind::Identifier(path), start))
@@ -785,6 +837,35 @@ impl Parser {
     }
 
     fn parse_expression(&mut self, precedence: Precedence) -> Option<Expression> {
+        self.nested(|p| {
+            let operand = p.parse_operand()?;
+            p.parse_operators(operand, precedence)
+        })
+    }
+
+    /// The operators after `left` that bind tighter than `precedence`.
+    /// Comparisons do not chain, as in Rust: `a < b == c` is an error.
+    fn parse_operators(
+        &mut self,
+        mut left: Expression,
+        precedence: Precedence,
+    ) -> Option<Expression> {
+        let mut compared = false;
+        while precedence < token_precedence(self.peek()) {
+            let comparison = matches!(
+                token_precedence(self.peek()),
+                Precedence::Equals | Precedence::LessGreater
+            );
+            if comparison && (compared || precedence == Precedence::Equals) {
+                return self.error_here("Comparison operators cannot be chained");
+            }
+            compared = comparison;
+            left = self.parse_infix_expression(left)?;
+        }
+        Some(left)
+    }
+
+    fn parse_operand(&mut self) -> Option<Expression> {
         let start = self.span();
         let literal = match self.peek() {
             Token::Int(val) => Some(ExpressionKind::Int(*val)),
@@ -796,10 +877,10 @@ impl Parser {
             Token::SelfTok => Some(ExpressionKind::Identifier("self".to_string())),
             _ => None,
         };
-        let mut left = match literal {
+        match literal {
             Some(kind) => {
                 self.bump();
-                Expression::new(kind, start)
+                Some(Expression::new(kind, start))
             }
             None => match self.peek() {
                 Token::LBracket => self.parse_array_literal(),
@@ -813,13 +894,8 @@ impl Parser {
                 Token::Match => self.parse_match_expression(),
                 Token::Asm => self.parse_asm_expression(),
                 token => self.error_here(format!("Expected an expression, found '{token}'")),
-            }?,
-        };
-
-        while precedence < token_precedence(self.peek()) {
-            left = self.parse_infix_expression(left)?;
+            },
         }
-        Some(left)
     }
 
     /// `(a)` is `a`; `()`, `(a,)` and `(a, b)` are tuples.
@@ -853,9 +929,12 @@ impl Parser {
                 true => {
                     let span = self.span();
                     self.bump();
-                    Expression::new(ExpressionKind::Identifier("default".to_string()), span)
+                    Pattern {
+                        kind: PatternKind::Default,
+                        span,
+                    }
                 }
-                false => self.parse_expression(Precedence::Lowest)?,
+                false => self.parse_pattern(false)?,
             };
             self.expect(&Token::Arrow)?;
 
@@ -882,6 +961,55 @@ impl Parser {
             arms,
         };
         Some(self.expression(kind, start))
+    }
+
+    /// Alternatives separated by `|`. A name alone is a binding inside a
+    /// payload and a constant or variant elsewhere.
+    fn parse_pattern(&mut self, in_payload: bool) -> Option<Pattern> {
+        self.nested(|p| {
+            let start = p.span();
+            let first = p.parse_alternative(in_payload)?;
+            if !p.at(&Token::BitOr) {
+                return Some(first);
+            }
+            let mut alternatives = vec![first];
+            while p.eat(&Token::BitOr) {
+                alternatives.push(p.parse_alternative(in_payload)?);
+            }
+            Some(Pattern {
+                kind: PatternKind::Or(alternatives),
+                span: start.merge(p.prev_span()),
+            })
+        })
+    }
+
+    fn parse_alternative(&mut self, in_payload: bool) -> Option<Pattern> {
+        let start = self.span();
+        let number = |token: &Token| matches!(token, Token::Int(_) | Token::Float(_));
+        let literal = match self.peek() {
+            Token::True | Token::False | Token::None => true,
+            Token::Minus => number(&self.tokens[self.pos + 1].0),
+            token => number(token),
+        };
+        let kind = match self.peek() {
+            _ if literal => PatternKind::Literal(self.parse_operand()?),
+            Token::Identifier(_) => {
+                let path = self.parse_path(&Token::DoubleColon)?.join("::");
+                match self.eat(&Token::LParen) {
+                    true => PatternKind::Payload {
+                        path,
+                        fields: self.parse_list(&Token::RParen, |p| p.parse_pattern(true))?,
+                    },
+                    false if in_payload && !path.contains("::") => PatternKind::Binding(path),
+                    false => PatternKind::Path(path),
+                }
+            }
+            token => return self.error_here(format!("Expected a pattern, found '{token}'")),
+        };
+        Some(Pattern {
+            kind,
+            span: start.merge(self.prev_span()),
+        })
     }
 
     fn parse_asm_expression(&mut self) -> Option<Expression> {
@@ -1362,8 +1490,8 @@ mod tests {
     #[test]
     fn test_operator_precedence() {
         for (input, expected) in [
-            ("5 > 5 == 3 < 4", "((5 Gt 5) Eq (3 Lt 4))"),
-            ("5 < 5 != 3 > 4", "((5 Lt 5) NotEq (3 Gt 4))"),
+            ("(5 > 5) == (3 < 4)", "((5 Gt 5) Eq (3 Lt 4))"),
+            ("(5 < 5) != (3 > 4)", "((5 Lt 5) NotEq (3 Gt 4))"),
             (
                 "3 + 4 * 5 == 3 * 1 + 4 * 5",
                 "((3 Plus (4 Star 5)) Eq ((3 Star 1) Plus (4 Star 5)))",

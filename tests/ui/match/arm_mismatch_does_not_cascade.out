@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Every arm must give i32, this one gives str
+   ╭─[ tests/ui/match/arm_mismatch_does_not_cascade.zr:3:42 ]
+   │
+ 3 │     var y = match x { 1 => 5, default => "five" };
+   │                                          ───┬──
+   │                                             ╰──── Every arm must give i32, this one gives str
+───╯
+[-] Error: aborting due to previous error

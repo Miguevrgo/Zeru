@@ -279,11 +279,12 @@ pub enum Builtin {
 
 #[derive(Clone)]
 pub struct Arm {
-    /// The value it matches: a number, a variant's position, 1 for `Some`
-    /// and `Ok`, 0 for `None` and `Err`. `None` for `default`.
-    pub tag: Option<i128>,
-    /// Locals viewing values inside the scrutinee.
-    pub bindings: Vec<(LocalId, Payload)>,
+    /// The values it matches: numbers, variants' positions, 1 for `Some`
+    /// and `Ok`, 0 for `None` and `Err`. None for `default`.
+    pub tags: Vec<i128>,
+    /// Locals viewing values inside the scrutinee, with where each finds
+    /// its value for each of `tags`.
+    pub bindings: Vec<(LocalId, Vec<Payload>)>,
     pub body: Expr,
 }
 

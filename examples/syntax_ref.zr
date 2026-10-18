@@ -274,9 +274,7 @@ fn main() {
     var status = Status::Connected;
     var message = match status {
         Status::Connected => "Online",
-        Status::Disconnected => "Offline",
-        Status::Connecting => "Please wait...",
-        Status::Error => "Something went wrong",
+        Status::Disconnected | Status::Error => "Offline",   // Either one
         default => "Unknown"
     };
 

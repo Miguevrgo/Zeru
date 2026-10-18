@@ -4,7 +4,7 @@ Error: Non-ASCII character in string
    ╭─[ tests/ui/parser/unicode_in_string_rejected.zr:2:13 ]
    │
  2 │     println("héllo");
-   │             ────┬───
-   │                 ╰───── Non-ASCII character in string
+   │             ───┬───
+   │                ╰───── Non-ASCII character in string
 ───╯
 [-] Error: aborting due to previous error

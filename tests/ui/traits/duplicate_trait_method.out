@@ -1,0 +1,12 @@
+status: compile error
+-- stderr
+Error: Trait 'T' declares method 'm' twice
+   ╭─[ tests/ui/traits/duplicate_trait_method.zr:1:1 ]
+   │
+ 1 │ ╭─▶ trait T {
+   ┆ ┆
+ 4 │ ├─▶ }
+   │ │
+   │ ╰─────── Trait 'T' declares method 'm' twice
+───╯
+[-] Error: aborting due to previous error

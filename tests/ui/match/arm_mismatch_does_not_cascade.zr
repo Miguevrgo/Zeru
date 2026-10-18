@@ -1,0 +1,5 @@
+fn main() {
+    var x = 1;
+    var y = match x { 1 => 5, default => "five" };
+    var z: bool = y;
+}
