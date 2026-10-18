@@ -117,7 +117,7 @@ fn main() {
 
     double_all(&var list);  // Mutable borrow
 
-    print(list[0]);         // 2 (modified)
+    println("{}", list[0]);  // 2 (modified)
 }
 ```
 
@@ -143,7 +143,7 @@ fn main() {
 
     list.push(4);  // Might reallocate internal buffer!
 
-    print(*first); // DANGER: first might point to freed memory
+    println("{}", *first); // DANGER: first might point to freed memory
 }
 ```
 
@@ -160,7 +160,7 @@ use in its block. Meanwhile the borrowed local cannot be:
 
 ```rust
 var first = list.get(0);     // (&i32)?, borrows list
-print(*first.unwrap());      // last use of first
+println("{}", *first.unwrap()); // last use of first
 list.push(4);                // fine: first is no longer used
 ```
 
@@ -212,7 +212,7 @@ Zeru supports three compilation modes with different safety/performance tradeoff
 │    Check     │    debug      │ release-safe │ release-fast │
 ├──────────────┼───────────────┼──────────────┼──────────────┤
 │ Move checks  │ ✅ Compile    │ ✅ Compile   │ ✅ Compile   │
-│ Gen-refs     │ ✅ Runtime    │ ✅ Runtime   │ ❌ Skipped   │
+│ Borrow checks│ ✅ Compile    │ ✅ Compile   │ ✅ Compile   │
 │ Bounds check │ ✅ Runtime    │ ✅ Runtime   │ ❌ Skipped   │
 │ Overflow     │ ✅ Runtime    │ ✅ Runtime   │ ❌ Skipped   │
 ├──────────────┼───────────────┼──────────────┼──────────────┤
@@ -348,11 +348,11 @@ fn main() {
  
     // Access
     var first = numbers[0];           // 10
-    var maybe = numbers.get(100);     // i32? = None
+    var maybe = numbers.get(100);     // (&i32)? = None
 
     // Iteration
     for n in numbers {
-        print(n);
+        println("{}", n);
     }
 
     // Passing to functions
@@ -362,7 +362,7 @@ fn main() {
 
 fn process(data: Vec<i32>) {
     for item in data {
-        print(item);
+        println("{}", item);
     }
 }  // data freed here
 ```
@@ -374,9 +374,8 @@ fn process(data: Vec<i32>) {
 | Feature | Zeru | Rust | Zig | Go | C++ |
 | --------- | ------ | ------ | ----- | ----- | ----- |
 | Move semantics | ✅ Default | ✅ Default | ❌ Copy | ❌ Copy | Opt-in |
-| Borrow checker | ❌ No | ✅ Yes | ❌ No | ❌ No | ❌ No |
+| Borrow checker | ✅ Yes | ✅ Yes | ❌ No | ❌ No | ❌ No |
 | Lifetimes | ❌ No | ✅ Yes | ❌ No | ❌ No | ❌ No |
-| Gen-refs | ✅ Yes | ❌ No | ❌ No | ❌ No | ❌ No |
 | GC | ❌ No | ❌ No | ❌ No | ✅ Yes | ❌ No |
 | RAII | ✅ Yes | ✅ Yes | Defer | Defer | ✅ Yes |
 | Bounds checks | Configurable | ✅ Always | Debug only | ✅ Always | ❌ Never |
@@ -393,7 +392,7 @@ C    Zig    Rust    Zeru(fast)    Zeru(safe)    C++    Go    Java
          │                    │
          └── No runtime ──────┘
              overhead         │
-                              └── Small gen-ref overhead (~5-10%)
+                              └── Bounds and overflow checks
 ```
 
 ---

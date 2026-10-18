@@ -59,6 +59,7 @@ Currently, Zeru is in active development. To try it out, you need to build the c
 
 * Rust (latest stable)
 * LLVM 21 or newer
+* A C compiler (`cc`), only as the linker
 
 ### Building
 

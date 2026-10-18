@@ -1,0 +1,6 @@
+import std.math;
+fn main() {
+    var b: i64 = 10;
+    println("{} {}", math::pow(b, 16), math::pow(2 as i32, 30));
+    println("{} {} {}", math::abs(-0.0), math::abs(-2.5), math::abs(-7));
+}

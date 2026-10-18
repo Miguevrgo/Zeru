@@ -8,9 +8,10 @@
 const EMPTY: u64 = 255;
 const DELETED: u64 = 128;
 
-// Fibonacci hashing: the bits times 2^64 over the golden ratio, wrapping.
+// Fibonacci hashing: the bits, high half folded into the low one so every
+// bit reaches the group index, times 2^64 over the golden ratio, wrapping.
 fn hash(bits: u64) u64 {
-    return bits *% 11400714819323198485;
+    return (bits ^ (bits >> 32)) *% 11400714819323198485;
 }
 
 // The slots of the group whose control bytes are `low` and `high` holding

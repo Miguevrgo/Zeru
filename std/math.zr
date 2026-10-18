@@ -30,6 +30,9 @@ pub fn abs<T>(num: T) T {
     if num < 0 {
         return -num;
     }
+    if num == 0 {
+        return 0;
+    }
     return num;
 }
 
@@ -41,7 +44,9 @@ pub fn pow<T>(base: T, exp: u32) T {
         if (e % 2) == 1 {
             result = result * b;
         }
-        b = b * b;
+        if e > 1 {
+            b = b * b;
+        }
         e = e / 2;
     }
     return result;

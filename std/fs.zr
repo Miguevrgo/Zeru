@@ -65,11 +65,9 @@ pub fn rename(old_path: *u8, new_path: *u8) i64! {
 }
 
 pub fn file_size(path: *u8) i64! {
-    var buf: Array<u8, 144> = [0; 144];
-    var ptr: *u8 = &buf[0];
-    sys_result(syscall2(SYS_STAT, path as i64, ptr as i64))!;
-    var size_ptr: *i64 = (&buf[48]) as *i64;
-    return Ok(*size_ptr);
+    var stat: Array<i64, 18> = [0; 18];
+    sys_result(syscall2(SYS_STAT, path as i64, (&stat[0]) as i64))!;
+    return Ok(stat[6]);
 }
 
 pub fn exists(path: *u8) bool {
