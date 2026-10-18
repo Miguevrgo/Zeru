@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: A pattern must be a literal, a constant or an enum variant
+Error: A pattern must be known at compile time
    ╭─[ tests/ui/constants/local_shadows_constant_in_pattern.zr:4:23 ]
    │
  4 │     var r = match 3 { Z => 1, default => 2 };
    │                       ┬
-   │                       ╰── A pattern must be a literal, a constant or an enum variant
+   │                       ╰── A pattern must be known at compile time
 ───╯
 [-] Error: aborting due to previous error

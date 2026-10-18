@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: A pattern must be a literal, a constant or an enum variant
+Error: A pattern must be known at compile time
    ╭─[ tests/ui/match/variable_is_not_a_pattern.zr:4:23 ]
    │
  4 │     var r = match x { y => 1, default => 2 };
    │                       ┬
-   │                       ╰── A pattern must be a literal, a constant or an enum variant
+   │                       ╰── A pattern must be known at compile time
 ───╯
 [-] Error: aborting due to previous error

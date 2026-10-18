@@ -1,0 +1,4 @@
+fn main() {
+    var y = 3;
+    var x = match 4 { y + 1 => 1, default => 2 };
+}

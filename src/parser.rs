@@ -1019,28 +1019,30 @@ impl Parser {
         })
     }
 
+    /// One alternative: `Some(p)` or `E::V(p, q)`, a name bound inside a
+    /// payload, or else a constant expression stopping before `|`.
     fn parse_alternative(&mut self, in_payload: bool) -> Option<Pattern> {
         let start = self.span();
-        let number = |token: &Token| matches!(token, Token::Int(_) | Token::Float(_));
-        let literal = match self.peek() {
-            Token::True | Token::False | Token::None => true,
-            Token::Minus => number(&self.tokens[self.pos + 1].0),
-            token => number(token),
-        };
         let kind = match self.peek() {
-            _ if literal => PatternKind::Literal(self.parse_operand()?),
             Token::Identifier(_) => {
+                let saved = self.pos;
                 let path = self.parse_path(&Token::DoubleColon)?.join("::");
+                let ends = self.at_any(&[Token::Comma, Token::RParen, Token::BitOr]);
                 match self.eat(&Token::LParen) {
                     true => PatternKind::Payload {
                         path,
                         fields: self.parse_list(&Token::RParen, |p| p.parse_pattern(true))?,
                     },
-                    false if in_payload && !path.contains("::") => PatternKind::Binding(path),
-                    false => PatternKind::Path(path),
+                    false if in_payload && ends && !path.contains("::") => {
+                        PatternKind::Binding(path)
+                    }
+                    false => {
+                        self.pos = saved;
+                        PatternKind::Constant(self.parse_expression(Precedence::BitwiseOr)?)
+                    }
                 }
             }
-            token => return self.error_here(format!("Expected a pattern, found '{token}'")),
+            _ => PatternKind::Constant(self.parse_expression(Precedence::BitwiseOr)?),
         };
         Some(Pattern {
             kind,

@@ -196,10 +196,9 @@ pub struct Pattern {
 pub enum PatternKind {
     /// The arm taking every value no other arm takes.
     Default,
-    /// A number, possibly negative, `true`, `false` or `None`.
-    Literal(Expression),
-    /// A constant or a variant, by its name.
-    Path(String),
+    /// A constant expression: a literal, `None`, a constant or a variant by
+    /// its name, or operators over them that bind tighter than `|`.
+    Constant(Expression),
     /// A name inside a payload, bound to the value there; `_` binds nothing.
     Binding(String),
     /// `Some(p)`, `Ok(p)`, `Err(p)` or `E::V(p, q)`.
@@ -340,8 +339,8 @@ impl Pattern {
     /// Call `seen` with every name the pattern uses or binds.
     pub fn names(&self, seen: &mut impl FnMut(&str)) {
         match &self.kind {
-            PatternKind::Literal(expr) => expr.names(seen),
-            PatternKind::Path(name) | PatternKind::Binding(name) => seen(name),
+            PatternKind::Constant(expr) => expr.names(seen),
+            PatternKind::Binding(name) => seen(name),
             PatternKind::Payload { path, fields } => {
                 seen(path);
                 fields.iter().for_each(|field| field.names(seen));

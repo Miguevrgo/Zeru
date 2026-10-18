@@ -1,3 +1,0 @@
-fn main() {
-    var x = match 5 { 2 + 3 => 1, default => 2 };
-}

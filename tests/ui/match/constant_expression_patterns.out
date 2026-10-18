@@ -1,0 +1,4 @@
+status: exit 0
+-- stdout
+max-1 -max eight three one or two four other 0
+none

@@ -302,15 +302,11 @@ impl FnCx<'_, '_> {
         let subject_kind = self.cx.types.kind(subject).clone();
         let (path, names) = match &pattern.kind {
             PatternKind::Payload { path, fields } => (path, fields),
-            PatternKind::Literal(Expression {
+            PatternKind::Constant(Expression {
                 kind: ExpressionKind::None,
                 ..
             }) if matches!(subject_kind, TyKind::Optional(_)) => return Some((0, Vec::new())),
-            PatternKind::Literal(value) => return self.value_pattern(value, subject),
-            PatternKind::Path(path) => {
-                let value = Expression::new(ExpressionKind::Identifier(path.clone()), pattern.span);
-                return self.value_pattern(&value, subject);
-            }
+            PatternKind::Constant(value) => return self.value_pattern(value, subject),
             PatternKind::Binding(_) | PatternKind::Or(_) | PatternKind::Default => {
                 unreachable!("the parser puts these only in a payload or as a whole arm")
             }
@@ -389,10 +385,7 @@ impl FnCx<'_, '_> {
             _ => self.cx.eval(&value),
         };
         let Some(tag) = tag else {
-            self.error(
-                "A pattern must be a literal, a constant or an enum variant",
-                pattern.span,
-            );
+            self.error("A pattern must be known at compile time", pattern.span);
             return None;
         };
         Some((tag, Vec::new()))
