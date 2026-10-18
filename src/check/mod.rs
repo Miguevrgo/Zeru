@@ -412,6 +412,12 @@ impl<'a> Checker<'a> {
                 span,
             );
         }
+        if item.owner.is_some() && name == "copy" {
+            self.error(
+                "'copy' is the built-in deep copy; give this method another name",
+                span,
+            );
+        }
 
         Some(Sig {
             params: param_tys,

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Array repeat count must be an integer literal
+   ╭─[ tests/ui/parser/repeat_count_error_in_nested_array.zr:3:43 ]
+   │
+ 3 │     var g: Array<Array<i32, 2>, 2> = [[0; N]; 2];
+   │                                           ┬
+   │                                           ╰── Array repeat count must be an integer literal
+───╯
+[-] Error: aborting due to previous error

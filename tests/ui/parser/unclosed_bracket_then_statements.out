@@ -1,0 +1,24 @@
+status: compile error
+-- stderr
+Error: Expected ',', found ';'
+   ╭─[ tests/ui/parser/unclosed_bracket_then_statements.zr:2:17 ]
+   │
+ 2 │     var a = [1, 2;
+   │                 ┬
+   │                 ╰── Expected ',', found ';'
+───╯
+Error: Expected an expression, found ';'
+   ╭─[ tests/ui/parser/unclosed_bracket_then_statements.zr:3:12 ]
+   │
+ 3 │     a = 3 +;
+   │            ┬
+   │            ╰── Expected an expression, found ';'
+───╯
+Error: Expected an expression, found ';'
+   ╭─[ tests/ui/parser/unclosed_bracket_then_statements.zr:4:12 ]
+   │
+ 4 │     a = 4 *;
+   │            ┬
+   │            ╰── Expected an expression, found ';'
+───╯
+[-] Error: aborting due to previous error

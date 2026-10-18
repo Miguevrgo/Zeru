@@ -1,0 +1,6 @@
+fn main() {
+    var x = 1;
+    print("{}", x;
+    y = ;
+    z = 1;
+}

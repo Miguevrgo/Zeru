@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'copy' is the built-in deep copy; give this method another name
+   ╭─[ tests/ui/structs/copy_method_is_reserved.zr:3:5 ]
+   │
+ 3 │     fn copy(self) Holder { return Holder { items: [42] }; }
+   │     ──────────┬─────────
+   │               ╰─────────── 'copy' is the built-in deep copy; give this method another name
+───╯
+[-] Error: aborting due to previous error

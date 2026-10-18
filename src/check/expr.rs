@@ -39,7 +39,7 @@ impl FnCx<'_, '_> {
     /// The expected type a literal takes its own from: a `T?` hands down `T`.
     fn unwrap_expected(&self, expected: Option<Ty>) -> Option<Ty> {
         match expected.map(|ty| self.cx.types.kind(ty)) {
-            Some(TyKind::Optional(inner)) => Some(*inner),
+            Some(TyKind::Optional(inner) | TyKind::Result(inner, _)) => Some(*inner),
             _ => expected,
         }
     }

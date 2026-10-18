@@ -10,7 +10,7 @@ mod tir;
 mod token;
 mod ty;
 
-use crate::driver::{GREEN, RED, RESET, compile, status};
+use crate::driver::{GREEN, RED, compile, status};
 use crate::{errors::CompileError, lower::SafetyMode};
 use clap::{Parser, Subcommand};
 use std::os::unix::process::ExitStatusExt;
@@ -94,7 +94,8 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
 
 fn main() {
     if let Err(err) = run_compiler(Cli::parse()) {
-        eprintln!("{RED}[-] Error: {err}{RESET}");
+        let (red, reset) = crate::errors::paint(RED);
+        eprintln!("{red}[-] Error: {err}{reset}");
         std::process::exit(1);
     }
 }

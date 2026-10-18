@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use crate::ast::{Expression, ExpressionKind};
 use crate::errors::Span;
+use crate::items::ItemKind;
 use crate::tir::{Arm, Expr, ExprKind, Payload};
 use crate::ty::{Ty, TyKind, Types};
 
@@ -51,7 +52,13 @@ impl FnCx<'_, '_> {
         let loans = self.place_loans(&scrutinee, None);
         let before = self.snapshot();
         let mut after = Moves::new();
-        let mut arm_ty: Option<Ty> = None;
+        let wraps = expected.filter(|&ty| {
+            matches!(
+                self.cx.types.kind(ty),
+                TyKind::Optional(_) | TyKind::Result(..)
+            )
+        });
+        let mut arm_ty: Option<Ty> = wraps;
         let mut checked = Vec::new();
         for ((pattern, body), shape) in arms.iter().zip(patterns) {
             self.restore(&before);
@@ -125,6 +132,17 @@ impl FnCx<'_, '_> {
             ty,
             span,
         )
+    }
+
+    /// Whether `name` in a pattern is a variant or a constant, which a
+    /// binding would silently shadow.
+    fn names_a_value(&self, name: &str) -> bool {
+        name.contains("::")
+            || self
+                .cx
+                .items
+                .lookup_value(self.scope.module, name)
+                .is_some_and(|def| self.cx.items.item(def).kind == ItemKind::Const)
     }
 
     /// Check each pattern against the subject: none twice, and every value
@@ -331,7 +349,7 @@ impl FnCx<'_, '_> {
         for (at, (name, ty)) in names.iter().zip(fields).enumerate() {
             match &name.kind {
                 ExpressionKind::Identifier(name) if name == "_" => {}
-                ExpressionKind::Identifier(name) => {
+                ExpressionKind::Identifier(name) if !self.names_a_value(name) => {
                     binds.push((name.clone(), ty, payload(tag as u32, at as u32)));
                 }
                 _ => {

@@ -1040,14 +1040,17 @@ impl<'c, 'a> FnCx<'c, 'a> {
             });
         }
 
-        let (inner, writable) = match &iterable.kind {
+        let (inner, mut writable) = match &iterable.kind {
             ExpressionKind::BorrowRefMut(inner) => (inner.as_ref(), true),
             ExpressionKind::BorrowRef(inner) => (inner.as_ref(), false),
             _ => (iterable, false),
         };
         let (place, ty) = self.place(inner);
+        let through_var = matches!(self.cx.types.kind(ty), TyKind::RefMut(_));
         let seq = self.through_ref(place, ty, inner.span);
-        if writable {
+        if through_var && std::ptr::eq(inner, iterable) {
+            writable = true;
+        } else if writable {
             self.require_mutable(&seq.0, inner, iterable.span);
             if !super::expr::is_assignable(inner) {
                 self.error(

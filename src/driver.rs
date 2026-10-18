@@ -18,12 +18,12 @@ use crate::{lexer::Lexer, parser::Parser};
 
 pub const RED: &str = "\x1b[1;38;2;224;108;117m";
 pub const GREEN: &str = "\x1b[1;38;2;152;195;121m";
-pub const RESET: &str = "\x1b[0m";
 const YELLOW: &str = "\x1b[1;38;2;229;192;123m";
 const VERB_WIDTH: usize = 9;
 
 pub fn status(colour: &str, icon: char, verb: &str, detail: impl std::fmt::Display) {
-    eprintln!("  {colour}{icon} {verb:>VERB_WIDTH$}{RESET} {detail}");
+    let (colour, reset) = crate::errors::paint(colour);
+    eprintln!("  {colour}{icon} {verb:>VERB_WIDTH$}{reset} {detail}");
 }
 
 fn std_path() -> Result<PathBuf, CompileError> {

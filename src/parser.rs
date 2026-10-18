@@ -23,6 +23,8 @@ pub struct Parser {
 
     /// How many braces are open before the next token.
     depth: usize,
+    /// How many brackets are open, where a `;` may belong to an `[x; n]`.
+    brackets: usize,
 }
 
 const ITEM_STARTS: [Token; 7] = [
@@ -67,6 +69,7 @@ impl Parser {
             no_struct_literal: false,
             code_seen: false,
             depth: 0,
+            brackets: 0,
         };
         p.report_illegal();
         p
@@ -98,6 +101,8 @@ impl Parser {
             Token::Eof => return token,
             Token::LBrace => self.depth += 1,
             Token::RBrace => self.depth = self.depth.saturating_sub(1),
+            Token::LBracket => self.brackets += 1,
+            Token::RBracket => self.brackets = self.brackets.saturating_sub(1),
             _ => {}
         }
         self.pos += 1;
@@ -185,8 +190,9 @@ impl Parser {
 
     /// Skip the rest of a broken statement in the block whose braces hold
     /// `depth`: through its `;`, or up to where the next statement or the
-    /// block's `}` starts. Braces inside the statement are skipped whole.
-    fn synchronize(&mut self, depth: usize) {
+    /// block's `}` starts. Braces inside the statement are skipped whole, and
+    /// a `;` inside its brackets, as in `[x; n]`, does not end it.
+    fn synchronize(&mut self, depth: usize, brackets: usize) {
         self.panic_mode = false;
         let mut blamed = self.blamed() && !self.at(&Token::RBrace);
         while !self.at(&Token::Eof) {
@@ -194,10 +200,20 @@ impl Parser {
                 return;
             }
             blamed = false;
-            if self.bump() == Token::Semicolon && self.depth == depth {
+            if self.bump() == Token::Semicolon
+                && self.depth == depth
+                && (self.brackets <= brackets || !self.at_repeat_count())
+            {
                 return;
             }
         }
+    }
+
+    /// Whether a count and its `]` follow, as after the `;` of `[x; n]`.
+    fn at_repeat_count(&self) -> bool {
+        let after = self.tokens.get(self.pos + 1).map(|(token, _)| token);
+        matches!(self.peek(), Token::Int(_) | Token::Identifier(_))
+            && matches!(after, Some(Token::RBracket))
     }
 
     /// Skip the rest of a broken top-level item: through the `}` or `;` that
@@ -751,13 +767,13 @@ impl Parser {
 
     fn parse_block_statement(&mut self) -> Option<Vec<Statement>> {
         self.expect(&Token::LBrace)?;
-        let depth = self.depth;
+        let (depth, brackets) = (self.depth, self.brackets);
         let mut block = Vec::new();
 
         while !self.at_any(&[Token::RBrace, Token::Eof]) {
             match self.parse_statement() {
                 Some(stmt) => block.push(stmt),
-                None => self.synchronize(depth),
+                None => self.synchronize(depth, brackets),
             }
         }
 
@@ -1018,7 +1034,9 @@ impl Parser {
         let first = self.parse_expression(Precedence::Lowest)?;
 
         if self.eat(&Token::Semicolon) {
-            let Token::Int(count) = *self.peek() else {
+            let after = self.tokens.get(self.pos + 1).map(|(token, _)| token);
+            let operator = after.is_some_and(|token| token_precedence(token) > Precedence::Lowest);
+            let (Token::Int(count), false) = (self.peek().clone(), operator) else {
                 return self.error_here("Array repeat count must be an integer literal");
             };
             self.bump();

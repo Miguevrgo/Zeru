@@ -1,0 +1,9 @@
+fn half(x: i64) i64? {
+    return match x % 2 { 0 => x / 2, default => None };
+}
+fn check(x: i64) i64! {
+    return match x { 0 => 10, default => Err(4) };
+}
+fn main() {
+    println("{} {} {} {}", half(4) orelse -1, half(3) orelse -1, check(0) catch -1, check(1) catch -1);
+}

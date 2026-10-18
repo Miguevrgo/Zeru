@@ -77,7 +77,8 @@ impl ZeruError {
             .locate(self.span)
             .filter(|(_, _, range)| !range.is_empty())
         else {
-            eprintln!("\x1b[31m{}\x1b[0m: {message}", self.prefix());
+            let (red, reset) = paint("\x1b[31m");
+            eprintln!("{red}{}{reset}: {message}", self.prefix());
             return;
         };
 
@@ -90,6 +91,7 @@ impl ZeruError {
             ReportKind::Error,
             (name.to_string(), range.clone()),
         )
+        .with_config(ariadne::Config::default().with_color(colored()))
         .with_message(message)
         .with_label(
             Label::new((name.to_string(), range))
@@ -173,6 +175,21 @@ impl Sources {
         let text = &self.text[file.start..file.end];
         let end = span.end.min(file.end) - file.start;
         Some((&file.name, text, span.start - file.start..end))
+    }
+}
+
+/// Whether stderr is a terminal, so output to it may be coloured, as cargo
+/// and rustc decide.
+pub fn colored() -> bool {
+    use std::io::IsTerminal;
+    std::io::stderr().is_terminal()
+}
+
+/// `code` and the reset after it, or nothing when stderr is not a terminal.
+pub fn paint(code: &str) -> (&str, &str) {
+    match colored() {
+        true => (code, "\x1b[0m"),
+        false => ("", ""),
     }
 }
 
