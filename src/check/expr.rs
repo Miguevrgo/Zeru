@@ -11,6 +11,7 @@ use crate::tir::{Asm, BinOp, Expr, ExprKind, Place, UnOp};
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
+use super::Checker;
 use super::body::FnCx;
 
 impl FnCx<'_, '_> {
@@ -497,7 +498,7 @@ impl FnCx<'_, '_> {
             Ok(value) => {
                 if let Some(base) = &compound
                     && !self.cx.types.is_error(target_ty)
-                    && !self.operator_applies(base, target_ty)
+                    && !self.cx.operator_applies(base, target_ty)
                 {
                     let shown = self.ty(target_ty);
                     self.error(
@@ -682,7 +683,7 @@ impl FnCx<'_, '_> {
             );
             return self.error_expr(span);
         }
-        if !self.operator_applies(operator, l_ty) {
+        if !self.cx.operator_applies(operator, l_ty) {
             let shown = self.ty(l_ty);
             self.error(
                 format!("Operator '{operator}' cannot be applied to {shown}"),
@@ -710,31 +711,6 @@ impl FnCx<'_, '_> {
                 let op = binop(operator);
                 self.mk(ExprKind::Binary(op, Box::new(l), Box::new(r)), ty, span)
             }
-        }
-    }
-
-    /// Whether `operator` means something for operands of type `ty`.
-    pub(super) fn operator_applies(&self, operator: &Token, ty: Ty) -> bool {
-        let types = &self.cx.types;
-        let number = types.is_number(ty);
-        let int = types.as_int(ty).is_some();
-        let kind = types.kind(ty);
-        match operator {
-            Token::Plus | Token::Minus | Token::Star | Token::Slash | Token::Mod => number,
-            Token::PlusWrap | Token::MinusWrap | Token::StarWrap => int,
-            Token::BitAnd | Token::BitOr | Token::BitXor => int || *kind == TyKind::Bool,
-            Token::ShiftLeft | Token::ShiftRight => int,
-            Token::And | Token::Or => *kind == TyKind::Bool,
-            Token::Eq | Token::NotEq => {
-                number
-                    || ty == Types::STR
-                    || matches!(kind, TyKind::Bool | TyKind::Ptr(_))
-                    || self.cx.is_enum(ty).is_some()
-            }
-            Token::Lt | Token::Gt | Token::Leq | Token::Geq => {
-                number || matches!(kind, TyKind::Ptr(_)) || self.cx.is_enum(ty).is_some()
-            }
-            _ => true,
         }
     }
 
@@ -813,21 +789,24 @@ impl FnCx<'_, '_> {
     }
 
     /// Whether `as` turns a `from` into a `to`. Nothing becomes an enum: a
-    /// number outside its variants would get past an exhaustive `match`.
+    /// number outside its variants would get past an exhaustive `match`. A
+    /// slice gives a pointer to its bytes, never a number.
     fn castable(&self, from: Ty, to: Ty) -> bool {
         let types = &self.cx.types;
         let number = |ty| types.is_number(ty);
         let int = |ty| types.as_int(ty).is_some();
-        let pointer_like = |ty| {
+        let address = |ty| {
             matches!(
                 types.kind(ty),
-                TyKind::Ptr(_) | TyKind::Ref(_) | TyKind::RefMut(_) | TyKind::Slice(_)
+                TyKind::Ptr(_) | TyKind::Ref(_) | TyKind::RefMut(_)
             )
         };
         let is_ptr = |ty| matches!(types.kind(ty), TyKind::Ptr(_));
+        let is_slice = |ty| matches!(types.kind(ty), TyKind::Slice(_));
         (number(from) || self.cx.is_enum(from).is_some()) && number(to)
             || from == Types::BOOL && int(to)
-            || pointer_like(from) && (int(to) || is_ptr(to))
+            || address(from) && (int(to) || is_ptr(to))
+            || is_slice(from) && is_ptr(to)
             || int(from) && is_ptr(to)
     }
 
@@ -1020,10 +999,14 @@ impl FnCx<'_, '_> {
             });
         }
         self.consume(&mut element);
-        if count > 1 && matches!(value.kind, ExpressionKind::Identifier(_)) {
-            self.expr(value, hint);
-        }
         let elem = element.ty;
+        if count > 1 && self.cx.owns_heap(elem) {
+            let shown = self.ty(elem);
+            self.error(
+                format!("[x; N] copies x, and {shown} owns memory; build the elements in a loop"),
+                value.span,
+            );
+        }
         if into_vec {
             let ty = self.cx.intern_or_error(TyKind::Vec(elem), &[elem]);
             return self.mk(ExprKind::VecRepeat(Box::new(element), count), ty, span);
@@ -1114,6 +1097,35 @@ impl FnCx<'_, '_> {
         }
         self.consume(&mut value);
         self.mk(ExprKind::Try(Box::new(value)), ok, span)
+    }
+}
+
+impl Checker<'_> {
+    /// Whether `operator` means something for operands of type `ty`; the
+    /// bounds `Eq`, `Ord` and `Num` ask for `==`, `<` and `+`.
+    pub(super) fn operator_applies(&mut self, operator: &Token, ty: Ty) -> bool {
+        let plain_enum = self.is_enum(ty).is_some_and(|def| !self.enum_has_data(def));
+        let types = &self.types;
+        let number = types.is_number(ty);
+        let int = types.as_int(ty).is_some();
+        let kind = types.kind(ty);
+        match operator {
+            Token::Plus | Token::Minus | Token::Star | Token::Slash | Token::Mod => number,
+            Token::PlusWrap | Token::MinusWrap | Token::StarWrap => int,
+            Token::BitAnd | Token::BitOr | Token::BitXor => int || *kind == TyKind::Bool,
+            Token::ShiftLeft | Token::ShiftRight => int,
+            Token::And | Token::Or => *kind == TyKind::Bool,
+            Token::Eq | Token::NotEq => {
+                number
+                    || ty == Types::STR
+                    || matches!(kind, TyKind::Bool | TyKind::Ptr(_))
+                    || plain_enum
+            }
+            Token::Lt | Token::Gt | Token::Leq | Token::Geq => {
+                number || matches!(kind, TyKind::Ptr(_)) || plain_enum
+            }
+            _ => true,
+        }
     }
 }
 

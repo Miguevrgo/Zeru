@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: [x; N] copies x, and (P, i32) owns memory; build the elements in a loop
+   ╭─[ tests/ui/ownership_drops/repeat_of_owner_rejected.zr:4:14 ]
+   │
+ 4 │     var a = [(p, 0); 2];
+   │              ───┬──
+   │                 ╰──── [x; N] copies x, and (P, i32) owns memory; build the elements in a loop
+───╯
+Error: [x; N] copies x, and Vec<i64> owns memory; build the elements in a loop
+   ╭─[ tests/ui/ownership_drops/repeat_of_owner_rejected.zr:6:17 ]
+   │
+ 6 │     var grid = [row; 3];
+   │                 ─┬─
+   │                  ╰─── [x; N] copies x, and Vec<i64> owns memory; build the elements in a loop
+───╯
+[-] Error: aborting due to previous error

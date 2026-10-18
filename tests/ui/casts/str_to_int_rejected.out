@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot cast str to u64
+   ╭─[ tests/ui/casts/str_to_int_rejected.zr:3:13 ]
+   │
+ 3 │     var n = s as u64;
+   │             ────┬───
+   │                 ╰───── Cannot cast str to u64
+───╯
+[-] Error: aborting due to previous error

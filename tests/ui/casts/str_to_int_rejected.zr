@@ -1,0 +1,4 @@
+fn main() {
+    var s = "abc";
+    var n = s as u64;
+}

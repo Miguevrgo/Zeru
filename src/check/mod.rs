@@ -18,6 +18,7 @@ use crate::ast::{Statement, StatementKind, TypeParameter, TypeSpec};
 use crate::errors::{Span, ZeruError};
 use crate::items::{DefId, ItemKind, Items, ModuleId};
 use crate::tir::{self, FnId};
+use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
 /// A function's signature with its type parameters still open: struct
@@ -753,14 +754,9 @@ impl<'a> Checker<'a> {
                 continue;
             }
             let ok = match bound.as_str() {
-                "Eq" => match self.is_enum(arg) {
-                    Some(e) => !self.enum_has_data(e),
-                    None => {
-                        self.types.is_number(arg)
-                            || matches!(self.types.kind(arg), TyKind::Bool | TyKind::Ptr(_))
-                    }
-                },
-                "Ord" | "Num" => self.types.is_number(arg),
+                "Eq" => self.operator_applies(&Token::Eq, arg),
+                "Ord" => self.operator_applies(&Token::Lt, arg),
+                "Num" => self.operator_applies(&Token::Plus, arg),
                 _ => match self.items.lookup_trait(module, bound) {
                     Some(trait_def) => self.has_trait_methods(arg, trait_def),
                     None => continue,

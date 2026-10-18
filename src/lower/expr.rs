@@ -175,6 +175,13 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         self.store_val(dst, value, expr.ty);
     }
 
+    /// `expr` evaluated once into a slot of its own, for a repeat to copy.
+    fn once(&mut self, expr: &'a Expr) -> PointerValue<'ctx> {
+        let slot = self.alloca(expr.ty, "repeated");
+        self.write(expr, slot);
+        slot
+    }
+
     pub(super) fn store_val(&mut self, dst: PointerValue<'ctx>, value: Val<'ctx>, ty: Ty) {
         match value {
             Val::Unit => {}
@@ -262,10 +269,11 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 }
             }
             ExprKind::ArrayRepeat(value, count) => {
+                let element = self.once(value);
                 let count = self.usize_type().const_int(*count, false);
                 self.counted_loop(count, |this, index| {
                     let slot = this.element_ptr(dst, ty, index);
-                    this.write(value, slot);
+                    this.copy_bits(slot, element, value.ty);
                 });
             }
             ExprKind::VecLiteral(elements) => {
@@ -282,10 +290,11 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             ExprKind::VecRepeat(value, count) => {
                 let elem = self.element_ty(ty);
                 let count = self.usize_type().const_int(*count, false);
+                let element = self.once(value);
                 let data = self.alloc_buffer(elem, count);
                 self.counted_loop(count, |this, index| {
                     let slot = this.buffer_slot(data, elem, index);
-                    this.write(value, slot);
+                    this.copy_bits(slot, element, elem);
                 });
                 self.store_vec(dst, ty, data, count, count);
             }
