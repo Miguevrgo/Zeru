@@ -17,6 +17,7 @@ const PRINTS: &[&str] = &["print", "println", "eprint", "eprintln"];
 
 /// Writes out what the print streams hold; the compiler emits it.
 const FLUSH_FN: &str = "__zeru_flush";
+const COPY_FN: &str = "__zeru_copy_bytes";
 
 /// The `Vec` methods that change it, so need a receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
@@ -72,6 +73,32 @@ impl FnCx<'_, '_> {
         if name == FLUSH_FN && self.local(name).is_none() {
             return self.mk(
                 ExprKind::Builtin(Builtin::Flush, Vec::new()),
+                Types::VOID,
+                span,
+            );
+        }
+        if name == COPY_FN && self.local(name).is_none() {
+            let byte_ptr = self.cx.types.intern(TyKind::Ptr(Types::U8));
+            if args.len() != 3 {
+                self.error(
+                    format!("{COPY_FN} takes a destination, a source and a count"),
+                    span,
+                );
+                self.check_args_only(args);
+                return self.error_expr(span);
+            }
+            let values = args
+                .iter()
+                .zip([byte_ptr, byte_ptr, Types::USIZE])
+                .map(|(arg, want)| {
+                    let value = self.expr(arg, Some(want));
+                    self.coerce_or(value, want, arg.span, |want, got| {
+                        format!("{COPY_FN} expects {want}, got {got}")
+                    })
+                })
+                .collect();
+            return self.mk(
+                ExprKind::Builtin(Builtin::CopyBytes, values),
                 Types::VOID,
                 span,
             );

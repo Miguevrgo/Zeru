@@ -1,0 +1,34 @@
+fn checksum(v: &Vec<i64>) i64 {
+    var s: i64 = 0;
+    for x in v { s = s *% 31 +% x; }
+    return s;
+}
+fn main() {
+    var all: Vec<Vec<i64>> = Vec.new();
+    var size: i64 = 1;
+    while size < 300000 {
+        var v: Vec<i64> = Vec.new();
+        for i in 0..size { v.push(i * 7 + size); }
+        all.push(v);
+        size = size * 3 + 1;
+    }
+    var total: i64 = 0;
+    for v in &all { total = total *% 17 +% checksum(&v); }
+    println("{} vecs, checksum {}", all.len(), total);
+    var shrunk: i64 = 0;
+    for v in &var all {
+        while v.len() > 2 { v.pop(); }
+        v.shrink_to_fit();
+        shrunk += checksum(&v);
+    }
+    println("after shrinking {}", shrunk);
+    var rounds: i64 = 0;
+    while rounds < 2000 {
+        var scratch: Vec<i64> = Vec.with_capacity(((rounds % 37) * 997) as usize);
+        scratch.push(rounds);
+        var copy = scratch.copy();
+        if copy[0] != rounds { println("bad copy"); }
+        rounds += 1;
+    }
+    println("{}", rounds);
+}

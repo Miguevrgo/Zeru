@@ -508,45 +508,95 @@ fn __zeru_str_eq(a: str, b: str) bool {
     return true;
 }
 
-// Allocate `size` bytes of memory using mmap. Null for zero bytes.
-fn __zeru_alloc(size: usize) *u8 {
-    if size == 0 {
-        return 0 as *u8;
-    }
+// Blocks up to this many bytes come from the heap's size classes; larger
+// ones are mapped whole.
+const HEAP_LARGEST: usize = 1048576;
+// How much the heap maps at a time to carve small blocks from.
+const HEAP_CHUNK: usize = 4194304;
+
+// Map `size` fresh bytes.
+fn __zeru_map(size: usize) *u8 {
     var prot: i64 = PROT_READ + PROT_WRITE;
     var flags: i64 = MAP_PRIVATE + MAP_ANONYMOUS;
     var result: i64 = syscall6(SYS_MMAP, 0, size as i64, prot, flags, -1, 0);
-
     if result < 0 {
         __zeru_out_of_memory();
     }
     return result as *u8;
 }
 
-// Reallocate memory: allocate new_size, copy old data, free old memory.
-// Null for zero bytes.
-fn __zeru_realloc(old_ptr: *u8, old_size: usize, new_size: usize) *u8 {
-    if new_size == 0 {
-        if old_size != 0 {
-            syscall2(SYS_MUNMAP, old_ptr as i64, old_size as i64);
+// The program's memory, as Zig's SmpAllocator without threads: a block of
+// up to HEAP_LARGEST bytes takes the power of two from 16 bytes that fits
+// it, and a freed one waits in its class's list, linked through its first
+// bytes, for the next allocation of that class. New blocks are carved from
+// mapped chunks. Larger blocks are mapped and unmapped whole. The compiler
+// makes one zeroed Heap and passes every allocation through it.
+struct Heap {
+    free: Array<*u8, 17>,
+    next: *u8,
+    end: *u8,
+
+    // Bytes for `size` or less, or null for none.
+    fn alloc(var self, size: usize) *u8 {
+        if size == 0 {
+            return 0 as *u8;
         }
-        return 0 as *u8;
+        if size > HEAP_LARGEST {
+            return __zeru_map(size);
+        }
+        var class = Heap.class_of(size);
+        var bytes: usize = 16 << class;
+        var head = self.free[class];
+        if head as usize != 0 {
+            self.free[class] = *(head as **u8);
+            return head;
+        }
+        if self.next as usize + bytes > self.end as usize {
+            self.next = __zeru_map(HEAP_CHUNK);
+            self.end = self.next + HEAP_CHUNK;
+        }
+        var block = self.next;
+        self.next = self.next + bytes;
+        return block;
     }
-    if old_size == 0 {
-        return __zeru_alloc(new_size);
-    }
-    var new_ptr: *u8 = syscall5(
-        SYS_MREMAP,
-        old_ptr as i64,
-        old_size as i64,
-        new_size as i64,
-        MREMAP_MAYMOVE,
-        0
-    ) as *u8;
 
-    if new_ptr as i64 < 0 {
-        __zeru_out_of_memory();
+    // Move the `old_size` bytes at `old` to a block of `new_size`, freeing
+    // the old one; a size of 0 is no block.
+    fn realloc(var self, old: *u8, old_size: usize, new_size: usize) *u8 {
+        if old_size > HEAP_LARGEST && new_size > HEAP_LARGEST {
+            var moved: i64 = syscall5(SYS_MREMAP, old as i64, old_size as i64, new_size as i64, MREMAP_MAYMOVE, 0);
+            if moved < 0 {
+                __zeru_out_of_memory();
+            }
+            return moved as *u8;
+        }
+        if old_size > 0 && new_size > 0 && old_size <= HEAP_LARGEST && new_size <= HEAP_LARGEST
+            && Heap.class_of(old_size) == Heap.class_of(new_size) {
+            return old;
+        }
+        var new = self.alloc(new_size);
+        var kept = old_size;
+        if new_size < kept {
+            kept = new_size;
+        }
+        __zeru_copy_bytes(new, old, kept);
+        if old_size > HEAP_LARGEST {
+            syscall2(SYS_MUNMAP, old as i64, old_size as i64);
+        } else if old_size > 0 {
+            var class = Heap.class_of(old_size);
+            *(old as **u8) = self.free[class];
+            self.free[class] = old;
+        }
+        return new;
     }
 
-    return new_ptr;
+    fn class_of(size: usize) usize {
+        var class: usize = 0;
+        var bytes: usize = 16;
+        while bytes < size {
+            bytes = bytes << 1;
+            class += 1;
+        }
+        return class;
+    }
 }

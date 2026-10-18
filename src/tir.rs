@@ -34,6 +34,7 @@ pub struct Runtime {
     pub write_uint: FnId,
     pub write_float: FnId,
     pub flush: FnId,
+    pub heap: Ty,
     pub alloc: FnId,
     pub realloc: FnId,
 }
@@ -275,6 +276,8 @@ pub enum Builtin {
     Unwrap,
     UnwrapErr,
     Flush,
+    /// `__zeru_copy_bytes(to, from, count)`, for the prelude's heap.
+    CopyBytes,
 }
 
 #[derive(Clone)]

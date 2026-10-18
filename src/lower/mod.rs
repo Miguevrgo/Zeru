@@ -62,6 +62,7 @@ pub struct Lower<'a, 'ctx> {
     llvm_types: HashMap<Ty, BasicTypeEnum<'ctx>>,
     functions: Vec<FunctionValue<'ctx>>,
     streams: Option<[PointerValue<'ctx>; 2]>,
+    heap: Option<PointerValue<'ctx>>,
     flush: Option<FunctionValue<'ctx>>,
     panic: Option<FunctionValue<'ctx>>,
     debug: Option<debug::Debug<'ctx>>,
@@ -100,6 +101,7 @@ pub fn lower<'ctx>(
         llvm_types: HashMap::new(),
         functions: Vec::new(),
         streams: None,
+        heap: None,
         flush: None,
         panic: None,
         debug: None,
@@ -118,7 +120,7 @@ pub fn lower<'ctx>(
         let declared = lower.declare(function);
         lower.functions.push(declared);
     }
-    lower.init_streams();
+    lower.init_globals();
     lower.create_flush();
     for at in 0..program.functions.len() {
         lower.define(FnId(at as u32));

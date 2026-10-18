@@ -1,0 +1,5 @@
+status: exit 0
+-- stdout
+12 vecs, checksum 4520436075618866694
+after shrinking 12754414
+2000

@@ -877,29 +877,28 @@ impl<'a> Checker<'a> {
 
     fn runtime(&mut self) -> Option<tir::Runtime> {
         let global = ModuleId::PRELUDE;
-        let stream = self.items.lookup_type(global, "OutStream")?;
-        let stream_ty = self.types.intern(TyKind::Adt(stream, Vec::new()));
-        self.note_adt(stream_ty, Span::default());
-        let method = |this: &mut Self, name: &str| {
-            let def = this.items.method(stream, name)?;
+        let mut prelude_struct = |name: &str| {
+            let def = self.items.lookup_type(global, name)?;
+            let ty = self.types.intern(TyKind::Adt(def, Vec::new()));
+            self.note_adt(ty, Span::default());
+            Some((def, ty))
+        };
+        let (stream, stream_ty) = prelude_struct("OutStream")?;
+        let (heap, heap_ty) = prelude_struct("Heap")?;
+        let method = |this: &mut Self, owner: DefId, name: &str| {
+            let def = this.items.method(owner, name)?;
             Some(this.instance(def, Vec::new(), Span::default()))
         };
-        let write_bytes = method(self, "write_bytes")?;
-        let write_int = method(self, "write_int")?;
-        let write_uint = method(self, "write_uint")?;
-        let write_float = method(self, "write_float")?;
-        let flush = method(self, "flush")?;
-        let alloc = self.items.lookup_value(global, "__zeru_alloc")?;
-        let realloc = self.items.lookup_value(global, "__zeru_realloc")?;
         let runtime = tir::Runtime {
             out_stream: stream_ty,
-            write_bytes,
-            write_int,
-            write_uint,
-            write_float,
-            flush,
-            alloc: self.instance(alloc, Vec::new(), Span::default()),
-            realloc: self.instance(realloc, Vec::new(), Span::default()),
+            write_bytes: method(self, stream, "write_bytes")?,
+            write_int: method(self, stream, "write_int")?,
+            write_uint: method(self, stream, "write_uint")?,
+            write_float: method(self, stream, "write_float")?,
+            flush: method(self, stream, "flush")?,
+            heap: heap_ty,
+            alloc: method(self, heap, "alloc")?,
+            realloc: method(self, heap, "realloc")?,
         };
         self.drain();
         Some(runtime)

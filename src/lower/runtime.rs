@@ -361,7 +361,8 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
 
     pub(super) fn alloc_buffer(&mut self, elem: Ty, count: IntValue<'ctx>) -> PointerValue<'ctx> {
         let size = self.bytes_to_allocate(elem, count);
-        self.call_fn(self.program.runtime.alloc, &[size.into()])
+        let heap = self.heap.expect("the heap comes first");
+        self.call_fn(self.program.runtime.alloc, &[heap.into(), size.into()])
             .unwrap()
             .into_pointer_value()
     }
@@ -372,9 +373,10 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         old: IntValue<'ctx>,
         new: IntValue<'ctx>,
     ) -> PointerValue<'ctx> {
+        let heap = self.heap.expect("the heap comes first");
         self.call_fn(
             self.program.runtime.realloc,
-            &[data.into(), old.into(), new.into()],
+            &[heap.into(), data.into(), old.into(), new.into()],
         )
         .unwrap()
         .into_pointer_value()
@@ -474,6 +476,13 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             Builtin::Flush => {
                 let flush = self.flush.expect("the prelude declares the streams");
                 self.builder.build_call(flush, &[], "").unwrap();
+                Val::Unit
+            }
+            Builtin::CopyBytes => {
+                let to = self.imm(&args[0]).into_pointer_value();
+                let from = self.imm(&args[1]).into_pointer_value();
+                let count = self.imm(&args[2]).into_int_value();
+                self.builder.build_memmove(to, 1, from, 1, count).unwrap();
                 Val::Unit
             }
             Builtin::VecNew | Builtin::VecWithCapacity => {
@@ -691,8 +700,9 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         }
     }
 
-    /// The stdout and stderr `OutStream` globals: empty, with their fd set.
-    pub(super) fn init_streams(&mut self) {
+    /// The stdout and stderr `OutStream` globals, empty with their fd set,
+    /// and the program's `Heap`, empty.
+    pub(super) fn init_globals(&mut self) {
         let stream_ty = self.program.runtime.out_stream;
         let shape = self.struct_type(stream_ty);
         let streams = [("__stdout_stream", 1), ("__stderr_stream", 2)].map(|(name, fd)| {
@@ -712,6 +722,12 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             global.as_pointer_value()
         });
         self.streams = Some(streams);
+        let heap = self.struct_type(self.program.runtime.heap);
+        let global = self
+            .module
+            .add_global(heap, Some(AddressSpace::default()), "__zeru_heap");
+        global.set_initializer(&heap.const_zero());
+        self.heap = Some(global.as_pointer_value());
     }
 
     /// `__zeru_flush`, which writes out what both streams hold: run as the
