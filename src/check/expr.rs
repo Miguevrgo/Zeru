@@ -317,14 +317,14 @@ impl FnCx<'_, '_> {
         }
     }
 
-    /// `object.name`: a struct's field or a tuple's part, through one pointer.
+    /// `object.name`: a struct's field or a tuple's part, through one pointer
+    /// or reference.
     fn field(&mut self, object: &Expression, name: &str, span: Span) -> (Place, Ty) {
-        let (mut base, mut ty) = self.place(object);
-        if let TyKind::Ptr(pointee) = *self.cx.types.kind(ty) {
-            let pointer = self.mk(ExprKind::Read(base), ty, object.span);
-            base = Place::Deref(Box::new(pointer));
-            ty = pointee;
-        }
+        let (base, ty) = self.place(object);
+        let (base, ty) = match *self.cx.types.kind(ty) {
+            TyKind::Ptr(_) => self.deref(base, ty, object.span),
+            _ => self.through_ref(base, ty, object.span),
+        };
         match self.cx.types.kind(ty).clone() {
             TyKind::Error => (base, Types::ERROR),
             TyKind::Tuple(parts) => match name.parse::<usize>().ok().filter(|&at| at < parts.len())
@@ -356,6 +356,7 @@ impl FnCx<'_, '_> {
 
     fn index(&mut self, left: &Expression, index: &Expression, span: Span) -> (Place, Ty) {
         let (base, base_ty) = self.place(left);
+        let (base, base_ty) = self.through_ref(base, base_ty, left.span);
         let index_expr = self.expr(index, Some(Types::USIZE));
         if self.cx.types.as_int(index_expr.ty).is_none() && !self.cx.types.is_error(index_expr.ty) {
             let shown = self.ty(index_expr.ty);
@@ -392,11 +393,32 @@ impl FnCx<'_, '_> {
         (Place::Index(Box::new(base), Box::new(index_expr)), elem)
     }
 
+    /// What the pointer of type `ty` read from `place` points at.
+    pub(super) fn deref(&mut self, place: Place, ty: Ty, span: Span) -> (Place, Ty) {
+        let pointee = match *self.cx.types.kind(ty) {
+            TyKind::Ptr(inner) | TyKind::Ref(inner) | TyKind::RefMut(inner) => inner,
+            _ => unreachable!("only a pointer is followed"),
+        };
+        let pointer = self.mk(ExprKind::Read(place), ty, span);
+        (Place::Deref(Box::new(pointer)), pointee)
+    }
+
+    /// `place` itself, or what it refers to when it holds a reference: a
+    /// field, an element or a method is reached through a `&T` as in Rust.
+    pub(super) fn through_ref(&mut self, place: Place, ty: Ty, span: Span) -> (Place, Ty) {
+        match self.cx.types.kind(ty) {
+            TyKind::Ref(_) | TyKind::RefMut(_) => self.deref(place, ty, span),
+            _ => (place, ty),
+        }
+    }
+
     fn borrow(&mut self, inner: &Expression, mutable: bool, span: Span) -> Expr {
         let assignable = is_assignable(inner);
         let (place, ty) = self.place(inner);
         if mutable {
             self.require_mutable(&place, inner, span);
+        } else if let Some(root) = super::body::local_root(&place) {
+            self.require_unchanging(root, span);
         }
         if !assignable {
             self.error("Cannot create reference to a temporary value", span);
@@ -487,8 +509,14 @@ impl FnCx<'_, '_> {
             }
         };
         self.consume(&mut value);
+        let loans = self.loans_of(&value);
         if let Some(local) = revived {
             self.set_moved(local, None);
+            self.clear_loans(local);
+        }
+        match super::body::local_root(&place) {
+            Some(root) => self.hold(root, loans, span),
+            None => self.require_outliving(&loans, "store"),
         }
         let kind = match compound {
             Some(base) => ExprKind::CompoundAssign {

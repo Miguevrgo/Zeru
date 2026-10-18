@@ -1,0 +1,7 @@
+fn main() {
+    var d: i64 = 0;
+    var r = &d;
+    var v: Vec<i64> = [1, 2, 3];
+    for x in &v { r = &x; }
+    println("{}", *r);
+}

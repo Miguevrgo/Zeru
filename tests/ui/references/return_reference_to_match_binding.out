@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot return a reference into a temporary value, which ends with this function
+   ╭─[ tests/ui/references/return_reference_to_match_binding.zr:3:40 ]
+   │
+ 3 │     match make() { Some(x) => { return &x; } default => { } }
+   │                                        ─┬
+   │                                         ╰── Cannot return a reference into a temporary value, which ends with this function
+───╯
+[-] Error: aborting due to previous error

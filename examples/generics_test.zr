@@ -29,7 +29,7 @@ struct Holder<T> {
     fallback: T,
 
     fn take(self, index: usize) T {
-        var got = self.items.get(index);
+        var got = self.items.get(index).copy();
         if got.is_none() { return self.fallback; }
         return got.unwrap();
     }

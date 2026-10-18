@@ -196,9 +196,96 @@ impl Statement {
     }
 }
 
+impl Statement {
+    /// Call `seen` with every name the statement uses, nested code included.
+    pub fn names(&self, seen: &mut impl FnMut(&str)) {
+        let block = |statements: &[Statement], seen: &mut _| {
+            statements.iter().for_each(|s| s.names(seen));
+        };
+        match &self.kind {
+            StatementKind::Var { value, .. } => value.names(seen),
+            StatementKind::Return(value) => value.iter().for_each(|v| v.names(seen)),
+            StatementKind::While { cond, body } => {
+                cond.names(seen);
+                body.names(seen);
+            }
+            StatementKind::ForIn { iterable, body, .. } => {
+                iterable.names(seen);
+                body.names(seen);
+            }
+            StatementKind::Expression(expr) => expr.names(seen),
+            StatementKind::Block(statements) => block(statements, seen),
+            StatementKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                condition.names(seen);
+                then_branch.names(seen);
+                else_branch.iter().for_each(|b| b.names(seen));
+            }
+            _ => {}
+        }
+    }
+}
+
 impl Expression {
     pub fn new(kind: ExpressionKind, span: Span) -> Self {
         Self { kind, span }
+    }
+
+    /// Call `seen` with every name the expression uses.
+    pub fn names(&self, seen: &mut impl FnMut(&str)) {
+        use ExpressionKind as E;
+        match &self.kind {
+            E::Identifier(name) => seen(name),
+            E::Prefix { right: inner, .. }
+            | E::Get { object: inner, .. }
+            | E::ArrayRepeat { value: inner, .. }
+            | E::Cast { left: inner, .. }
+            | E::BorrowRef(inner)
+            | E::BorrowRefMut(inner)
+            | E::Dereference(inner)
+            | E::Try(inner) => inner.names(seen),
+            E::Infix { left, right, .. }
+            | E::Assign {
+                target: left,
+                value: right,
+                ..
+            }
+            | E::Index { left, index: right }
+            | E::Range {
+                start: left,
+                end: right,
+            } => {
+                left.names(seen);
+                right.names(seen);
+            }
+            E::StructLiteral { fields, .. } => fields.iter().for_each(|(_, v)| v.names(seen)),
+            E::Call {
+                function,
+                arguments,
+            } => {
+                function.names(seen);
+                arguments.iter().for_each(|a| a.names(seen));
+            }
+            E::ArrayLiteral(items) | E::Tuple(items) => items.iter().for_each(|i| i.names(seen)),
+            E::Match { value, arms } => {
+                value.names(seen);
+                for (pattern, body) in arms {
+                    pattern.names(seen);
+                    body.names(seen);
+                }
+            }
+            E::Block(statements) => statements.iter().for_each(|s| s.names(seen)),
+            E::InlineAsm {
+                outputs, inputs, ..
+            } => outputs
+                .iter()
+                .chain(inputs)
+                .for_each(|operand| operand.expr.names(seen)),
+            E::Int(_) | E::Float(_) | E::StringLit(_) | E::Boolean(_) | E::None => {}
+        }
     }
 
     /// The `default` arm of a `match`, which the parser writes as a name.

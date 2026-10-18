@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot return a reference into 'v', which ends with this function
+   ╭─[ tests/ui/references/return_reference_to_local.zr:3:12 ]
+   │
+ 3 │     return &v;
+   │            ─┬
+   │             ╰── Cannot return a reference into 'v', which ends with this function
+───╯
+[-] Error: aborting due to previous error

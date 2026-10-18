@@ -1,0 +1,5 @@
+fn main() {
+    var y: i32 = 5;
+    var r: &i32 = &y;
+    if true { { var x: i32 = 1; r = &x; } println("{}", *r); }
+}

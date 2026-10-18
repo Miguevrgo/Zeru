@@ -1,0 +1,9 @@
+fn leak() &Vec<i64> {
+    var v: Vec<i64> = [1, 2, 3];
+    return &v;
+}
+fn first(v: &Vec<i64>) &i64 { return &v[0]; }
+fn main() {
+    var v: Vec<i64> = [4];
+    println("{} {}", leak().len(), *first(&v));
+}

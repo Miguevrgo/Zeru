@@ -272,6 +272,15 @@ impl Types {
         tys.iter().map(|&ty| self.subst(ty, args)).collect()
     }
 
+    /// `ty` before a `?` or `!`, in parentheses when it starts with `&` or `*`,
+    /// which would otherwise take the suffix in.
+    fn show_operand(&self, ty: Ty) -> String {
+        match self.kind(ty) {
+            TyKind::Ptr(_) | TyKind::Ref(_) | TyKind::RefMut(_) => format!("({})", self.show(ty)),
+            _ => self.show(ty),
+        }
+    }
+
     /// The type as the programmer writes it.
     pub fn show(&self, ty: Ty) -> String {
         let list = |tys: &[Ty]| {
@@ -296,9 +305,10 @@ impl Types {
             TyKind::Ptr(inner) => format!("*{}", self.show(*inner)),
             TyKind::Ref(inner) => format!("&{}", self.show(*inner)),
             TyKind::RefMut(inner) => format!("&var {}", self.show(*inner)),
-            TyKind::Optional(inner) => format!("{}?", self.show(*inner)),
-            TyKind::Result(ok, err) if *err == Self::I32 => format!("{}!", self.show(*ok)),
-            TyKind::Result(ok, err) => format!("{}!{}", self.show(*ok), self.show(*err)),
+            TyKind::Optional(inner) => format!("{}?", self.show_operand(*inner)),
+            TyKind::Result(ok, err) if *err == Self::I32 => format!("{}!", self.show_operand(*ok)),
+            TyKind::Result(ok, err) => format!("{}!{}", self.show_operand(*ok), self.show(*err)),
+            TyKind::Tuple(items) if items.len() == 1 => format!("({},)", list(items)),
             TyKind::Tuple(items) => format!("({})", list(items)),
             TyKind::Error => "<error>".into(),
         }

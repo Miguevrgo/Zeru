@@ -1,0 +1,6 @@
+fn main() {
+    var v: Vec<i64> = [5];
+    var r = v.get(0).unwrap();
+    var i = 0;
+    while i < 2 { if i == 1 { println("{}", *r); } var w: Vec<i64> = [42]; r = w.get(0).unwrap(); i += 1; }
+}

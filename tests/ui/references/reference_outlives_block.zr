@@ -1,0 +1,9 @@
+fn main() {
+    var v: Vec<i64> = [1];
+    var r = v.get(0);
+    if v.len() > 0 {
+        var w: Vec<i64> = [7];
+        r = w.get(0);
+    }
+    println("{}", r.is_some());
+}

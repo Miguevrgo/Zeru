@@ -28,6 +28,7 @@ impl FnCx<'_, '_> {
         span: Span,
     ) -> Expr {
         let (scrutinee, subject) = self.place(value);
+        let (scrutinee, subject) = self.through_ref(scrutinee, subject, value.span);
         let patterns = self.patterns(subject, arms, span);
         if arms.is_empty() {
             return self.mk(
@@ -47,6 +48,7 @@ impl FnCx<'_, '_> {
         if let Some(path) = locked.clone() {
             self.lock(path);
         }
+        let loans = self.place_loans(&scrutinee, None);
         let before = self.snapshot();
         let mut after = Moves::new();
         let mut arm_ty: Option<Ty> = None;
@@ -66,6 +68,12 @@ impl FnCx<'_, '_> {
                         .collect()
                 })
                 .unwrap_or_default();
+            for &(local, _) in &bindings {
+                self.view_into(local, &scrutinee, pattern.span);
+                if self.cx.holds_ref(self.local_ty(local)).is_some() {
+                    self.hold(local, loans.clone(), pattern.span);
+                }
+            }
             let wanted = arm_ty.or(expected);
             let mut result = self.expr(body, wanted);
             self.leave();

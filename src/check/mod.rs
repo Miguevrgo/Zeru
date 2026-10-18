@@ -626,6 +626,38 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Whether a value of `ty` holds a reference, so it borrows what that
+    /// points into, and whether any it holds is a `&var`.
+    pub(crate) fn holds_ref(&mut self, ty: Ty) -> Option<bool> {
+        self.holds_ref_past(ty, &mut Vec::new())
+    }
+
+    fn holds_ref_past(&mut self, ty: Ty, seen: &mut Vec<Ty>) -> Option<bool> {
+        let parts = match self.types.kind(ty).clone() {
+            TyKind::Ref(_) => return Some(false),
+            TyKind::RefMut(_) => return Some(true),
+            TyKind::Adt(def, _) if !seen.contains(&ty) => {
+                seen.push(ty);
+                match self.items.item(def).kind {
+                    ItemKind::Struct => self.fields_of(ty).into_iter().map(|(_, f)| f).collect(),
+                    _ => self
+                        .variants_of(def)
+                        .into_iter()
+                        .flat_map(|(_, fields)| fields)
+                        .collect(),
+                }
+            }
+            TyKind::Tuple(parts) => parts,
+            TyKind::Result(inner, error) => vec![inner, error],
+            TyKind::Array(inner, _) | TyKind::Optional(inner) | TyKind::Vec(inner) => vec![inner],
+            _ => Vec::new(),
+        };
+        parts
+            .into_iter()
+            .filter_map(|part| self.holds_ref_past(part, seen))
+            .reduce(|a, b| a || b)
+    }
+
     /// Note that values of `ty` exist, so its layout and, for a generic
     /// struct, its methods are needed.
     pub(crate) fn note_adt(&mut self, ty: Ty, span: Span) {

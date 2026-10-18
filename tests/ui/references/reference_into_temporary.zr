@@ -1,0 +1,8 @@
+fn mk() Vec<i64> { return [1, 2, 3]; }
+fn main() {
+    var r = mk().get(0).unwrap();
+    var other: Vec<i64> = [77, 88, 99];
+    println("{}", *r);
+    println("{}", *mk().get(1).unwrap());
+    match mk().get(2) { Some(x) => { var y = x; println("{}", *y); } None => { } }
+}

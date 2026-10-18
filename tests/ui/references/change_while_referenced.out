@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: Cannot change 'v' while 'r' still refers into it
+   ╭─[ tests/ui/references/change_while_referenced.zr:4:5 ]
+   │
+ 4 │     v.push(3);
+   │     ────┬────
+   │         ╰────── Cannot change 'v' while 'r' still refers into it
+───╯
+Error: Cannot change 'v' while 'e' still refers into it
+   ╭─[ tests/ui/references/change_while_referenced.zr:7:5 ]
+   │
+ 7 │     v = [9];
+   │     ───┬───
+   │        ╰───── Cannot change 'v' while 'e' still refers into it
+───╯
+[-] Error: aborting due to previous error

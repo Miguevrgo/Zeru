@@ -4,7 +4,7 @@
 use crate::ast::{Expression, ExpressionKind, format_pieces};
 use crate::errors::Span;
 use crate::items::{DefId, ItemKind};
-use crate::tir::{Builtin, Expr, ExprKind, Place};
+use crate::tir::{Arm, Builtin, Expr, ExprKind, Payload, Place};
 use crate::ty::{Ty, TyKind, Types};
 
 use super::body::FnCx;
@@ -138,11 +138,20 @@ impl FnCx<'_, '_> {
             return self.error_expr(span);
         }
 
+        if name == "copy"
+            && args.is_empty()
+            && let TyKind::Optional(reference) = *self.cx.types.kind(ty)
+            && let TyKind::Ref(inner) | TyKind::RefMut(inner) = *self.cx.types.kind(reference)
+        {
+            return self.copy_referent(place, reference, inner, span);
+        }
+        let through = matches!(self.cx.types.kind(ty), TyKind::Ref(_) | TyKind::RefMut(_));
+        let (place, ty) = self.through_ref(place, ty, object.span);
         if name == "copy" && args.is_empty() {
             if self.cx.owns_heap(ty) {
                 return self.mk(ExprKind::Copy(place), ty, span);
             }
-            if !self.in_instance {
+            if !through && !self.in_instance {
                 let shown = self.ty(ty);
                 self.error(
                     format!("{shown} holds no memory of its own, so it is copied already; drop the .copy()"),
@@ -158,20 +167,6 @@ impl FnCx<'_, '_> {
                     self.require_mutable(&place, object, span);
                 }
                 let receiver = self.address(place, ty, object.span);
-                self.vec_method(name, elem, receiver, args, span)
-            }
-            TyKind::Ref(inner) | TyKind::RefMut(inner)
-                if matches!(self.cx.types.kind(inner), TyKind::Vec(_)) =>
-            {
-                let TyKind::Vec(elem) = *self.cx.types.kind(inner) else {
-                    unreachable!()
-                };
-                let pointer = self.mk(ExprKind::Read(place), ty, object.span);
-                let vec = Place::Deref(Box::new(pointer));
-                if VEC_MUTATORS.contains(&name) {
-                    self.require_mutable(&vec, object, span);
-                }
-                let receiver = self.address(vec, inner, object.span);
                 self.vec_method(name, elem, receiver, args, span)
             }
             TyKind::Slice(_) => {
@@ -191,10 +186,7 @@ impl FnCx<'_, '_> {
             }
             TyKind::Adt(..) | TyKind::Ptr(_) => {
                 let (place, struct_ty) = match *self.cx.types.kind(ty) {
-                    TyKind::Ptr(pointee) => {
-                        let pointer = self.mk(ExprKind::Read(place), ty, object.span);
-                        (Place::Deref(Box::new(pointer)), pointee)
-                    }
+                    TyKind::Ptr(_) => self.deref(place, ty, object.span),
                     _ => (place, ty),
                 };
                 let Some(owner) = self.cx.is_struct(struct_ty) else {
@@ -241,6 +233,39 @@ impl FnCx<'_, '_> {
                 self.error_expr(span)
             }
         }
+    }
+
+    /// `.copy()` on a `(&T)?`: a `T?` holding a copy of what it refers to,
+    /// as Rust's `cloned()`.
+    fn copy_referent(&mut self, scrutinee: Place, reference: Ty, inner: Ty, span: Span) -> Expr {
+        self.enter();
+        let binding = self.declare("", reference, false, true, true);
+        self.leave();
+        let pointer = self.mk(ExprKind::Read(Place::Local(binding)), reference, span);
+        let referent = Place::Deref(Box::new(pointer));
+        let value = match self.cx.owns_heap(inner) {
+            true => ExprKind::Copy(referent),
+            false => ExprKind::Read(referent),
+        };
+        let ty = self.cx.types.intern(TyKind::Optional(inner));
+        let some = self.mk(
+            ExprKind::Some(Box::new(self.mk(value, inner, span))),
+            ty,
+            span,
+        );
+        let arms = vec![
+            Arm {
+                tag: Some(1),
+                bindings: vec![(binding, Payload::SomeValue)],
+                body: some,
+            },
+            Arm {
+                tag: None,
+                bindings: Vec::new(),
+                body: self.mk(ExprKind::None, ty, span),
+            },
+        ];
+        self.mk(ExprKind::Match { scrutinee, arms }, ty, span)
     }
 
     fn address(&mut self, place: Place, ty: Ty, span: Span) -> Expr {
@@ -350,6 +375,7 @@ impl FnCx<'_, '_> {
             .chain((0..args.len()).filter(|&at| deferred(&args[at])))
             .collect();
         let mut checked: Vec<Option<Expr>> = (0..args.len()).map(|_| None).collect();
+        let pending = self.pending_loans.len();
         let mut poisoned = false;
         let mut expected_bound = false;
         for at in order {
@@ -378,8 +404,11 @@ impl FnCx<'_, '_> {
             ) {
                 self.consume(&mut value);
             }
+            let loans = self.loans_of(&value);
+            self.pending_loans.extend(loans);
             checked[at] = Some(value);
         }
+        self.pending_loans.truncate(pending);
 
         let mut resolved = Vec::with_capacity(subs.len());
         for (param, sub) in generics.iter().zip(&subs) {
@@ -656,21 +685,28 @@ impl FnCx<'_, '_> {
                 return self.error_expr(span);
             }
         };
+        let root = match &receiver.kind {
+            ExprKind::AddressOf(place) => super::body::local_root(place),
+            _ => None,
+        };
         let mut values = vec![receiver];
         values.extend(self.vec_args(name, elem, args, span));
+        if let (Builtin::VecPush | Builtin::VecInsert, Some(item)) = (builtin, values.last()) {
+            let loans = self.loans_of(item);
+            match root {
+                Some(root) => self.hold(root, loans, span),
+                None => self.require_outliving(&loans, "store"),
+            }
+        }
         let ty = match builtin {
             Builtin::VecLen | Builtin::VecCapacity => Types::USIZE,
             Builtin::VecIsEmpty => Types::BOOL,
             Builtin::VecRemove => elem,
-            Builtin::VecGet if self.cx.owns_heap(elem) => {
-                let shown = self.ty(elem);
-                self.error(
-                    format!("Vec::get() cannot copy out a {shown}; index it and call .copy()"),
-                    span,
-                );
-                return self.error_expr(span);
+            Builtin::VecGet => {
+                let reference = self.cx.types.intern(TyKind::Ref(elem));
+                self.cx.types.intern(TyKind::Optional(reference))
             }
-            Builtin::VecGet | Builtin::VecPop => self.cx.types.intern(TyKind::Optional(elem)),
+            Builtin::VecPop => self.cx.types.intern(TyKind::Optional(elem)),
             _ => Types::VOID,
         };
         self.mk(ExprKind::Builtin(builtin, values), ty, span)
@@ -746,6 +782,14 @@ impl FnCx<'_, '_> {
         let mut checked = Vec::new();
         for value in values {
             let value = self.expr(value, None);
+            let value = match self.cx.types.kind(value.ty) {
+                TyKind::Ref(_) | TyKind::RefMut(_) => {
+                    let (ty, span) = (value.ty, value.span);
+                    let (place, ty) = self.deref(Place::Temp(Box::new(value)), ty, span);
+                    self.mk(ExprKind::Read(place), ty, span)
+                }
+                _ => value,
+            };
             let types = &self.cx.types;
             let printable = types.is_number(value.ty)
                 || value.ty == Types::BOOL

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'r' refers into 'x', which ends with its block first
+   ╭─[ tests/ui/references/reference_to_loop_copy.zr:5:23 ]
+   │
+ 5 │     for x in &v { r = &x; }
+   │                       ─┬
+   │                        ╰── 'r' refers into 'x', which ends with its block first
+───╯
+[-] Error: aborting due to previous error

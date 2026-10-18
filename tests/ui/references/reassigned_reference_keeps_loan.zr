@@ -1,0 +1,10 @@
+fn pick(a: &i64, b: &i64) &i64 { return a; }
+fn main() {
+    var v: Vec<i64> = [5];
+    var y: i64 = 1;
+    var r = v.get(0).unwrap();
+    r = pick(r, &y);
+    var i: i64 = 0;
+    while i < 1000 { v.push(i); i += 1; }
+    println("{}", *r);
+}

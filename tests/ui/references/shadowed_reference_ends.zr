@@ -1,0 +1,8 @@
+fn main() {
+    var x: i64 = 1;
+    var r = &x;
+    println("{}", *r);
+    var r = 2;
+    x = 3;
+    println("{} {}", r, x);
+}

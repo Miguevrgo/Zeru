@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot store a reference into 'x', which ends with this function
+   ╭─[ tests/ui/references/store_reference_through_pointer.zr:1:43 ]
+   │
+ 1 │ fn f(p: &var &i64) { var x: i64 = 7; *p = &x; }
+   │                                           ─┬
+   │                                            ╰── Cannot store a reference into 'x', which ends with this function
+───╯
+[-] Error: aborting due to previous error

@@ -41,13 +41,16 @@ pub struct HashMap<K: Eq, V> {
         self.len += 1;
     }
 
-    // A copy of the value under `key`, a deep one if it owns memory.
-    pub fn get(self, key: K) V? {
+    // The value under `key`, if any; `.copy()` gives a copy of it.
+    pub fn get(self, key: K) (&V)? {
         var found = self.find(key);
         if found.is_none() {
             return None;
         }
-        return self.values[found.unwrap()].copy();
+        match self.values[found.unwrap()] {
+            Some(value) => { return &value; }
+            None => { return None; }
+        }
     }
 
     pub fn contains(self, key: K) bool {

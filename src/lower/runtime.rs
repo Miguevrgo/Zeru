@@ -642,7 +642,12 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                     let data = data(this);
                     let slot = this.buffer_slot(data, elem, index);
                     let payload = this.field_ptr(result, ty, 1);
-                    this.copy_bits(payload, slot, elem);
+                    match builtin {
+                        Builtin::VecGet => {
+                            this.builder.build_store(payload, slot).unwrap();
+                        }
+                        _ => this.copy_bits(payload, slot, elem),
+                    }
                     let tag = this.field_ptr(result, ty, 0);
                     this.builder
                         .build_store(tag, this.context.bool_type().const_int(1, false))

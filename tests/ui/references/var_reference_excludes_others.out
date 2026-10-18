@@ -1,0 +1,31 @@
+status: compile error
+-- stderr
+Error: Cannot refer into 'v' while an earlier argument can change it
+   ╭─[ tests/ui/references/var_reference_excludes_others.zr:5:19 ]
+   │
+ 5 │     drain(&var v, &v);
+   │                   ─┬
+   │                    ╰── Cannot refer into 'v' while an earlier argument can change it
+───╯
+Error: Cannot change 'v' while an earlier argument still refers into it
+   ╭─[ tests/ui/references/var_reference_excludes_others.zr:6:20 ]
+   │
+ 6 │     pair(v.get(0), v.pop());
+   │                    ───┬───
+   │                       ╰───── Cannot change 'v' while an earlier argument still refers into it
+───╯
+Error: Cannot refer into 'v' while 'r' can change it
+   ╭─[ tests/ui/references/var_reference_excludes_others.zr:8:5 ]
+   │
+ 8 │     var g = v.get(0);
+   │     ────────┬────────
+   │             ╰────────── Cannot refer into 'v' while 'r' can change it
+───╯
+Error: Cannot refer into 'v' while 'r' can change it
+    ╭─[ tests/ui/references/var_reference_excludes_others.zr:11:14 ]
+    │
+ 11 │     for x in v { r.push(x); }
+    │              ┬
+    │              ╰── Cannot refer into 'v' while 'r' can change it
+────╯
+[-] Error: aborting due to previous error

@@ -323,10 +323,7 @@ impl Parser {
                 TypeSpec::Pointer(Box::new(self.parse_type()?))
             }
             Token::BitAnd => self.parse_reference_type()?,
-            Token::LParen => {
-                self.bump();
-                TypeSpec::Tuple(self.parse_list(&Token::RParen, Self::parse_type)?)
-            }
+            Token::LParen => self.parse_parenthesized_type()?,
             Token::Identifier(_) => self.parse_named_type()?,
             _ => return self.error_here("Type identifier expected"),
         };
@@ -341,6 +338,22 @@ impl Parser {
             return Some(TypeSpec::Result(Box::new(base), error));
         }
         Some(base)
+    }
+
+    /// `(T)` is `T`, as in an expression; `()`, `(T,)` and `(T, U)` are tuples.
+    fn parse_parenthesized_type(&mut self) -> Option<TypeSpec> {
+        self.bump();
+        if self.eat(&Token::RParen) {
+            return Some(TypeSpec::Tuple(Vec::new()));
+        }
+        let first = self.parse_type()?;
+        if self.eat(&Token::RParen) {
+            return Some(first);
+        }
+        self.expect(&Token::Comma)?;
+        let mut parts = vec![first];
+        parts.extend(self.parse_list(&Token::RParen, Self::parse_type)?);
+        Some(TypeSpec::Tuple(parts))
     }
 
     /// `&[T]` is a slice, `&var T` a mutable reference, `&T` a shared one.

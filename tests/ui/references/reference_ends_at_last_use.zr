@@ -1,0 +1,14 @@
+fn main() {
+    var v: Vec<i64> = [1, 2];
+    var r = v.get(0);
+    println("{}", *r.unwrap());
+    v.push(3);
+    while v.len() < 5 {
+        var first = v.get(0);
+        println("{}", first.is_some());
+        v.push(4);
+    }
+    if v.get(0).is_some() { v.push(5); }
+    v.push(*v.get(0).unwrap());
+    println("{}", v.len());
+}

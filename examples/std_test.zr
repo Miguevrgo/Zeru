@@ -29,12 +29,12 @@ fn main() {
     map.insert(1, 100);
     map.insert(2, 200);
     if map.len() != 2 { exit(23); }
-    if map.get(1).unwrap() != 100 { exit(24); }
+    if *map.get(1).unwrap() != 100 { exit(24); }
     if map.get(9).is_some() { exit(25); }
     if !map.contains(2) { exit(26); }
 
     map.insert(1, 111);
-    if map.get(1).unwrap() != 111 { exit(28); }
+    if *map.get(1).unwrap() != 111 { exit(28); }
     if map.len() != 2 { exit(29); }
 
     if !map.remove(1) { exit(30); }
@@ -49,14 +49,14 @@ fn main() {
         key += 1;
     }
     if map.len() != 5000 { exit(35); }
-    if map.get(1234).unwrap() != 3702 || map.get(-7).unwrap() != -21 { exit(36); }
+    if *map.get(1234).unwrap() != 3702 || *map.get(-7).unwrap() != -21 { exit(36); }
 
     key = -2500;
     while key < 2500 {
         map.remove(key);
         key += 2;
     }
-    if map.len() != 2500 || map.contains(0) || map.get(1).unwrap() != 3 { exit(37); }
+    if map.len() != 2500 || map.contains(0) || *map.get(1).unwrap() != 3 { exit(37); }
     map.insert(1, 4);
     if map.len() != 2500 { exit(38); }
 

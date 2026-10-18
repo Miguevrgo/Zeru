@@ -1,0 +1,6 @@
+fn make() i64? { return 42; }
+fn bad(d: &i64) &i64 {
+    match make() { Some(x) => { return &x; } default => { } }
+    return d;
+}
+fn main() { var d: i64 = 1; println("{}", *bad(&d)); }

@@ -17,10 +17,10 @@ This document formalizes Zeru's approach to memory management, ownership, and sa
 Zeru achieves memory safety through a combination of:
 
 - **Move semantics** (compile-time) - Prevents double-free and use-after-move
-- **Generational references** (runtime) - Catches dangling references
+- **Borrow checking** (compile-time) - Prevents dangling references
 - **RAII** - Automatic cleanup at scope end
 
-This is inspired by Rust (moves), Vale (generational refs), and Zig (simplicity).
+This is inspired by Rust (moves and borrows) and Zig (simplicity).
 
 ---
 
@@ -126,11 +126,11 @@ fn main() {
 - `&T` = read-only access
 - `&var T` = read-write access
 - References do NOT transfer ownership
-- References are protected by generational checks (see Section 2)
+- References are checked at compile time (see Section 2)
 
 ---
 
-## 2. Generational References
+## 2. Borrow Checking
 
 ### 2.1 The Problem
 
@@ -142,65 +142,30 @@ fn main() {
     var first: &i32 = &list[0];
 
     list.push(4);  // Might reallocate internal buffer!
-    list.push(5);
-    list.push(6);
 
     print(*first); // DANGER: first might point to freed memory
 }
 ```
 
-### 2.2 The Solution: Generational References
+### 2.2 The Rule
 
-Every heap allocation includes a **generation counter**:
+As in Rust, the compiler rejects this. A local holding a reference borrows
+the local it points into, from where it takes the reference until its last
+use in its block. Meanwhile the borrowed local cannot be:
 
-```
-┌─────────────────────────────────────────┐
-│ HeapHeader                              │
-├─────────────────────────────────────────┤
-│ generation: u64  │  ... other metadata  │
-├─────────────────────────────────────────┤
-│              User Data                  │
-└─────────────────────────────────────────┘
-```
-
-When creating a reference, we capture the current generation:
-
-```
-Reference {
-    ptr: *T,
-    expected_generation: u64
-}
-```
-
-On dereference, we verify:
+- changed, by assignment or a method that takes `var self`
+- moved
+- borrowed with `&var`, nor borrowed at all while a `&var` into it is live
+- left behind by its block while the reference outlives it
 
 ```rust
-// Compiler-generated check:
-fn deref(ref: &T) T {
-    if ref.expected_generation != ref.ptr.header.generation {
-        panic("dangling reference: memory was freed or reallocated");
-    }
-    return *ref.ptr;
-}
+var first = list.get(0);     // (&i32)?, borrows list
+print(*first.unwrap());      // last use of first
+list.push(4);                // fine: first is no longer used
 ```
 
-### 2.3 When Generation Changes
-
-- `free()` increments generation (catches use-after-free)
-- `realloc()` increments generation (catches iterator invalidation)
-- New allocation at same address has different generation
-
-### 2.4 Performance
-
-Generational reference checks are controlled by compile mode:
-
-| Mode | Gen-Ref Checks | Overhead |
-| ------ | ---------------- | ---------- |
-| `debug` | ✅ Enabled | ~10-15% |
-| `release-safe` | ✅ Enabled | ~5-10% |
-| `release-fast` | ❌ Disabled | 0% |
-
----
+Arguments of one call count too: `f(&var v, &v)` is an error. Raw pointers
+(`*T`) borrow nothing and are not checked.
 
 ## 3. Returning References
 
@@ -232,7 +197,7 @@ fn bad(data: Vec<i32>) &i32 {
 
 ### 3.2 Rationale
 
-This simple rule catches most dangling reference bugs at compile time, without requiring Rust-style lifetime annotations. The remaining cases (iterator invalidation) are caught by generational references at runtime.
+This simple rule, with Section 2, catches dangling references at compile time without lifetime annotations.
 
 ---
 
@@ -323,11 +288,11 @@ Vec<T> {
     capacity: usize,   // Allocated capacity
 }
 
-Heap Buffer (with generational header):
-┌──────────────┬─────────────────────────────────────┐
-│ generation   │  T  │  T  │  T  │  ...  │ unused   │
-│   (u64)      │ [0] │ [1] │ [2] │       │          │
-└──────────────┴─────────────────────────────────────┘
+Heap Buffer:
+┌─────┬─────┬─────┬───────┬──────────┐
+│  T  │  T  │  T  │  ...  │ unused   │
+│ [0] │ [1] │ [2] │       │          │
+└─────┴─────┴─────┴───────┴──────────┘
 ```
 
 ### 6.2 API
@@ -348,7 +313,7 @@ fn clear(self: &var Vec<T>)              // Remove all elements
 fn len(self: &Vec<T>) usize
 fn capacity(self: &Vec<T>) usize
 fn is_empty(self: &Vec<T>) bool
-fn get(self: &Vec<T>, idx: usize) T?     // Safe access, returns None if OOB
+fn get(self: &Vec<T>, idx: usize) (&T)? // Safe access, None if OOB; .copy() gives a T?
 fn [](self: &Vec<T>, idx: usize) T       // Index access, panics on OOB*
 fn [](self: &var Vec<T>, idx: usize) &var T  // Mutable index access
 
@@ -445,9 +410,8 @@ C    Zig    Rust    Zeru(fast)    Zeru(safe)    C++    Go    Java
 ### Phase 2: Runtime
 
 - [x] Implement heap allocation (mmap/brk syscalls)
-- [ ] Add generational header to allocations
-- [ ] Implement gen-ref checking in codegen
 - [x] Add compile mode flags
+- [x] Borrow checking of references at compile time
 
 ### Phase 3: `Vec<T>`
 
@@ -475,7 +439,6 @@ C    Zig    Rust    Zeru(fast)    Zeru(safe)    C++    Go    Java
 
 ## References
 
-- [Vale Language - Generational References](https://vale.dev/blog/generational-references)
 - [Rust Ownership](https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html)
 - [Zig Manual - Memory](https://ziglang.org/documentation/master/#Memory)
 - [Linear Types](https://en.wikipedia.org/wiki/Substructural_type_system#Linear_type_systems)

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Cannot move 'v' while 'r' still refers into it
+   ╭─[ tests/ui/references/move_while_referenced.zr:5:10 ]
+   │
+ 5 │     take(v);
+   │          ┬
+   │          ╰── Cannot move 'v' while 'r' still refers into it
+───╯
+[-] Error: aborting due to previous error

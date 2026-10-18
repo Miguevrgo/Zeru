@@ -1,0 +1,21 @@
+import std.collections.hashmap::{HashMap};
+struct P {
+    x: i64,
+    fn twice(self) i64 { return self.x * 2; }
+}
+fn main() {
+    var rows: Vec<Vec<i64>> = [[1, 2], [3]];
+    var row = rows.get(0).unwrap();
+    println("{} {}", row.len(), row[1]);
+    var copied = rows.get(1).copy().unwrap();
+    rows.push(copied);
+    println("{} {}", rows.len(), rows.get(9).is_none());
+    var nums: Vec<i64> = [7];
+    println("{} {}", nums.get(0).copy() orelse 0, nums.get(5).copy() orelse -1);
+    var ps: Vec<P> = [P { x: 5 }];
+    var q = &ps[0];
+    println("{} {} {}", q.x, q.twice(), q.copy().x);
+    var m: HashMap<i64, Vec<i64>> = HashMap.new();
+    m.insert(1, [4, 5, 6]);
+    println("{} {}", m.get(1).unwrap().len(), m.get(2).is_none());
+}
