@@ -1,6 +1,6 @@
 # What a program needs that libc used to give it, for x86-64 Linux: the
-# process entry, and the functions LLVM calls by name for copies, float
-# remainders and truncation, and for a panic.
+# process entry, and the functions LLVM calls by name for copies, string
+# lengths, float remainders and truncation, and for a panic.
 
     .text
 
@@ -8,6 +8,7 @@
     .type _start, @function
 _start:
     xor %ebp, %ebp
+    mov %rsp, __zeru_stack(%rip)
     and $-16, %rsp
     call __zeru_detect_simd
     call __zeru_start
@@ -52,6 +53,12 @@ __zeru_detect_simd:
     .bss
 __zeru_simd:
     .byte 0
+
+# The stack as the kernel handed it to _start: argc, then argv, then envp.
+    .globl __zeru_stack
+    .p2align 3
+__zeru_stack:
+    .quad 0
     .text
 
 # Copies of up to 64 bytes read everything into registers before writing,
@@ -409,6 +416,20 @@ bcmp:
     dec %rdx
     jnz 1b
 2:
+    ret
+
+# The bytes before the first zero, for a loop LLVM recognises as strlen.
+    .globl strlen
+    .type strlen, @function
+strlen:
+    mov %rdi, %rax
+1:
+    cmpb $0, (%rax)
+    je 2f
+    inc %rax
+    jmp 1b
+2:
+    sub %rdi, %rax
     ret
 
 # Clear the fraction bits below the binary point; what is already whole,

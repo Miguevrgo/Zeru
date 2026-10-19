@@ -23,4 +23,11 @@ If you prefer to immediately run the compiled executable, use:
 zeru run main.zr
 ```
 
+Arguments for the program go after `--`, and the program reads them with
+`os::args()` from `std.os`, its own path first:
+
+```sh
+zeru run main.zr -- input.txt 3
+```
+
 There are more flags available, which you can read using the help command `zeru --help`. The executable will be generated inside the `build` directory.

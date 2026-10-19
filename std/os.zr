@@ -11,6 +11,24 @@ const SYS_GETEGID: i64 = 108;
 const SYS_GETPPID: i64 = 110;
 const SYS_CLOCK_GETTIME: i64 = 228;
 
+// The command line the program was started with, its own path first.
+pub fn args() Vec<str> {
+    var stack: i64 = 0;
+    asm ("movq __zeru_stack(%rip), $0" : "=r" (stack));
+    var count = *(stack as *i64);
+    var out: Vec<str> = Vec.with_capacity(count as usize);
+    for i in 1..count + 1 {
+        var text = *((stack + 8 * i) as *i64) as *u8;
+        var len: usize = 0;
+        while *(text + len) != 0 {
+            len += 1;
+        }
+        var parts = (text, len);
+        out.push(*((&parts) as *str));
+    }
+    return out;
+}
+
 pub fn getpid() i64 { return syscall1(SYS_GETPID, 0); }
 pub fn getppid() i64 { return syscall1(SYS_GETPPID, 0); }
 pub fn getuid() i64 { return syscall1(SYS_GETUID, 0); }

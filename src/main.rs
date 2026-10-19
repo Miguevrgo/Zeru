@@ -51,6 +51,8 @@ enum Commands {
         release_safe: bool,
         #[arg(long, help = "Optimize, drop runtime checks")]
         release_fast: bool,
+        #[arg(last = true, help = "Arguments for the program, after --")]
+        program_args: Vec<String>,
     },
     #[command(about = "Remove the build/ directory")]
     Clean,
@@ -71,11 +73,14 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
             file,
             release_safe,
             release_fast,
+            program_args,
         } => {
             let safety_mode = SafetyMode::from_flags(release_fast, release_safe);
             let executable_path = compile(&file, safety_mode, false)?;
             status(GREEN, '\u{e7d5}', "Running", executable_path.display());
-            let status = std::process::Command::new(&executable_path).status()?;
+            let status = std::process::Command::new(&executable_path)
+                .args(program_args)
+                .status()?;
             std::process::exit(
                 status
                     .code()

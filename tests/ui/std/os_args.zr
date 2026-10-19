@@ -1,0 +1,5 @@
+import std.os;
+fn main() {
+    var args = os::args();
+    println("{} {}", args.len(), args[0].len() > 0);
+}
