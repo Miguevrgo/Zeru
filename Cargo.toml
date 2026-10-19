@@ -2,7 +2,7 @@
 name = "zeru"
 version = "0.3.0"
 edition = "2024"
-authors = ["Miguel Angel <miguevrgo@proton.me>"]
+authors = ["Miguel Angel <miguevrgo@gmail.com>"]
 repository = "https://github.com/Miguevrgo/Zeru"
 license = "MIT"
 keywords = ["compiler", "programming-language", "llvm"]
