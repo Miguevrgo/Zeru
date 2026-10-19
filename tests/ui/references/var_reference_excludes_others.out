@@ -1,6 +1,15 @@
 status: compile error
 -- stderr
 Error: Cannot change 'v' while a reference into it is still in use
+   ╭─[ tests/ui/references/var_reference_excludes_others.zr:5:5 ]
+   │
+ 5 │     drain(&var v, &v);
+   │     ────────┬──────┬─
+   │             ╰────────── Cannot change 'v' while a reference into it is still in use
+   │                    │
+   │                    ╰─── borrowed here
+───╯
+Error: Cannot change 'v' while a reference into it is still in use
    ╭─[ tests/ui/references/var_reference_excludes_others.zr:6:20 ]
    │
  6 │     pair(v.get(0), v.pop());

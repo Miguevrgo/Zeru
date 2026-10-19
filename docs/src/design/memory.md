@@ -174,9 +174,10 @@ which a new variant replaces. While a loan is live, these are errors:
    after it, which frees the old value.
 4. Assigning anything to an enum whose payload the loan points into.
 5. Reallocating a place the loan reaches through an owning step after it:
-   `push`, `pop`, `insert`, `remove`, `clear`, `reserve`, `shrink_to_fit`, a
-   method taking `var self` on a value that owns memory, or `&var` to such a
-   value, which could do the same later.
+   `push`, `pop`, `insert`, `remove`, `clear`, `reserve`, `shrink_to_fit`,
+   or a call given a `&var` to it, directly or inside an argument (a
+   struct field, a `T?`, a `self` that holds it). Taking the `&var` is
+   fine; using it to reallocate is what counts.
 
 ```rust
 var first = &v[0];
@@ -208,10 +209,24 @@ at: with `var m = &var v` and `var e = &m[0]`, `m.push(1)` is an error while
 `e` is used. A reference a function returns may point anywhere inside what
 its reference arguments point at.
 
+A call sees everything its arguments carry. Each `&var` among them may
+reallocate what it points at, and every reference among them may be stored
+where such a `&var` points, when that can hold a reference:
+
+```rust
+fn set(dst: &var (&i64)?, src: &i64) { *dst = src; }
+
+set(&var slot, &v[0]);    // slot may now refer into v
+v.push(1);                // error (5) while slot is used later
+first(&var v, &v);        // error (5): first may push to v under the &v
+heal(&var p.hp, &p.mana); // fine: plain data
+```
+
 A method call takes its receiver first and uses it after the arguments, as
-Rust's two-phase borrows: `v.push(v.len())` is fine, since the arguments only
-read `v`, but `vs[0].push(grow(&var vs))` is an error, since `grow` may move
-the element the receiver points at.
+Rust's two-phase borrows: `v.push(v.len())` and `v.push(*e)` with
+`e = &v[0]` are fine, since the push happens once the arguments are read,
+but `vs[0].push(grow(&var vs))` is an error, since `grow` may move the
+element the receiver points at.
 
 A `for` loop borrows every element of its sequence for the whole loop, and
 a `match` binding borrows the scrutinee while the binding is used:

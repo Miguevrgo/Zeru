@@ -1,0 +1,49 @@
+status: compile error
+-- stderr
+Error: Cannot change 'vs' while a reference into it is still in use
+   ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:9:16 ]
+   │
+ 9 │     vs[0].push(grow(&var vs));
+   │     ────────────┬────┬───────
+   │                 ╰────────────── borrowed here
+   │                      │
+   │                      ╰───────── Cannot change 'vs' while a reference into it is still in use
+───╯
+Error: Cannot change 'vs' while a reference into it is still in use
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:10:25 ]
+    │
+ 10 │     println("{}", vs[0][grow(&var vs)]);
+    │                   ──────────┬─┬───────
+    │                             ╰─────────── borrowed here
+    │                               │
+    │                               ╰───────── Cannot change 'vs' while a reference into it is still in use
+────╯
+Error: Cannot change 'cs' while a reference into it is still in use
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:12:15 ]
+    │
+ 12 │     cs[0].add(grow_cs(&var cs));
+    │     ──┬──────────┬────┬────────
+    │       ╰────────────────────────── borrowed here
+    │                  │    │
+    │                  ╰─────────────── used later here
+    │                       │
+    │                       ╰────────── Cannot change 'cs' while a reference into it is still in use
+────╯
+Error: Cannot change 'v' while 'e' still refers into it
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:15:5 ]
+    │
+ 15 │     v.push(1);
+    │     ────┬────
+    │         ╰────── Cannot change 'v' while 'e' still refers into it
+    │
+    ├─[ tests/ui/vec/two_phase_receiver_errors.zr:15:5 ]
+    │
+ 14 │     var e = &v[0];
+    │             ──┬──
+    │               ╰──── borrowed here
+    │
+ 16 │     println("{}", *e);
+    │                    ┬
+    │                    ╰── used later here
+────╯
+[-] Error: aborting due to previous error

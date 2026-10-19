@@ -1,21 +1,21 @@
 status: compile error
 -- stderr
 Error: Cannot change 'vs' while a reference into it is still in use
-   ╭─[ tests/ui/vec/place_after_reallocation.zr:5:24 ]
+   ╭─[ tests/ui/vec/place_after_reallocation.zr:5:19 ]
    │
  5 │     var x = vs[0][grow(&var vs)];
-   │             ──────────┬───┬─────
+   │             ──────────┬─┬───────
    │                       ╰─────────── borrowed here
-   │                           │
-   │                           ╰─────── Cannot change 'vs' while a reference into it is still in use
+   │                         │
+   │                         ╰───────── Cannot change 'vs' while a reference into it is still in use
 ───╯
 Error: Cannot change 'vs' while a reference into it is still in use
-   ╭─[ tests/ui/vec/place_after_reallocation.zr:6:26 ]
+   ╭─[ tests/ui/vec/place_after_reallocation.zr:6:16 ]
    │
  6 │     vs[0].push(grow_more(&var vs));
-   │     ───────────────┬────────┬─────
+   │     ───────────────┬────┬─────────
    │                    ╰──────────────── borrowed here
-   │                             │
-   │                             ╰─────── Cannot change 'vs' while a reference into it is still in use
+   │                         │
+   │                         ╰─────────── Cannot change 'vs' while a reference into it is still in use
 ───╯
 [-] Error: aborting due to previous error

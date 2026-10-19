@@ -1,0 +1,17 @@
+struct P { hp: i64, mana: i64 }
+fn first_after_push(a: &var Vec<i64>, b: &Vec<i64>) i64 {
+    var e = &b[0];
+    a.push(2);
+    return *e;
+}
+fn both(a: &var Vec<i64>, b: &var Vec<i64>) {}
+fn heal(hp: &var i64, mana: &i64) { *hp += *mana; }
+fn main() {
+    var v: Vec<i64> = [1];
+    println("{}", first_after_push(&var v, &v));
+    var r = &var v;
+    both(r, r);
+    var p = P { hp: 1, mana: 2 };
+    heal(&var p.hp, &p.mana);
+    v.push(v.len() as i64);
+}

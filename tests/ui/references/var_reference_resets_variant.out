@@ -1,13 +1,13 @@
 status: compile error
 -- stderr
 Error: Cannot change 'o' while 'r' still refers into it
-   ╭─[ tests/ui/references/var_reference_resets_variant.zr:2:79 ]
+   ╭─[ tests/ui/references/var_reference_resets_variant.zr:2:73 ]
    │
  2 │ fn main() { var k: i64 = 3; var o: (&i64)? = &k; match o { Some(r) => { reset(&var o); println("{}", *r); } None => {} } }
-   │                                                            ───┬───            ───┬──                  ┬
+   │                                                            ───┬───      ──────┬──────                 ┬
    │                                                               ╰────────────────────────────────────────── borrowed here
-   │                                                                                  │                    │
-   │                                                                                  ╰─────────────────────── Cannot change 'o' while 'r' still refers into it
+   │                                                                               │                       │
+   │                                                                               ╰────────────────────────── Cannot change 'o' while 'r' still refers into it
    │                                                                                                       │
    │                                                                                                       ╰── used later here
 ───╯

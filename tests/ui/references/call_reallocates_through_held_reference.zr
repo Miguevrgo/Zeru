@@ -1,0 +1,25 @@
+struct W {
+    v: &var Vec<i64>,
+    fn grow(self) { self.v.push(2); }
+}
+fn grow(w: W) { w.v.push(2); }
+fn grow_some(o: (&var Vec<i64>)?) { match o { Some(v) => { v.push(2); } None => {} } }
+fn main() {
+    var a: Vec<i64> = [1];
+    var w = W { v: &var a };
+    var e = &a[0];
+    grow(w);
+    println("{}", *e);
+
+    var b: Vec<i64> = [1];
+    var o: (&var Vec<i64>)? = &var b;
+    var f = &b[0];
+    grow_some(o);
+    println("{}", *f);
+
+    var c: Vec<i64> = [1];
+    var x = W { v: &var c };
+    var g = &c[0];
+    x.grow();
+    println("{}", *g);
+}

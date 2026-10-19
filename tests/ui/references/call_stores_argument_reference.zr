@@ -1,0 +1,25 @@
+struct Bag {
+    items: Vec<&i64>,
+    fn add(var self, r: &i64) { self.items.push(r); }
+}
+fn set(dst: &var (&i64)?, src: &i64) { *dst = src; }
+fn main() {
+    var v: Vec<i64> = [1];
+    var slot: (&i64)? = None;
+    set(&var slot, &v[0]);
+    v.push(2);
+    match slot { Some(r) => { println("{}", *r); } None => {} }
+
+    var bag = Bag { items: [] };
+    var w: Vec<i64> = [1];
+    bag.add(&w[0]);
+    w.push(2);
+    println("{}", *bag.items[0]);
+
+    var kept: (&i64)? = None;
+    {
+        var x: i64 = 41;
+        set(&var kept, &x);
+    }
+    match kept { Some(r) => { println("{}", *r); } None => {} }
+}

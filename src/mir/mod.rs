@@ -10,7 +10,7 @@ mod elaborate;
 
 use crate::errors::Span;
 use crate::tir::{BinOp, FnId, Program, UnOp};
-use crate::ty::Ty;
+use crate::ty::{Ty, TyKind};
 
 pub use build::build;
 
@@ -19,6 +19,17 @@ pub struct Local(pub u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct BlockId(pub u32);
+
+/// A kind of part a type may have: a reference, a `drop` method, one an
+/// owning step reaches (a Vec's elements or a variant's payload), a variant's
+/// payload.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Part {
+    Ref,
+    Drop,
+    Owning,
+    Variant,
+}
 
 /// The return place, written before each `Return`.
 pub const RETURN: Local = Local(0);
@@ -337,7 +348,6 @@ impl Program {
     /// The type `projection` reaches from a `ty`, `variant` keeping the
     /// variant a `Downcast` chose for the field after it.
     pub fn project_ty(&self, ty: Ty, projection: Projection, variant: &mut Option<u32>) -> Ty {
-        use crate::ty::TyKind;
         match (projection, self.types.kind(ty)) {
             (
                 Projection::Deref,
@@ -361,5 +371,44 @@ impl Program {
             (Projection::Field(at), _) => self.structs[&ty].fields[at as usize],
             _ => unreachable!("{} has no such part", self.types.show(ty)),
         }
+    }
+
+    /// Whether a value of `ty`, not looking through pointers, has a part
+    /// of kind `part`.
+    fn reaches(&self, ty: Ty, part: Part, seen: &mut Vec<Ty>) -> bool {
+        let kind = self.types.kind(ty);
+        let payloads = || {
+            self.enums
+                .get(&ty)
+                .is_some_and(|e| e.variants.iter().any(|v| !v.is_empty()))
+        };
+        let found = match (part, kind) {
+            (Part::Ref, TyKind::Ref(_) | TyKind::RefMut(_)) => true,
+            (Part::Owning, TyKind::Vec(_)) => true,
+            (Part::Owning | Part::Variant, TyKind::Optional(_) | TyKind::Result(..)) => true,
+            (Part::Owning | Part::Variant, _) => payloads(),
+            (Part::Drop, _) => self.structs.get(&ty).is_some_and(|s| s.drop.is_some()),
+            _ => false,
+        };
+        if found || seen.contains(&ty) {
+            return found;
+        }
+        seen.push(ty);
+        let parts: Vec<Ty> = match kind {
+            TyKind::Vec(inner) | TyKind::Array(inner, _) | TyKind::Optional(inner) => vec![*inner],
+            TyKind::Result(value, error) => vec![*value, *error],
+            TyKind::Tuple(parts) => parts.clone(),
+            TyKind::Adt(..) => match self.structs.get(&ty) {
+                Some(layout) => layout.fields.clone(),
+                None => self
+                    .enums
+                    .get(&ty)
+                    .map_or(Vec::new(), |e| e.variants.concat()),
+            },
+            _ => Vec::new(),
+        };
+        parts
+            .into_iter()
+            .any(|inner| self.reaches(inner, part, seen))
     }
 }

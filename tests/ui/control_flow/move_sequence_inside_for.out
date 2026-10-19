@@ -1,12 +1,5 @@
 status: compile error
 -- stderr
-Error: Cannot move 'v' inside a loop: the next turn would use it again
-   ╭─[ tests/ui/control_flow/move_sequence_inside_for.zr:4:23 ]
-   │
- 4 │     for x in v { take(v); println("{}", x); }
-   │                       ┬
-   │                       ╰── Cannot move 'v' inside a loop: the next turn would use it again
-───╯
 Error: Cannot move 'v' while the loop still refers into it
    ╭─[ tests/ui/control_flow/move_sequence_inside_for.zr:4:23 ]
    │

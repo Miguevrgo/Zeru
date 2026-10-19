@@ -8,12 +8,13 @@
 //! dataflow finds which locals may hold which loans at each point, and a
 //! loan is live where one of them is used later. With a loan live, these
 //! are errors: moving out of what it points into; ending the local it points
-//! into; dropping, reallocating or lending `&var` to a place it reaches
-//! through an owning step after it (an element of a Vec, a variant's
-//! payload); and assigning to an enum whose payload it points into. An
-//! access through a reference counts as an access to what the reference
-//! points at. A second dataflow finds where a move out of a local may have
-//! happened, and any use of it there is an error.
+//! into; dropping or reallocating a place it reaches through an owning step
+//! after it (an element of a Vec, a variant's payload); and assigning to an
+//! enum whose payload it points into. An access through a reference counts
+//! as an access to what the reference points at, and a call as reallocating
+//! what each `&var` its arguments carry points at. A second dataflow finds
+//! where a move out of a local may have happened, and any use of it there is
+//! an error.
 
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
@@ -23,7 +24,8 @@ use crate::tir::{BinOp, Program};
 use crate::ty::{Ty, TyKind};
 
 use super::{
-    BlockId, Body, Local, Operand, Place, Projection, RETURN, Rvalue, StatementKind, TerminatorKind,
+    BlockId, Body, Local, Operand, Part, Place, Projection, RETURN, Rvalue, StatementKind,
+    TerminatorKind,
 };
 
 /// A step along a path, as a projection, with every index alike and the
@@ -48,13 +50,14 @@ struct Path {
 }
 
 /// A loan: the place it borrows (for `get`, the element at any index), the
-/// paths that place may stand for once references in it are followed, and
-/// where it was taken. A `Fact` is that a local may hold a loan, and
-/// whether the reference it holds may point anywhere inside the loan's
-/// place, as one a call returned.
+/// paths that place may stand for once references in it are followed,
+/// whether it lends `&var`, and where it was taken. A `Fact` is that a
+/// local may hold a loan, and whether the reference it holds may point
+/// anywhere inside the loan's place, as one a call returned.
 struct Loan {
     place: Place,
     paths: Vec<Path>,
+    mutable: bool,
     span: Span,
 }
 
@@ -65,21 +68,9 @@ enum Role {
     Read,
     Move,
     Write,
-    Borrow { mutable: bool },
     Realloc,
     Drop,
     Dead,
-}
-
-/// A kind of part a type may have: a reference, a `drop` method, one an
-/// owning step reaches (a Vec's elements or a variant's payload), a variant's
-/// payload.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum Part {
-    Ref,
-    Drop,
-    Owning,
-    Variant,
 }
 
 /// What an access may invalidate in a loan reaching under it.
@@ -186,6 +177,7 @@ impl<'a> Cx<'a> {
                 cx.loans.push(Loan {
                     place,
                     paths: vec![path],
+                    mutable: matches!(program.types.kind(ty), TyKind::RefMut(_)),
                     span: body.span,
                 });
             }
@@ -209,6 +201,7 @@ impl<'a> Cx<'a> {
                 cx.loans.push(Loan {
                     place,
                     paths: Vec::new(),
+                    mutable: matches!(cx.kind(cx.ty(dest)), TyKind::RefMut(_)),
                     span: statement.span,
                 });
             }
@@ -277,52 +270,9 @@ impl<'a> Cx<'a> {
         if let Some(&known) = self.parts.borrow().get(&(ty, part)) {
             return known;
         }
-        let found = self.reaches(ty, part, &mut Vec::new());
+        let found = self.program.reaches(ty, part, &mut Vec::new());
         self.parts.borrow_mut().insert((ty, part), found);
         found
-    }
-
-    fn reaches(&self, ty: Ty, part: Part, seen: &mut Vec<Ty>) -> bool {
-        let kind = self.kind(ty);
-        let payloads = || {
-            self.program
-                .enums
-                .get(&ty)
-                .is_some_and(|e| e.variants.iter().any(|v| !v.is_empty()))
-        };
-        let found = match (part, kind) {
-            (Part::Ref, TyKind::Ref(_) | TyKind::RefMut(_)) => true,
-            (Part::Owning, TyKind::Vec(_)) => true,
-            (Part::Owning | Part::Variant, TyKind::Optional(_) | TyKind::Result(..)) => true,
-            (Part::Owning | Part::Variant, _) => payloads(),
-            (Part::Drop, _) => self
-                .program
-                .structs
-                .get(&ty)
-                .is_some_and(|s| s.drop.is_some()),
-            _ => false,
-        };
-        if found || seen.contains(&ty) {
-            return found;
-        }
-        seen.push(ty);
-        let parts: Vec<Ty> = match kind {
-            TyKind::Vec(inner) | TyKind::Array(inner, _) | TyKind::Optional(inner) => vec![*inner],
-            TyKind::Result(value, error) => vec![*value, *error],
-            TyKind::Tuple(parts) => parts.clone(),
-            TyKind::Adt(..) => match self.program.structs.get(&ty) {
-                Some(layout) => layout.fields.clone(),
-                None => self
-                    .program
-                    .enums
-                    .get(&ty)
-                    .map_or(Vec::new(), |e| e.variants.concat()),
-            },
-            _ => Vec::new(),
-        };
-        parts
-            .into_iter()
-            .any(|inner| self.reaches(inner, part, seen))
     }
 
     /// The places statement `at` of block `b` (its terminator, past the
@@ -341,14 +291,6 @@ impl<'a> Cx<'a> {
                     for arg in args {
                         operand(arg, &mut out);
                     }
-                    for arg in args {
-                        if let Operand::Copy(place) | Operand::Move(place) = arg
-                            && let TyKind::RefMut(pointee) = *self.kind(self.ty(place))
-                            && self.has(pointee, Part::Owning)
-                        {
-                            out.push((place.clone().project(Projection::Deref), Role::Realloc));
-                        }
-                    }
                     out.extend(dest.iter().map(|dest| (dest.clone(), Role::Write)));
                 }
                 TerminatorKind::Drop { place, .. } => out.push((place.clone(), Role::Drop)),
@@ -365,11 +307,8 @@ impl<'a> Cx<'a> {
         match &statement.kind {
             StatementKind::Assign(dest, rvalue) => {
                 match rvalue {
-                    Rvalue::AddressOf(place) => {
-                        let mutable = matches!(self.kind(self.ty(dest)), TyKind::RefMut(_));
-                        out.push((place.clone(), Role::Borrow { mutable }));
-                    }
-                    Rvalue::DeepCopy(place)
+                    Rvalue::AddressOf(place)
+                    | Rvalue::DeepCopy(place)
                     | Rvalue::Len(place)
                     | Rvalue::Capacity(place)
                     | Rvalue::Discriminant(place)
@@ -684,8 +623,20 @@ impl<'a> Cx<'a> {
         if carried.is_empty() || !self.has(self.ty(dest), Part::Ref) {
             return Vec::new();
         }
+        let paths = self.canonical(dest, facts);
+        self.hold(facts, paths, carried)
+    }
+
+    /// The roots of `paths` may hold `carried` from now on. Returns those
+    /// stored behind a pointer of unknown origin.
+    fn hold(
+        &self,
+        facts: &mut BTreeSet<Fact>,
+        paths: Vec<Path>,
+        carried: Vec<(usize, bool)>,
+    ) -> Vec<(usize, bool)> {
         let mut escaped = Vec::new();
-        for path in self.canonical(dest, facts) {
+        for path in paths {
             match path.steps.contains(&Step::Deref) {
                 true => escaped.extend(carried.iter().copied()),
                 false => facts.extend(carried.iter().map(|&(loan, deep)| (path.root, loan, deep))),
@@ -700,20 +651,32 @@ impl<'a> Cx<'a> {
         let body = self.body;
         let block = &body.blocks[b];
         let Some(statement) = block.statements.get(at) else {
-            if let TerminatorKind::Call {
-                args,
-                dest: Some(dest),
-                ..
-            } = &block.terminator.kind
+            let TerminatorKind::Call { args, dest, .. } = &block.terminator.kind else {
+                return Vec::new();
+            };
+            let carried: Vec<(usize, bool)> = args
+                .iter()
+                .flat_map(|arg| self.carried_operand(arg, facts))
+                .map(|(loan, _)| (loan, true))
+                .collect();
+            let mut escaped = Vec::new();
+            for &(loan, _) in carried
+                .iter()
+                .filter(|&&(loan, _)| self.loans[loan].mutable)
             {
-                let carried = args
+                let paths = self.loans[loan]
+                    .paths
                     .iter()
-                    .flat_map(|arg| self.carried_operand(arg, facts))
-                    .map(|(loan, _)| (loan, true))
+                    .filter(|path| self.has(path.ty, Part::Ref))
+                    .cloned()
                     .collect();
-                return self.store(facts, dest, carried);
+                let flowing = carried.iter().filter(|c| c.0 != loan).copied().collect();
+                escaped.extend(self.hold(facts, paths, flowing));
             }
-            return Vec::new();
+            if let Some(dest) = dest {
+                escaped.extend(self.store(facts, dest, carried));
+            }
+            return escaped;
         };
         match &statement.kind {
             StatementKind::Assign(dest, rvalue) => {
@@ -817,17 +780,22 @@ impl<'a> Cx<'a> {
         let live = self.live_through(b);
         for (at, live) in live.iter().enumerate() {
             let span = self.span(b, at);
-            let accesses = self.accesses(b, at);
-            for (place, role) in &accesses {
-                if !Self::defines(place, *role)
-                    && (*role != Role::Drop || !place.projection.is_empty())
+            let live_facts: Vec<Fact> = self.alive(&facts, live).into_iter().collect();
+            for (place, role) in self.accesses(b, at) {
+                let errors = self.errors.len();
+                self.check_access(&place, role, &facts, &live_facts, (b, at));
+                if self.errors.len() == errors
+                    && !Self::defines(&place, role)
+                    && (role != Role::Drop || !place.projection.is_empty())
                 {
                     self.check_moved(place.local, &moved, span);
                 }
             }
-            let live_facts: Vec<Fact> = self.alive(&facts, live).into_iter().collect();
-            for (place, role) in &accesses {
-                self.check_access(place, *role, &facts, &live_facts, (b, at));
+            if let (None, TerminatorKind::Call { args, .. }) = (
+                self.body.blocks[b].statements.get(at),
+                &self.body.blocks[b].terminator.kind,
+            ) {
+                self.check_call(args, &facts, &live_facts, (b, at));
             }
             for (loan, _) in self.transfer(&mut facts, b, at) {
                 self.escaped(loan);
@@ -866,15 +834,71 @@ impl<'a> Cx<'a> {
         at: (usize, usize),
     ) {
         let rule = match role {
-            Role::Read | Role::Borrow { mutable: false } => return,
+            Role::Read => return,
             Role::Dead => return self.check_dead(place.local, live, at),
             Role::Move => Rule::Move,
             Role::Write => Rule::Variant,
             Role::Drop if !self.replaced(at.0, place) => return,
-            Role::Borrow { mutable: true } if !self.has(self.ty(place), Part::Owning) => return,
-            Role::Drop | Role::Realloc | Role::Borrow { .. } => Rule::Owning,
+            Role::Drop | Role::Realloc => Rule::Owning,
         };
         let accessed = self.canonical(place, facts);
+        self.conflict(&accessed, rule, live, at);
+    }
+
+    /// A call may reallocate what each `&var` its arguments carry, directly
+    /// or inside them, points at, when that owns memory. What it gets lent
+    /// it may reach anywhere inside, so another loan an argument carries
+    /// conflicts with that as a deep one.
+    fn check_call(
+        &mut self,
+        args: &[Operand],
+        facts: &BTreeSet<Fact>,
+        live: &[Fact],
+        at: (usize, usize),
+    ) {
+        let carried: Vec<Vec<usize>> = args
+            .iter()
+            .map(|arg| {
+                self.carried_operand(arg, facts)
+                    .into_iter()
+                    .map(|(loan, _)| loan)
+                    .collect()
+            })
+            .collect();
+        for (i, loans) in carried.iter().enumerate() {
+            for &loan in loans {
+                if !self.loans[loan].mutable {
+                    continue;
+                }
+                let accessed: Vec<Path> = self.loans[loan]
+                    .paths
+                    .iter()
+                    .filter(|path| self.has(path.ty, Part::Owning))
+                    .cloned()
+                    .collect();
+                let shared = carried
+                    .iter()
+                    .enumerate()
+                    .any(|(j, other)| j != i && other.contains(&loan));
+                let live: Vec<Fact> = live
+                    .iter()
+                    .filter(|fact| fact.1 != loan || shared)
+                    .map(|&(holder, other, deep)| {
+                        (
+                            holder,
+                            other,
+                            deep || carried.iter().flatten().any(|&c| c == other),
+                        )
+                    })
+                    .collect();
+                self.conflict(&accessed, Rule::Owning, &live, at);
+            }
+        }
+    }
+
+    /// Report each loan in `live` that `rule`'s access to `accessed`
+    /// invalidates.
+    fn conflict(&mut self, accessed: &[Path], rule: Rule, live: &[Fact], at: (usize, usize)) {
         for &(holder, loan, deep) in live {
             if self.reported.contains(&loan) {
                 continue;

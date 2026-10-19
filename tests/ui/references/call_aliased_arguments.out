@@ -1,0 +1,25 @@
+status: compile error
+-- stderr
+Error: Cannot change 'v' while a reference into it is still in use
+    ╭─[ tests/ui/references/call_aliased_arguments.zr:11:19 ]
+    │
+ 11 │     println("{}", first_after_push(&var v, &v));
+    │                   ──────────────┬───────────┬─
+    │                                 ╰─────────────── Cannot change 'v' while a reference into it is still in use
+    │                                             │
+    │                                             ╰─── borrowed here
+────╯
+Error: Cannot change 'v' while a reference into it is still in use
+    ╭─[ tests/ui/references/call_aliased_arguments.zr:13:5 ]
+    │
+ 13 │     both(r, r);
+    │     ─────┬────
+    │          ╰────── Cannot change 'v' while a reference into it is still in use
+    │
+    ├─[ tests/ui/references/call_aliased_arguments.zr:13:5 ]
+    │
+ 12 │     var r = &var v;
+    │             ───┬──
+    │                ╰──── borrowed here
+────╯
+[-] Error: aborting due to previous error

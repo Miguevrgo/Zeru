@@ -108,7 +108,8 @@ switch on an integer, a call, a drop, a check, or a return.
   `&var` or an element that owns memory, the element itself.
 - A built-in method's receiver, and the base of an element whose index
   calls something, is reached through a reference taken before its
-  arguments are evaluated, as Rust's two-phase borrows.
+  arguments are evaluated. As with Rust's two-phase borrows, taking a
+  `&var` changes nothing; what it is used for is checked where it is used.
 - Every scope ends its locals with a `StorageDead`, after their drops, at
   its end and at every exit; a statement ends its temporaries.
 - Runtime checks (bounds, null, `unwrap`) are `Assert` terminators, and the
@@ -138,6 +139,12 @@ aliasing or plain writes (`docs/src/design/memory.md`, section 2).
   reference may point at, so an access through `*m` is the same access to
   what `m` borrows. A reference a call returns may point anywhere inside
   what its reference arguments point at.
+- **Calls.** A call may do anything a `&var` lets it do: each `&var` its
+  arguments carry, directly or inside a struct, a `T?` or a `self`, may
+  reallocate what it points at, and every reference the arguments carry may
+  be stored where such a `&var` points, when that can hold a reference.
+  What a call is lent it may reach anywhere inside, so `f(&var v, &v)` is an
+  error while `f(&var p.hp, &p.mana)` is fine.
 - **Which locals hold which loans** is a forward dataflow: an assignment
   hands the destination the loans of the value, and a whole assignment or the
   end of a local's scope takes them away. A value holds a loan directly or
@@ -152,10 +159,11 @@ aliasing or plain writes (`docs/src/design/memory.md`, section 2).
 
 With a loan live, it is an error to move out of a place that overlaps it,
 to end the local it points into, and to drop, reallocate (the Vec mutators, a
-`var self` method, creating `&var` to a value that owns memory) or replace
-(for a variant) a place whose loan continues under it through an owning step:
-an element of a Vec or a variant's payload. Each error points at the access
-and has notes at the loan and at the later use that keeps it live.
+call through a `&var`) or replace (for a variant) a place whose loan
+continues under it through an owning step: an element of a Vec or a
+variant's payload. Taking a `&var` is none of these; only what it is used
+for is. Each error points at the access and has notes at the loan and at
+the later use that keeps it live.
 
 The work grows with the size of a function and how long its references
 live, not with the square of its size.
