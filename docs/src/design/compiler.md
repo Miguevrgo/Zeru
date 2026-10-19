@@ -140,7 +140,9 @@ aliasing or plain writes (`docs/src/design/memory.md`, section 2).
   Through a reference a local holds, a path continues from the places that
   reference may point at, so an access through `*m` is the same access to
   what `m` borrows. A reference a call returns may point anywhere inside
-  what its reference arguments point at.
+  what its reference arguments point at, and takes a loan of its own, as a
+  reborrow in rustc: paths through it compare exactly with paths through
+  the same result, unless the call returned another that is still live.
 - **Calls.** A call may do anything a `&var` lets it do: each `&var` its
   arguments carry, directly or inside a struct, a `T?` or a `self`, may
   reallocate what it points at, and every reference the arguments carry may

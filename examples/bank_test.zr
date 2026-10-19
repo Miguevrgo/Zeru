@@ -59,13 +59,12 @@ fn balance(accounts: &Vec<Account>, id: u32) i64? {
     return accounts[at].balance;
 }
 
-// The index of account `id`, or NO_ACCOUNT. A finder returning
-// (&var Account)? would read better, but writing through a reference a call
-// returned is rejected when the target owns memory, so callers index.
-fn need(accounts: &Vec<Account>, id: u32) usize! {
-    var at = position(accounts, id);
-    if at.is_none() { return Err(NO_ACCOUNT); }
-    return Ok(at.unwrap());
+// Account `id`, or NO_ACCOUNT.
+fn need(accounts: &var Vec<Account>, id: u32) (&var Account)! {
+    for acc in accounts {
+        if acc.id == id { return Ok(&var acc); }
+    }
+    return Err(NO_ACCOUNT);
 }
 
 fn run(accounts: &var Vec<Account>, cmd: Command) i32! {
@@ -76,8 +75,8 @@ fn run(accounts: &var Vec<Account>, cmd: Command) i32! {
         default => { }
     }
     match cmd {
-        Command::Deposit(id, amount) => { accounts[need(accounts, id)!].apply(amount)!; }
-        Command::Withdraw(id, amount) => { accounts[need(accounts, id)!].apply(-amount)!; }
+        Command::Deposit(id, amount) => { need(accounts, id)!.apply(amount)!; }
+        Command::Withdraw(id, amount) => { need(accounts, id)!.apply(-amount)!; }
         Command::Transfer(from, to, amount) => {
             if from == to { return Err(SAME); }
             var a = position(accounts, from);
@@ -89,21 +88,21 @@ fn run(accounts: &var Vec<Account>, cmd: Command) i32! {
             dst.apply(amount)!;
         }
         Command::Freeze(id, reason) => {
-            var acc = &var accounts[need(accounts, id)!];
+            var acc = need(accounts, id)!;
             match acc.state {
                 State::Open | State::Frozen(_) => { acc.state = State::Frozen(reason); }
                 State::Closed => { return Err(NOT_OPEN); }
             }
         }
         Command::Thaw(id) => {
-            var acc = &var accounts[need(accounts, id)!];
+            var acc = need(accounts, id)!;
             match acc.state {
                 State::Frozen(_) => { acc.state = State::Open; }
                 State::Open | State::Closed => { return Err(NOT_OPEN); }
             }
         }
         Command::Close(id) => {
-            var acc = &var accounts[need(accounts, id)!];
+            var acc = need(accounts, id)!;
             if acc.balance != 0 { return Err(NOT_EMPTY); }
             acc.state = State::Closed;
         }

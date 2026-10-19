@@ -40,25 +40,33 @@ enum Step {
 
 /// Where a reference points: a path from a local and the type there, and
 /// with `deep`, anywhere inside that. A path is followed `EXACT` steps
-/// deep; a longer one stands for anything inside those.
+/// deep; a longer one stands for anything inside those. Under a reference a
+/// call returned, `anchor` is its loan and the steps from where it points,
+/// which compare exactly with those of another path under the same one.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Path {
     root: Local,
     steps: Vec<Step>,
     ty: Ty,
     deep: bool,
+    anchor: Option<(usize, Vec<Step>)>,
 }
 
 /// A loan: the place it borrows (for `get`, the element at any index), the
 /// paths that place may stand for once references in it are followed,
-/// whether it lends `&var`, and where it was taken. A `Fact` is that a
+/// whether it lends `&var`, and where it was taken. A reference a call
+/// returns holds a loan of its own, `from` a loan its arguments carry, deep
+/// in its paths and anchored at itself; it is `multi` when references the
+/// call returned in different turns may be live at once. A `Fact` is that a
 /// local may hold a loan, and whether the reference it holds may point
-/// anywhere inside the loan's place, as one a call returned.
+/// anywhere inside the loan's place, as one a call stored through a `&var`.
 struct Loan {
     place: Place,
     paths: Vec<Path>,
     mutable: bool,
     span: Span,
+    from: Option<usize>,
+    multi: bool,
 }
 
 type Fact = (Local, usize, bool);
@@ -126,6 +134,7 @@ pub(super) fn check(body: &Body, program: &Program) -> Vec<ZeruError> {
 /// listed by statement in `moves_at` and by local in `moves_of`; `holders`
 /// marks the locals that can hold a reference, the only ones liveness
 /// follows; `start` the loans the parameters hold as the function starts;
+/// `derived` the loan a call's result holds for each loan of its arguments;
 /// `grew` that a loan's paths grew after blocks had used them.
 struct Cx<'a> {
     body: &'a Body,
@@ -138,6 +147,7 @@ struct Cx<'a> {
     holders: Vec<bool>,
     parts: RefCell<HashMap<(Ty, Part), bool>>,
     start: BTreeSet<Fact>,
+    derived: HashMap<(usize, usize), usize>,
     live_in: Vec<BTreeSet<Local>>,
     grew: bool,
     reported: HashSet<usize>,
@@ -157,6 +167,7 @@ impl<'a> Cx<'a> {
             holders: Vec::new(),
             parts: RefCell::new(HashMap::new()),
             start: BTreeSet::new(),
+            derived: HashMap::new(),
             live_in: Vec::new(),
             grew: false,
             reported: HashSet::new(),
@@ -172,6 +183,7 @@ impl<'a> Cx<'a> {
                     steps: vec![Step::Deref],
                     ty: pointee,
                     deep: false,
+                    anchor: None,
                 };
                 cx.start.insert((local, cx.loans.len(), false));
                 cx.loans.push(Loan {
@@ -179,6 +191,8 @@ impl<'a> Cx<'a> {
                     paths: vec![path],
                     mutable: matches!(program.types.kind(ty), TyKind::RefMut(_)),
                     span: body.span,
+                    from: None,
+                    multi: false,
                 });
             }
         }
@@ -203,6 +217,8 @@ impl<'a> Cx<'a> {
                     paths: Vec::new(),
                     mutable: matches!(cx.kind(cx.ty(dest)), TyKind::RefMut(_)),
                     span: statement.span,
+                    from: None,
+                    multi: false,
                 });
             }
             for at in 0..=block.statements.len() {
@@ -513,6 +529,7 @@ impl<'a> Cx<'a> {
             steps: Vec::new(),
             ty,
             deep: false,
+            anchor: None,
         }];
         let mut variant = None;
         for &projection in &place.projection {
@@ -526,10 +543,7 @@ impl<'a> Cx<'a> {
                         let pointed: Vec<Path> = held
                             .into_iter()
                             .flat_map(|(loan, deep)| {
-                                self.loans[loan].paths.iter().map(move |p| Path {
-                                    deep: p.deep || deep,
-                                    ..p.clone()
-                                })
+                                self.loans[loan].paths.iter().map(move |p| inside(p, deep))
                             })
                             .collect();
                         match pointed.is_empty() {
@@ -674,7 +688,8 @@ impl<'a> Cx<'a> {
                 escaped.extend(self.hold(facts, paths, flowing));
             }
             if let Some(dest) = dest {
-                escaped.extend(self.store(facts, dest, carried));
+                let returned = self.derive(b, &carried, facts, dest);
+                escaped.extend(self.store(facts, dest, returned));
             }
             return escaped;
         };
@@ -693,6 +708,60 @@ impl<'a> Cx<'a> {
             }
             _ => Vec::new(),
         }
+    }
+
+    /// The loans the result of the call ending block `b`, stored at `dest`,
+    /// holds: for each loan its arguments carry, one of its own. It is
+    /// `multi` when a reference under one the call returned before is
+    /// still live.
+    fn derive(
+        &mut self,
+        b: usize,
+        carried: &[(usize, bool)],
+        facts: &BTreeSet<Fact>,
+        dest: &Place,
+    ) -> Vec<(usize, bool)> {
+        if !self.has(self.ty(dest), Part::Ref) {
+            return Vec::new();
+        }
+        let live = self.alive(facts, &self.live_out(b));
+        let mut returned = Vec::new();
+        for &(loan, _) in carried {
+            let origin = self.loans[loan].from.unwrap_or(loan);
+            let derived = *self.derived.entry((b, origin)).or_insert_with(|| {
+                self.loans.push(Loan {
+                    place: self.loans[origin].place.clone(),
+                    paths: Vec::new(),
+                    mutable: self.loans[origin].mutable,
+                    span: self.loans[origin].span,
+                    from: Some(origin),
+                    multi: false,
+                });
+                self.loans.len() - 1
+            });
+            let paths: Vec<Path> = self.loans[origin]
+                .paths
+                .iter()
+                .map(|path| Path {
+                    deep: true,
+                    anchor: Some((derived, Vec::new())),
+                    ..path.clone()
+                })
+                .collect();
+            if paths != self.loans[derived].paths {
+                let before = std::mem::replace(&mut self.loans[derived].paths, paths);
+                self.grew |= !before.is_empty();
+            }
+            self.loans[derived].multi |= live.iter().any(|&(holder, held, _)| {
+                Some(holder) != dest.as_local()
+                    && self.loans[held]
+                        .paths
+                        .iter()
+                        .any(|path| path.anchor.as_ref().is_some_and(|a| a.0 == derived))
+            });
+            returned.push((derived, false));
+        }
+        returned
     }
 
     /// The loans each block may start with, none for one never reached.
@@ -904,10 +973,7 @@ impl<'a> Cx<'a> {
                 continue;
             }
             let hit = self.loans[loan].paths.iter().find_map(|path| {
-                let path = Path {
-                    deep: path.deep || deep,
-                    ..path.clone()
-                };
+                let path = inside(path, deep);
                 accessed
                     .iter()
                     .find(|q| self.invalidates(q, &path, rule))
@@ -941,7 +1007,10 @@ impl<'a> Cx<'a> {
         if accessed.root != loan.root {
             return false;
         }
-        let (q, l) = (&accessed.steps, &loan.steps);
+        let (q, l, deep) = match (&accessed.anchor, &loan.anchor) {
+            (Some((a, q)), Some((b, l))) if a == b && !self.loans[*a].multi => (q, l, false),
+            _ => (&accessed.steps, &loan.steps, loan.deep),
+        };
         let prefix = |a: &[Step], b: &[Step]| {
             a.len() <= b.len() && a.iter().zip(b).all(|(x, y)| same(*x, *y))
         };
@@ -957,9 +1026,9 @@ impl<'a> Cx<'a> {
             _ => Part::Owning,
         };
         if prefix(q, l) {
-            return l[q.len()..].iter().any(step) || (loan.deep && self.has(loan.ty, below));
+            return l[q.len()..].iter().any(step) || (deep && self.has(loan.ty, below));
         }
-        loan.deep && prefix(l, q) && self.has(accessed.ty, below)
+        deep && prefix(l, q) && self.has(accessed.ty, below)
     }
 
     /// Whether the drop ending block `b`, of `place`, drops its old value
@@ -1098,10 +1167,31 @@ fn same(a: Step, b: Step) -> bool {
     matches!((a, b), (Step::Index { .. }, Step::Index { .. })) || a == b
 }
 
+/// `path`, or anywhere inside it when `deep`.
+fn inside(path: &Path, deep: bool) -> Path {
+    match deep {
+        true => Path {
+            deep: true,
+            anchor: None,
+            ..path.clone()
+        },
+        false => path.clone(),
+    }
+}
+
 /// `path` one step further, at a value of type `ty`, unless it stands for
-/// anything inside already.
+/// anything inside already, though then still from its anchor short of a
+/// reference.
 fn extend(mut path: Path, step: Step, ty: Ty) -> Path {
     if path.deep {
+        path.anchor = path
+            .anchor
+            .take()
+            .filter(|(_, steps)| step != Step::Deref && steps.len() < EXACT)
+            .map(|(loan, mut steps)| {
+                steps.push(step);
+                (loan, steps)
+            });
         return path;
     }
     if path.steps.len() == EXACT {

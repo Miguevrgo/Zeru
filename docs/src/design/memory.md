@@ -207,7 +207,9 @@ at: with `var m = &var v` and `var e = &m[0]`, `m.push(1)` is an error while
 `e` is used later. A reference parameter is its own root: inside
 `fn grow(v: &var Vec<i64>)`, `var e = &v[0]; v.push(2);` is an error while
 `e` is used. A reference a function returns may point anywhere inside what
-its reference arguments point at.
+its reference arguments point at, and is used as `&var v[0]` would be:
+with `var s = pick(&var v)`, `s.push(4)` is fine, but an error while a
+reference taken from `s`, such as `&s[0]` or `head(s)`, is used later.
 
 A call sees everything its arguments carry. Each `&var` among them may
 reallocate what it points at, and every reference among them may be stored
