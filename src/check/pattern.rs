@@ -67,6 +67,9 @@ impl FnCx<'_, '_> {
                 .collect();
             let wanted = arm_ty.or(expected);
             let mut result = self.expr(body, wanted);
+            for (binding, _) in &bindings {
+                self.settle_binding(*binding, &scrutinee);
+            }
             let leaves = self.diverges;
             all_leave &= leaves;
             self.leave();

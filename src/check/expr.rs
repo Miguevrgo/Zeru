@@ -451,6 +451,7 @@ impl FnCx<'_, '_> {
             TyKind::Ref(ty)
         };
         let ty = self.cx.intern_or_error(kind, &[ty]);
+        self.note_borrow(&place);
         self.mk(ExprKind::AddressOf(place), ty, span)
     }
 

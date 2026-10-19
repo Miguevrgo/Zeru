@@ -1,0 +1,8 @@
+enum Shape { Circle(i64), Many(Vec<i64>) }
+fn main() {
+    var s = Shape::Circle(3);
+    match s {
+        Shape::Circle(r) => { var at = &r; s = Shape::Circle(1); println("{}", *at); }
+        Shape::Many(v) => { s = Shape::Circle(1); println("{}", v.len()); }
+    }
+}

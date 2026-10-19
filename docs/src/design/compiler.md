@@ -101,8 +101,10 @@ switch on an integer, a call, a drop, a check, or a return.
 - A scope drops what it owns as it ends, and every exit (`return`, `break`,
   `continue`, `?`, `!`) drops what the scopes it leaves still own, temporaries
   of the statements it leaves first.
-- `match` is a switch on the discriminant. Each binding is a reference into
-  the value matched, set as its arm is entered.
+- `match` is a switch on the discriminant. Each binding is set as its arm
+  is entered: a copy of a value that owns no memory, refers to nothing and
+  is never borrowed, as Rust's bindings of `Copy` values, or else a
+  reference into the value matched.
 - `for x in seq` walks a reference from the first element to one past the
   last, as Rust's slice iterator; `x` is a copy of the element, or for
   `&var` or an element that owns memory, the element itself.

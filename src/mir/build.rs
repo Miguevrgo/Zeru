@@ -15,7 +15,8 @@ use crate::ty::{Ty, TyKind, Types};
 
 use super::{
     Aggregate, Asm, BlockData, BlockId, Body, ConstValue, Constant, Local, LocalDecl, Operand,
-    Panic, Place, Projection, RETURN, Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
+    Panic, Part, Place, Projection, RETURN, Rvalue, Statement, StatementKind, Terminator,
+    TerminatorKind,
 };
 
 /// The MIR of every function of `program`, indexed by [`FnId`], or the
@@ -809,8 +810,9 @@ impl<'a> Builder<'a> {
         self.current = Some(merge);
     }
 
-    /// `match`: a switch on the tag. Each binding is a reference into the
-    /// scrutinee, which each alternative of its arm sets as it enters.
+    /// `match`: a switch on the tag. Each binding is a copy of plain data or
+    /// else a reference into the scrutinee, which each alternative of its arm
+    /// sets as it enters.
     fn match_expr(&mut self, dest: Option<Place>, scrutinee: &tir::Place, arms: &[Arm]) {
         let place = self.as_place(scrutinee);
         let subject = self.place_ty(&place);
@@ -827,7 +829,7 @@ impl<'a> Builder<'a> {
         let mut entries = Vec::new();
         for arm in arms {
             let body = self.new_block();
-            let pointers: Vec<Local> = arm
+            let locals: Vec<(Local, bool)> = arm
                 .bindings
                 .iter()
                 .map(|(local, _)| self.binding(*local))
@@ -836,7 +838,7 @@ impl<'a> Builder<'a> {
                 .tags
                 .iter()
                 .map(|&value| {
-                    let entry = match pointers.is_empty() {
+                    let entry = match locals.is_empty() {
                         true => body,
                         false => self.new_block(),
                     };
@@ -847,7 +849,7 @@ impl<'a> Builder<'a> {
             if arm.tags.is_empty() {
                 otherwise = Some(body);
             }
-            entries.push((body, pointers, alternatives));
+            entries.push((body, locals, alternatives));
         }
         let otherwise = otherwise.unwrap_or_else(|| {
             let block = self.new_block();
@@ -858,7 +860,7 @@ impl<'a> Builder<'a> {
             block
         });
         self.switch(Operand::Move(Place::local(tag)), targets, otherwise);
-        for (arm, (body, pointers, alternatives)) in arms.iter().zip(entries) {
+        for (arm, (body, locals, alternatives)) in arms.iter().zip(entries) {
             let outer = replace(&mut self.span, arm.span);
             for (at, entry) in alternatives
                 .into_iter()
@@ -866,9 +868,13 @@ impl<'a> Builder<'a> {
                 .filter(|(_, e)| *e != body)
             {
                 self.current = Some(entry);
-                for ((_, payloads), &pointer) in arm.bindings.iter().zip(&pointers) {
+                for ((_, payloads), &(binding, copy)) in arm.bindings.iter().zip(&locals) {
                     let reached = payload(&place, payloads[at]);
-                    self.assign(Place::local(pointer), Rvalue::AddressOf(reached));
+                    let value = match copy {
+                        true => Rvalue::Use(Operand::Copy(reached)),
+                        false => Rvalue::AddressOf(reached),
+                    };
+                    self.assign(Place::local(binding), value);
                 }
                 self.goto(body);
             }
@@ -880,15 +886,23 @@ impl<'a> Builder<'a> {
         self.current = Some(merge);
     }
 
-    /// The reference a `match` binding reads its value through, named as
-    /// the binding.
-    fn binding(&mut self, local: tir::LocalId) -> Local {
+    /// The local a `match` binding is, named as it, and whether it holds a
+    /// copy: one the checker did not make a view and that refers to
+    /// nothing. Otherwise it is a reference the binding reads its value
+    /// through.
+    fn binding(&mut self, local: tir::LocalId) -> (Local, bool) {
         let decl = &self.function.locals[local.0 as usize];
         let name = Some(decl.name.clone()).filter(|name| !name.is_empty());
+        if !decl.view && !self.program.reaches(decl.ty, Part::Ref, &mut Vec::new()) {
+            let copy = self.local(decl.ty, name);
+            self.map[local.0 as usize] = Some(copy);
+            self.own(copy);
+            return (copy, true);
+        }
         let pointer = self.program.types.intern(TyKind::Ref(decl.ty));
         let mir = self.local(pointer, name);
         self.views[local.0 as usize] = Some(Place::local(mir).project(Projection::Deref));
-        mir
+        (mir, false)
     }
 
     /// `value?` or `value!`: the payload, or else the None or the error

@@ -13,7 +13,8 @@ use super::{Checker, Receiver, Scope};
 /// One function being checked, as rustc's `FnCtxt`. `diverges` says that
 /// control cannot reach the point being checked, since every path to it
 /// returned, broke out or went on; `breaks` says, for each loop around,
-/// whether a `break` leaves it.
+/// whether a `break` leaves it; `borrowed` marks the locals a reference was
+/// taken into.
 pub(super) struct FnCx<'c, 'a> {
     pub(super) cx: &'c mut Checker<'a>,
     pub(super) scope: Scope,
@@ -22,6 +23,7 @@ pub(super) struct FnCx<'c, 'a> {
     pub(super) in_instance: bool,
     locals: Vec<tir::Local>,
     mutable: Vec<bool>,
+    borrowed: Vec<bool>,
     names: Vec<(String, LocalId)>,
     marks: Vec<usize>,
     pub(super) diverges: bool,
@@ -111,6 +113,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             in_instance: false,
             locals: Vec::new(),
             mutable: Vec::new(),
+            borrowed: Vec::new(),
             names: Vec::new(),
             marks: Vec::new(),
             diverges: false,
@@ -162,8 +165,29 @@ impl<'c, 'a> FnCx<'c, 'a> {
             view,
         });
         self.mutable.push(mutable);
+        self.borrowed.push(false);
         self.names.push((name.to_string(), id));
         id
+    }
+
+    /// A reference into `place` is taken, so a `match` binding it starts
+    /// from must be a view of the scrutinee.
+    pub(super) fn note_borrow(&mut self, place: &Place) {
+        if let Some(local) = place.root() {
+            self.borrowed[local.0 as usize] = true;
+        }
+    }
+
+    /// Decide, once its arm is checked, whether `binding` views the
+    /// `scrutinee` or holds a copy: a copy of a value that owns no memory
+    /// and is never borrowed reads the same, and lets the arm change the
+    /// scrutinee, as Rust's bindings of `Copy` values.
+    pub(super) fn settle_binding(&mut self, binding: LocalId, scrutinee: &Place) {
+        let view = self.borrowed[binding.0 as usize] || self.cx.owns_heap(self.local_ty(binding));
+        self.locals[binding.0 as usize].view = view;
+        if view {
+            self.note_borrow(scrutinee);
+        }
     }
 
     pub(super) fn local(&self, name: &str) -> Option<LocalId> {

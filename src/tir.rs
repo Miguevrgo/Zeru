@@ -268,6 +268,16 @@ impl Expr {
 }
 
 impl Place {
+    /// The local it starts from, unless it starts from a pointer or a
+    /// temporary.
+    pub fn root(&self) -> Option<LocalId> {
+        match self {
+            Place::Local(local) => Some(*local),
+            Place::Field(base, _) | Place::Index(base, _) => base.root(),
+            Place::Deref(_) | Place::Temp(_) => None,
+        }
+    }
+
     fn for_each_expr(&mut self, f: &mut impl FnMut(&mut Expr)) {
         match self {
             Place::Local(_) => {}

@@ -354,6 +354,7 @@ impl FnCx<'_, '_> {
             true => self.cx.types.intern(TyKind::RefMut(ty)),
             false => self.cx.types.intern(TyKind::Ref(ty)),
         };
+        self.note_borrow(&place);
         self.mk(ExprKind::AddressOf(place), pointer, span)
     }
 

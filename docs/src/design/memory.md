@@ -196,9 +196,9 @@ var mana = &var p.mana;   // fine: two &var, plain data
 *hp -= 1;
 *mana += 1;
 
-match o {
-    Some(x) => { o = None; println("{}", x); } // error (4): x points into Some
-    None => { o = 5; }                          // fine: no binding is live
+match o {                 // o: Vec<i64>?
+    Some(x) => { o = None; println("{}", x.len()); } // error (4): x points into Some
+    None => { o = [5]; }                              // fine: no binding is live
 }
 ```
 
@@ -229,12 +229,19 @@ but `vs[0].push(grow(&var vs))` is an error, since `grow` may move the
 element the receiver points at.
 
 A `for` loop borrows every element of its sequence for the whole loop, and
-a `match` binding borrows the scrutinee while the binding is used:
+a `match` binding borrows the scrutinee while the binding is used, unless
+it is plain data (it owns no memory and refers to nothing) that is never
+borrowed: that is a copy, as Rust's bindings of `Copy` values.
 
 ```rust
 for x in &var v { x += 1; }          // fine
 for x in v { v.push(x); }             // error (5): the loop walks v's buffer
 for x in v { v[0] = x; }              // fine: a plain write
+
+match st {
+    Counting(n) => { st = Done; println("{}", n); }   // fine: n is a copy
+    Done => {}
+}
 ```
 
 ## 3. Returning References

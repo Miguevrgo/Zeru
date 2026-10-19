@@ -1,0 +1,8 @@
+status: exit 0
+-- stdout
+was 3
+4
+5
+6
+1 2
+7

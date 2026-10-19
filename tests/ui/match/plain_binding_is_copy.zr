@@ -1,0 +1,23 @@
+enum State { Counting(i64), Done }
+enum Inner { Val(i64), Nothing }
+enum Outer { Has(Inner), Empty }
+fn main() {
+    var st = State::Counting(3);
+    match st {
+        State::Counting(n) => { st = State::Done; println("was {}", n); }
+        State::Done => {}
+    }
+    var o: i64? = 4;
+    for i in 0..3 {
+        match o { Some(x) => { o = x + 1; println("{}", x); } None => {} }
+    }
+    var p: (i64, i64)? = (1, 2);
+    match p { Some(t) => { p = None; println("{} {}", t.0, t.1); } None => {} }
+    var q = Outer::Has(Inner::Val(7));
+    match q {
+        Outer::Has(inner) => {
+            match inner { Inner::Val(k) => { q = Outer::Empty; println("{}", k); } Inner::Nothing => {} }
+        }
+        Outer::Empty => {}
+    }
+}

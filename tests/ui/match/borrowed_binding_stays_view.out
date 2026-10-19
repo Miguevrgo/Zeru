@@ -1,0 +1,25 @@
+status: compile error
+-- stderr
+Error: Cannot change 's' while 'at' still refers into it
+   ╭─[ tests/ui/match/borrowed_binding_stays_view.zr:5:44 ]
+   │
+ 5 │         Shape::Circle(r) => { var at = &r; s = Shape::Circle(1); println("{}", *at); }
+   │                                        ─┬  ──────────┬─────────                 ─┬
+   │                                         ╰─────────────────────────────────────────── borrowed here
+   │                                                      │                           │
+   │                                                      ╰────────────────────────────── Cannot change 's' while 'at' still refers into it
+   │                                                                                  │
+   │                                                                                  ╰── used later here
+───╯
+Error: Cannot change 's' while 'v' still refers into it
+   ╭─[ tests/ui/match/borrowed_binding_stays_view.zr:6:29 ]
+   │
+ 6 │         Shape::Many(v) => { s = Shape::Circle(1); println("{}", v.len()); }
+   │         ───────┬──────      ──────────┬─────────                ───┬───
+   │                ╰───────────────────────────────────────────────────────── borrowed here
+   │                                       │                            │
+   │                                       ╰────────────────────────────────── Cannot change 's' while 'v' still refers into it
+   │                                                                    │
+   │                                                                    ╰───── used later here
+───╯
+[-] Error: aborting due to previous error
