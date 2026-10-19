@@ -6,14 +6,16 @@
 use crate::errors::Span;
 use crate::items::DefId;
 use crate::tir::{Expr, ExprKind, FnId};
-use crate::ty::{Ty, TyKind};
+use crate::ty::{Ty, TyKind, Types};
 
 use super::body::FnCx;
 
-/// An inference variable: what it stands for once known, and the type
-/// parameter and the call it was made for.
+/// An inference variable: what it stands for once known, the type a number
+/// written for it takes if nothing else decides, and the type parameter and
+/// the call it was made for.
 pub(super) struct Var {
     value: Option<Ty>,
+    literal: Option<Ty>,
     param: String,
     call: String,
     span: Span,
@@ -32,6 +34,7 @@ impl FnCx<'_, '_> {
         let var = self.vars.len() as u32;
         self.vars.push(Var {
             value: None,
+            literal: None,
             param: param.to_string(),
             call: call.to_string(),
             span,
@@ -96,6 +99,21 @@ impl FnCx<'_, '_> {
         }
     }
 
+    /// The variable `expected` still is, if any, which a number written there
+    /// leaves open: it becomes `default` (`i32`, or `f64` once a float was
+    /// written) only if nothing else decides it, as in rustc.
+    pub(super) fn literal_var(&mut self, expected: Option<Ty>, default: Ty) -> Option<Ty> {
+        let ty = self.resolve(expected?);
+        let TyKind::Infer(var) = *self.cx.types.kind(ty) else {
+            return None;
+        };
+        let var = &mut self.vars[var as usize];
+        if var.literal != Some(Types::F64) {
+            var.literal = Some(default);
+        }
+        Some(ty)
+    }
+
     fn bind(&mut self, var: u32, ty: Ty) -> bool {
         if self.cx.types.has(ty, &|kind| *kind == TyKind::Infer(var)) {
             return false;
@@ -153,6 +171,12 @@ impl FnCx<'_, '_> {
         if self.vars.len() == vars {
             return expr;
         }
+        for var in vars..self.vars.len() {
+            if let Some(default) = self.vars[var].literal {
+                let ty = self.cx.types.intern(TyKind::Infer(var as u32));
+                self.fits(ty, default, true);
+            }
+        }
         let open: Vec<usize> = (vars..self.vars.len())
             .filter(|&var| {
                 let ty = self.cx.types.intern(TyKind::Infer(var as u32));
@@ -183,7 +207,23 @@ impl FnCx<'_, '_> {
     /// of each call that waited on one; false if one breaks its bounds.
     fn write_back(&mut self, expr: &mut Expr) -> bool {
         if self.cx.types.contains_var(expr.ty) {
-            expr.ty = self.resolve(expr.ty);
+            let ty = self.resolve(expr.ty);
+            match expr.kind {
+                ExprKind::Int(value) => {
+                    let magnitude = value.unsigned_abs() as u64;
+                    *expr = self.int_literal(magnitude, value < 0, Some(ty), expr.span);
+                }
+                ExprKind::Float(value) if self.cx.types.is_float(ty) => {
+                    *expr = self.float_literal(value, Some(ty), expr.span);
+                }
+                ExprKind::Float(value) => {
+                    let shown = self.cx.types.show(ty);
+                    self.error(format!("Literal {value} is not {shown}"), expr.span);
+                    expr.ty = Types::ERROR;
+                    return false;
+                }
+                _ => expr.ty = ty,
+            }
             self.cx.note_types_in(expr.ty, expr.span);
         }
         let mut resolved = true;

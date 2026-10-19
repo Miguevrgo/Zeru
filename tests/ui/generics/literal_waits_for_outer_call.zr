@@ -1,0 +1,12 @@
+struct Box<T> { v: T, fn make(v: T) Box<T> { return Box { v: v }; } }
+fn w<T>(b: Box<T>, n: T) T { return b.v + n; }
+fn id<T>(x: T) T { return x; }
+fn pair<T>(a: T, b: T) T { return a + b; }
+fn main() {
+    var big: i64 = 5000000000;
+    println("{}", w(Box.make(7), big));
+    println("{}", pair(id(2), big));
+    var f: f64 = 0.5;
+    println("{}", pair(id(2.0), f));
+    println("{}", id(3));
+}

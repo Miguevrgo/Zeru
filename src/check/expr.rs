@@ -71,15 +71,7 @@ impl FnCx<'_, '_> {
         let inner = self.unwrap_expected(expected);
         match &e.kind {
             ExpressionKind::Int(value) => self.int_literal(*value, false, inner, span),
-            ExpressionKind::Float(value) => match inner.map(|t| self.cx.types.kind(t)) {
-                Some(TyKind::F32) => {
-                    if (*value as f32).is_infinite() {
-                        self.error(format!("Literal {value:e} does not fit in f32"), span);
-                    }
-                    self.mk(ExprKind::Float(*value), Types::F32, span)
-                }
-                _ => self.mk(ExprKind::Float(*value), Types::F64, span),
-            },
+            ExpressionKind::Float(value) => self.float_literal(*value, inner, span),
             ExpressionKind::Boolean(value) => self.mk(ExprKind::Bool(*value), Types::BOOL, span),
             ExpressionKind::StringLit(bytes) => {
                 self.mk(ExprKind::Str(bytes.clone()), Types::STR, span)
@@ -194,6 +186,21 @@ impl FnCx<'_, '_> {
     /// An integer written out, negated when `negative`: of the integer type
     /// its context expects, or i32 when nothing does. A value that does not
     /// fit is an error, not a quiet wrap.
+    pub(super) fn float_literal(&mut self, value: f64, expected: Option<Ty>, span: Span) -> Expr {
+        if let Some(var) = self.literal_var(expected, Types::F64) {
+            return self.mk(ExprKind::Float(value), var, span);
+        }
+        match expected.map(|t| self.cx.types.kind(t)) {
+            Some(TyKind::F32) => {
+                if (value as f32).is_infinite() {
+                    self.error(format!("Literal {value:e} does not fit in f32"), span);
+                }
+                self.mk(ExprKind::Float(value), Types::F32, span)
+            }
+            _ => self.mk(ExprKind::Float(value), Types::F64, span),
+        }
+    }
+
     pub(super) fn int_literal(
         &mut self,
         value: u64,
@@ -206,6 +213,9 @@ impl FnCx<'_, '_> {
         } else {
             i128::from(value)
         };
+        if let Some(var) = self.literal_var(expected, Types::I32) {
+            return self.mk(ExprKind::Int(signed), var, span);
+        }
         if let Some(ty) = expected.filter(|&t| self.cx.types.is_float(t)) {
             let exact = match self.cx.types.kind(ty) {
                 TyKind::F32 => (value as f32) as u128 == u128::from(value),
@@ -702,13 +712,15 @@ impl FnCx<'_, '_> {
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
+        if *operator == Token::Minus
+            && let ExpressionKind::Int(value) = right.kind
+        {
+            let inner = self.unwrap_expected(expected);
+            return self.int_literal(value, true, inner, span);
+        }
         let expected = expected.filter(|&ty| !self.cx.types.contains_var(ty));
         match operator {
             Token::Minus => {
-                if let ExpressionKind::Int(value) = right.kind {
-                    let inner = self.unwrap_expected(expected);
-                    return self.int_literal(value, true, inner, span);
-                }
                 let operand = self.expr(right, expected);
                 let types = &self.cx.types;
                 match types.as_int(operand.ty) {
