@@ -158,17 +158,6 @@ impl Sources {
         self.text.len()
     }
 
-    /// Each file in the order pushed: its name, where it starts, its text.
-    pub fn files(&self) -> impl Iterator<Item = (&str, usize, &str)> {
-        self.files.iter().map(|file| {
-            (
-                file.name.as_str(),
-                file.start,
-                &self.text[file.start..file.end - 1],
-            )
-        })
-    }
-
     /// The file, line and column a span starts at, found by binary search
     /// in each file's table of line starts.
     pub fn position(&self, span: Span) -> Option<(&str, u32, u32)> {

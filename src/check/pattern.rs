@@ -8,7 +8,6 @@ use crate::items::ItemKind;
 use crate::tir::{Arm, Expr, ExprKind, Payload};
 use crate::ty::{Ty, TyKind, Types};
 
-use super::Def;
 use super::body::FnCx;
 
 /// Where binding `field` of a pattern for variant `variant` finds its value.
@@ -64,10 +63,7 @@ impl FnCx<'_, '_> {
             let bindings: Vec<_> = shape
                 .binds
                 .into_iter()
-                .map(|(name, ty, payloads)| {
-                    let local = self.declare(&name, ty, false, true, pattern.span);
-                    (local, payloads)
-                })
+                .map(|(name, ty, payloads)| (self.declare(&name, ty, false, true), payloads))
                 .collect();
             let wanted = arm_ty.or(expected);
             let mut result = self.expr(body, wanted);
@@ -317,7 +313,6 @@ impl FnCx<'_, '_> {
                 }
                 let variants = self.cx.variants_of(def);
                 variants.iter().position(|(v, _)| v == variant).map(|at| {
-                    self.cx.note_use(pattern.span, Def::Variant(def, at));
                     let payload: PayloadAt = |variant, field| Payload::Variant { variant, field };
                     (at as i128, variants[at].1.clone(), payload)
                 })

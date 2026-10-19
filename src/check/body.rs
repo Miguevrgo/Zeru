@@ -8,7 +8,7 @@ use crate::tir::{self, Block, Expr, ExprKind, LocalId, Place, Stmt, StmtKind};
 use crate::ty::{Ty, TyKind, Types};
 
 use super::infer::{DeferredCall, Var};
-use super::{Checker, Def, Receiver, Scope};
+use super::{Checker, Receiver, Scope};
 
 /// One function being checked, as rustc's `FnCtxt`. `diverges` says that
 /// control cannot reach the point being checked, since every path to it
@@ -24,7 +24,6 @@ pub(super) struct FnCx<'c, 'a> {
     locals: Vec<tir::Local>,
     mutable: Vec<bool>,
     borrowed: Vec<bool>,
-    decls: Vec<Span>,
     names: Vec<(String, LocalId)>,
     marks: Vec<usize>,
     pub(super) diverges: bool,
@@ -67,7 +66,7 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
         .zip(&param_tys)
         .map(|((param, _, mutable), &ty)| {
             let receiver = param == "self" && sig.receiver != Receiver::None;
-            fx.declare(param, ty, *mutable, receiver, span)
+            fx.declare(param, ty, *mutable, receiver)
         })
         .collect();
     let body_block = fx.block(body);
@@ -115,7 +114,6 @@ impl<'c, 'a> FnCx<'c, 'a> {
             locals: Vec::new(),
             mutable: Vec::new(),
             borrowed: Vec::new(),
-            decls: Vec::new(),
             names: Vec::new(),
             marks: Vec::new(),
             diverges: false,
@@ -157,20 +155,10 @@ impl<'c, 'a> FnCx<'c, 'a> {
         self.names.truncate(mark);
     }
 
-    /// A new local, which later statements see by `name`, declared in
-    /// `decl`. A `view` is a pointer into another place and owns nothing.
-    pub(super) fn declare(
-        &mut self,
-        name: &str,
-        ty: Ty,
-        mutable: bool,
-        view: bool,
-        decl: Span,
-    ) -> LocalId {
+    /// A new local, which later statements see by `name`. A `view` is a
+    /// pointer into another place and owns nothing.
+    pub(super) fn declare(&mut self, name: &str, ty: Ty, mutable: bool, view: bool) -> LocalId {
         let id = LocalId(self.locals.len() as u32);
-        if let Some(record) = &mut self.cx.record {
-            record.locals.push((name.to_string(), decl, ty));
-        }
         self.locals.push(tir::Local {
             name: name.to_string(),
             ty,
@@ -178,7 +166,6 @@ impl<'c, 'a> FnCx<'c, 'a> {
         });
         self.mutable.push(mutable);
         self.borrowed.push(false);
-        self.decls.push(decl);
         self.names.push((name.to_string(), id));
         id
     }
@@ -221,36 +208,6 @@ impl<'c, 'a> FnCx<'c, 'a> {
 
     pub(super) fn local_names(&self) -> Vec<String> {
         self.names.iter().map(|(name, _)| name.clone()).collect()
-    }
-
-    /// Note that `span` uses `local`.
-    pub(super) fn note_local_use(&mut self, span: Span, local: LocalId) {
-        let def = Def::Local(self.decls[local.0 as usize], self.local_ty(local));
-        self.cx.note_use(span, def);
-    }
-
-    /// Note the type of the expression or place at `span`.
-    pub(super) fn note_type(&mut self, span: Span, ty: Ty) {
-        if self.cx.record.is_none() {
-            return;
-        }
-        let ty = self.resolve(ty);
-        if let Some(record) = &mut self.cx.record {
-            record.types.push((span, ty));
-        }
-    }
-
-    /// Note the locals in scope where `span` names nothing.
-    pub(super) fn note_scope(&mut self, span: Span) {
-        let Some(record) = &mut self.cx.record else {
-            return;
-        };
-        let names = self
-            .names
-            .iter()
-            .map(|(name, id)| (name.clone(), self.locals[id.0 as usize].ty))
-            .collect();
-        record.scopes.push((span, names));
     }
 
     /// `expr` is given away by value: to a variable, a call, a field, a
@@ -422,7 +379,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 });
                 self.consume(&mut value);
                 self.cx.note_types_in(ty, span);
-                let local = self.declare(name, ty, !is_const, false, span);
+                let local = self.declare(name, ty, !is_const, false);
                 StmtKind::Let(local, value)
             }
             StatementKind::Return(value) => {
@@ -474,7 +431,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 variable,
                 iterable,
                 body,
-            } => self.for_in(variable, iterable, body, span),
+            } => self.for_in(variable, iterable, body),
             StatementKind::Break | StatementKind::Continue if self.breaks.is_empty() => {
                 self.error("Break/Continue can only be used inside loops", span);
                 return None;
@@ -517,13 +474,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// `for i in a..b` counts; `for x in v` reads each element of an array or
     /// a Vec, viewing one that owns memory rather than copying it; `for x in
     /// &var v` lets each be written through `x`.
-    fn for_in(
-        &mut self,
-        variable: &str,
-        iterable: &Expression,
-        body: &Statement,
-        span: Span,
-    ) -> StmtKind {
+    fn for_in(&mut self, variable: &str, iterable: &Expression, body: &Statement) -> StmtKind {
         if let ExpressionKind::Range { start, end } = &iterable.kind {
             let (start, end) = self.operands(start, end, None);
             let ty = match (start.ty, end.ty) {
@@ -539,7 +490,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 }
             };
             self.enter();
-            let var = self.declare(variable, ty, false, false, span);
+            let var = self.declare(variable, ty, false, false);
             let (body, _) = self.loop_body(|this| this.branch(body));
             self.leave();
             return StmtKind::ForRange {
@@ -586,7 +537,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
         };
         self.enter();
         let view = writable || self.cx.owns_heap(item);
-        let var = self.declare(variable, item, writable, view, span);
+        let var = self.declare(variable, item, writable, view);
         let (body, _) = self.loop_body(|this| this.branch(body));
         self.leave();
         StmtKind::ForEach {

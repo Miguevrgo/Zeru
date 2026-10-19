@@ -5,7 +5,6 @@ mod errors;
 mod items;
 mod lexer;
 mod lower;
-mod lsp;
 mod mir;
 mod parser;
 mod tir;
@@ -57,8 +56,6 @@ enum Commands {
     },
     #[command(about = "Remove the build/ directory")]
     Clean,
-    #[command(about = "Run the language server over stdin and stdout")]
-    Lsp,
 }
 
 fn run_compiler(args: Cli) -> Result<(), CompileError> {
@@ -90,7 +87,6 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
                     .unwrap_or_else(|| status.signal().map(|s| 128 + s).unwrap_or(1)),
             );
         }
-        Commands::Lsp => crate::lsp::run()?,
         Commands::Clean => {
             let build_dir = Path::new("build");
             if build_dir.exists() {

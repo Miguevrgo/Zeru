@@ -11,8 +11,6 @@ mod infer;
 mod pattern;
 mod types;
 
-pub(crate) use call::{PRINTS, VEC_METHODS};
-
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -98,31 +96,6 @@ pub struct Checker<'a> {
     /// Where an expression failed to check without an error saying why, as
     /// rustc's delayed bugs: compiling on from there would emit broken code.
     unreported: Cell<Option<Span>>,
-    pub record: Option<Record>,
-}
-
-/// What the language server needs from checking, in the manner of rustc's
-/// save-analysis: each name used and what it names, the type of each
-/// expression and place, each local declared (its name, where and its
-/// type), and the locals in scope wherever a name named nothing. Kept only
-/// when [`Checker::record`] is set.
-#[derive(Default)]
-pub struct Record {
-    pub uses: Vec<(Span, Def)>,
-    pub types: Vec<(Span, Ty)>,
-    pub locals: Vec<(String, Span, Ty)>,
-    pub scopes: Vec<(Span, Vec<(String, Ty)>)>,
-}
-
-/// What a name names. A local is known by where it is declared and its name,
-/// and has its type in the instance that used it. A use's span holds the
-/// name, but may hold more, as the whole of `E::V(..)` or `.name`.
-#[derive(Clone, Copy, PartialEq)]
-pub enum Def {
-    Local(Span, Ty),
-    Item(DefId),
-    Field(DefId, usize),
-    Variant(DefId, usize),
 }
 
 /// Where a type, a name or a call is being resolved: in which module, with
@@ -152,13 +125,6 @@ impl<'a> Checker<'a> {
             unsatisfied: HashSet::new(),
             adts_seen: HashSet::new(),
             unreported: Cell::new(None),
-            record: None,
-        }
-    }
-
-    fn note_use(&mut self, span: Span, def: Def) {
-        if let Some(record) = &mut self.record {
-            record.uses.push((span, def));
         }
     }
 
@@ -168,13 +134,6 @@ impl<'a> Checker<'a> {
 
     /// Check everything reachable and return the program, or the errors.
     pub fn check(mut self) -> Result<tir::Program, Vec<ZeruError>> {
-        self.run();
-        self.finish()
-    }
-
-    /// Check every function reachable, keeping what was found, so the
-    /// language server can ask about it before [`Checker::finish`].
-    pub fn run(&mut self) {
         let defs: Vec<DefId> = (0..self.items.items.len() as u32).map(DefId).collect();
         for &def in &defs {
             let item = self.items.item(def);
@@ -207,9 +166,6 @@ impl<'a> Checker<'a> {
         }
         self.check_recursive_types(&defs);
         self.drain();
-    }
-
-    pub fn finish(mut self) -> Result<tir::Program, Vec<ZeruError>> {
         let runtime = self.runtime();
         let (structs, enums) = self.layouts();
         let owning = self

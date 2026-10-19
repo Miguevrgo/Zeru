@@ -7,32 +7,17 @@ use crate::items::{DefId, ItemKind};
 use crate::tir::{Arm, Builtin, Expr, ExprKind, Payload, Place};
 use crate::ty::{Ty, TyKind, Types};
 
+use super::Receiver;
 use super::body::FnCx;
 use super::expr::is_number_literal;
-use super::{Def, Receiver};
 
 /// The built-in ways to write text: to stdout or stderr, with or without a
 /// newline after.
-pub(crate) const PRINTS: &[&str] = &["print", "println", "eprint", "eprintln"];
+const PRINTS: &[&str] = &["print", "println", "eprint", "eprintln"];
 
 /// Writes out what the print streams hold; the compiler emits it.
 const FLUSH_FN: &str = "__zeru_flush";
 const COPY_FN: &str = "__zeru_copy_bytes";
-
-/// The methods every `Vec` has.
-pub(crate) const VEC_METHODS: [(&str, Builtin); 11] = [
-    ("len", Builtin::VecLen),
-    ("capacity", Builtin::VecCapacity),
-    ("is_empty", Builtin::VecIsEmpty),
-    ("push", Builtin::VecPush),
-    ("insert", Builtin::VecInsert),
-    ("remove", Builtin::VecRemove),
-    ("pop", Builtin::VecPop),
-    ("get", Builtin::VecGet),
-    ("clear", Builtin::VecClear),
-    ("reserve", Builtin::VecReserve),
-    ("shrink_to_fit", Builtin::VecShrinkToFit),
-];
 
 /// The `Vec` methods that change it, so need a receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
@@ -162,7 +147,6 @@ impl FnCx<'_, '_> {
             self.error(format!("Function '{name}' not defined"), span);
             return self.error_expr(span);
         };
-        self.cx.note_use(function_span, Def::Item(def));
         self.cx.check_visible(def, module, span);
         let Some(known) = self.known_type_args(def, Vec::new(), type_args, span) else {
             self.check_args_only(args);
@@ -180,7 +164,6 @@ impl FnCx<'_, '_> {
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
-        let name_span = Span::new(object.span.end, span.end);
         if let ExpressionKind::Identifier(type_name) = &object.kind
             && self.local(type_name).is_none()
         {
@@ -190,14 +173,12 @@ impl FnCx<'_, '_> {
             if let Some(def) = self.cx.items.lookup_type(self.scope.module, type_name)
                 && self.cx.items.item(def).kind == ItemKind::Struct
             {
-                self.cx.note_use(object.span, Def::Item(def));
                 let Some((method, known)) =
                     self.static_callee(def, type_name, name, type_args, expected, span)
                 else {
                     self.check_args_only(args);
                     return self.error_expr(span);
                 };
-                self.cx.note_use(name_span, Def::Item(method));
                 return self.call_def(method, known, None, args, expected, span);
             }
         }
@@ -284,7 +265,6 @@ impl FnCx<'_, '_> {
                     self.check_args_only(args);
                     return self.error_expr(span);
                 };
-                self.cx.note_use(name_span, Def::Item(def));
                 self.cx.check_visible(def, self.scope.module, span);
                 let sig = self.cx.sig(def);
                 let receiver = sig.as_ref().map(|sig| sig.receiver);
@@ -338,7 +318,7 @@ impl FnCx<'_, '_> {
     /// as Rust's `cloned()`.
     fn copy_referent(&mut self, scrutinee: Place, reference: Ty, inner: Ty, span: Span) -> Expr {
         self.enter();
-        let binding = self.declare("", reference, false, true, span);
+        let binding = self.declare("", reference, false, true);
         self.leave();
         let pointer = self.mk(ExprKind::Read(Place::Local(binding)), reference, span);
         let referent = Place::Deref(Box::new(pointer));
@@ -565,7 +545,6 @@ impl FnCx<'_, '_> {
             self.check_args_only(args);
             return self.error_expr(span);
         };
-        self.cx.note_use(span, Def::Variant(def, index));
         let fields = variants[index].1.clone();
         if args.len() != fields.len() {
             self.error(
@@ -742,10 +721,23 @@ impl FnCx<'_, '_> {
         args: &[Expression],
         span: Span,
     ) -> Expr {
-        let Some(&(_, builtin)) = VEC_METHODS.iter().find(|(method, _)| *method == name) else {
-            self.check_args_only(args);
-            self.error(format!("Vec<T> has no method '{name}'"), span);
-            return self.error_expr(span);
+        let builtin = match name {
+            "len" => Builtin::VecLen,
+            "capacity" => Builtin::VecCapacity,
+            "is_empty" => Builtin::VecIsEmpty,
+            "push" => Builtin::VecPush,
+            "insert" => Builtin::VecInsert,
+            "remove" => Builtin::VecRemove,
+            "pop" => Builtin::VecPop,
+            "get" => Builtin::VecGet,
+            "clear" => Builtin::VecClear,
+            "reserve" => Builtin::VecReserve,
+            "shrink_to_fit" => Builtin::VecShrinkToFit,
+            _ => {
+                self.check_args_only(args);
+                self.error(format!("Vec<T> has no method '{name}'"), span);
+                return self.error_expr(span);
+            }
         };
         let mut values = vec![receiver];
         values.extend(self.vec_args(name, elem, args, span));

@@ -3,36 +3,6 @@ use std::{iter::Peekable, num::IntErrorKind, str::Chars};
 use crate::errors::Span;
 use crate::token::Token;
 
-/// The words the lexer reads as keywords, with their tokens.
-pub const KEYWORDS: [(&str, Token); 26] = [
-    ("fn", Token::Fn),
-    ("var", Token::Var),
-    ("const", Token::Const),
-    ("if", Token::If),
-    ("else", Token::Else),
-    ("import", Token::Import),
-    ("while", Token::While),
-    ("return", Token::Return),
-    ("for", Token::For),
-    ("in", Token::In),
-    ("break", Token::Break),
-    ("continue", Token::Continue),
-    ("as", Token::As),
-    ("pub", Token::Pub),
-    ("struct", Token::Struct),
-    ("enum", Token::Enum),
-    ("trait", Token::Trait),
-    ("str", Token::Str),
-    ("match", Token::Match),
-    ("default", Token::Default),
-    ("self", Token::SelfTok),
-    ("true", Token::True),
-    ("false", Token::False),
-    ("asm", Token::Asm),
-    ("volatile", Token::Volatile),
-    ("None", Token::None),
-];
-
 pub struct Lexer<'a> {
     input: Peekable<Chars<'a>>,
     pos: usize,
@@ -248,10 +218,36 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        KEYWORDS
-            .iter()
-            .find(|(word, _)| *word == literal)
-            .map_or(Token::Identifier(literal), |(_, token)| token.clone())
+        match literal.as_str() {
+            "fn" => Token::Fn,
+            "var" => Token::Var,
+            "const" => Token::Const,
+            "if" => Token::If,
+            "else" => Token::Else,
+            "import" => Token::Import,
+            "while" => Token::While,
+            "return" => Token::Return,
+            "for" => Token::For,
+            "in" => Token::In,
+            "break" => Token::Break,
+            "continue" => Token::Continue,
+            "as" => Token::As,
+            "pub" => Token::Pub,
+            "struct" => Token::Struct,
+            "enum" => Token::Enum,
+            "trait" => Token::Trait,
+            "str" => Token::Str,
+            "match" => Token::Match,
+            "default" => Token::Default,
+            "self" => Token::SelfTok,
+            "true" => Token::True,
+            "false" => Token::False,
+            "asm" => Token::Asm,
+            "volatile" => Token::Volatile,
+            "None" => Token::None,
+
+            _ => Token::Identifier(literal),
+        }
     }
 
     /// Digits for which `is_digit` holds, skipping the `_` that may separate
