@@ -52,7 +52,8 @@ fn main() {
 **Rules:**
 
 - After a move, the original variable is **invalid** (compile error to use)
-  until it is assigned a new value
+  until it is assigned a new value; a move on one path of an `if` or a
+  `match` counts after it
 - Moves have **zero runtime cost** (just pointer copy)
 - A move inside a loop is an error unless the loop is left, or the variable
   assigned again, before the next turn
@@ -149,23 +150,77 @@ fn main() {
 
 ### 2.2 The Rule
 
-As in Rust, the compiler rejects this. A local holding a reference borrows
-the local it points into, from where it takes the reference until its last
-use in its block. Meanwhile the borrowed local cannot be:
+Zeru is single threaded, so a reference forbids only what can invalidate the
+memory it points into. Two references to one place, `&var` or not, are fine,
+and so is writing through a path while references into it live: the
+reference sees the new value. The compiler rejects the example above because
+`push` may move the buffer `first` points into.
 
-- changed, by assignment or a method that takes `var self`
-- moved
-- borrowed with `&var`, nor borrowed at all while a `&var` into it is live
-- left behind by its block while the reference outlives it
+A **loan** is taken by `&place` or `&var place` (and by `get`, a `match`
+binding and a `for` loop). It is **live** from where it is taken to the last
+use, along any path, of a variable holding it, directly or inside a value
+such as a struct, a `T?`, an array or an enum's payload. A raw pointer
+(`*T`) takes no loan and is not checked.
+
+Some steps of a path **own** what comes after them: an element of a `Vec`,
+which lives in its heap buffer, and the payload of an enum, a `T?` or a `T!`,
+which a new variant replaces. While a loan is live, these are errors:
+
+1. Moving out of what it points into, or out of anything inside that.
+2. Ending the variable it points into: its block ends, or the function
+   returns. A function returns a reference only into what its reference
+   parameters (`self` among them) point at.
+3. Assigning a new value to a place the loan reaches through an owning step
+   after it, which frees the old value.
+4. Assigning anything to an enum whose payload the loan points into.
+5. Reallocating a place the loan reaches through an owning step after it:
+   `push`, `pop`, `insert`, `remove`, `clear`, `reserve`, `shrink_to_fit`, a
+   method taking `var self` on a value that owns memory, or `&var` to such a
+   value, which could do the same later.
 
 ```rust
-var first = list.get(0);     // (&i32)?, borrows list
-println("{}", *first.unwrap()); // last use of first
-list.push(4);                // fine: first is no longer used
+var first = &v[0];
+v[2] = 9;                 // fine: a plain write
+v.push(4);                // error (5): the buffer may move
+println("{}", *first);
+
+var r = &v;
+v = [1];                  // fine: r still points at a Vec
+var e = &v[0];
+v = [1];                  // error (3): the old buffer is freed
+println("{} {}", r.len(), *e);
+
+var hp = &var p.hp;
+var mana = &var p.mana;   // fine: two &var, plain data
+*hp -= 1;
+*mana += 1;
+
+match o {
+    Some(x) => { o = None; println("{}", x); } // error (4): x points into Some
+    None => { o = 5; }                          // fine: no binding is live
+}
 ```
 
-Arguments of one call count too: `f(&var v, &v)` is an error. Raw pointers
-(`*T`) borrow nothing and are not checked.
+An access through a reference counts as the same access to what it points
+at: with `var m = &var v` and `var e = &m[0]`, `m.push(1)` is an error while
+`e` is used later. A reference parameter is its own root: inside
+`fn grow(v: &var Vec<i64>)`, `var e = &v[0]; v.push(2);` is an error while
+`e` is used. A reference a function returns may point anywhere inside what
+its reference arguments point at.
+
+A method call takes its receiver first and uses it after the arguments, as
+Rust's two-phase borrows: `v.push(v.len())` is fine, since the arguments only
+read `v`, but `vs[0].push(grow(&var vs))` is an error, since `grow` may move
+the element the receiver points at.
+
+A `for` loop borrows every element of its sequence for the whole loop, and
+a `match` binding borrows the scrutinee while the binding is used:
+
+```rust
+for x in &var v { x += 1; }          // fine
+for x in v { v.push(x); }             // error (5): the loop walks v's buffer
+for x in v { v[0] = x; }              // fine: a plain write
+```
 
 ## 3. Returning References
 
@@ -324,8 +379,8 @@ fn shrink_to_fit(self: &var Vec<T>)
 // Copying
 fn copy(self: &Vec<T>) Vec<T>            // Deep clone
 
-// Iteration is a `for` loop: `for x in v` reads a copy of each element,
-// `for x in &var v` writes each one in place
+// Iteration is a `for` loop: `for x in v` reads each element (a copy of
+// plain data), `for x in &var v` writes each one in place
 ```
 
 *Bounds checking behavior depends on compile mode

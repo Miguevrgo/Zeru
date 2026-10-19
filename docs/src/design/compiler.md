@@ -15,7 +15,7 @@ source ─▶ lexer ─▶ parser ─▶ items ─▶ check ─▶ mir ─▶ lo
 | Lexer, parser | `lexer.rs`, `parser.rs`, `ast.rs` | A token list per file, which the parser walks with one cursor into a syntax tree. The tree is never changed after parsing |
 | Items | `items.rs` | A `DefId` for every function, method, struct, enum, trait and constant, and a scope per module |
 | Check | `check/` | The typed IR of every function instance, or the errors |
-| MIR | `mir/` | Each function as a graph of basic blocks, its drops elaborated |
+| MIR | `mir/` | Each function as a graph of basic blocks, borrow checked, its drops elaborated |
 | Lower | `lower/` | An LLVM module |
 
 ## Names
@@ -46,11 +46,25 @@ generic instance fails, every error it reports carries a note pointing at the
 call that asked for it.
 
 `check/body.rs` checks one instance in a function context (`FnCx`), in the
-manner of rustc's `FnCtxt`. Locals are numbered `LocalId`s. Which ones are
-moved along each path is a vector indexed by them, merged at every join, so a
-move inside a branch or a loop is tracked exactly. Expressions are in
-`expr.rs`, calls and built-in methods in `call.rs`, `match` in `pattern.rs`,
-and constant evaluation, at the width of each integer type, in `consts.rs`.
+manner of rustc's `FnCtxt`. Locals are numbered `LocalId`s. Expressions are
+in `expr.rs`, calls and built-in methods in `call.rs`, `match` in
+`pattern.rs`, and constant evaluation, at the width of each integer type, in
+`consts.rs`.
+
+The checker decides what each expression means, and nothing about where
+values go afterwards:
+
+- Whether a value is read or moved depends on its type: a value that owns
+  memory is moved, plain data is copied. Moving out of a field, an element,
+  a pointer or a view (a `match` binding, `self`) is an error here, since it
+  needs no flow. Whether a moved local is used again is the borrow
+  checker's question.
+- As it walks, `FnCx::diverges` says whether control can reach the current
+  point, as rustc's: a `return`, `break` or `continue` sets it, an `if`
+  diverges when both branches do, a `match` when every arm does, and a
+  `while true` with no `break` out of it. It decides that a function can
+  finish without returning a value, and which arms of a `match` leave, so
+  their type does not count.
 
 Two rules keep errors from cascading:
 
@@ -87,16 +101,64 @@ switch on an integer, a call, a drop, a check, or a return.
 - A scope drops what it owns as it ends, and every exit (`return`, `break`,
   `continue`, `?`, `!`) drops what the scopes it leaves still own, temporaries
   of the statements it leaves first.
-- `match` is a switch on the discriminant. Its bindings, and the element of a
-  `for .. in &var`, are places inside the value matched or walked.
+- `match` is a switch on the discriminant. Each binding is a reference into
+  the value matched, set as its arm is entered.
+- `for x in seq` walks a reference from the first element to one past the
+  last, as Rust's slice iterator; `x` is a copy of the element, or for
+  `&var` or an element that owns memory, the element itself.
+- A built-in method's receiver, and the base of an element whose index
+  calls something, is reached through a reference taken before its
+  arguments are evaluated, as Rust's two-phase borrows.
+- Every scope ends its locals with a `StorageDead`, after their drops, at
+  its end and at every exit; a statement ends its temporaries.
 - Runtime checks (bounds, null, `unwrap`) are `Assert` terminators, and the
   arithmetic, division, shift and float-to-int checks are marked on the
   operation; none exist in release-fast.
 
-`mir/elaborate.rs` then decides each drop, as rustc's drop elaboration: a
+`mir/borrowck.rs` then checks the body (see below), and
+`mir/elaborate.rs` decides each drop, as rustc's drop elaboration: a
 forward dataflow over the blocks finds whether the local may hold a value
 there and whether it may not. A drop runs, goes away, or tests a drop flag, a
 bool local raised as the value arrives and lowered as it leaves.
+
+## The borrow checker
+
+`mir/borrowck.rs` checks references and moves on the MIR of each function,
+in the manner of rustc's MIR borrowck. Zeru is single threaded, so a live
+reference forbids only what can invalidate the memory it points into, never
+aliasing or plain writes (`docs/src/design/memory.md`, section 2).
+
+- **Loans.** `&place` and `&var place` take a loan; so do `get`, a `match`
+  binding and a `for` loop, which the MIR writes as taking an address. A raw
+  `*T` takes none. A reference parameter holds a loan on what it points at
+  from the start.
+- **Places.** A loan's place is a path: a local, then fields, elements,
+  derefs and variants, the payload of a `T?` or `T!` counting as a variant.
+  Through a reference a local holds, a path continues from the places that
+  reference may point at, so an access through `*m` is the same access to
+  what `m` borrows. A reference a call returns may point anywhere inside
+  what its reference arguments point at.
+- **Which locals hold which loans** is a forward dataflow: an assignment
+  hands the destination the loans of the value, and a whole assignment or the
+  end of a local's scope takes them away. A value holds a loan directly or
+  through a part that is a reference.
+- **Liveness** follows the locals that can hold a reference: a local is
+  live where it may be used later, found by walking back from each use to
+  the definitions that reach it. A loan is live where a local holding it is
+  live or is reached through a live reference. A `drop` counts as a use
+  only for a type with a `drop` method.
+- **Moves.** A forward dataflow finds the moves out of a local that may have
+  happened before each point; using the local there is an error.
+
+With a loan live, it is an error to move out of a place that overlaps it,
+to end the local it points into, and to drop, reallocate (the Vec mutators, a
+`var self` method, creating `&var` to a value that owns memory) or replace
+(for a variant) a place whose loan continues under it through an owning step:
+an element of a Vec or a variant's payload. Each error points at the access
+and has notes at the loan and at the later use that keeps it live.
+
+The work grows with the size of a function and how long its references
+live, not with the square of its size.
 
 ## Lowering
 

@@ -240,13 +240,6 @@ impl FnCx<'_, '_> {
 
     fn identifier(&mut self, name: &str, span: Span) -> Expr {
         if let Some(local) = self.local(name) {
-            if self.moved_at(local).is_some() {
-                self.error(
-                    format!("Use of moved value '{name}'. Value was previously moved and is no longer valid"),
-                    span,
-                );
-                return self.error_expr(span);
-            }
             let ty = self.local_ty(local);
             return self.mk(ExprKind::Read(Place::Local(local)), ty, span);
         }
@@ -438,8 +431,6 @@ impl FnCx<'_, '_> {
         let (place, ty) = self.place(inner);
         if mutable {
             self.require_mutable(&place, inner, span);
-        } else if let Some(root) = super::body::local_root(&place) {
-            self.require_unchanging(root, span);
         }
         if self.temporary(&place, ty, inner) {
             self.error("Cannot create reference to a temporary value", span);
@@ -475,9 +466,8 @@ impl FnCx<'_, '_> {
             Some(local) if !self.local_mutable(local) => {
                 let name = self.local_name(local).to_string();
                 self.error(format!("Cannot reassign constant variable '{name}'"), span);
-                self.require_unlocked(target, span);
             }
-            Some(_) => self.require_unlocked(target, span),
+            Some(_) => {}
             None => self.require_mutable(&place, target, span),
         }
         if let Place::Index(base, _) = &place
@@ -518,15 +508,6 @@ impl FnCx<'_, '_> {
             }
         };
         self.consume(&mut value);
-        let loans = self.loans_of(&value);
-        if let Some(local) = revived {
-            self.set_moved(local, None);
-            self.clear_loans(local);
-        }
-        match super::body::local_root(&place) {
-            Some(root) => self.hold(root, loans, span),
-            None => self.require_outliving(&loans, "store"),
-        }
         let kind = match compound {
             Some(base) => ExprKind::CompoundAssign {
                 op: binop(&base),

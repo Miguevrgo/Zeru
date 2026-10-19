@@ -1,0 +1,37 @@
+status: compile error
+-- stderr
+Error: Cannot move 'v' while 'e' still refers into it
+   ╭─[ tests/ui/references/loan_inside_enum_and_array.zr:6:10 ]
+   │
+ 6 │     take(v);
+   │          ┬
+   │          ╰── Cannot move 'v' while 'e' still refers into it
+   │
+   ├─[ tests/ui/references/loan_inside_enum_and_array.zr:6:10 ]
+   │
+ 5 │     var e = R::Has(&v);
+   │                    ─┬
+   │                     ╰── borrowed here
+   │
+ 7 │     match e { R::Has(r) => { println("{}", r[0]); } R::Nothing => {} }
+   │     ─────────────────────────────────┬────────────────────────────────
+   │                                      ╰────────────────────────────────── used later here
+───╯
+Error: Cannot move 'u' while 'a' still refers into it
+    ╭─[ tests/ui/references/loan_inside_enum_and_array.zr:10:10 ]
+    │
+ 10 │     take(u);
+    │          ┬
+    │          ╰── Cannot move 'u' while 'a' still refers into it
+    │
+    ├─[ tests/ui/references/loan_inside_enum_and_array.zr:10:10 ]
+    │
+  9 │     var a = [&u; 2];
+    │              ─┬
+    │               ╰── borrowed here
+    │
+ 11 │     println("{}", a[0][1]);
+    │                   ──┬─
+    │                     ╰─── used later here
+────╯
+[-] Error: aborting due to previous error

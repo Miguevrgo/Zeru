@@ -1,0 +1,2 @@
+fn reset(o: &var (&i64)?) { *o = None; }
+fn main() { var k: i64 = 3; var o: (&i64)? = &k; match o { Some(r) => { reset(&var o); println("{}", *r); } None => {} } }

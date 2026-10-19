@@ -4,7 +4,9 @@ Error: 'r' refers into 'x', which ends with its block first
    ╭─[ tests/ui/references/reference_outlives_nested_block.zr:4:37 ]
    │
  4 │     if true { { var x: i32 = 1; r = &x; } println("{}", *r); }
-   │                                     ─┬
-   │                                      ╰── 'r' refers into 'x', which ends with its block first
+   │                                     ─┬                   ┬
+   │                                      ╰────────────────────── 'r' refers into 'x', which ends with its block first
+   │                                                          │
+   │                                                          ╰── used later here
 ───╯
 [-] Error: aborting due to previous error

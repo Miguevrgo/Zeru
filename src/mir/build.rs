@@ -6,7 +6,7 @@
 
 use std::mem::replace;
 
-use crate::errors::Span;
+use crate::errors::{Span, ZeruError};
 use crate::lower::SafetyMode;
 use crate::tir::{
     self, Arm, BinOp, Builtin, Expr, ExprKind, FnId, Payload, Program, Stmt, StmtKind, UnOp,
@@ -18,17 +18,29 @@ use super::{
     Panic, Place, Projection, RETURN, Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
 };
 
-/// The MIR of every function of `program`, indexed by [`FnId`].
-pub fn build(program: &mut Program, mode: SafetyMode) -> Vec<Body> {
+/// The MIR of every function of `program`, indexed by [`FnId`], or the
+/// errors the borrow checker found in it.
+pub fn build(program: &mut Program, mode: SafetyMode) -> Result<Vec<Body>, Vec<ZeruError>> {
     let functions = std::mem::take(&mut program.functions);
-    functions
-        .iter()
-        .map(|function| {
-            let mut body = Builder::new(program, function, mode.emit_safety_checks()).build();
-            super::elaborate::elaborate(&mut body, program);
-            body
-        })
-        .collect()
+    let mut errors: Vec<ZeruError> = Vec::new();
+    let mut bodies = Vec::new();
+    for function in &functions {
+        let mut body = Builder::new(program, function, mode.emit_safety_checks()).build();
+        for error in super::borrowck::check(&body, program) {
+            if !errors
+                .iter()
+                .any(|e| e.span == error.span && e.message == error.message)
+            {
+                errors.push(error);
+            }
+        }
+        super::elaborate::elaborate(&mut body, program);
+        bodies.push(body);
+    }
+    match errors.is_empty() {
+        true => Ok(bodies),
+        false => Err(errors),
+    }
 }
 
 /// A loop being built: where `continue` and `break` go, and how many scopes
@@ -40,6 +52,9 @@ struct LoopScope {
     temps: usize,
 }
 
+/// One function's MIR being built. `scopes` holds the locals each open
+/// scope ends and whether it drops each; `temps` the temporaries of the
+/// statements being built and whether each is dropped as they end.
 struct Builder<'a> {
     program: &'a mut Program,
     function: &'a tir::Function,
@@ -49,8 +64,8 @@ struct Builder<'a> {
     current: Option<BlockId>,
     map: Vec<Option<Local>>,
     views: Vec<Option<Place>>,
-    scopes: Vec<Vec<Local>>,
-    temps: Vec<Local>,
+    scopes: Vec<Vec<(Local, bool)>>,
+    temps: Vec<(Local, bool)>,
     loops: Vec<LoopScope>,
     span: Span,
 }
@@ -84,7 +99,7 @@ impl<'a> Builder<'a> {
         for &param in &function.params {
             let local = &function.locals[param.0 as usize];
             if local.view {
-                let pointer = self.program.types.intern(TyKind::Ptr(local.ty));
+                let pointer = self.program.types.intern(TyKind::Ref(local.ty));
                 let mir = self.local(pointer, Some(local.name.clone()));
                 self.views[param.0 as usize] = Some(Place::local(mir).project(Projection::Deref));
             } else {
@@ -147,11 +162,10 @@ impl<'a> Builder<'a> {
         mir
     }
 
-    /// The current scope drops `local` as it ends, if it owns anything.
+    /// The current scope ends `local`, and drops it if it owns anything.
     fn own(&mut self, local: Local) {
-        if self.program.needs_drop(self.locals[local.0 as usize].ty) {
-            self.scopes.last_mut().unwrap().push(local);
-        }
+        let drop = self.program.needs_drop(self.locals[local.0 as usize].ty);
+        self.scopes.last_mut().unwrap().push((local, drop));
     }
 
     fn push(&mut self, kind: StatementKind) {
@@ -210,16 +224,22 @@ impl<'a> Builder<'a> {
     }
 
     /// Drop the temporaries from `temps` on and every value the scopes from
-    /// `scopes` on hold, last made first, for a jump out of them.
+    /// `scopes` on hold, last made first, for a jump out of them, then end
+    /// them all.
     fn exit(&mut self, temps: usize, scopes: usize) {
-        let owned: Vec<Local> = self.temps[temps..]
+        let ending: Vec<(Local, bool)> = self.temps[temps..]
             .iter()
             .rev()
             .chain(self.scopes[scopes..].iter().flatten().rev())
             .copied()
             .collect();
-        for local in owned {
-            self.drop(Place::local(local));
+        for &(local, drop) in &ending {
+            if drop {
+                self.drop(Place::local(local));
+            }
+        }
+        for (local, _) in ending {
+            self.push(StatementKind::StorageDead(local));
         }
     }
 
@@ -229,8 +249,13 @@ impl<'a> Builder<'a> {
     }
 
     fn block(&mut self, block: &tir::Block) {
+        self.scope(|this| this.stmts(&block.stmts));
+    }
+
+    /// `inner` built in a scope of its own, which ends after it.
+    fn scope(&mut self, inner: impl FnOnce(&mut Self)) {
         self.scopes.push(Vec::new());
-        self.stmts(&block.stmts);
+        inner(self);
         self.exit(self.temps.len(), self.scopes.len() - 1);
         self.scopes.pop();
     }
@@ -295,25 +320,23 @@ impl<'a> Builder<'a> {
                 self.current = Some(merge);
             }
             StmtKind::While { cond, body } => {
-                let cond_bb = self.new_block();
-                self.goto(cond_bb);
-                self.current = Some(cond_bb);
-                let cond = self.condition(cond);
-                let body_bb = self.new_block();
-                let after = self.new_block();
-                self.switch(cond, vec![(0, after)], body_bb);
-                self.current = Some(body_bb);
-                self.loop_body(body, cond_bb, after);
-                self.goto(cond_bb);
-                self.current = Some(after);
+                self.looping(|this| this.condition(cond), |_| {}, body, |_| {})
             }
             StmtKind::ForRange {
                 var,
                 start,
                 end,
                 body,
-            } => self.for_range(*var, start, end, body),
-            StmtKind::ForEach { var, seq, body } => self.for_each(*var, seq, body),
+            } => self.scope(|this| this.for_range(*var, start, end, body)),
+            StmtKind::ForEach {
+                var,
+                seq,
+                body,
+                within,
+            } => self.scope(|this| {
+                this.span = *within;
+                this.for_each(*var, seq, body)
+            }),
             StmtKind::Block(block) => self.block(block),
         }
         self.drop_temps(mark);
@@ -328,58 +351,38 @@ impl<'a> Builder<'a> {
         value
     }
 
-    fn loop_body(&mut self, body: &tir::Block, next: BlockId, exit: BlockId) {
-        self.loops.push(LoopScope {
-            next,
-            exit,
-            scopes: self.scopes.len(),
-            temps: self.temps.len(),
-        });
-        self.block(body);
-        self.loops.pop();
-    }
-
-    /// The test at the top of a counting loop, `index < bound`, then its
-    /// body, then `index += 1`.
-    fn counting(
+    /// A loop: `test` decides at the top of each turn whether to take it,
+    /// `at_start` begins it in the scope of `body`, and `step` ends it.
+    fn looping(
         &mut self,
-        index: Local,
-        bound: Operand,
-        body: &tir::Block,
+        test: impl FnOnce(&mut Self) -> Operand,
         at_start: impl FnOnce(&mut Self),
+        body: &tir::Block,
+        step: impl FnOnce(&mut Self),
     ) {
-        let ty = self.locals[index.0 as usize].ty;
         let cond_bb = self.new_block();
         self.goto(cond_bb);
         self.current = Some(cond_bb);
-        let more = self.temp(Types::BOOL);
-        self.assign(
-            Place::local(more),
-            Rvalue::Binary {
-                op: BinOp::Lt,
-                left: Operand::Copy(Place::local(index)),
-                right: bound,
-                checked: false,
-            },
-        );
+        let more = test(self);
         let body_bb = self.new_block();
-        let incr = self.new_block();
+        let next = self.new_block();
         let after = self.new_block();
-        self.switch(Operand::Move(Place::local(more)), vec![(0, after)], body_bb);
+        self.switch(more, vec![(0, after)], body_bb);
         self.current = Some(body_bb);
-        at_start(self);
-        self.loop_body(body, incr, after);
-        self.goto(incr);
-        self.current = Some(incr);
-        self.assign(
-            Place::local(index),
-            Rvalue::Binary {
-                op: BinOp::AddWrap,
-                left: Operand::Copy(Place::local(index)),
-                right: constant(1, ty),
-                checked: false,
-            },
-        );
+        self.loops.push(LoopScope {
+            next,
+            exit: after,
+            scopes: self.scopes.len(),
+            temps: self.temps.len(),
+        });
+        self.scope(|this| {
+            at_start(this);
+            this.stmts(&body.stmts);
+        });
+        self.loops.pop();
+        self.goto(next);
+        self.current = Some(next);
+        step(self);
         self.goto(cond_bb);
         self.current = Some(after);
     }
@@ -388,26 +391,68 @@ impl<'a> Builder<'a> {
         let first = self.as_operand(start);
         let bound = reused(self.as_operand(end));
         let index = self.declare(var);
+        self.own(index);
         self.assign(Place::local(index), Rvalue::Use(first));
-        self.counting(index, bound, body, |_| {});
+        let ty = self.locals[index.0 as usize].ty;
+        let at = Operand::Copy(Place::local(index));
+        self.looping(
+            |this| this.binary(BinOp::Lt, at.clone(), bound),
+            |_| {},
+            body,
+            |this| {
+                let rvalue = Rvalue::Binary {
+                    op: BinOp::AddWrap,
+                    left: at.clone(),
+                    right: constant(1, ty),
+                    checked: false,
+                };
+                this.assign(Place::local(index), rvalue);
+            },
+        );
     }
 
+    /// `for x in seq`: a reference walks from the first element to one past
+    /// the last, as Rust's slice iterator, so the loop borrows every element
+    /// throughout.
     fn for_each(&mut self, var: tir::LocalId, seq: &tir::Place, body: &tir::Block) {
         let seq = self.as_place(seq);
+        let elem = match self.types().kind(self.place_ty(&seq)) {
+            TyKind::Array(elem, _) | TyKind::Vec(elem) | TyKind::Slice(elem) => *elem,
+            _ => unreachable!("only an array or a Vec is walked"),
+        };
+        let pointer = self.program.types.intern(TyKind::Ref(elem));
         let len = self.temp(Types::USIZE);
         self.assign(Place::local(len), Rvalue::Len(seq.clone()));
-        let count = Operand::Copy(Place::local(len));
-        let index = self.temp(Types::USIZE);
-        self.assign(Place::local(index), Rvalue::Use(constant(0, Types::USIZE)));
-        let element = seq.project(Projection::Index(index));
-        self.counting(index, count, body, |this| {
-            if this.function.locals[var.0 as usize].view {
-                this.views[var.0 as usize] = Some(element);
-            } else {
-                let copy = this.declare(var);
-                this.assign(Place::local(copy), Rvalue::Use(Operand::Copy(element)));
-            }
-        });
+        let first = self.temp(Types::USIZE);
+        self.assign(Place::local(first), Rvalue::Use(constant(0, Types::USIZE)));
+        let at = self.local(pointer, Some("for".to_string()));
+        let element = seq.project(Projection::Index(first));
+        self.assign(Place::local(at), Rvalue::AddressOf(element));
+        let end = self.temp(pointer);
+        let step = |by: Operand| Rvalue::Binary {
+            op: BinOp::PtrAdd,
+            left: Operand::Copy(Place::local(at)),
+            right: by,
+            checked: false,
+        };
+        self.assign(Place::local(end), step(Operand::Move(Place::local(len))));
+        let current = Place::local(at).project(Projection::Deref);
+        self.looping(
+            |this| {
+                let end = Operand::Copy(Place::local(end));
+                this.binary(BinOp::Ne, Operand::Copy(Place::local(at)), end)
+            },
+            |this| match this.function.locals[var.0 as usize].view {
+                true => this.views[var.0 as usize] = Some(current),
+                false => {
+                    let copy = this.declare(var);
+                    this.scopes.last_mut().unwrap().push((copy, false));
+                    this.assign(Place::local(copy), Rvalue::Use(Operand::Copy(current)));
+                }
+            },
+            body,
+            |this| this.assign(Place::local(at), step(constant(1, Types::USIZE))),
+        );
     }
 
     fn place_ty(&self, place: &Place) -> Ty {
@@ -429,7 +474,18 @@ impl<'a> Builder<'a> {
             },
             tir::Place::Field(base, at) => self.as_place(base).project(Projection::Field(*at)),
             tir::Place::Index(base, index) => {
-                let base = self.as_place(base);
+                let mut base = self.as_place(base);
+                if !simple(index)
+                    && base
+                        .projection
+                        .iter()
+                        .any(|p| matches!(p, Projection::Index(_)))
+                {
+                    let pointer = self.program.types.intern(TyKind::Ref(self.place_ty(&base)));
+                    let held = self.temp(pointer);
+                    self.assign(Place::local(held), Rvalue::AddressOf(base));
+                    base = Place::local(held).project(Projection::Deref);
+                }
                 let at = self.index(index);
                 if self.checks {
                     let len = self.temp(Types::USIZE);
@@ -456,7 +512,13 @@ impl<'a> Builder<'a> {
                 }
                 Place::local(pointer).project(Projection::Deref)
             }
-            tir::Place::Temp(value) => Place::local(self.as_temp(value)),
+            tir::Place::Temp(value) => {
+                let temp = self.as_temp(value);
+                if self.temps.last() != Some(&(temp, true)) {
+                    self.temps.push((temp, false));
+                }
+                Place::local(temp)
+            }
         }
     }
 
@@ -530,7 +592,7 @@ impl<'a> Builder<'a> {
         let temp = self.temp(expr.ty);
         self.expr_into(Some(Place::local(temp)), expr);
         if !matches!(expr.kind, ExprKind::Read(_)) && self.program.needs_drop(expr.ty) {
-            self.temps.push(temp);
+            self.temps.push((temp, true));
         }
         temp
     }
@@ -747,6 +809,8 @@ impl<'a> Builder<'a> {
         self.current = Some(merge);
     }
 
+    /// `match`: a switch on the tag. Each binding is a reference into the
+    /// scrutinee, which each alternative of its arm sets as it enters.
     fn match_expr(&mut self, dest: Option<Place>, scrutinee: &tir::Place, arms: &[Arm]) {
         let place = self.as_place(scrutinee);
         let subject = self.place_ty(&place);
@@ -763,23 +827,27 @@ impl<'a> Builder<'a> {
         let mut entries = Vec::new();
         for arm in arms {
             let body = self.new_block();
-            let uniform = arm
+            let pointers: Vec<Local> = arm
                 .bindings
                 .iter()
-                .all(|(_, payloads)| payloads.iter().all(|&p| p == payloads[0]));
-            let mut alternatives = Vec::new();
-            for &value in &arm.tags {
-                let entry = match uniform {
-                    true => body,
-                    false => self.new_block(),
-                };
-                targets.push((value, entry));
-                alternatives.push(entry);
-            }
+                .map(|(local, _)| self.binding(*local))
+                .collect();
+            let alternatives: Vec<BlockId> = arm
+                .tags
+                .iter()
+                .map(|&value| {
+                    let entry = match pointers.is_empty() {
+                        true => body,
+                        false => self.new_block(),
+                    };
+                    targets.push((value, entry));
+                    entry
+                })
+                .collect();
             if arm.tags.is_empty() {
                 otherwise = Some(body);
             }
-            entries.push((body, (!uniform).then_some(alternatives)));
+            entries.push((body, pointers, alternatives));
         }
         let otherwise = otherwise.unwrap_or_else(|| {
             let block = self.new_block();
@@ -790,15 +858,21 @@ impl<'a> Builder<'a> {
             block
         });
         self.switch(Operand::Move(Place::local(tag)), targets, otherwise);
-        for (arm, (body, alternatives)) in arms.iter().zip(entries) {
-            match alternatives {
-                None => {
-                    for (local, payloads) in &arm.bindings {
-                        self.views[local.0 as usize] = Some(payload(&place, payloads[0]));
-                    }
+        for (arm, (body, pointers, alternatives)) in arms.iter().zip(entries) {
+            let outer = replace(&mut self.span, arm.span);
+            for (at, entry) in alternatives
+                .into_iter()
+                .enumerate()
+                .filter(|(_, e)| *e != body)
+            {
+                self.current = Some(entry);
+                for ((_, payloads), &pointer) in arm.bindings.iter().zip(&pointers) {
+                    let reached = payload(&place, payloads[at]);
+                    self.assign(Place::local(pointer), Rvalue::AddressOf(reached));
                 }
-                Some(alternatives) => self.bind_alternatives(arm, &place, &alternatives, body),
+                self.goto(body);
             }
+            self.span = outer;
             self.current = Some(body);
             self.expr_into(dest.clone(), &arm.body);
             self.goto(merge);
@@ -806,25 +880,15 @@ impl<'a> Builder<'a> {
         self.current = Some(merge);
     }
 
-    /// The bindings of an arm whose alternatives hold them in different
-    /// places: a pointer to each, set as each alternative enters the arm.
-    fn bind_alternatives(&mut self, arm: &Arm, place: &Place, entries: &[BlockId], body: BlockId) {
-        let mut pointers = Vec::new();
-        for (local, _) in &arm.bindings {
-            let ty = self.function.locals[local.0 as usize].ty;
-            let pointer = self.program.types.intern(TyKind::Ptr(ty));
-            let mir = self.temp(pointer);
-            self.views[local.0 as usize] = Some(Place::local(mir).project(Projection::Deref));
-            pointers.push(mir);
-        }
-        for (at, &entry) in entries.iter().enumerate() {
-            self.current = Some(entry);
-            for ((_, payloads), &pointer) in arm.bindings.iter().zip(&pointers) {
-                let reached = payload(place, payloads[at]);
-                self.assign(Place::local(pointer), Rvalue::AddressOf(reached));
-            }
-            self.goto(body);
-        }
+    /// The reference a `match` binding reads its value through, named as
+    /// the binding.
+    fn binding(&mut self, local: tir::LocalId) -> Local {
+        let decl = &self.function.locals[local.0 as usize];
+        let name = Some(decl.name.clone()).filter(|name| !name.is_empty());
+        let pointer = self.program.types.intern(TyKind::Ref(decl.ty));
+        let mir = self.local(pointer, name);
+        self.views[local.0 as usize] = Some(Place::local(mir).project(Projection::Deref));
+        mir
     }
 
     /// `value?` or `value!`: the payload, or else the None or the error
@@ -862,9 +926,18 @@ impl<'a> Builder<'a> {
     }
 
     /// The place a builtin works on, and whether it takes the value away.
-    fn receiver(&mut self, arg: &Expr) -> (Place, bool) {
+    /// One `borrowed` while the other arguments are evaluated is reached
+    /// through a reference taken first, as Rust's two-phase borrows.
+    fn receiver(&mut self, arg: &Expr, borrowed: bool) -> (Place, bool) {
         let outer = replace(&mut self.span, arg.span);
         let receiver = match &arg.kind {
+            ExprKind::AddressOf(place) if borrowed => {
+                let place = self.as_place(place);
+                let pointer = self.temp(arg.ty);
+                self.span = outer;
+                self.assign(Place::local(pointer), Rvalue::AddressOf(place));
+                (Place::local(pointer).project(Projection::Deref), false)
+            }
             ExprKind::AddressOf(place) | ExprKind::Read(place) => (self.as_place(place), false),
             ExprKind::Move(place) => (self.as_place(place), true),
             _ => (Place::local(self.as_temp(arg)), true),
@@ -884,7 +957,7 @@ impl<'a> Builder<'a> {
             Builtin::VecNew => Rvalue::VecNew(None),
             Builtin::VecWithCapacity => Rvalue::VecNew(Some(operand(self, 0))),
             _ => {
-                let (held, moved) = self.receiver(&args[0]);
+                let (held, moved) = self.receiver(&args[0], args.len() > 1);
                 match builtin {
                     Builtin::VecLen | Builtin::SliceLen => Rvalue::Len(held),
                     Builtin::VecCapacity => Rvalue::Capacity(held),
@@ -998,16 +1071,20 @@ fn payload(place: &Place, payload: Payload) -> Place {
 
 /// Whether evaluating `place` runs nothing that could change another place.
 fn plain(place: &tir::Place) -> bool {
-    let simple = |expr: &Expr| match &expr.kind {
-        ExprKind::Read(place) => plain(place),
-        kind => matches!(kind, ExprKind::Int(_)),
-    };
     match place {
         tir::Place::Local(_) => true,
         tir::Place::Field(base, _) => plain(base),
         tir::Place::Index(base, index) => plain(base) && simple(index),
         tir::Place::Deref(pointer) => simple(pointer),
         tir::Place::Temp(_) => false,
+    }
+}
+
+/// Whether `expr` is a constant or a read of a plain place.
+fn simple(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Read(place) => plain(place),
+        kind => matches!(kind, ExprKind::Int(_)),
     }
 }
 

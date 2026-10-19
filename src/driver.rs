@@ -101,7 +101,10 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
         Err(errors) => return report(&errors),
         Ok(program) => program,
     };
-    let bodies = crate::mir::build(&mut program, mode);
+    let bodies = match crate::mir::build(&mut program, mode) {
+        Err(errors) => return report(&errors),
+        Ok(bodies) => bodies,
+    };
     let context = Context::create();
     let module = context.create_module(name);
     let machine = crate::lower::host_machine(mode);

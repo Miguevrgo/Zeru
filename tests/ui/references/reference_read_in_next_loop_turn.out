@@ -4,7 +4,9 @@ Error: 'r' refers into 'w', which ends with its block first
    ╭─[ tests/ui/references/reference_read_in_next_loop_turn.zr:5:80 ]
    │
  5 │     while i < 2 { if i == 1 { println("{}", *r); } var w: Vec<i64> = [42]; r = w.get(0).unwrap(); i += 1; }
-   │                                                                                ┬
-   │                                                                                ╰── 'r' refers into 'w', which ends with its block first
+   │                                              ┬                                 ────┬───
+   │                                              ╰─────────────────────────────────────────── used here in the next turn of the loop
+   │                                                                                    │
+   │                                                                                    ╰───── 'r' refers into 'w', which ends with its block first
 ───╯
 [-] Error: aborting due to previous error

@@ -1,0 +1,7 @@
+fn take(v: Vec<i64>) {}
+fn main() {
+    var v: Vec<i64> = [1];
+    var c = true;
+    if c { take(v); while true { match c { true => match c { true => { break; }, false => {} }, false => {} } } }
+    v.push(4);
+}

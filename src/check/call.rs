@@ -221,10 +221,11 @@ impl FnCx<'_, '_> {
 
         match self.cx.types.kind(ty).clone() {
             TyKind::Vec(elem) => {
-                if VEC_MUTATORS.contains(&name) {
+                let mutable = VEC_MUTATORS.contains(&name);
+                if mutable {
                     self.require_mutable(&place, object, span);
                 }
-                let receiver = self.address(place, ty, object.span);
+                let receiver = self.address(place, ty, mutable, object.span);
                 self.vec_method(name, elem, receiver, args, span)
             }
             TyKind::Slice(_) => {
@@ -266,7 +267,8 @@ impl FnCx<'_, '_> {
                 };
                 self.cx.check_visible(def, self.scope.module, span);
                 let sig = self.cx.sig(def);
-                match sig.as_ref().map(|sig| sig.receiver) {
+                let receiver = sig.as_ref().map(|sig| sig.receiver);
+                match receiver {
                     Some(Receiver::None) => {
                         let full = self.cx.items.item(def).name.clone();
                         self.error(
@@ -283,7 +285,8 @@ impl FnCx<'_, '_> {
                     self.check_args_only(args);
                     return self.error_expr(span);
                 };
-                let receiver = self.address(place, struct_ty, object.span);
+                let mutable = receiver == Some(Receiver::Mutable);
+                let receiver = self.address(place, struct_ty, mutable, object.span);
                 self.call_def(def, known, Some(receiver), args, expected, span)
             }
             _ => {
@@ -315,7 +318,7 @@ impl FnCx<'_, '_> {
     /// as Rust's `cloned()`.
     fn copy_referent(&mut self, scrutinee: Place, reference: Ty, inner: Ty, span: Span) -> Expr {
         self.enter();
-        let binding = self.declare("", reference, false, true, true);
+        let binding = self.declare("", reference, false, true);
         self.leave();
         let pointer = self.mk(ExprKind::Read(Place::Local(binding)), reference, span);
         let referent = Place::Deref(Box::new(pointer));
@@ -334,18 +337,23 @@ impl FnCx<'_, '_> {
                 tags: vec![1],
                 bindings: vec![(binding, vec![Payload::SomeValue])],
                 body: some,
+                span,
             },
             Arm {
                 tags: Vec::new(),
                 bindings: Vec::new(),
                 body: self.mk(ExprKind::None, ty, span),
+                span,
             },
         ];
         self.mk(ExprKind::Match { scrutinee, arms }, ty, span)
     }
 
-    fn address(&mut self, place: Place, ty: Ty, span: Span) -> Expr {
-        let pointer = self.cx.types.intern(TyKind::Ptr(ty));
+    fn address(&mut self, place: Place, ty: Ty, mutable: bool, span: Span) -> Expr {
+        let pointer = match mutable {
+            true => self.cx.types.intern(TyKind::RefMut(ty)),
+            false => self.cx.types.intern(TyKind::Ref(ty)),
+        };
         self.mk(ExprKind::AddressOf(place), pointer, span)
     }
 
@@ -484,7 +492,6 @@ impl FnCx<'_, '_> {
         let (late, early): (Vec<usize>, Vec<usize>) =
             (0..args.len()).partition(|&at| written_value(&args[at]));
         let mut checked: Vec<Option<Expr>> = (0..args.len()).map(|_| None).collect();
-        let pending = self.pending_loans.len();
         for at in early {
             checked[at] = Some(self.argument(&args[at], params[at], at));
         }
@@ -494,7 +501,6 @@ impl FnCx<'_, '_> {
         for at in late {
             checked[at] = Some(self.argument(&args[at], params[at], at));
         }
-        self.pending_loans.truncate(pending);
 
         let Some(id) = self.call_instance(def, generics, span) else {
             return self.error_expr(span);
@@ -518,8 +524,6 @@ impl FnCx<'_, '_> {
         ) {
             self.consume(&mut value);
         }
-        let loans = self.loans_of(&value);
-        self.pending_loans.extend(loans);
         value
     }
 
@@ -734,19 +738,8 @@ impl FnCx<'_, '_> {
                 return self.error_expr(span);
             }
         };
-        let root = match &receiver.kind {
-            ExprKind::AddressOf(place) => super::body::local_root(place),
-            _ => None,
-        };
         let mut values = vec![receiver];
         values.extend(self.vec_args(name, elem, args, span));
-        if let (Builtin::VecPush | Builtin::VecInsert, Some(item)) = (builtin, values.last()) {
-            let loans = self.loans_of(item);
-            match root {
-                Some(root) => self.hold(root, loans, span),
-                None => self.require_outliving(&loans, "store"),
-            }
-        }
         let ty = match builtin {
             Builtin::VecLen | Builtin::VecCapacity => Types::USIZE,
             Builtin::VecIsEmpty => Types::BOOL,

@@ -1,0 +1,14 @@
+status: compile error
+-- stderr
+Error: Cannot change 's' while 'r' still refers into it
+   ╭─[ tests/ui/references/var_self_resets_variant.zr:8:30 ]
+   │
+ 8 │     match s.o { Some(r) => { s.reset(); println("{}", *r); } None => {} }
+   │                 ───┬───      ┬                         ┬
+   │                    ╰────────────────────────────────────── borrowed here
+   │                              │                         │
+   │                              ╰──────────────────────────── Cannot change 's' while 'r' still refers into it
+   │                                                        │
+   │                                                        ╰── used later here
+───╯
+[-] Error: aborting due to previous error

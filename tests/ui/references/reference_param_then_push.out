@@ -1,0 +1,14 @@
+status: compile error
+-- stderr
+Error: Cannot change 'v' while 'e' still refers into it
+   ╭─[ tests/ui/references/reference_param_then_push.zr:1:44 ]
+   │
+ 1 │ fn grow(v: &var Vec<i64>) { var e = &v[0]; v.push(2); println("{}", *e); }
+   │                                     ──┬──  ────┬────                 ┬
+   │                                       ╰───────────────────────────────── borrowed here
+   │                                                │                     │
+   │                                                ╰──────────────────────── Cannot change 'v' while 'e' still refers into it
+   │                                                                      │
+   │                                                                      ╰── used later here
+───╯
+[-] Error: aborting due to previous error

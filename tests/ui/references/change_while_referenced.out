@@ -6,6 +6,16 @@ Error: Cannot change 'v' while 'r' still refers into it
  4 │     v.push(3);
    │     ────┬────
    │         ╰────── Cannot change 'v' while 'r' still refers into it
+   │
+   ├─[ tests/ui/references/change_while_referenced.zr:4:5 ]
+   │
+ 3 │     var r = v.get(0);
+   │             ────┬───
+   │                 ╰───── borrowed here
+   │
+ 5 │     println("{}", *r.unwrap());
+   │                    ─────┬────
+   │                         ╰────── used later here
 ───╯
 Error: Cannot change 'v' while 'e' still refers into it
    ╭─[ tests/ui/references/change_while_referenced.zr:7:5 ]
@@ -13,5 +23,15 @@ Error: Cannot change 'v' while 'e' still refers into it
  7 │     v = [9];
    │     ───┬───
    │        ╰───── Cannot change 'v' while 'e' still refers into it
+   │
+   ├─[ tests/ui/references/change_while_referenced.zr:7:5 ]
+   │
+ 6 │     var e = &v[1];
+   │             ──┬──
+   │               ╰──── borrowed here
+   │
+ 8 │     println("{}", *e);
+   │                    ┬
+   │                    ╰── used later here
 ───╯
 [-] Error: aborting due to previous error

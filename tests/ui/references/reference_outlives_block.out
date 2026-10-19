@@ -4,7 +4,11 @@ Error: 'r' refers into 'w', which ends with its block first
    ╭─[ tests/ui/references/reference_outlives_block.zr:6:13 ]
    │
  6 │         r = w.get(0);
-   │             ┬
-   │             ╰── 'r' refers into 'w', which ends with its block first
+   │             ────┬───
+   │                 ╰───── 'r' refers into 'w', which ends with its block first
+   │
+ 8 │     println("{}", r.is_some());
+   │                   ─────┬─────
+   │                        ╰─────── used later here
 ───╯
 [-] Error: aborting due to previous error

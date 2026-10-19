@@ -1,0 +1,13 @@
+struct Counter {
+    items: Vec<i64>,
+    fn add(var self, n: usize) { self.items.push(n as i64); }
+    fn size(self, n: usize) usize { return self.items.len() + n; }
+}
+fn grow(cs: &var Vec<Counter>) usize { cs.push(Counter { items: [] }); return 0; }
+fn main() {
+    var cs: Vec<Counter> = [Counter { items: [] }];
+    cs[0].add(grow(&var cs));
+    println("{}", cs[0].size(grow(&var cs)));
+    cs[0].add(cs.len());
+    println("{}", cs[0].size(cs.len()));
+}

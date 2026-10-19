@@ -4,7 +4,11 @@ Error: Cannot keep a reference into a temporary value past its statement; store 
    ╭─[ tests/ui/references/reference_into_temporary.zr:3:13 ]
    │
  3 │     var r = mk().get(0).unwrap();
-   │             ──┬─
-   │               ╰─── Cannot keep a reference into a temporary value past its statement; store the value in a variable first
+   │             ─────┬─────
+   │                  ╰─────── Cannot keep a reference into a temporary value past its statement; store the value in a variable first
+   │
+ 5 │     println("{}", *r);
+   │                    ┬
+   │                    ╰── used later here
 ───╯
 [-] Error: aborting due to previous error

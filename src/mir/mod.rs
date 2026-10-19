@@ -4,6 +4,7 @@
 //! translates. `build` makes it from the typed IR and `elaborate` decides
 //! which drops run and which need a flag.
 
+mod borrowck;
 mod build;
 mod elaborate;
 
@@ -62,6 +63,9 @@ pub enum StatementKind {
     /// `__zeru_copy_bytes(to, from, count)`.
     CopyBytes(Operand, Operand, Operand),
     Flush,
+    /// The scope of a variable or temporary ends: nothing may refer into it
+    /// from here on. Only the borrow checker reads it.
+    StorageDead(Local),
     /// The text around each value, the values already evaluated.
     Print {
         stderr: bool,
@@ -244,7 +248,8 @@ impl StatementKind {
             StatementKind::Print { values, .. } => values.iter().collect(),
             StatementKind::VecClear(_)
             | StatementKind::VecShrinkToFit(_)
-            | StatementKind::Flush => Vec::new(),
+            | StatementKind::Flush
+            | StatementKind::StorageDead(_) => Vec::new(),
         }
     }
 }

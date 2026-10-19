@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Use of moved value 'v'. Value was previously moved and is no longer valid
+   ╭─[ tests/ui/ownership_drops/move_before_nested_break.zr:6:5 ]
+   │
+ 6 │     v.push(4);
+   │     ────┬────
+   │         ╰────── Use of moved value 'v'. Value was previously moved and is no longer valid
+───╯
+[-] Error: aborting due to previous error

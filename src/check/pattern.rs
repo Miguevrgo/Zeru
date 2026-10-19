@@ -8,7 +8,7 @@ use crate::items::ItemKind;
 use crate::tir::{Arm, Expr, ExprKind, Payload};
 use crate::ty::{Ty, TyKind, Types};
 
-use super::body::{FnCx, Moves, always_leaves};
+use super::body::FnCx;
 
 /// Where binding `field` of a pattern for variant `variant` finds its value.
 type PayloadAt = fn(u32, u32) -> Payload;
@@ -46,14 +46,8 @@ impl FnCx<'_, '_> {
             );
         }
 
-        let binds_any = patterns.iter().any(|shape| !shape.binds.is_empty());
-        let locked = binds_any.then(|| self.place_path(value)).flatten();
-        if let Some(path) = locked.clone() {
-            self.lock(path);
-        }
-        let loans = self.place_loans(&scrutinee, None);
-        let before = self.snapshot();
-        let mut after = Moves::new();
+        let before = self.diverges;
+        let mut all_leave = true;
         let wraps = expected.filter(|&ty| {
             matches!(
                 self.cx.types.kind(ty),
@@ -64,24 +58,17 @@ impl FnCx<'_, '_> {
         let mut mismatched = false;
         let mut checked = Vec::new();
         for ((pattern, body), shape) in arms.iter().zip(patterns) {
-            self.restore(&before);
+            self.diverges = before;
             self.enter();
             let bindings: Vec<_> = shape
                 .binds
                 .into_iter()
-                .map(|(name, ty, payloads)| (self.declare(&name, ty, false, true, true), payloads))
+                .map(|(name, ty, payloads)| (self.declare(&name, ty, false, true), payloads))
                 .collect();
-            for (local, _) in &bindings {
-                let local = *local;
-                self.view_into(local, &scrutinee, pattern.span);
-                if self.cx.holds_ref(self.local_ty(local)).is_some() {
-                    self.hold(local, loans.clone(), pattern.span);
-                }
-            }
-            let leaves =
-                matches!(&body.kind, ExpressionKind::Block(inner) if always_leaves(inner, true));
             let wanted = arm_ty.or(expected);
             let mut result = self.expr(body, wanted);
+            let leaves = self.diverges;
+            all_leave &= leaves;
             self.leave();
             match arm_ty {
                 _ if leaves => {}
@@ -104,19 +91,14 @@ impl FnCx<'_, '_> {
                 }
             }
             self.consume(&mut result);
-            if !leaves {
-                Self::merge(&mut after, &self.snapshot());
-            }
             checked.push(Arm {
                 tags: shape.tags,
                 bindings,
                 body: result,
+                span: pattern.span,
             });
         }
-        self.restore(&after);
-        if locked.is_some() {
-            self.unlock();
-        }
+        self.diverges = all_leave;
         let ty = match mismatched {
             true => Types::ERROR,
             false => arm_ty.unwrap_or(Types::VOID),

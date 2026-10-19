@@ -6,5 +6,8 @@ Error: 'r' refers into 'x', which ends with its block first
  5 │     for x in &v { r = &x; }
    │                       ─┬
    │                        ╰── 'r' refers into 'x', which ends with its block first
+ 6 │     println("{}", *r);
+   │                    ┬
+   │                    ╰── used later here
 ───╯
 [-] Error: aborting due to previous error

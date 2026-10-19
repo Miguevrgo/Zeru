@@ -1,0 +1,25 @@
+status: compile error
+-- stderr
+Error: Cannot change 'cs' while a reference into it is still in use
+   ╭─[ tests/ui/vec/var_self_receiver_before_arguments.zr:9:20 ]
+   │
+ 9 │     cs[0].add(grow(&var cs));
+   │     ──┬─────────┬─────┬─────
+   │       ╰─────────────────────── borrowed here
+   │                 │     │
+   │                 ╰───────────── used later here
+   │                       │
+   │                       ╰─────── Cannot change 'cs' while a reference into it is still in use
+───╯
+Error: Cannot change 'cs' while a reference into it is still in use
+    ╭─[ tests/ui/vec/var_self_receiver_before_arguments.zr:10:35 ]
+    │
+ 10 │     println("{}", cs[0].size(grow(&var cs)));
+    │                   ──┬─────────┬──────┬─────
+    │                     ╰──────────────────────── borrowed here
+    │                               │      │
+    │                               ╰────────────── used later here
+    │                                      │
+    │                                      ╰─────── Cannot change 'cs' while a reference into it is still in use
+────╯
+[-] Error: aborting due to previous error

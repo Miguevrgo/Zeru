@@ -115,11 +115,13 @@ pub enum StmtKind {
         body: Block,
     },
     /// `for var in seq`: `var` copies each element of an array or a Vec, or,
-    /// when it is a view, is each element. The length is read once.
+    /// when it is a view, is each element. The loop borrows every element
+    /// throughout; `within` is the sequence as written.
     ForEach {
         var: LocalId,
         seq: Place,
         body: Block,
+        within: Span,
     },
     Block(Block),
 }
@@ -348,6 +350,8 @@ pub enum Builtin {
     CopyBytes,
 }
 
+/// One arm of a `match`; `span` is its pattern, where its bindings borrow
+/// the scrutinee.
 #[derive(Clone)]
 pub struct Arm {
     /// The values it matches: numbers, variants' positions, 1 for `Some`
@@ -357,6 +361,7 @@ pub struct Arm {
     /// its value for each of `tags`.
     pub bindings: Vec<(LocalId, Vec<Payload>)>,
     pub body: Expr,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

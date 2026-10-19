@@ -316,6 +316,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 let count = self.operand(count).imm().into_int_value();
                 self.builder.build_memmove(to, 1, from, 1, count).unwrap();
             }
+            StatementKind::StorageDead(_) => {}
             StatementKind::Flush => {
                 let flush = self.flush.expect("the prelude declares the streams");
                 self.builder.build_call(flush, &[], "").unwrap();

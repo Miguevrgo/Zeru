@@ -6,5 +6,15 @@ Error: Cannot move 'v' while 'r' still refers into it
  5 │     take(v);
    │          ┬
    │          ╰── Cannot move 'v' while 'r' still refers into it
+   │
+   ├─[ tests/ui/references/move_while_referenced.zr:5:10 ]
+   │
+ 4 │     var r = v.get(0);
+   │             ────┬───
+   │                 ╰───── borrowed here
+   │
+ 6 │     println("{}", r.is_some());
+   │                   ─────┬─────
+   │                        ╰─────── used later here
 ───╯
 [-] Error: aborting due to previous error

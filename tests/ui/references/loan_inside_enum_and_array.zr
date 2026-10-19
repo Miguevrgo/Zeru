@@ -1,0 +1,12 @@
+enum R { Has(&Vec<i64>), Nothing }
+fn take(v: Vec<i64>) {}
+fn main() {
+    var v: Vec<i64> = [1, 2];
+    var e = R::Has(&v);
+    take(v);
+    match e { R::Has(r) => { println("{}", r[0]); } R::Nothing => {} }
+    var u: Vec<i64> = [1, 2];
+    var a = [&u; 2];
+    take(u);
+    println("{}", a[0][1]);
+}
