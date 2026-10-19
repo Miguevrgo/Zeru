@@ -1,17 +1,30 @@
 # Installation
 
-The first step is to install Zeru. There are some releases provided under github directory (this releases include some precompiled version for the compiler), additionally, there is an install.sh script under the main project which takes the last stable version and performs a full install of the standard library along with the compiler binary. You'll need an internet connection for the download.
+## Quick install (Linux x86-64)
 
-> [!TIP]
-> Zeru is still under active development, which means the recommended way to try Zeru is currently through a code compilation on main, for this sake you'll need some dependencies:
+The installer downloads the latest release, the compiler and its standard
+library, into `~/.zeru`:
 
-## Prerequisites
+```sh
+curl -fsSL https://raw.githubusercontent.com/Miguevrgo/Zeru/main/install.sh | bash
+export PATH="$HOME/.zeru/bin:$PATH"   # add this line to your ~/.bashrc or ~/.zshrc
+```
+
+Programs are linked with your system's C compiler (`cc`), which only acts as
+the linker.
+
+## Building from source
+
+Zeru is under active development, so `main` is ahead of the latest release.
+To build it you need:
+
+### Prerequisites
 
 * Rust (latest stable)
 * LLVM 21 or newer
 * A C compiler (`cc`), only as the linker: programs Zeru builds are static and use no libc
 
-## Building
+### Building
 
 **After installing** rust and llvm you can clone the repo and compile it using cargo:
 
@@ -28,6 +41,14 @@ After building, you can use the executable located in `./target/release/zeru` to
 
 ## Editor Support
 
-For syntax highlighting in **Vim/Neovim, VSCode or Emacs** checkout:
+Neovim gets a plugin with a language server: errors as you type and on save,
+hover with documentation, go to definition, references, rename, completion and
+highlighting. With [lazy.nvim](https://github.com/folke/lazy.nvim):
+
+```lua
+{ "Miguevrgo/zeru-editors", lazy = false, build = "cargo build --release --manifest-path server/Cargo.toml" }
+```
+
+Vim, VS Code and Emacs get syntax highlighting. Setup for every editor:
 
 👉 **[https://github.com/Miguevrgo/zeru-editors](https://github.com/Miguevrgo/zeru-editors)**

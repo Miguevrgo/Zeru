@@ -53,15 +53,24 @@ mdbook serve --open
 
 ## 📦 Installation
 
-Currently, Zeru is in active development. To try it out, you need to build the compiler from source.
+### Quick install (Linux x86-64)
 
-### Prerequisites
+The installer puts the latest release, the compiler and its standard library, in `~/.zeru`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Miguevrgo/Zeru/main/install.sh | bash
+export PATH="$HOME/.zeru/bin:$PATH"   # add this line to your ~/.bashrc or ~/.zshrc
+```
+
+Programs are linked with your system's C compiler (`cc`), which only acts as the linker.
+
+### Building from source
+
+You need:
 
 * Rust (latest stable)
 * LLVM 21 or newer
 * A C compiler (`cc`), only as the linker
-
-### Building
 
 ```sh
 git clone git@github.com:Miguevrgo/Zeru.git
@@ -90,9 +99,13 @@ To collaborate, you can fork the project, create a branch for the feature/improv
 
 ## 🎨 Editor Support
 
-### Syntax Highlighting (Tree-sitter)
+**Neovim** gets a plugin with a language server: errors as you type and on save, hover with documentation, go to definition, references, rename, completion and highlighting. With [lazy.nvim](https://github.com/folke/lazy.nvim):
 
-For syntax highlighting in Vim/Neovim, VSCode or Emacs checkout:
+```lua
+{ "Miguevrgo/zeru-editors", lazy = false, build = "cargo build --release --manifest-path server/Cargo.toml" }
+```
+
+Vim, VS Code and Emacs get syntax highlighting. Setup for every editor:
 
 👉 **<https://github.com/Miguevrgo/zeru-editors>**
 
