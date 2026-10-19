@@ -242,3 +242,23 @@ fn examples() {
         })
     });
 }
+
+#[test]
+fn check_reports_json() {
+    let source = root().join("tests/ui/references/change_while_referenced.zr");
+    let output = Command::new(env!("CARGO_BIN_EXE_zeru"))
+        .args(["check", "--json"])
+        .arg(&source)
+        .current_dir(source.parent().unwrap())
+        .env("ZERU_STD_PATH", root().join("std"))
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(!output.status.success());
+    assert!(stdout.starts_with("{\"file\":"), "{stdout}");
+    assert!(
+        stdout.contains("\"line\":") && stdout.contains("\"notes\":[{"),
+        "{stdout}"
+    );
+    assert!(!root().join("tests/ui/references/build").exists());
+}

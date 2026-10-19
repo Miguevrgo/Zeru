@@ -65,6 +65,41 @@ fn parse_file(
     program
 }
 
+/// What checking a program gives: its typed IR and MIR, or its errors.
+type Analysis = Result<(crate::tir::Program, Vec<crate::mir::Body>), Vec<ZeruError>>;
+
+/// Everything before code generation: load and parse every file, collect the
+/// items, type check, and build the MIR and check its borrows.
+fn analyze(path: &Path, mode: SafetyMode) -> Result<(Sources, Analysis), CompileError> {
+    let user_code = std::fs::read_to_string(path)?;
+    let (sources, modules, errors) = load(path, &user_code);
+    if !errors.is_empty() {
+        return Ok((sources, Err(errors)));
+    }
+    let items = Items::collect(&modules);
+    let analysis = Checker::new(&items).check().and_then(|mut program| {
+        let bodies = crate::mir::build(&mut program, mode)?;
+        Ok((program, bodies))
+    });
+    Ok((sources, analysis))
+}
+
+/// Check `path` as `compile` would, without generating code, and report its
+/// errors as text or, for editors, as one JSON object per line.
+pub fn check(path: &Path, json: bool) -> Result<(), CompileError> {
+    let (sources, analysis) = analyze(path, SafetyMode::Debug)?;
+    let Err(errors) = analysis else {
+        return Ok(());
+    };
+    match json {
+        true => errors
+            .iter()
+            .for_each(|error| println!("{}", error.json(&sources))),
+        false => report_errors(&errors, &sources),
+    }
+    Err(CompileError::Unknown)
+}
+
 pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, CompileError> {
     if !path.extension().is_some_and(|ext| ext == "zr") {
         status(YELLOW, '\u{ea6c}', "Warning", "Zeru extension is .zr");
@@ -86,25 +121,11 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
         format_args!("v{} ({})", env!("CARGO_PKG_VERSION"), path.display()),
     );
     let start = std::time::Instant::now();
-    let user_code = std::fs::read_to_string(path)?;
-
-    let (sources, modules, errors) = load(path, &user_code);
-    let report = |errors: &[ZeruError]| {
-        report_errors(errors, &sources);
-        Err(CompileError::Unknown)
-    };
-    if !errors.is_empty() {
-        return report(&errors);
-    }
-    let items = Items::collect(&modules);
-    let mut program = match Checker::new(&items).check() {
-        Err(errors) => return report(&errors),
-        Ok(program) => program,
-    };
-    let bodies = match crate::mir::build(&mut program, mode) {
-        Err(errors) => return report(&errors),
-        Ok(bodies) => bodies,
-    };
+    let (sources, analysis) = analyze(path, mode)?;
+    let (program, bodies) = analysis.map_err(|errors| {
+        report_errors(&errors, &sources);
+        CompileError::Unknown
+    })?;
     let context = Context::create();
     let module = context.create_module(name);
     let machine = crate::lower::host_machine(mode);

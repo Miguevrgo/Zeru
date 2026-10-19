@@ -11,7 +11,7 @@ mod tir;
 mod token;
 mod ty;
 
-use crate::driver::{GREEN, RED, compile, status};
+use crate::driver::{GREEN, RED, check, compile, status};
 use crate::{errors::CompileError, lower::SafetyMode};
 use clap::{Parser, Subcommand};
 use std::os::unix::process::ExitStatusExt;
@@ -54,6 +54,12 @@ enum Commands {
         #[arg(last = true, help = "Arguments for the program, after --")]
         program_args: Vec<String>,
     },
+    #[command(about = "Check a .zr file for errors without compiling it")]
+    Check {
+        file: PathBuf,
+        #[arg(long, help = "One JSON object per error, for editors")]
+        json: bool,
+    },
     #[command(about = "Remove the build/ directory")]
     Clean,
 }
@@ -87,6 +93,7 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
                     .unwrap_or_else(|| status.signal().map(|s| 128 + s).unwrap_or(1)),
             );
         }
+        Commands::Check { file, json } => check(&file, json)?,
         Commands::Clean => {
             let build_dir = Path::new("build");
             if build_dir.exists() {

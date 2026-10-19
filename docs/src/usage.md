@@ -30,4 +30,8 @@ Arguments for the program go after `--`, and the program reads them with
 zeru run main.zr -- input.txt 3
 ```
 
+To only look for errors, without generating code or writing `build/`, use
+`zeru check main.zr`. Editors run `zeru check --json main.zr`, which prints
+each error as one JSON object per line.
+
 There are more flags available, which you can read using the help command `zeru --help`. The executable will be generated inside the `build` directory.

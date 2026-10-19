@@ -197,6 +197,46 @@ pub fn paint(code: &str) -> (&str, &str) {
     }
 }
 
+impl ZeruError {
+    /// The error as one JSON object: where it is, with 1-based lines and
+    /// byte columns, the end exclusive, its message and its notes alike.
+    pub fn json(&self, sources: &Sources) -> String {
+        let notes: Vec<String> = self
+            .notes
+            .iter()
+            .map(|(message, span)| format!("{{{}}}", json_at(sources, *span, message)))
+            .collect();
+        let at = json_at(sources, self.span, &self.message);
+        format!("{{{at},\"notes\":[{}]}}", notes.join(","))
+    }
+}
+
+fn json_at(sources: &Sources, span: Span, message: &str) -> String {
+    let (file, line, column) = sources.position(span).unwrap_or(("", 0, 0));
+    let last = Span::new(span.end.max(span.start + 1) - 1, span.end);
+    let (_, end_line, end_column) = sources.position(last).unwrap_or((file, line, column));
+    format!(
+        "\"file\":{},\"line\":{line},\"column\":{column},\"end_line\":{end_line},\"end_column\":{},\"message\":{}",
+        json_string(file),
+        end_column + 1,
+        json_string(message)
+    )
+}
+
+fn json_string(text: &str) -> String {
+    let mut out = String::from('"');
+    for c in text.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            c if u32::from(c) < 0x20 => out.push_str(&format!("\\u{:04x}", u32::from(c))),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
 pub fn report_errors(errors: &[ZeruError], sources: &Sources) {
     for error in errors {
         error.report(sources);
