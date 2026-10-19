@@ -1,0 +1,146 @@
+// A small file tool: write a report to a file, append to it, read it back
+// and count its lines, words and bytes, as `wc` does, then remove it.
+// Usage: filetool [path]; the path defaults to build/filetool_demo.txt.
+
+import std.fs;
+import std.os;
+
+const NOT_FOUND: i32 = 2;
+
+struct Counts {
+    lines: usize,
+    words: usize,
+    bytes: usize,
+    longest: usize,
+}
+
+// The bytes at `at` seen as a str, as std.os does for the arguments.
+fn as_str(at: *u8, len: usize) str {
+    var parts = (at, len);
+    return *((&parts) as *str);
+}
+
+fn push_text(out: &var Vec<u8>, text: str) {
+    for i in 0..text.len() {
+        out.push(text[i]);
+    }
+}
+
+fn push_num(out: &var Vec<u8>, n: u64) {
+    var digits: Array<u8, 20> = [0; 20];
+    var at: usize = 20;
+    var rest = n;
+    while true {
+        at -= 1;
+        digits[at] = '0' + (rest % 10) as u8;
+        rest /= 10;
+        if rest == 0 {
+            break;
+        }
+    }
+    for i in at..20 {
+        out.push(digits[i]);
+    }
+}
+
+// One line per number: "n squared is n*n".
+fn squares(from: u64, to: u64) Vec<u8> {
+    var out: Vec<u8> = Vec.new();
+    for n in from..to + 1 {
+        push_num(&var out, n);
+        push_text(&var out, " squared is ");
+        push_num(&var out, n * n);
+        push_text(&var out, "\n");
+    }
+    return out;
+}
+
+fn count(bytes: &Vec<u8>) Counts {
+    var c = Counts { lines: 0, words: 0, bytes: bytes.len(), longest: 0 };
+    var in_word = false;
+    var line_len: usize = 0;
+    for b in bytes {
+        match b {
+            '\n' => {
+                c.lines += 1;
+                if line_len > c.longest {
+                    c.longest = line_len;
+                }
+                line_len = 0;
+                in_word = false;
+            }
+            ' ' | '\t' | '\r' => {
+                line_len += 1;
+                in_word = false;
+            }
+            default => {
+                line_len += 1;
+                if !in_word {
+                    c.words += 1;
+                }
+                in_word = true;
+            }
+        }
+    }
+    return c;
+}
+
+fn append(path: *u8, var data: Vec<u8>) i64! {
+    var fd = fs::open(path, fs::O_WRONLY | fs::O_APPEND, 0)!;
+    var wrote = fs::write(fd, &data[0], data.len())!;
+    fs::close(fd)!;
+    return Ok(wrote);
+}
+
+// The whole file, read into a buffer as large as its size.
+fn slurp(path: *u8) Vec<u8>! {
+    var size = fs::file_size(path)! as usize;
+    var buf: Vec<u8> = Vec.with_capacity(size);
+    for i in 0..size {
+        buf.push(0);
+    }
+    var got = fs::read_file(path, &buf[0], size)!;
+    if got as usize != size {
+        return Err(5);
+    }
+    return Ok(buf);
+}
+
+fn main() {
+    var args = os::args();
+    var path: *u8 = "build/filetool_demo.txt" as *u8;
+    if args.len() > 1 {
+        path = args[1] as *u8;
+    }
+
+    var first = squares(1, 12);
+    var written = fs::write_file(path, &first[0], first.len());
+    if written.is_err() {
+        eprintln("cannot write the file: error {}", written.unwrap_err());
+        exit(1);
+    }
+    var more = squares(99, 101);
+    if append(path, more).unwrap() != 61 {
+        exit(2);
+    }
+
+    var text = slurp(path).unwrap();
+    var c = count(&text);
+    println("{} lines, {} words, {} bytes, longest line {}", c.lines, c.words, c.bytes, c.longest);
+    var start = text.len() - 1;
+    while start > 0 && text[start - 1] != '\n' {
+        start -= 1;
+    }
+    println("last line: {}", as_str(&text[start], text.len() - 1 - start));
+
+    if fs::unlink(path).is_err() || fs::exists(path) {
+        exit(3);
+    }
+    var gone = slurp(path);
+    println("after unlink: error {}", gone.unwrap_err());
+
+    if c.lines != 15 || c.words != 60 || c.bytes != 256 || c.longest != 20 || gone.unwrap_err() != NOT_FOUND {
+        exit(4);
+    }
+    exit(0);
+}

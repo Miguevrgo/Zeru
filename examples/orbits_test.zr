@@ -1,0 +1,140 @@
+// Two planets around a star, integrated with the leapfrog (kick-drift-kick)
+// scheme. Leapfrog keeps energy and angular momentum close to their start,
+// which the program checks after a few orbits.
+
+const G: f64 = 1.0;
+const DT: f64 = 0.005;
+const STEPS: i32 = 2000;
+
+fn sqrt(x: f64) f64 {
+    var root: f64 = 0.0;
+    asm ("sqrtsd $1, $0" : "=x" (root) : "x" (x));
+    return root;
+}
+
+struct V2 {
+    x: f64,
+    y: f64,
+
+    fn add(self, o: V2) V2 { return V2 { x: self.x + o.x, y: self.y + o.y }; }
+    fn sub(self, o: V2) V2 { return V2 { x: self.x - o.x, y: self.y - o.y }; }
+    fn scale(self, k: f64) V2 { return V2 { x: self.x * k, y: self.y * k }; }
+    fn dot(self, o: V2) f64 { return self.x * o.x + self.y * o.y; }
+    fn cross(self, o: V2) f64 { return self.x * o.y - self.y * o.x; }
+}
+
+struct Body {
+    name: str,
+    mass: f64,
+    pos: V2,
+    vel: V2,
+    acc: V2,
+}
+
+fn zero() V2 {
+    return V2 { x: 0.0, y: 0.0 };
+}
+
+// A body on a circular orbit of radius r around a mass `central` at the origin.
+fn circular(name: str, mass: f64, r: f64, central: f64) Body {
+    var speed = sqrt(G * central / r);
+    return Body { name: name, mass: mass, pos: V2 { x: r, y: 0.0 }, vel: V2 { x: 0.0, y: speed }, acc: zero() };
+}
+
+fn accelerate(bodies: &var Vec<Body>) {
+    for b in &var bodies {
+        b.acc = zero();
+    }
+    for i in 0..bodies.len() {
+        for j in i + 1..bodies.len() {
+            var d = bodies[j].pos.sub(bodies[i].pos);
+            var r2 = d.dot(d);
+            var inv_r3 = 1.0 / (r2 * sqrt(r2));
+            bodies[i].acc = bodies[i].acc.add(d.scale(G * bodies[j].mass * inv_r3));
+            bodies[j].acc = bodies[j].acc.sub(d.scale(G * bodies[i].mass * inv_r3));
+        }
+    }
+}
+
+fn step(bodies: &var Vec<Body>) {
+    for b in &var bodies {
+        b.vel = b.vel.add(b.acc.scale(DT / 2.0));
+        b.pos = b.pos.add(b.vel.scale(DT));
+    }
+    accelerate(bodies);
+    for b in &var bodies {
+        b.vel = b.vel.add(b.acc.scale(DT / 2.0));
+    }
+}
+
+fn energy(bodies: &Vec<Body>) f64 {
+    var total: f64 = 0.0;
+    for i in 0..bodies.len() {
+        total += 0.5 * bodies[i].mass * bodies[i].vel.dot(bodies[i].vel);
+        for j in i + 1..bodies.len() {
+            var d = bodies[j].pos.sub(bodies[i].pos);
+            total -= G * bodies[i].mass * bodies[j].mass / sqrt(d.dot(d));
+        }
+    }
+    return total;
+}
+
+fn angular_momentum(bodies: &Vec<Body>) f64 {
+    var total: f64 = 0.0;
+    for b in bodies {
+        total += b.mass * b.pos.cross(b.vel);
+    }
+    return total;
+}
+
+fn relative(now: f64, start: f64) f64 {
+    var d = (now - start) / start;
+    if d < 0.0 {
+        return -d;
+    }
+    return d;
+}
+
+fn main() {
+    var sun = Body { name: "sun", mass: 1000.0, pos: zero(), vel: zero(), acc: zero() };
+    var bodies: Vec<Body> = Vec.new();
+    bodies.push(circular("inner", 1.0, 10.0, sun.mass));
+    bodies.push(circular("outer", 0.5, 25.0, sun.mass));
+
+    var momentum = zero();
+    for b in bodies {
+        momentum = momentum.add(b.vel.scale(b.mass));
+    }
+    sun.vel = momentum.scale(-1.0 / sun.mass);
+    bodies.insert(0, sun);
+
+    accelerate(&var bodies);
+    var e0 = energy(&bodies);
+    var l0 = angular_momentum(&bodies);
+    println("start: energy {} angular momentum {}", e0, l0);
+
+    var worst: f64 = 0.0;
+    for n in 1..STEPS + 1 {
+        step(&var bodies);
+        var drift = relative(energy(&bodies), e0);
+        if drift > worst {
+            worst = drift;
+        }
+        if n % 500 == 0 {
+            println("t = {}: energy {} drift {}", n as f64 * DT, energy(&bodies), drift);
+        }
+    }
+    for b in bodies {
+        println("  {} at ({}, {})", b.name, b.pos.x, b.pos.y);
+    }
+    var l_drift = relative(angular_momentum(&bodies), l0);
+    println("worst energy drift {}, angular momentum drift {}", worst, l_drift);
+
+    var inner = bodies[1].pos.sub(bodies[0].pos);
+    var radius = sqrt(inner.dot(inner));
+    if worst > 0.0001 || l_drift > 0.000000001 || radius < 9.9 || radius > 10.1
+        || relative(bodies[1].pos.x, -8.48049578121427) > 0.000000001 {
+        exit(1);
+    }
+    exit(0);
+}
