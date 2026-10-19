@@ -28,7 +28,7 @@ pub fn status(colour: &str, icon: char, verb: &str, detail: impl std::fmt::Displ
 
 /// The standard library: `ZERU_STD_PATH`, or else the one beside the
 /// compiler, so a compiler always reads the std it was released with.
-fn std_path() -> Option<PathBuf> {
+pub(crate) fn std_path() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("ZERU_STD_PATH") {
         return Some(path.into());
     }
@@ -88,7 +88,8 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
     let start = std::time::Instant::now();
     let user_code = std::fs::read_to_string(path)?;
 
-    let (sources, modules, errors) = load(path, &user_code);
+    let (sources, modules, errors) =
+        load(path, &user_code, &|file| std::fs::read_to_string(file).ok());
     let report = |errors: &[ZeruError]| {
         report_errors(errors, &sources);
         Err(CompileError::Unknown)
@@ -145,8 +146,12 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
 }
 
 /// Parse the prelude, the root file and every module they import, each into
-/// a module of its own.
-fn load(path: &Path, user_code: &str) -> (Sources, Vec<SourceModule>, Vec<ZeruError>) {
+/// a module of its own, reading each module's file with `read`.
+pub(crate) fn load(
+    path: &Path,
+    user_code: &str,
+    read: &dyn Fn(&Path) -> Option<String>,
+) -> (Sources, Vec<SourceModule>, Vec<ZeruError>) {
     let mut sources = Sources::default();
     let mut errors = Vec::new();
     let prelude = parse_file(
@@ -208,7 +213,7 @@ fn load(path: &Path, user_code: &str) -> (Sources, Vec<SourceModule>, Vec<ZeruEr
                 ));
                 continue;
             };
-            let Ok(source) = std::fs::read_to_string(&file) else {
+            let Some(source) = read(&file) else {
                 errors.push(ZeruError::semantic(
                     format!("Module '{import}' not found at {}", file.display()),
                     span,

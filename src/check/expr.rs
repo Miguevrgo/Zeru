@@ -11,8 +11,8 @@ use crate::tir::{Asm, BinOp, Expr, ExprKind, Place, UnOp};
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
-use super::Checker;
 use super::body::FnCx;
+use super::{Checker, Def};
 
 impl FnCx<'_, '_> {
     pub(super) fn mk(&self, kind: ExprKind, ty: Ty, span: Span) -> Expr {
@@ -35,6 +35,7 @@ impl FnCx<'_, '_> {
         if self.cx.errors.len() == errors {
             self.check_constant(&expr);
         }
+        self.note_type(e.span, expr.ty);
         expr
     }
 
@@ -250,6 +251,7 @@ impl FnCx<'_, '_> {
 
     fn identifier(&mut self, name: &str, span: Span) -> Expr {
         if let Some(local) = self.local(name) {
+            self.note_local_use(span, local);
             let ty = self.local_ty(local);
             return self.mk(ExprKind::Read(Place::Local(local)), ty, span);
         }
@@ -263,6 +265,7 @@ impl FnCx<'_, '_> {
                 self.error(format!("Enum '{owner}' has no variant '{variant}'"), span);
                 return self.error_expr(span);
             };
+            self.cx.note_use(span, Def::Variant(def, index));
             if !variants[index].1.is_empty() {
                 let count = variants[index].1.len();
                 self.error(
@@ -276,6 +279,7 @@ impl FnCx<'_, '_> {
         }
         match self.cx.items.lookup_value(self.scope.module, name) {
             Some(def) if self.cx.items.item(def).kind == ItemKind::Const => {
+                self.cx.note_use(span, Def::Item(def));
                 self.cx.check_visible(def, self.scope.module, span);
                 let mut value = self.cx.const_value(def, span);
                 value.span = span;
@@ -286,6 +290,7 @@ impl FnCx<'_, '_> {
                 self.error_expr(span)
             }
             None => {
+                self.note_scope(span);
                 let mut candidates = self.local_names();
                 candidates.extend(
                     self.cx
@@ -311,7 +316,7 @@ impl FnCx<'_, '_> {
     /// at, or, for a value with no place of its own, a temporary.
     pub(super) fn place(&mut self, e: &Expression) -> (Place, Ty) {
         let span = e.span;
-        match &e.kind {
+        let (place, ty) = match &e.kind {
             ExpressionKind::Identifier(name) if self.local(name).is_some() => {
                 let value = self.identifier(name, span);
                 match value.kind {
@@ -339,7 +344,9 @@ impl FnCx<'_, '_> {
                 let ty = value.ty;
                 (Place::Temp(Box::new(value)), ty)
             }
-        }
+        };
+        self.note_type(span, ty);
+        (place, ty)
     }
 
     /// `object.name`: a struct's field or a tuple's part, through one pointer
@@ -361,10 +368,14 @@ impl FnCx<'_, '_> {
                     (base, Types::ERROR)
                 }
             },
-            TyKind::Adt(..) if self.cx.is_struct(ty).is_some() => {
+            TyKind::Adt(def, _) if self.cx.is_struct(ty).is_some() => {
                 let fields = self.cx.fields_of(ty);
                 match fields.iter().position(|(field, _)| field == name) {
-                    Some(at) => (Place::Field(Box::new(base), at as u32), fields[at].1),
+                    Some(at) => {
+                        let name_span = Span::new(object.span.end, span.end);
+                        self.cx.note_use(name_span, Def::Field(def, at));
+                        (Place::Field(Box::new(base), at as u32), fields[at].1)
+                    }
                     None => {
                         let shown = self.ty(ty);
                         self.error(format!("Struct '{shown}' has no field '{name}'"), span);
@@ -467,7 +478,10 @@ impl FnCx<'_, '_> {
             _ => None,
         };
         let (place, target_ty) = match revived {
-            Some(local) => (Place::Local(local), self.local_ty(local)),
+            Some(local) => {
+                self.note_local_use(target.span, local);
+                (Place::Local(local), self.local_ty(local))
+            }
             None => self.place(target),
         };
         if self.temporary(&place, target_ty, target) {
@@ -823,6 +837,7 @@ impl FnCx<'_, '_> {
             }
             return self.error_expr(span);
         };
+        self.cx.note_use(span, Def::Item(def));
         self.cx.check_visible(def, self.scope.module, span);
         let mut checked: HashMap<usize, Expr> = HashMap::new();
         let Some(ty) = self.literal_type(def, fields, expected, &mut checked, span) else {
@@ -845,6 +860,13 @@ impl FnCx<'_, '_> {
                 self.error(format!("Unknown field '{field}' in struct '{shown}'"), span);
                 continue;
             };
+            let after = at
+                .checked_sub(1)
+                .map_or(span.start, |at| fields[at].1.span.end);
+            self.cx.note_use(
+                Span::new(after, value.span.start),
+                Def::Field(def, position),
+            );
             let field_ty = declared[position].1;
             let checked = checked
                 .remove(&at)
