@@ -1,0 +1,7 @@
+fn id<T>(x: T) T { return x; }
+fn add<T>(a: T, b: T) T { return a + b; }
+fn main() {
+    println("{}", add(id(1), id(2.5)));
+    println("{}", add(id(2.5), id(id(1))));
+    println("{}", add(id(1), id(2)));
+}

@@ -156,7 +156,9 @@ impl FnCx<'_, '_> {
 
     /// Check what `check` gives with variables of its own, unless `expected`
     /// holds an enclosing call's: then those are resolved with the enclosing
-    /// call's. Each variable left unbound is reported.
+    /// call's. The numbers written then decide what is left, floats first,
+    /// so a float anywhere among unified variables makes them all `f64`.
+    /// Each variable left unbound is reported.
     pub(super) fn inference_root(
         &mut self,
         expected: Option<Ty>,
@@ -171,11 +173,13 @@ impl FnCx<'_, '_> {
         if self.vars.len() == vars {
             return expr;
         }
-        for var in vars..self.vars.len() {
-            if let Some(default) = self.vars[var].literal {
-                let ty = self.cx.types.intern(TyKind::Infer(var as u32));
-                self.fits(ty, default, true);
-            }
+        let mut defaults: Vec<(usize, Ty)> = (vars..self.vars.len())
+            .filter_map(|var| Some((var, self.vars[var].literal?)))
+            .collect();
+        defaults.sort_by_key(|&(_, default)| default != Types::F64);
+        for (var, default) in defaults {
+            let ty = self.cx.types.intern(TyKind::Infer(var as u32));
+            self.fits(ty, default, true);
         }
         let open: Vec<usize> = (vars..self.vars.len())
             .filter(|&var| {
