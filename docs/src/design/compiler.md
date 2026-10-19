@@ -17,6 +17,7 @@ source ─▶ lexer ─▶ parser ─▶ items ─▶ check ─▶ mir ─▶ lo
 | Check | `check/` | The typed IR of every function instance, or the errors |
 | MIR | `mir/` | Each function as a graph of basic blocks, borrow checked, its drops elaborated |
 | Lower | `lower/` | An LLVM module |
+| Language server | `lsp/` | `zeru lsp`: the passes up to the borrow checker over the editor's text. With `Checker::record` set, the checker notes what each name resolves to, the type of each expression, each local and the locals in scope where a name resolves to nothing |
 
 ## Names
 
