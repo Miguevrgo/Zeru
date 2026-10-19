@@ -98,10 +98,15 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
     Ok(())
 }
 
+/// The passes recurse along the syntax tree, as rustc's do, so they run on a
+/// thread whose stack fits a deep one: memory is only taken as it is used.
 fn main() {
-    if let Err(err) = run_compiler(Cli::parse()) {
-        let (red, reset) = crate::errors::paint(RED);
-        eprintln!("{red}[-] Error: {err}{reset}");
-        std::process::exit(1);
-    }
+    let compiler = std::thread::Builder::new().stack_size(1 << 30).spawn(|| {
+        if let Err(err) = run_compiler(Cli::parse()) {
+            let (red, reset) = crate::errors::paint(RED);
+            eprintln!("{red}[-] Error: {err}{reset}");
+            std::process::exit(1);
+        }
+    });
+    compiler.unwrap().join().unwrap();
 }
