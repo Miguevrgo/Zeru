@@ -5,8 +5,8 @@ before and produces something the next one reads; no pass revisits a decision
 an earlier one made. The layout follows what rustc, Zig and Carbon do.
 
 ```text
-source ─▶ lexer ─▶ parser ─▶ items ─▶ check ─▶ lower ─▶ LLVM ─▶ cc
-          tokens    AST      DefIds    typed IR  LLVM IR  object  executable
+source ─▶ lexer ─▶ parser ─▶ items ─▶ check ─▶ mir ─▶ lower ─▶ LLVM ─▶ cc
+          tokens    AST      DefIds    typed IR  MIR    LLVM IR  object  executable
 ```
 
 | Pass | Files | Produces |
@@ -15,6 +15,7 @@ source ─▶ lexer ─▶ parser ─▶ items ─▶ check ─▶ lower ─▶ 
 | Lexer, parser | `lexer.rs`, `parser.rs`, `ast.rs` | A token list per file, which the parser walks with one cursor into a syntax tree. The tree is never changed after parsing |
 | Items | `items.rs` | A `DefId` for every function, method, struct, enum, trait and constant, and a scope per module |
 | Check | `check/` | The typed IR of every function instance, or the errors |
+| MIR | `mir/` | Each function as a graph of basic blocks, its drops elaborated |
 | Lower | `lower/` | An LLVM module |
 
 ## Names
@@ -68,21 +69,48 @@ own, every call names the function instance it reaches, and every place
 `Move` and every drop of a replaced value an `Assign { drop_old }`. The
 checker has decided all of it before code generation starts.
 
+## The MIR
+
+`mir/` turns the typed IR of each function into a graph of basic blocks over
+numbered locals, as rustc's MIR does. Local 0 is the return place, then come
+the arguments, the variables and the temporaries. A statement assigns an
+rvalue to a place or runs a built-in; a block ends in a terminator: a jump, a
+switch on an integer, a call, a drop, a check, or a return.
+
+`mir/build.rs` decides everything the tree left open, once:
+
+- Every value an expression needs is evaluated, left to right, into an
+  operand: a constant, or a temporary local. A place is projected where it is
+  used, after its indices have been evaluated into locals, so nothing holds an
+  address across code that may move what it points into.
+- Assignment evaluates its right side before its target.
+- A scope drops what it owns as it ends, and every exit (`return`, `break`,
+  `continue`, `?`, `!`) drops what the scopes it leaves still own, temporaries
+  of the statements it leaves first.
+- `match` is a switch on the discriminant. Its bindings, and the element of a
+  `for .. in &var`, are places inside the value matched or walked.
+- Runtime checks (bounds, null, `unwrap`) are `Assert` terminators, and the
+  arithmetic, division, shift and float-to-int checks are marked on the
+  operation; none exist in release-fast.
+
+`mir/elaborate.rs` then decides each drop, as rustc's drop elaboration: a
+forward dataflow over the blocks finds whether the local may hold a value
+there and whether it may not. A drop runs, goes away, or tests a drop flag, a
+bool local raised as the value arrives and lowered as it leaves.
+
 ## Lowering
 
-`lower/` translates the typed IR and makes no decision of its own. It follows
+`lower/` translates the MIR and makes no decision of its own. It follows
 the memory model of rustc's code generation:
 
-- Scalars (integers, floats, bools, pointers, enums without data) are SSA values.
+- Scalars (integers, floats, bools, pointers, enums without data) are SSA
+  values: a temporary assigned once and never borrowed has no slot at all.
 - Everything else lives in memory and is passed around as a pointer to it,
   copied with `memcpy`. A big array or struct never becomes one huge LLVM value.
-- An aggregate argument is a pointer to a copy the callee owns. An aggregate
-  result is written through a pointer the caller passes first.
-- A value that owns memory has a drop flag, raised while it owns the value and
-  lowered by a `Move`. Each type gets its drop and copy functions once.
-- Runtime checks (overflow, bounds, null, division, shifts, `unwrap`,
-  float-to-int range) are emitted in debug and release-safe builds, and none in
-  release-fast.
+- An aggregate argument is a pointer to a copy the callee owns, or to the local
+  itself when it is moved. An aggregate result is written through a pointer the
+  caller passes first.
+- Each type gets its drop and copy functions once.
 
 ## Tests
 

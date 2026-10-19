@@ -1,10 +1,11 @@
 //! What the generated code does on its own: safety checks and the panic they
-//! end in, the Vec and `T?`/`T!` builtins, buffers, printing, the output
-//! streams and their flush, and inline assembly.
+//! end in, the Vec builtins, buffers, printing, the output streams and their
+//! flush, and inline assembly.
 
 use inkwell::{
     AddressSpace, FloatPredicate, IntPredicate,
     attributes::{Attribute, AttributeLoc},
+    basic_block::BasicBlock,
     intrinsics::Intrinsic,
     module::Linkage,
     types::{BasicType, BasicTypeEnum, IntType},
@@ -14,7 +15,8 @@ use inkwell::{
     },
 };
 
-use crate::tir::{BinOp, Builtin, Expr, FnId, Place};
+use crate::mir::{Asm, Operand, Place};
+use crate::tir::{BinOp, FnId};
 use crate::ty::{Ty, TyKind, Types};
 
 use super::{Lower, Val};
@@ -111,12 +113,9 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         function
     }
 
-    /// Abort when `condition` holds, then carry on in a fresh block. Every
-    /// safety check funnels through here, and none exists in ReleaseFast.
-    fn trap_if(&mut self, condition: IntValue<'ctx>, label: &str) {
-        if !self.mode.emit_safety_checks() {
-            return;
-        }
+    /// A block that panics with the message `label` names, at the span
+    /// being lowered.
+    pub(super) fn panic_block(&mut self, label: &str) -> BasicBlock<'ctx> {
         let what = match label {
             "null" => "null pointer dereference",
             "bounds" => "index out of bounds",
@@ -133,11 +132,8 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             Some((file, line, column)) => format!("panic at {file}:{line}:{column}: {what}\n"),
             None => format!("panic: {what}\n"),
         };
+        let here = self.builder.get_insert_block().expect("inside a block");
         let panic_bb = self.append(&format!("{label}_panic"));
-        let ok_bb = self.append(&format!("{label}_ok"));
-        self.builder
-            .build_conditional_branch(condition, panic_bb, ok_bb)
-            .unwrap();
         let panic = self.panic_fn();
         self.builder.position_at_end(panic_bb);
         let text = self.const_bytes(message.as_bytes());
@@ -146,42 +142,18 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             .build_call(panic, &[text.into(), len.into()], "")
             .unwrap();
         self.builder.build_unreachable().unwrap();
+        self.builder.position_at_end(here);
+        panic_bb
+    }
+
+    /// Panic when `condition` holds, then carry on in a fresh block.
+    fn trap_if(&mut self, condition: IntValue<'ctx>, label: &str) {
+        let panic_bb = self.panic_block(label);
+        let ok_bb = self.append(&format!("{label}_ok"));
+        self.builder
+            .build_conditional_branch(condition, panic_bb, ok_bb)
+            .unwrap();
         self.builder.position_at_end(ok_bb);
-    }
-
-    pub(super) fn check_null(&mut self, ptr: PointerValue<'ctx>) {
-        if !self.mode.emit_safety_checks() {
-            return;
-        }
-        let is_null = self
-            .builder
-            .build_int_compare(
-                IntPredicate::EQ,
-                ptr,
-                self.ptr_type().const_null(),
-                "is_null",
-            )
-            .unwrap();
-        self.trap_if(is_null, "null");
-    }
-
-    /// Trap when the usize `index` falls outside `0..len`.
-    pub(super) fn check_bounds(&mut self, index: IntValue<'ctx>, len: IntValue<'ctx>) {
-        if !self.mode.emit_safety_checks() {
-            return;
-        }
-        if let (Some(at), Some(len)) = (
-            index.get_sign_extended_constant(),
-            len.get_zero_extended_constant(),
-        ) && (0..len as i64).contains(&at)
-        {
-            return;
-        }
-        let out = self
-            .builder
-            .build_int_compare(IntPredicate::UGE, index, len, "out_of_range")
-            .unwrap();
-        self.trap_if(out, "bounds");
     }
 
     /// Trap on a zero divisor, and on `MIN / -1`, which LLVM leaves undefined.
@@ -191,9 +163,6 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         rhs: IntValue<'ctx>,
         signed: bool,
     ) {
-        if !self.mode.emit_safety_checks() {
-            return;
-        }
         let int_type = rhs.get_type();
         let b = &self.builder;
         let mut invalid = b
@@ -219,9 +188,6 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     }
 
     pub(super) fn check_shift(&mut self, amount: IntValue<'ctx>) {
-        if !self.mode.emit_safety_checks() {
-            return;
-        }
         let int_type = amount.get_type();
         let width = int_type.const_int(u64::from(int_type.get_bit_width()), false);
         let too_wide = self
@@ -238,9 +204,6 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         int_type: IntType<'ctx>,
         unsigned: bool,
     ) {
-        if !self.mode.emit_safety_checks() {
-            return;
-        }
         let float_type = value.get_type();
         let trunc = Intrinsic::find("llvm.trunc")
             .and_then(|i| i.get_declaration(self.module, &[float_type.into()]))
@@ -370,10 +333,12 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         self.builder.build_int_mul(count, size, "bytes").unwrap()
     }
 
-    /// `bytes_for` a buffer about to be allocated, trapping on overflow.
+    /// `bytes_for` a buffer about to be allocated, trapping on overflow in a
+    /// build with checks.
     fn bytes_to_allocate(&mut self, elem: Ty, count: IntValue<'ctx>) -> IntValue<'ctx> {
         let size = self.size_of(elem);
-        self.int_arith(BinOp::Mul, count, size, false)
+        let checked = self.mode.emit_safety_checks();
+        self.int_arith(BinOp::Mul, count, size, false, checked)
             .into_int_value()
     }
 
@@ -477,245 +442,139 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         });
     }
 
-    /// The Vec a builtin's first argument, `AddressOf` it, points at.
-    fn receiver(&mut self, args: &'a [Expr]) -> (PointerValue<'ctx>, Ty) {
-        let receiver = &args[0];
-        let ty = match self.types().kind(receiver.ty) {
-            TyKind::Ptr(inner) | TyKind::Ref(inner) | TyKind::RefMut(inner) => *inner,
-            _ => receiver.ty,
-        };
-        (self.expr(receiver).ptr(), ty)
+    /// The Vec at `place`, with its type and element type.
+    fn vec_at(&mut self, place: &Place) -> (PointerValue<'ctx>, Ty, Ty) {
+        let ty = self.place_ty(place);
+        (self.place(place), ty, self.element_ty(ty))
     }
 
-    pub(super) fn builtin(&mut self, builtin: Builtin, args: &'a [Expr], ty: Ty) -> Val<'ctx> {
+    /// `push`, or `insert` at `at`, the bounds already checked.
+    pub(super) fn vec_insert(&mut self, place: &Place, at: Option<&Operand>, item: &Operand) {
+        let at = at.map(|at| self.operand(at).imm().into_int_value());
+        let staged = self.operand(item);
+        let (vec, ty, elem) = self.vec_at(place);
+        let one = self.usize_type().const_int(1, false);
+        let current = self.load_field(vec, ty, 1).into_int_value();
+        let grown = self.builder.build_int_add(current, one, "grown").unwrap();
+        self.reserve(vec, ty, grown);
+        let data = self.load_field(vec, ty, 0).into_pointer_value();
+        let slot = self.buffer_slot(data, elem, at.unwrap_or(current));
+        if let Some(at) = at {
+            let next = self.builder.build_int_add(at, one, "next").unwrap();
+            let after = self.buffer_slot(data, elem, next);
+            let tail = self.builder.build_int_sub(current, at, "tail").unwrap();
+            self.move_elements(after, slot, elem, tail);
+        }
+        self.store_val(slot, staged, elem);
+        let len_field = self.field_ptr(vec, ty, 1);
+        self.builder.build_store(len_field, grown).unwrap();
+    }
+
+    /// `remove(at)`, the bounds already checked.
+    pub(super) fn vec_remove(&mut self, place: &Place, at: &Operand) -> Val<'ctx> {
+        let at = self.operand(at).imm().into_int_value();
+        let (vec, ty, elem) = self.vec_at(place);
+        let one = self.usize_type().const_int(1, false);
+        let current = self.load_field(vec, ty, 1).into_int_value();
+        let data = self.load_field(vec, ty, 0).into_pointer_value();
+        let slot = self.buffer_slot(data, elem, at);
+        let removed = self.alloca(elem, "removed");
+        self.copy_bits(removed, slot, elem);
+        let next = self.builder.build_int_add(at, one, "next").unwrap();
+        let after = self.buffer_slot(data, elem, next);
+        let tail = self.builder.build_int_sub(current, next, "tail").unwrap();
+        self.move_elements(slot, after, elem, tail);
+        let shrunk = self.builder.build_int_sub(current, one, "shrunk").unwrap();
+        let len_field = self.field_ptr(vec, ty, 1);
+        self.builder.build_store(len_field, shrunk).unwrap();
+        self.load_val(removed, elem)
+    }
+
+    /// `pop()`, or with `at`, `get(at)`, into the `T?` or `(&T)?` at `dst`.
+    pub(super) fn vec_take(
+        &mut self,
+        place: &Place,
+        at: Option<&Operand>,
+        dst: PointerValue<'ctx>,
+        ty: Ty,
+    ) {
+        let index = at.map(|at| self.operand(at).imm().into_int_value());
+        let (vec, vec_ty, elem) = self.vec_at(place);
         let usize_type = self.usize_type();
         let one = usize_type.const_int(1, false);
-        match builtin {
-            Builtin::Flush => {
-                let flush = self.flush.expect("the prelude declares the streams");
-                self.builder.build_call(flush, &[], "").unwrap();
-                Val::Unit
+        let current = self.load_field(vec, vec_ty, 1).into_int_value();
+        let present = match index {
+            Some(index) => self
+                .builder
+                .build_int_compare(IntPredicate::ULT, index, current, "in_bounds")
+                .unwrap(),
+            None => self
+                .builder
+                .build_int_compare(
+                    IntPredicate::NE,
+                    current,
+                    usize_type.const_zero(),
+                    "has_elem",
+                )
+                .unwrap(),
+        };
+        self.store_tag(dst, ty, false);
+        self.if_then(present, |this| {
+            let index = index.unwrap_or_else(|| {
+                let last = this.builder.build_int_sub(current, one, "new_len").unwrap();
+                let len_field = this.field_ptr(vec, vec_ty, 1);
+                this.builder.build_store(len_field, last).unwrap();
+                last
+            });
+            let data = this.load_field(vec, vec_ty, 0).into_pointer_value();
+            let slot = this.buffer_slot(data, elem, index);
+            let payload = this.field_ptr(dst, ty, 1);
+            match at {
+                Some(_) => {
+                    this.builder.build_store(payload, slot).unwrap();
+                }
+                None => this.copy_bits(payload, slot, elem),
             }
-            Builtin::CopyBytes => {
-                let to = self.imm(&args[0]).into_pointer_value();
-                let from = self.imm(&args[1]).into_pointer_value();
-                let count = self.imm(&args[2]).into_int_value();
-                self.builder.build_memmove(to, 1, from, 1, count).unwrap();
-                Val::Unit
-            }
-            Builtin::VecNew | Builtin::VecWithCapacity => {
-                let elem = self.element_ty(ty);
-                let (data, cap) = match args.first() {
-                    Some(cap) => {
-                        let cap = self.imm(cap).into_int_value();
-                        (self.alloc_buffer(elem, cap), cap)
-                    }
-                    None => (self.ptr_type().const_null(), usize_type.const_zero()),
-                };
-                let slot = self.alloca(ty, "vec");
-                self.store_vec(slot, ty, data, usize_type.const_zero(), cap);
-                Val::Mem(slot)
-            }
-            Builtin::SliceLen => {
-                let slice_ty = args[0].ty;
-                let slice = self.expr(&args[0]).ptr();
-                Val::Imm(self.load_field(slice, slice_ty, 1))
-            }
-            Builtin::IsSome | Builtin::IsOk | Builtin::IsNone | Builtin::IsErr => {
-                let held_ty = args[0].ty;
-                let held = self.expr(&args[0]).ptr();
-                let tag = self.load_field(held, held_ty, 0).into_int_value();
-                Val::Imm(match builtin {
-                    Builtin::IsNone | Builtin::IsErr => {
-                        self.builder.build_not(tag, "not").unwrap().into()
-                    }
-                    _ => tag.into(),
-                })
-            }
-            Builtin::Unwrap | Builtin::UnwrapErr => {
-                let held_ty = args[0].ty;
-                let held = self.expr(&args[0]).ptr();
-                let tag = self.load_field(held, held_ty, 0).into_int_value();
-                let (failed, label, at) = match (builtin, self.types().kind(held_ty)) {
-                    (Builtin::UnwrapErr, _) => (tag, "unwrap_err", 2),
-                    (_, TyKind::Optional(_)) => (
-                        self.builder.build_not(tag, "empty").unwrap(),
-                        "unwrap_none",
-                        1,
-                    ),
-                    _ => (self.builder.build_not(tag, "is_err").unwrap(), "unwrap", 1),
-                };
-                self.trap_if(failed, label);
-                let payload = self.field_ptr(held, held_ty, at);
-                self.load_val(payload, ty)
-            }
-            _ => self.vec_method(builtin, args, ty, one),
-        }
+            this.store_tag(dst, ty, true);
+        });
     }
 
-    fn vec_method(
-        &mut self,
-        builtin: Builtin,
-        args: &'a [Expr],
-        ty: Ty,
-        one: IntValue<'ctx>,
-    ) -> Val<'ctx> {
-        let (vec, vec_ty) = self.receiver(args);
-        let elem = self.element_ty(vec_ty);
-        let usize_type = self.usize_type();
-        let len = |this: &mut Self| this.load_field(vec, vec_ty, 1).into_int_value();
-        let set_len = |this: &mut Self, value: IntValue<'ctx>| {
-            let field = this.field_ptr(vec, vec_ty, 1);
-            this.builder.build_store(field, value).unwrap();
-        };
-        let data = |this: &mut Self| this.load_field(vec, vec_ty, 0).into_pointer_value();
-        match builtin {
-            Builtin::VecLen => Val::Imm(len(self).into()),
-            Builtin::VecCapacity => Val::Imm(self.load_field(vec, vec_ty, 2)),
-            Builtin::VecIsEmpty => {
-                let len = len(self);
-                let empty = self
-                    .builder
-                    .build_int_compare(IntPredicate::EQ, len, usize_type.const_zero(), "is_empty")
-                    .unwrap();
-                Val::Imm(empty.into())
-            }
-            Builtin::VecPush | Builtin::VecInsert => {
-                let at = (builtin == Builtin::VecInsert).then(|| {
-                    let signed = self.is_signed(args[1].ty);
-                    let index = self.imm(&args[1]).into_int_value();
-                    self.widen(index, signed)
-                });
-                let item = args.last().unwrap();
-                let staged = self.alloca(elem, "item");
-                self.write(item, staged);
-                let current = len(self);
-                let grown = self.builder.build_int_add(current, one, "grown").unwrap();
-                let at = match at {
-                    Some(at) => {
-                        self.check_bounds(at, grown);
-                        at
-                    }
-                    None => current,
-                };
-                self.reserve(vec, vec_ty, grown);
-                let data = data(self);
-                let slot = self.buffer_slot(data, elem, at);
-                if builtin == Builtin::VecInsert {
-                    let next = self.builder.build_int_add(at, one, "next").unwrap();
-                    let after = self.buffer_slot(data, elem, next);
-                    let tail = self.builder.build_int_sub(current, at, "tail").unwrap();
-                    self.move_elements(after, slot, elem, tail);
-                }
-                self.copy_bits(slot, staged, elem);
-                set_len(self, grown);
-                Val::Unit
-            }
-            Builtin::VecRemove => {
-                let signed = self.is_signed(args[1].ty);
-                let at = self.imm(&args[1]).into_int_value();
-                let at = self.widen(at, signed);
-                let current = len(self);
-                self.check_bounds(at, current);
-                let data = data(self);
-                let slot = self.buffer_slot(data, elem, at);
-                let removed = self.alloca(elem, "removed");
-                self.copy_bits(removed, slot, elem);
-                let next = self.builder.build_int_add(at, one, "next").unwrap();
-                let after = self.buffer_slot(data, elem, next);
-                let tail = self.builder.build_int_sub(current, next, "tail").unwrap();
-                self.move_elements(slot, after, elem, tail);
-                let shrunk = self.builder.build_int_sub(current, one, "shrunk").unwrap();
-                set_len(self, shrunk);
-                self.load_val(removed, elem)
-            }
-            Builtin::VecPop | Builtin::VecGet => {
-                let current = len(self);
-                let (present, index) = match builtin {
-                    Builtin::VecPop => {
-                        let present = self
-                            .builder
-                            .build_int_compare(
-                                IntPredicate::NE,
-                                current,
-                                usize_type.const_zero(),
-                                "has_elem",
-                            )
-                            .unwrap();
-                        (present, None)
-                    }
-                    _ => {
-                        let signed = self.is_signed(args[1].ty);
-                        let index = self.imm(&args[1]).into_int_value();
-                        let index = self.widen(index, signed);
-                        let present = self
-                            .builder
-                            .build_int_compare(IntPredicate::ULT, index, current, "in_bounds")
-                            .unwrap();
-                        (present, Some(index))
-                    }
-                };
-                let result = self.alloca(ty, "elem");
-                let tag = self.field_ptr(result, ty, 0);
-                self.builder
-                    .build_store(tag, self.context.bool_type().const_zero())
-                    .unwrap();
-                self.if_then(present, |this| {
-                    let index = index.unwrap_or_else(|| {
-                        let last = this.builder.build_int_sub(current, one, "new_len").unwrap();
-                        set_len(this, last);
-                        last
-                    });
-                    let data = data(this);
-                    let slot = this.buffer_slot(data, elem, index);
-                    let payload = this.field_ptr(result, ty, 1);
-                    match builtin {
-                        Builtin::VecGet => {
-                            this.builder.build_store(payload, slot).unwrap();
-                        }
-                        _ => this.copy_bits(payload, slot, elem),
-                    }
-                    let tag = this.field_ptr(result, ty, 0);
-                    this.builder
-                        .build_store(tag, this.context.bool_type().const_int(1, false))
-                        .unwrap();
-                });
-                Val::Mem(result)
-            }
-            Builtin::VecClear => {
-                if self.program.needs_drop(elem) {
-                    let current = len(self);
-                    let data = data(self);
-                    self.counted_loop(current, |this, at| {
-                        let item = this.buffer_slot(data, elem, at);
-                        this.call_drop(item, elem);
-                    });
-                }
-                set_len(self, usize_type.const_zero());
-                Val::Unit
-            }
-            Builtin::VecReserve => {
-                let more = self.imm(&args[1]).into_int_value();
-                let current = len(self);
-                let needed = self.builder.build_int_add(current, more, "needed").unwrap();
-                self.reserve(vec, vec_ty, needed);
-                Val::Unit
-            }
-            Builtin::VecShrinkToFit => {
-                let current = len(self);
-                let cap = self.load_field(vec, vec_ty, 2).into_int_value();
-                let data = data(self);
-                let old = self.bytes_for(elem, cap);
-                let new = self.bytes_for(elem, current);
-                let resized = self.resize_buffer(data, old, new);
-                let ptr_field = self.field_ptr(vec, vec_ty, 0);
-                self.builder.build_store(ptr_field, resized).unwrap();
-                let cap_field = self.field_ptr(vec, vec_ty, 2);
-                self.builder.build_store(cap_field, current).unwrap();
-                Val::Unit
-            }
-            _ => unreachable!("{builtin:?} is not a Vec method"),
+    pub(super) fn vec_clear(&mut self, place: &Place) {
+        let (vec, ty, elem) = self.vec_at(place);
+        if self.program.needs_drop(elem) {
+            let current = self.load_field(vec, ty, 1).into_int_value();
+            let data = self.load_field(vec, ty, 0).into_pointer_value();
+            self.counted_loop(current, |this, at| {
+                let item = this.buffer_slot(data, elem, at);
+                this.call_drop(item, elem);
+            });
         }
+        let len_field = self.field_ptr(vec, ty, 1);
+        self.builder
+            .build_store(len_field, self.usize_type().const_zero())
+            .unwrap();
+    }
+
+    pub(super) fn vec_reserve(&mut self, place: &Place, more: &Operand) {
+        let more = self.operand(more).imm().into_int_value();
+        let (vec, ty, _) = self.vec_at(place);
+        let current = self.load_field(vec, ty, 1).into_int_value();
+        let needed = self.builder.build_int_add(current, more, "needed").unwrap();
+        self.reserve(vec, ty, needed);
+    }
+
+    pub(super) fn vec_shrink(&mut self, place: &Place) {
+        let (vec, ty, elem) = self.vec_at(place);
+        let current = self.load_field(vec, ty, 1).into_int_value();
+        let cap = self.load_field(vec, ty, 2).into_int_value();
+        let data = self.load_field(vec, ty, 0).into_pointer_value();
+        let old = self.bytes_for(elem, cap);
+        let new = self.bytes_for(elem, current);
+        let resized = self.resize_buffer(data, old, new);
+        let ptr_field = self.field_ptr(vec, ty, 0);
+        self.builder.build_store(ptr_field, resized).unwrap();
+        let cap_field = self.field_ptr(vec, ty, 2);
+        self.builder.build_store(cap_field, current).unwrap();
     }
 
     /// The stdout and stderr `OutStream` globals, empty with their fd set,
@@ -770,7 +629,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     /// `main`, then the flush, giving back `main`'s exit code.
     pub(super) fn create_start(&mut self) {
         self.module.set_inline_assembly(include_str!("start.s"));
-        let Some(main) = self.program.functions.iter().position(|f| f.exported) else {
+        let Some(main) = self.bodies.iter().position(|body| body.exported) else {
             return;
         };
         let flush = self.flush.expect("the flush comes first");
@@ -793,22 +652,23 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         &mut self,
         stderr: bool,
         newline: bool,
-        pieces: &'a [Vec<u8>],
-        values: &'a [Expr],
+        pieces: &[Vec<u8>],
+        values: &[Operand],
     ) {
         let [out, err] = self.streams.expect("the prelude declares the streams");
         let stream = if stderr { err } else { out };
         let runtime = &self.program.runtime;
         let (write_bytes, flush) = (runtime.write_bytes, runtime.flush);
-        let lowered: Vec<Val<'ctx>> = values.iter().map(|value| self.snapshot(value)).collect();
         for (at, piece) in pieces.iter().enumerate() {
             if !piece.is_empty() {
                 let text = self.const_bytes(piece);
                 let len = self.usize_type().const_int(piece.len() as u64, false);
                 self.call_fn(write_bytes, &[stream.into(), text.into(), len.into()]);
             }
-            if let (Some(value), Some(&val)) = (values.get(at), lowered.get(at)) {
-                self.print_value(stream, value.ty, val);
+            if let Some(value) = values.get(at) {
+                let ty = self.operand_ty(value);
+                let lowered = self.operand(value);
+                self.print_value(stream, ty, lowered);
             }
         }
         if newline {
@@ -816,19 +676,6 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             let one = self.usize_type().const_int(1, false);
             self.call_fn(write_bytes, &[stream.into(), text.into(), one.into()]);
             self.call_fn(flush, &[stream.into()]);
-        }
-    }
-
-    /// The value of `value` as it is now, kept apart from the place it was
-    /// read from, so what later arguments do cannot change it.
-    fn snapshot(&mut self, value: &'a Expr) -> Val<'ctx> {
-        match self.expr(value) {
-            Val::Mem(src) => {
-                let slot = self.alloca(value.ty, "printed");
-                self.copy_bits(slot, src, value.ty);
-                Val::Mem(slot)
-            }
-            other => other,
         }
     }
 
@@ -889,16 +736,18 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         }
     }
 
-    pub(super) fn asm(
-        &mut self,
-        template: &str,
-        constraints: &str,
-        outputs: &'a [Place],
-        inputs: &'a [Expr],
-        volatile: bool,
-        ty: Ty,
-    ) -> Val<'ctx> {
-        let inputs: Vec<BasicValueEnum> = inputs.iter().map(|input| self.imm(input)).collect();
+    pub(super) fn asm(&mut self, asm: &Asm, ty: Ty) -> Val<'ctx> {
+        let Asm {
+            template,
+            constraints,
+            outputs,
+            inputs,
+            volatile,
+        } = asm;
+        let inputs: Vec<BasicValueEnum> = inputs
+            .iter()
+            .map(|input| self.operand(input).imm())
+            .collect();
         let output_tys: Vec<BasicTypeEnum> = outputs
             .iter()
             .map(|place| {
@@ -916,9 +765,9 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         let fn_type = output_type.fn_type(&params, false);
         let asm = self.context.create_inline_asm(
             fn_type,
-            template.to_string(),
-            constraints.to_string(),
-            volatile,
+            template.clone(),
+            constraints.clone(),
+            *volatile,
             false,
             None,
             false,

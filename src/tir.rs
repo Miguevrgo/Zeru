@@ -1,7 +1,7 @@
-//! The typed IR the checker produces and codegen lowers. Every expression has
-//! its exact type, every implicit conversion is a node of its own, every call
-//! names the function instance it reaches, and every move and drop the
-//! language implies is written out. Codegen decides nothing; it translates.
+//! The typed IR the checker produces and the MIR is built from. Every
+//! expression has its exact type, every implicit conversion is a node of its
+//! own, every call names the function instance it reaches, and every move and
+//! drop the language implies is written out.
 
 use std::collections::{HashMap, HashSet};
 

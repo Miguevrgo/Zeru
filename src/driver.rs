@@ -1,6 +1,6 @@
 //! The pipeline: load and parse every file, collect the items, type check
-//! into the typed IR, lower that to LLVM, emit an object file and link it
-//! statically, with no libc, through the system C compiler.
+//! into the typed IR, build the MIR, lower that to LLVM, emit an object file
+//! and link it statically, with no libc, through the system C compiler.
 
 use inkwell::context::Context;
 use inkwell::passes::PassBuilderOptions;
@@ -97,14 +97,17 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
         return report(&errors);
     }
     let items = Items::collect(&modules);
-    let program = match Checker::new(&items).check() {
+    let mut program = match Checker::new(&items).check() {
         Err(errors) => return report(&errors),
         Ok(program) => program,
     };
+    let bodies = crate::mir::build(&mut program, mode);
     let context = Context::create();
     let module = context.create_module(name);
     let machine = crate::lower::host_machine(mode);
-    crate::lower::lower(&program, &context, &module, &sources, mode, &machine);
+    crate::lower::lower(
+        &program, &bodies, &context, &module, &sources, mode, &machine,
+    );
     module.verify()?;
     if keep_ir {
         module.print_to_file(&ir_path)?;

@@ -5,6 +5,7 @@ mod errors;
 mod items;
 mod lexer;
 mod lower;
+mod mir;
 mod parser;
 mod tir;
 mod token;
