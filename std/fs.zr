@@ -11,77 +11,118 @@ const SYS_MKDIR: i64 = 83;
 const SYS_RMDIR: i64 = 84;
 const SYS_UNLINK: i64 = 87;
 
+// `open` flag: reading only.
 pub const O_RDONLY: i64 = 0;
+// `open` flag: writing only.
 pub const O_WRONLY: i64 = 1;
+// `open` flag: reading and writing.
 pub const O_RDWR: i64 = 2;
+// `open` flag: create the file if it is missing, with `open`'s `mode`.
 pub const O_CREAT: i64 = 64;
+// `open` flag: empty the file when writing to it.
 pub const O_TRUNC: i64 = 512;
+// `open` flag: every write goes to the end of the file.
 pub const O_APPEND: i64 = 1024;
+// `open` flag: with `O_CREAT`, fail with 17 (EEXIST) if the file exists.
 pub const O_EXCL: i64 = 128;
 
+// `lseek` from the start of the file.
 pub const SEEK_SET: i64 = 0;
+// `lseek` from the current offset.
 pub const SEEK_CUR: i64 = 1;
+// `lseek` from the end of the file.
 pub const SEEK_END: i64 = 2;
 
+// rw-r--r--: the owner reads and writes, everyone else reads.
 pub const PERM_644: i64 = 420;
+// rwxr-xr-x: the owner does everything, everyone else reads and runs.
 pub const PERM_755: i64 = 493;
+// rw-------: only the owner reads and writes.
 pub const PERM_600: i64 = 384;
+// rwx------: only the owner, for everything.
 pub const PERM_700: i64 = 448;
 
+// Open `path`, which must end with a NUL byte, with `O_*` flags and `mode`
+// as a created file's permissions; the fd, or the errno as the error code.
 pub fn open(path: *u8, flags: i64, mode: i64) i64! {
     return sys_result(syscall3(SYS_OPEN, path as i64, flags, mode));
 }
 
+// Close `fd`; 0, or the errno as the error code.
 pub fn close(fd: i64) i64! {
     return sys_result(syscall1(SYS_CLOSE, fd));
 }
 
+// Read up to `count` bytes into `buf`; how many, 0 at the end of the file,
+// or the errno as the error code.
 pub fn read(fd: i64, buf: *u8, count: usize) i64! {
     return sys_result(syscall3(SYS_READ, fd, buf as i64, count as i64));
 }
 
+// Write up to `count` bytes of `buf`; how many, which may be fewer, or the
+// errno as the error code.
 pub fn write(fd: i64, buf: *u8, count: usize) i64! {
     return sys_result(syscall3(SYS_WRITE, fd, buf as i64, count as i64));
 }
 
+// Move `fd`'s offset to `offset` bytes from `whence`, a `SEEK_*`; the new
+// offset from the start, or the errno as the error code.
 pub fn lseek(fd: i64, offset: i64, whence: i64) i64! {
     return sys_result(syscall3(SYS_LSEEK, fd, offset, whence));
 }
 
+// Create a directory at `path`, which must end with a NUL byte, with
+// permissions `mode`; 0, or the errno as the error code.
 pub fn mkdir(path: *u8, mode: i64) i64! {
     return sys_result(syscall2(SYS_MKDIR, path as i64, mode));
 }
 
+// Remove the empty directory at `path`, which must end with a NUL byte; 0,
+// or the errno as the error code.
 pub fn rmdir(path: *u8) i64! {
     return sys_result(syscall1(SYS_RMDIR, path as i64));
 }
 
+// Delete the file at `path`, which must end with a NUL byte; not for
+// directories. 0, or the errno as the error code.
 pub fn unlink(path: *u8) i64! {
     return sys_result(syscall1(SYS_UNLINK, path as i64));
 }
 
+// Move `old_path` to `new_path`, both ending with a NUL byte, replacing a
+// file already there; 0, or the errno as the error code.
 pub fn rename(old_path: *u8, new_path: *u8) i64! {
     return sys_result(syscall2(SYS_RENAME, old_path as i64, new_path as i64));
 }
 
+// The size in bytes of the file at `path`, which must end with a NUL byte,
+// following symlinks; the errno as the error code, 2 (ENOENT) when missing.
 pub fn file_size(path: *u8) i64! {
     var stat: Array<i64, 18> = [0; 18];
     sys_result(syscall2(SYS_STAT, path as i64, (&stat[0]) as i64))!;
     return Ok(stat[6]);
 }
 
+// Whether something exists at `path`, which must end with a NUL byte; false
+// on any error, such as no permission to look.
 pub fn exists(path: *u8) bool {
     return syscall2(SYS_ACCESS, path as i64, 0) == 0;
 }
 
+// Cut or zero-extend the file at `path`, which must end with a NUL byte, to
+// `length` bytes; 0, or the errno as the error code.
 pub fn truncate(path: *u8, length: i64) i64! {
     return sys_result(syscall2(SYS_TRUNCATE, path as i64, length));
 }
 
+// Wait until what was written to `fd` is on disk; 0, or the errno as the
+// error code.
 pub fn fsync(fd: i64) i64! {
     return sys_result(syscall1(SYS_FSYNC, fd));
 }
 
+// Read the file at `path`, which must end with a NUL byte, into `buf`, up to
+// `buf_size` bytes and no NUL added; how many, or the errno as the error code.
 pub fn read_file(path: *u8, buf: *u8, buf_size: usize) i64! {
     var fd = open(path, O_RDONLY, 0)!;
     var total: usize = 0;
@@ -95,6 +136,8 @@ pub fn read_file(path: *u8, buf: *u8, buf_size: usize) i64! {
     return Ok(total as i64);
 }
 
+// Create or replace the file at `path`, which must end with a NUL byte, with
+// `len` bytes of `data`, as `PERM_644`; `len`, or the errno as the error code.
 pub fn write_file(path: *u8, data: *u8, len: usize) i64! {
     var fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, PERM_644)!;
     var total: usize = 0;

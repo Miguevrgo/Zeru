@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: Cannot cast str to u64
-    ╭─[ std/collections/hashmap.zr:76:25 ]
+    ╭─[ std/collections/hashmap.zr:80:25 ]
     │
- 76 │         var bits = hash(entry.0 as u64);
+ 80 │         var bits = hash(entry.0 as u64);
     │                         ───────┬──────
     │                                ╰──────── Cannot cast str to u64
     │
@@ -14,9 +14,9 @@ Error: Cannot cast str to u64
     │                                      ╰──────── in 'hashmap::HashMap::place<str, i64>', instantiated here
 ────╯
 Error: Cannot cast str to u64
-     ╭─[ std/collections/hashmap.zr:152:25 ]
+     ╭─[ std/collections/hashmap.zr:160:25 ]
      │
- 152 │         var bits = hash(key as u64);
+ 160 │         var bits = hash(key as u64);
      │                         ─────┬────
      │                              ╰────── Cannot cast str to u64
      │

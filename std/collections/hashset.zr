@@ -3,9 +3,11 @@
 
 import std.collections.hashmap::{HashMap};
 
+// A set of integer, bool or enum keys, growing on the heap as members come.
 pub struct HashSet<K: Eq> {
     members: HashMap<K, bool>,
 
+    // An empty set; it allocates on the first insert.
     pub fn new() HashSet<K> {
         return HashSet { members: HashMap.new() };
     }
@@ -19,22 +21,27 @@ pub struct HashSet<K: Eq> {
         return true;
     }
 
+    // Whether `key` is a member.
     pub fn contains(self, key: K) bool {
         return self.members.contains(key);
     }
 
+    // Drop `key`; false when it was not a member.
     pub fn remove(var self, key: K) bool {
         return self.members.remove(key);
     }
 
+    // Drop every member.
     pub fn clear(var self) {
         self.members.clear();
     }
 
+    // How many members it holds.
     pub fn len(self) usize {
         return self.members.len();
     }
 
+    // Whether it holds no members.
     pub fn is_empty(self) bool {
         return self.members.is_empty();
     }

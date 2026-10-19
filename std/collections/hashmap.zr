@@ -47,17 +47,21 @@ fn lowest(bits: u32) usize {
     return at as usize;
 }
 
+// A map from integer, bool or enum keys to values, growing on the heap as
+// entries come.
 pub struct HashMap<K: Eq, V> {
     groups: Vec<u64>,
     slots: Vec<(K, V)?>,
     len: usize,
     room: usize,
 
+    // An empty map; it allocates on the first insert.
     pub fn new() HashMap<K, V> {
         return HashMap { groups: Vec.new(), slots: Vec.new(), len: 0, room: 0 };
     }
 
-    // Store `value` under `key`, in place of what was there.
+    // Store `value` under `key`, in place of what was there; the map grows
+    // when full.
     pub fn insert(var self, key: K, value: V) {
         var found = self.find(key);
         if found.is_some() {
@@ -104,12 +108,13 @@ pub struct HashMap<K: Eq, V> {
         }
     }
 
+    // Whether there is an entry under `key`.
     pub fn contains(self, key: K) bool {
         return self.find(key).is_some();
     }
 
-    // Drop the entry under `key`; false when there was none. Its slot is
-    // never used again only if its group still has one never used, since
+    // Drop the entry under `key`; false when there was none. Its slot goes
+    // back to never used only if its group still has one never used, since
     // then no search ever went past that group.
     pub fn remove(var self, key: K) bool {
         var found = self.find(key);
@@ -128,6 +133,7 @@ pub struct HashMap<K: Eq, V> {
         return true;
     }
 
+    // Drop every entry.
     pub fn clear(var self) {
         self.groups.clear();
         self.slots.clear();
@@ -135,10 +141,12 @@ pub struct HashMap<K: Eq, V> {
         self.room = 0;
     }
 
+    // How many entries it holds.
     pub fn len(self) usize {
         return self.len;
     }
 
+    // Whether it holds no entries.
     pub fn is_empty(self) bool {
         return self.len == 0;
     }

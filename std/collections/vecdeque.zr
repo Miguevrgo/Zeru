@@ -1,15 +1,20 @@
 // Zeru Standard Library - VecDeque (double-ended queue, i64 elements)
 // Fixed-capacity circular buffer. 1024 elements max. O(1) push/pop both ends.
 
+// A queue of up to 1024 i64s open at both ends, held inline in 8 KB; it never
+// allocates.
 pub struct VecDeque {
     data: Array<i64, 1024>,
     head: usize,
     len: usize,
 
+    // An empty queue.
     pub fn new() VecDeque {
         return VecDeque { data: [0; 1024], head: 0, len: 0 };
     }
 
+    // Add `val` at the back; false, leaving the queue as it was, when it holds
+    // 1024 already.
     pub fn push_back(var self, val: i64) bool {
         if self.len >= 1024 {
             return false;
@@ -20,6 +25,8 @@ pub struct VecDeque {
         return true;
     }
 
+    // Add `val` at the front; false, leaving the queue as it was, when it
+    // holds 1024 already.
     pub fn push_front(var self, val: i64) bool {
         if self.len >= 1024 {
             return false;
@@ -34,6 +41,7 @@ pub struct VecDeque {
         return true;
     }
 
+    // Take out the front value; None when empty.
     pub fn pop_front(var self) i64? {
         if self.len == 0 {
             return None;
@@ -44,6 +52,7 @@ pub struct VecDeque {
         return val;
     }
 
+    // Take out the back value; None when empty.
     pub fn pop_back(var self) i64? {
         if self.len == 0 {
             return None;
@@ -53,6 +62,7 @@ pub struct VecDeque {
         return self.data[tail];
     }
 
+    // The front value, left in place; None when empty.
     pub fn front(self) i64? {
         if self.len == 0 {
             return None;
@@ -60,6 +70,7 @@ pub struct VecDeque {
         return self.data[self.head];
     }
 
+    // The back value, left in place; None when empty.
     pub fn back(self) i64? {
         if self.len == 0 {
             return None;
@@ -68,6 +79,7 @@ pub struct VecDeque {
         return self.data[tail];
     }
 
+    // The value `index` places from the front; None past the end.
     pub fn at(self, index: usize) i64? {
         if index >= self.len {
             return None;
@@ -76,14 +88,17 @@ pub struct VecDeque {
         return self.data[real_idx];
     }
 
+    // How many values it holds.
     pub fn len(self) usize {
         return self.len;
     }
 
+    // Whether it holds no values.
     pub fn is_empty(self) bool {
         return self.len == 0;
     }
 
+    // Drop every value.
     pub fn clear(var self) {
         self.head = 0;
         self.len = 0;

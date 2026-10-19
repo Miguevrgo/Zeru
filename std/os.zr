@@ -11,7 +11,8 @@ const SYS_GETEGID: i64 = 108;
 const SYS_GETPPID: i64 = 110;
 const SYS_CLOCK_GETTIME: i64 = 228;
 
-// The command line the program was started with, its own path first.
+// The command line the program was started with, its own path first. The
+// Vec is allocated; its strings point into the process's memory, not copies.
 pub fn args() Vec<str> {
     var stack: i64 = 0;
     asm ("movq __zeru_stack(%rip), $0" : "=r" (stack));
@@ -29,34 +30,50 @@ pub fn args() Vec<str> {
     return out;
 }
 
+// This process's id.
 pub fn getpid() i64 { return syscall1(SYS_GETPID, 0); }
+// The id of the process that started this one.
 pub fn getppid() i64 { return syscall1(SYS_GETPPID, 0); }
+// The real user id.
 pub fn getuid() i64 { return syscall1(SYS_GETUID, 0); }
+// The real group id.
 pub fn getgid() i64 { return syscall1(SYS_GETGID, 0); }
+// The effective user id, the one permissions are checked against.
 pub fn geteuid() i64 { return syscall1(SYS_GETEUID, 0); }
+// The effective group id, the one permissions are checked against.
 pub fn getegid() i64 { return syscall1(SYS_GETEGID, 0); }
 
+// Write the working directory and a closing NUL to `buf`; its length with the
+// NUL, or the errno as the error code, 34 (ERANGE) when `size` is too small.
 pub fn getcwd(buf: *u8, size: usize) i64! {
     return sys_result(syscall2(SYS_GETCWD, buf as i64, size as i64));
 }
 
+// Block for `ms` milliseconds; 0, or the errno as the error code: 22 (EINVAL)
+// for a negative `ms`, 4 (EINTR) when a signal wakes it early.
 pub fn sleep_ms(ms: i64) i64! {
     var ts: Array<i64, 2> = [ms / 1000, (ms % 1000) * 1000000];
     return sys_result(syscall2(SYS_NANOSLEEP, (&ts[0]) as i64, 0));
 }
 
+// Nanoseconds on the monotonic clock, for timing between two calls; not the
+// time of day. The errno as the error code.
 pub fn clock_ns() i64! {
     var ts: Array<i64, 2> = [0; 2];
     sys_result(syscall2(SYS_CLOCK_GETTIME, 1, (&ts[0]) as i64))!;
     return Ok(ts[0] * 1000000000 + ts[1]);
 }
 
+// Whole seconds since 1970-01-01 UTC by the wall clock; the errno as the
+// error code.
 pub fn time() i64! {
     var ts: Array<i64, 2> = [0; 2];
     sys_result(syscall2(SYS_CLOCK_GETTIME, 0, (&ts[0]) as i64))!;
     return Ok(ts[0]);
 }
 
+// Write the host name and a closing NUL to `buf`, cut to `size - 1` bytes;
+// 0, or the errno as the error code. Writes nothing when `size` is 0.
 pub fn hostname(buf: *u8, size: usize) i64! {
     if size == 0 { return Ok(0); }
     var utsname: Array<u8, 390> = [0; 390];

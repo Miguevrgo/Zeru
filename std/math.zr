@@ -1,7 +1,11 @@
+// The ratio of a circle's circumference to its diameter, 3.14159...
 pub const PI: f64 = 3.14159265358979323846;
+// Euler's number, the base of the natural logarithm, 2.71828...
 pub const E: f64 = 2.71828182845904523536;
+// A full turn in radians, 2 * `PI`.
 pub const TAU: f64 = 6.28318530717958647692;
 
+// The smaller of `a` and `b`; `b` when they are equal.
 pub fn min<T>(a: T, b: T) T {
     if a < b {
         return a;
@@ -9,6 +13,7 @@ pub fn min<T>(a: T, b: T) T {
     return b;
 }
 
+// The larger of `a` and `b`; `b` when they are equal.
 pub fn max<T>(a: T, b: T) T {
     if a > b {
         return a;
@@ -16,6 +21,7 @@ pub fn max<T>(a: T, b: T) T {
     return b;
 }
 
+// `value` held between `low` and `high`, both included; expects `low <= high`.
 pub fn clamp<T>(value: T, low: T, high: T) T {
     if value < low {
         return low;
@@ -26,6 +32,8 @@ pub fn clamp<T>(value: T, low: T, high: T) T {
     return value;
 }
 
+// `num` without its sign; -0.0 gives 0.0. Signed types only, and it panics
+// on the most negative integer, which has no positive.
 pub fn abs<T>(num: T) T {
     if num < 0 {
         return -num;
@@ -36,6 +44,8 @@ pub fn abs<T>(num: T) T {
     return num;
 }
 
+// `base` to the power `exp`, by squaring; 1 when `exp` is 0. Panics on
+// overflow.
 pub fn pow<T>(base: T, exp: u32) T {
     var result: T = 1;
     var b: T = base;
@@ -52,10 +62,13 @@ pub fn pow<T>(base: T, exp: u32) T {
     return result;
 }
 
+// Whether `n` is 1, 2, 4, 8 and so on; false for 0.
 pub fn is_power_of_two(n: u64) bool {
     return n != 0 && (n & (n - 1)) == 0;
 }
 
+// Integer division whose remainder, `mod_euclid`, is never negative:
+// -7 by 2 gives -4. Panics when `b` is 0. Integers only.
 pub fn div_euclid<T>(a: T, b: T) T {
     var q: T = a / b;
     var r: T = a % b;
@@ -69,6 +82,8 @@ pub fn div_euclid<T>(a: T, b: T) T {
     return q;
 }
 
+// The remainder of `a` by `b`, never negative: -7 by 2 gives 1. Panics when
+// an integer `b` is 0.
 pub fn mod_euclid<T>(a: T, b: T) T {
     var r: T = a % b;
     if r < 0 {

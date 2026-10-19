@@ -1,11 +1,18 @@
 // Zeru Standard Library - Network (Linux x86_64)
 
+// The IPv4 address family, the one every socket here uses.
 pub const AF_INET: i64 = 2;
+// The IPv6 address family; the sockets here are IPv4 only.
 pub const AF_INET6: i64 = 10;
+// A stream socket, as TCP uses.
 pub const SOCK_STREAM: i64 = 1;
+// A datagram socket, as UDP uses.
 pub const SOCK_DGRAM: i64 = 2;
+// `shutdown`: no more reading.
 pub const SHUT_RD: i64 = 0;
+// `shutdown`: no more writing; the peer reads the end of the stream.
 pub const SHUT_WR: i64 = 1;
+// `shutdown`: no more reading or writing.
 pub const SHUT_RDWR: i64 = 2;
 
 const SYS_SOCKET: i64 = 41;
@@ -40,9 +47,12 @@ pub fn make_addr(ip: u32, port: u16) Array<u8, 16> {
 }
 
 
+// A TCP socket waiting for connections on an IPv4 address.
 pub struct TcpListener {
     fd: i64,
 
+    // Listen on `ip` and `port`, with SO_REUSEADDR and a backlog of 128; the
+    // errno as the error code, 98 (EADDRINUSE) when the port is taken.
     pub fn bind(ip: u32, port: u16) TcpListener! {
         var fd = sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_STREAM, 0))!;
         var one: i32 = 1;
@@ -55,20 +65,25 @@ pub struct TcpListener {
         return Ok(TcpListener { fd: fd });
     }
 
+    // Block until the next connection comes; the errno as the error code.
     pub fn accept(self) TcpStream! {
         var fd = sys_result(syscall3(SYS_ACCEPT, self.fd, 0, 0))!;
         return Ok(TcpStream { fd: fd });
     }
 
+    // Stop listening; 0, or the errno as the error code.
     pub fn close(self) i64! {
         return sys_result(syscall1(SYS_CLOSE, self.fd));
     }
 }
 
 
+// A TCP connection.
 pub struct TcpStream {
     fd: i64,
 
+    // Connect to `ip` and `port`; the errno as the error code, 111
+    // (ECONNREFUSED) when nothing listens there.
     pub fn connect(ip: u32, port: u16) TcpStream! {
         var fd = sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_STREAM, 0))!;
         var addr = make_addr(ip, port);
@@ -77,14 +92,20 @@ pub struct TcpStream {
         return Ok(TcpStream { fd: fd });
     }
 
+    // Read up to `len` bytes into `buf`, blocking until some come; how many,
+    // 0 once the peer has closed, or the errno as the error code.
     pub fn read(self, buf: *u8, len: usize) i64! {
         return sys_result(syscall3(SYS_READ, self.fd, buf as i64, len as i64));
     }
 
+    // Send up to `len` bytes of `buf`; how many, which may be fewer, or the
+    // errno as the error code. `write_all` sends them all.
     pub fn write(self, buf: *u8, len: usize) i64! {
         return sys_result(syscall3(SYS_WRITE, self.fd, buf as i64, len as i64));
     }
 
+    // Send all `len` bytes of `buf`; `len`, or the errno of the first failed
+    // write as the error code.
     pub fn write_all(self, buf: *u8, len: usize) i64! {
         var total: i64 = 0;
         var remaining: usize = len;
@@ -96,6 +117,8 @@ pub struct TcpStream {
         return Ok(total);
     }
 
+    // Read until `buf_size` bytes have come or the peer closes; how many, or
+    // the errno of the first failed read as the error code.
     pub fn read_all(self, buf: *u8, buf_size: usize) i64! {
         var total: i64 = 0;
         var remaining: usize = buf_size;
@@ -108,19 +131,25 @@ pub struct TcpStream {
         return Ok(total);
     }
 
+    // End reading, writing or both as `how`, a `SHUT_*`, says, keeping the
+    // socket open; 0, or the errno as the error code.
     pub fn shutdown(self, how: i64) i64! {
         return sys_result(syscall2(SYS_SHUTDOWN, self.fd, how));
     }
 
+    // Close the connection; 0, or the errno as the error code.
     pub fn close(self) i64! {
         return sys_result(syscall1(SYS_CLOSE, self.fd));
     }
 }
 
 
+// A UDP socket bound to an IPv4 address.
 pub struct UdpSocket {
     fd: i64,
 
+    // Bind to `ip` and `port`; the errno as the error code, 98 (EADDRINUSE)
+    // when the port is taken.
     pub fn bind(ip: u32, port: u16) UdpSocket! {
         var fd = sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_DGRAM, 0))!;
         var addr = make_addr(ip, port);
@@ -129,15 +158,20 @@ pub struct UdpSocket {
         return Ok(UdpSocket { fd: fd });
     }
 
+    // Send `len` bytes of `buf` as one datagram to `ip` and `port`; how many,
+    // or the errno as the error code.
     pub fn send_to(self, buf: *u8, len: usize, ip: u32, port: u16) i64! {
         var addr = make_addr(ip, port);
         return sys_result(syscall6(SYS_SENDTO, self.fd, buf as i64, len as i64, 0, (&addr[0]) as i64, 16));
     }
 
+    // Block for the next datagram and copy it to `buf`; its bytes, cut to
+    // `len` with the rest lost, or the errno as the error code.
     pub fn recv(self, buf: *u8, len: usize) i64! {
         return sys_result(syscall6(SYS_RECVFROM, self.fd, buf as i64, len as i64, 0, 0, 0));
     }
 
+    // Close the socket; 0, or the errno as the error code.
     pub fn close(self) i64! {
         return sys_result(syscall1(SYS_CLOSE, self.fd));
     }
