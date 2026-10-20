@@ -1,6 +1,3 @@
-// Only what is marked `pub` can be used from another module; fields are
-// always visible.
-
 pub struct Rect {
     w: i32,
     h: i32,
@@ -10,12 +7,10 @@ pub struct Rect {
     }
 }
 
-// How many square tiles of `side` cover `room`, rounding each side up.
 pub fn tiles(room: Rect, side: i32) i32 {
     return rounded_up(room.w, side) * rounded_up(room.h, side);
 }
 
-// Private: other modules cannot call it.
 fn rounded_up(length: i32, step: i32) i32 {
     return (length + step - 1) / step;
 }

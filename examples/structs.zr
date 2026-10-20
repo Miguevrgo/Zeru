@@ -1,19 +1,13 @@
-// Structs, enums and match: a few shapes on a plane, each a struct with
-// methods, its kind an enum, and the matches that take them apart.
-
 const PI: f64 = 3.14159;
 
-// A struct groups named fields; its functions are written inside it.
 struct Point {
     x: f64,
     y: f64,
 
-    // A function without `self` belongs to the type: `Point.origin()`.
     fn origin() Point {
         return Point { x: 0.0, y: 0.0 };
     }
 
-    // `self` reads the value the method is called on.
     fn manhattan(self, other: Point) f64 {
         var dx = self.x - other.x;
         var dy = self.y - other.y;
@@ -26,21 +20,18 @@ struct Point {
         return dx + dy;
     }
 
-    // `var self` may change it; the caller's variable must be `var` too.
     fn shift(var self, dx: f64, dy: f64) {
         self.x += dx;
         self.y += dy;
     }
 }
 
-// An enum is one of its variants, and a variant may carry values.
 enum Kind {
     Circle(f64),
     Rect(f64, f64),
     Dot,
 }
 
-// Variants that carry nothing compare with ==.
 enum Color {
     Red,
     Green,
@@ -52,8 +43,6 @@ struct Shape {
     kind: Kind,
     color: Color,
 
-    // match takes a value apart: each arm names a pattern, and the variant's
-    // values come out by name.
     fn area(self) f64 {
         return match self.kind {
             Kind::Circle(r) => PI * r * r,
@@ -62,7 +51,6 @@ struct Shape {
         };
     }
 
-    // A tuple holds a few values of any types, read as .0, .1 and so on.
     fn size(self) (f64, f64) {
         return match self.kind {
             Kind::Circle(r) => (2.0 * r, 2.0 * r),
@@ -72,8 +60,6 @@ struct Shape {
     }
 }
 
-// Patterns: | for either, constants, `_` to skip a value, and `default` for
-// whatever no other arm takes.
 fn describe(sides: i32) str {
     return match sides {
         0 => "round",
@@ -103,7 +89,6 @@ fn main() {
     }
     println("total area {}", total);
 
-    // A match whose arms are blocks is a statement.
     var reds = 0;
     for shape in shapes {
         match shape.kind {

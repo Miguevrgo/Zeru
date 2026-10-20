@@ -1,8 +1,3 @@
-// Modules: a program in several files. `import geometry;` loads geometry.zr
-// beside this file, and its public items are reached as `geometry::name`.
-// `import units.length::{meters}` loads units/length.zr and also names
-// `meters` directly. Run it with `zeru run examples/modules/main.zr`.
-
 import geometry;
 import units.length::{meters};
 

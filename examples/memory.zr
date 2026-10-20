@@ -1,8 +1,3 @@
-// Memory: what is copied and what is moved, lending with references, `drop`
-// when an owner goes, and raw pointers. No garbage collector and no manual
-// free: each value that owns memory has one owner, which frees it.
-
-// A struct with a `drop` method runs it when its owner goes away.
 struct Ticket {
     id: i32,
     holders: Vec<str>,
@@ -12,13 +7,10 @@ struct Ticket {
     }
 }
 
-// Taking a value that owns memory takes it over: the caller cannot use it
-// after the call, and it is dropped when this function ends.
 fn consume(ticket: Ticket) {
     println("using ticket {}", ticket.id);
 }
 
-// `&` lends it to read and `&var` to change; the owner keeps it.
 fn count(names: &Vec<str>) usize {
     return names.len();
 }
@@ -27,35 +19,28 @@ fn add_name(names: &var Vec<str>, name: str) {
     names.push(name);
 }
 
-// Returning a value hands it to the caller.
 fn make(id: i32) Ticket {
     return Ticket { id: id, holders: Vec.new() };
 }
 
 fn main() {
-    // Plain data, numbers and structs of them, is copied: both stay usable.
     var a = 5;
     var b = a;
     b += 1;
     println("{} {}", a, b);
 
-    // What owns memory, as a Vec, moves: `first` is empty from here on, and
-    // using it again is a compile error.
     var first: Vec<str> = ["ann", "bob"];
     var second = first;
-    // .copy() makes a second owner with its own memory.
     var third = second.copy();
     add_name(&var third, "cid");
     println("{} {}", count(&second), count(&third));
 
-    // A loop over `&var` changes each element in place.
     var scores: Vec<i64> = [1, 2, 3];
     for score in &var scores {
         score *= 10;
     }
     println("{} {} {}", scores[0], scores[1], scores[2]);
 
-    // Owners go at the end of their block, or when replaced.
     {
         var inner = make(1);
         println("inner holds {}", inner.holders.len());
@@ -64,12 +49,9 @@ fn main() {
     ticket = make(3);
     consume(ticket);
 
-    // While a reference to `scores` is in use, `scores` cannot be moved or
-    // freed, which the compiler checks; reading and writing stay allowed.
     var top = &scores[2];
     println("top {}", *top);
 
-    // A pointer `*T` is an address with no checks, for talking to the system.
     var bytes: Array<u8, 4> = [1, 2, 3, 4];
     var at: *u8 = &bytes[0];
     var sum: u32 = 0;

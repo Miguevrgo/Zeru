@@ -1,19 +1,14 @@
-// Collections: fixed arrays, the growable Vec, and the std's HashMap,
-// HashSet, VecDeque and BinaryHeap.
-
 import std.collections.hashmap::{HashMap};
 import std.collections.hashset::{HashSet};
 import std.collections.vecdeque::{VecDeque};
 import std.collections.binary_heap::{BinaryHeap};
 
 fn main() {
-    // Array<T, N> has N elements, its size known when compiling.
     var grid: Array<Array<i32, 3>, 2> = [[1, 2, 3], [4, 5, 6]];
     var zeros: Array<u8, 8> = [0; 8];
     grid[1][2] = 60;
     println("{} {} {}", grid[0][1], grid[1][2], zeros[7]);
 
-    // Vec<T> grows as it needs, on the heap.
     var v: Vec<i64> = [5, 3, 8];
     v.push(1);
     v.insert(0, 9);
@@ -26,11 +21,9 @@ fn main() {
     v.clear();
     println("{}", v.is_empty());
 
-    // Indexing out of bounds stops the program; get() gives None instead.
     var names: Vec<str> = ["ann", "bob"];
     println("{} {}", names.get(1).is_some(), names.get(5).is_none());
 
-    // HashMap<K, V>: values by key. A key is an integer, a bool or an enum.
     var ages: HashMap<i64, i32> = HashMap.new();
     ages.insert(1, 30);
     ages.insert(2, 41);
@@ -41,14 +34,12 @@ fn main() {
     }
     println("{} {}", ages.len(), ages.contains(3));
 
-    // HashSet<K>: keys only, each once.
     var seen: HashSet<i32> = HashSet.new();
     for n in [4, 7, 4, 4, 9] {
         seen.insert(n);
     }
     println("{} distinct", seen.len());
 
-    // VecDeque<T>: a queue to push and pop at both ends.
     var queue: VecDeque<str> = VecDeque.new();
     queue.push_back("second");
     queue.push_front("first");
@@ -58,7 +49,6 @@ fn main() {
     }
     println("");
 
-    // BinaryHeap<T>: pop always gives the largest.
     var heap: BinaryHeap<i32> = BinaryHeap.new();
     for n in [3, 10, 1, 7] {
         heap.push(n);

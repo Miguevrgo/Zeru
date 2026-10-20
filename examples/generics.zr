@@ -1,13 +1,7 @@
-// Generics and traits: code written once for many types, and the methods a
-// type must have to be used with it.
-
-// <T> names a type the caller picks; the arguments settle it.
 fn pair<T>(a: T, b: T) (T, T) {
     return (b, a);
 }
 
-// A bound asks for what the code does with T: Ord for < and >, Eq for ==
-// and !=, Num for arithmetic.
 fn largest<T: Ord>(items: &Vec<T>) T {
     var best = items[0];
     for item in items {
@@ -22,12 +16,10 @@ fn average<T: Num>(items: &Vec<T>) T {
     return items.sum() / items.len() as T;
 }
 
-// When nothing passed in settles T, write it after the name.
 fn zero<T: Num>() T {
     return 0 as T;
 }
 
-// A generic struct: a stack of anything.
 struct Stack<T> {
     items: Vec<T>,
 
@@ -48,8 +40,6 @@ struct Stack<T> {
     }
 }
 
-// A trait lists methods. A type meets it by having them; nothing else to
-// write.
 trait Named {
     fn name(self) str;
 }
@@ -70,7 +60,6 @@ struct Robot {
     }
 }
 
-// A trait as a bound: any T with `name` will do.
 fn greet<T: Named>(who: T) {
     println("hello, {}", who.name());
 }
@@ -85,7 +74,6 @@ fn main() {
     println("{} {} {} {}", largest(&ints), largest(&floats), average(&ints), average(&floats));
     println("{} {}", zero<i32>(), zero<f64>());
 
-    // The variable's type settles T when new() cannot.
     var stack: Stack<str> = Stack.new();
     stack.push("a");
     stack.push("b");

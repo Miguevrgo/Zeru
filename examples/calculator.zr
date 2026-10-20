@@ -1,7 +1,3 @@
-// A calculator, a whole program built from the pieces of the other examples:
-// text split into tokens, a recursive descent parser and errors as codes.
-// `zeru run examples/calculator.zr -- "2 * (3 + 4)"` evaluates its argument.
-
 import std.os;
 
 const BAD_CHARACTER: i32 = 1;
@@ -51,8 +47,6 @@ fn tokenize(text: str) Vec<Token>! {
     return Ok(tokens);
 }
 
-// Each rule is a method: sum = product (+|- product)*, product = unary
-// (*|/ unary)*, unary = number | -unary | ( sum ).
 struct Parser {
     tokens: Vec<Token>,
     at: usize,
@@ -61,7 +55,6 @@ struct Parser {
         return self.tokens[self.at];
     }
 
-    // The next token, stepping past it unless it is the End.
     fn next(var self) Token {
         var token = self.peek();
         match token {
