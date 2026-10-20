@@ -100,6 +100,41 @@ pub fn check(path: &Path, json: bool) -> Result<(), CompileError> {
     Err(CompileError::Unknown)
 }
 
+/// Format each of `files` in place, or with `check` list those that are not
+/// formatted, changing nothing. `-` formats stdin to stdout.
+pub fn format(files: &[PathBuf], check: bool) -> Result<(), CompileError> {
+    let mut failed = false;
+    for path in files {
+        let stdin = path.as_os_str() == "-";
+        let source = match stdin {
+            true => std::io::read_to_string(std::io::stdin())?,
+            false => std::fs::read_to_string(path)?,
+        };
+        match crate::fmt::format(&source) {
+            Ok(formatted) if stdin => print!("{formatted}"),
+            Ok(formatted) if formatted == source => {}
+            Ok(_) if check => {
+                status(RED, '\u{ea6c}', "Unformatted", path.display());
+                failed = true;
+            }
+            Ok(formatted) => {
+                std::fs::write(path, formatted)?;
+                status(GREEN, '\u{eb6d}', "Formatted", path.display());
+            }
+            Err(errors) => {
+                let mut sources = Sources::default();
+                sources.push(path.display().to_string(), &source);
+                report_errors(&errors, &sources);
+                failed = true;
+            }
+        }
+    }
+    match failed {
+        true => Err(CompileError::Unknown),
+        false => Ok(()),
+    }
+}
+
 pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, CompileError> {
     if !path.extension().is_some_and(|ext| ext == "zr") {
         status(YELLOW, '\u{ea6c}', "Warning", "Zeru extension is .zr");

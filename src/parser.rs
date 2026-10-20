@@ -29,6 +29,8 @@ pub struct Parser {
     /// next token.
     nesting: usize,
     splits: Vec<(usize, (Token, Span))>,
+    pub comments: Vec<Span>,
+    pub parens: Vec<Span>,
 }
 
 /// How deep code may nest, as Clang limits bracket depth: deeper code is an
@@ -84,6 +86,8 @@ impl Parser {
             brackets: 0,
             nesting: 0,
             splits: Vec::new(),
+            comments: std::mem::take(&mut lexer.comments),
+            parens: Vec::new(),
         };
         p.report_illegal();
         p
@@ -945,6 +949,7 @@ impl Parser {
             let first = p.parse_expression(Precedence::Lowest)?;
             if !p.eat(&Token::Comma) {
                 p.expect(&Token::RParen)?;
+                p.parens.push(first.span);
                 return Some(first);
             }
             let mut elements = vec![first];

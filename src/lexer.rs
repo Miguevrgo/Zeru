@@ -7,6 +7,7 @@ pub struct Lexer<'a> {
     input: Peekable<Chars<'a>>,
     pos: usize,
     after_dot: bool,
+    pub comments: Vec<Span>,
 }
 
 impl<'a> Lexer<'a> {
@@ -23,6 +24,7 @@ impl<'a> Lexer<'a> {
             input: input.chars().peekable(),
             pos: start,
             after_dot: false,
+            comments: Vec::new(),
         }
     }
 
@@ -52,6 +54,7 @@ impl<'a> Lexer<'a> {
 
                     match lookahead.peek() {
                         Some('/') => {
+                            let start = self.pos;
                             self.advance();
                             self.advance();
 
@@ -61,6 +64,7 @@ impl<'a> Lexer<'a> {
                                 }
                                 self.advance();
                             }
+                            self.comments.push(Span::new(start, self.pos));
                         }
                         Some('*') => {
                             let start = self.pos;
@@ -71,6 +75,7 @@ impl<'a> Lexer<'a> {
                                 match self.advance() {
                                     Some('*') if self.peek() == Some(&'/') => {
                                         self.advance();
+                                        self.comments.push(Span::new(start, self.pos));
                                         break;
                                     }
                                     Some(_) => {}

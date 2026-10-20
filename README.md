@@ -91,6 +91,8 @@ Now you can compile and run it:
 zeru build file_name.zr
 ```
 
+`zeru fmt file_name.zr` formats it, as rustfmt does.
+
 There are more flags available, which you can read using the help command `zeru --help`. The executable will be generated inside the build directory.
 
 ## 🤝 Contributing

@@ -34,4 +34,9 @@ To only look for errors, without generating code or writing `build/`, use
 `zeru check main.zr`. Editors run `zeru check --json main.zr`, which prints
 each error as one JSON object per line.
 
+`zeru fmt main.zr` lays the file out again as rustfmt would: four-space
+indents and lines broken at 100 columns, keeping comments and blank lines.
+`zeru fmt --check` lists the files it would change, and `zeru fmt -` formats
+stdin to stdout, as editors do.
+
 There are more flags available, which you can read using the help command `zeru --help`. The executable will be generated inside the `build` directory.

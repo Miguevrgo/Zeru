@@ -2,6 +2,7 @@ mod ast;
 mod check;
 mod driver;
 mod errors;
+mod fmt;
 mod items;
 mod lexer;
 mod lower;
@@ -11,7 +12,7 @@ mod tir;
 mod token;
 mod ty;
 
-use crate::driver::{GREEN, RED, check, compile, status};
+use crate::driver::{GREEN, RED, check, compile, format, status};
 use crate::{errors::CompileError, lower::SafetyMode};
 use clap::{Parser, Subcommand};
 use std::os::unix::process::ExitStatusExt;
@@ -60,6 +61,13 @@ enum Commands {
         #[arg(long, help = "One JSON object per error, for editors")]
         json: bool,
     },
+    #[command(about = "Format .zr files in place; - formats stdin to stdout")]
+    Fmt {
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+        #[arg(long, help = "List the files not formatted, changing nothing")]
+        check: bool,
+    },
     #[command(about = "Remove the build/ directory")]
     Clean,
     #[command(about = "Install the build of main's latest commit")]
@@ -101,6 +109,7 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
             );
         }
         Commands::Check { file, json } => check(&file, json)?,
+        Commands::Fmt { files, check } => format(&files, check)?,
         Commands::Clean => {
             let build_dir = Path::new("build");
             if build_dir.exists() {
