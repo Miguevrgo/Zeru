@@ -19,10 +19,24 @@ const PRINTS: &[&str] = &["print", "println", "eprint", "eprintln"];
 const FLUSH_FN: &str = "__zeru_flush";
 const COPY_FN: &str = "__zeru_copy_bytes";
 /// str methods, each the prelude's `__zeru_str_<name>` with the str first.
-const STR_METHODS: &[&str] = &["split", "lines"];
+const STR_METHODS: &[&str] = &[
+    "split",
+    "lines",
+    "trim",
+    "starts_with",
+    "ends_with",
+    "parse_int",
+    "parse_float",
+];
+
+/// Vec methods written in the prelude, each `__zeru_vec_<name>` taking a
+/// reference to the Vec first.
+const VEC_STD_METHODS: &[&str] = &["sort", "swap", "contains", "sum", "min", "max"];
 
 /// The `Vec` methods that change it, so need a receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
+    "sort",
+    "swap",
     "push",
     "pop",
     "clear",
@@ -228,6 +242,14 @@ impl FnCx<'_, '_> {
                     self.require_mutable(&place, object, span);
                 }
                 let receiver = self.address(place, ty, mutable, object.span);
+                if VEC_STD_METHODS.contains(&name)
+                    && let Some(def) = self
+                        .cx
+                        .items
+                        .lookup_value(ModuleId::PRELUDE, &format!("__zeru_vec_{name}"))
+                {
+                    return self.call_def(def, vec![elem], Some(receiver), args, expected, span);
+                }
                 self.vec_method(name, elem, receiver, args, span)
             }
             TyKind::Slice(_) => {

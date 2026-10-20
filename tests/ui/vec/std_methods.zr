@@ -1,0 +1,37 @@
+fn main() {
+    var v: Vec<i64> = [5, -2, 9, 0, 3, 3, -7];
+    println("{} {} {} {}", v.sum(), v.min().unwrap(), v.max().unwrap(), v.contains(9));
+    v.sort();
+    for x in v { print("{} ", x); }
+    println("");
+    v.swap(0, 6);
+    println("{} {}", v[0], v[6]);
+    var f: Vec<f64> = [2.5, 1.5];
+    f.sort();
+    println("{} {}", f[0], f.sum());
+    var e: Vec<i32> = Vec.new();
+    e.sort();
+    println("{} {}", e.sum(), e.min().is_none());
+    var words: Vec<str> = "pear apple fig".split(" ");
+    println("{} {}", words[0], words.contains("fig"));
+    var nested: Vec<Vec<str>> = Vec.new();
+    nested.push("a".split(" "));
+    nested.push("b c".split(" "));
+    nested.swap(1, 0);
+    println("{} {}", nested[0].len(), nested[1].len());
+    var big: Vec<u64> = Vec.new();
+    var seed: u64 = 12345;
+    for i in 0..2000 {
+        seed = seed *% 6364136223846793005 +% 1442695040888963407;
+        big.push(seed >> 40);
+    }
+    var total = big.sum();
+    big.sort();
+    var sorted = true;
+    for i in 1..big.len() {
+        if big[i - 1] > big[i] {
+            sorted = false;
+        }
+    }
+    println("{} {}", sorted, total == big.sum());
+}

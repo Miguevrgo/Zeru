@@ -555,6 +555,244 @@ fn __zeru_str_lines(s: str) Vec<str> {
     return lines;
 }
 
+// `s.trim()`: `s` without the spaces, tabs and line breaks at either end.
+fn __zeru_str_trim(s: str) str {
+    var start: usize = 0;
+    var end = s.len();
+    while start < end && __zeru_is_space(s[start]) {
+        start += 1;
+    }
+    while end > start && __zeru_is_space(s[end - 1]) {
+        end -= 1;
+    }
+    return __zeru_str_sub(s, start, end);
+}
+
+fn __zeru_is_space(byte: u8) bool {
+    return byte == ' ' || byte == '\t' || byte == '\n' || byte == '\r';
+}
+
+// `s.starts_with(prefix)`: whether `s` begins with `prefix`.
+fn __zeru_str_starts_with(s: str, prefix: str) bool {
+    return prefix.len() <= s.len() && __zeru_str_sub(s, 0, prefix.len()) == prefix;
+}
+
+// `s.ends_with(suffix)`: whether `s` ends with `suffix`.
+fn __zeru_str_ends_with(s: str, suffix: str) bool {
+    return suffix.len() <= s.len() && __zeru_str_sub(s, s.len() - suffix.len(), s.len()) == suffix;
+}
+
+// `s.parse_int()`: the integer `s` spells, with an optional sign; 22
+// (EINVAL) as the error code when it spells none, 34 (ERANGE) when it does
+// not fit an i64.
+fn __zeru_str_parse_int(s: str) i64! {
+    var negative = s.len() > 0 && s[0] == '-';
+    var start: usize = 0;
+    if s.len() > 0 && (s[0] == '-' || s[0] == '+') {
+        start = 1;
+    }
+    if start == s.len() {
+        return Err(22);
+    }
+    var limit: u64 = 9223372036854775807;
+    if negative {
+        limit += 1;
+    }
+    var value: u64 = 0;
+    for i in start..s.len() {
+        if s[i] < '0' || s[i] > '9' {
+            return Err(22);
+        }
+        var digit = (s[i] - '0') as u64;
+        if value > (limit - digit) / 10 {
+            return Err(34);
+        }
+        value = value * 10 + digit;
+    }
+    if negative {
+        var zero: u64 = 0;
+        return Ok((zero -% value) as i64);
+    }
+    return Ok(value as i64);
+}
+
+// `s.parse_float()`: the number `s` spells, as `-12.5` or `3e-4`; 22
+// (EINVAL) as the error code when it spells none. Exact up to 15 digits and
+// powers of ten up to 22, as Clinger's fast path.
+// ponytail: past those it may be an ulp off; Eisel-Lemire if that matters.
+fn __zeru_str_parse_float(s: str) f64! {
+    var at: usize = 0;
+    var negative = s.len() > 0 && s[0] == '-';
+    if s.len() > 0 && (s[0] == '-' || s[0] == '+') {
+        at = 1;
+    }
+    var mantissa: u64 = 0;
+    var digits: i64 = 0;
+    var exponent: i64 = 0;
+    var seen = false;
+    var point = false;
+    while at < s.len() {
+        if s[at] == '.' && !point {
+            point = true;
+        } else if s[at] >= '0' && s[at] <= '9' {
+            seen = true;
+            if digits < 19 {
+                mantissa = mantissa * 10 + (s[at] - '0') as u64;
+                if mantissa > 0 {
+                    digits += 1;
+                }
+                if point {
+                    exponent -= 1;
+                }
+            } else if !point {
+                exponent += 1;
+            }
+        } else {
+            break;
+        }
+        at += 1;
+    }
+    if !seen {
+        return Err(22);
+    }
+    if at < s.len() && (s[at] == 'e' || s[at] == 'E') {
+        var power = __zeru_str_parse_int(__zeru_str_sub(s, at + 1, s.len()))!;
+        exponent += power;
+        at = s.len();
+    }
+    if at != s.len() {
+        return Err(22);
+    }
+    var value = mantissa as f64;
+    var scale: f64 = 1.0;
+    var steps = exponent;
+    if steps < 0 {
+        steps = -steps;
+    }
+    if steps > 400 {
+        steps = 400;
+    }
+    for i in 0..steps {
+        scale *= 10.0;
+    }
+    if exponent < 0 {
+        value /= scale;
+    } else {
+        value *= scale;
+    }
+    if negative {
+        value = -value;
+    }
+    return Ok(value);
+}
+
+// `v.sort()`: `v` in ascending order, by heapsort.
+fn __zeru_vec_sort<T: Ord>(v: &var Vec<T>) {
+    var start = v.len() / 2;
+    while start > 0 {
+        start -= 1;
+        __zeru_sift(v, start, v.len());
+    }
+    var end = v.len();
+    while end > 1 {
+        end -= 1;
+        var top = v[0];
+        v[0] = v[end];
+        v[end] = top;
+        __zeru_sift(v, 0, end);
+    }
+}
+
+// Sink `v[at]` below the larger of its children, in the heap `v[..end]`.
+fn __zeru_sift<T: Ord>(v: &var Vec<T>, root: usize, end: usize) {
+    var at = root;
+    while 2 * at + 1 < end {
+        var child = 2 * at + 1;
+        if child + 1 < end && v[child] < v[child + 1] {
+            child += 1;
+        }
+        if v[at] >= v[child] {
+            return;
+        }
+        var held = v[at];
+        v[at] = v[child];
+        v[child] = held;
+        at = child;
+    }
+}
+
+// `v.swap(i, j)`: exchange two elements. Their bytes trade places, so it
+// works for elements that own memory, which cannot be copied out.
+fn __zeru_vec_swap<T>(v: &var Vec<T>, i: usize, j: usize) {
+    var a = (&v[i]) as *u8;
+    var b = (&v[j]) as *u8;
+    if i == j {
+        return;
+    }
+    var gap: usize = 0;
+    if i < j {
+        gap = j - i;
+    } else {
+        var held = a;
+        a = b;
+        b = held;
+        gap = i - j;
+    }
+    var size = (b as usize - a as usize) / gap;
+    for k in 0..size {
+        var byte = *(a + k);
+        *(a + k) = *(b + k);
+        *(b + k) = byte;
+    }
+}
+
+// `v.contains(value)`: whether an element equals `value`.
+fn __zeru_vec_contains<T: Eq>(v: &Vec<T>, value: T) bool {
+    for x in v {
+        if x == value {
+            return true;
+        }
+    }
+    return false;
+}
+
+// `v.sum()`: the elements added up; 0 when there are none.
+fn __zeru_vec_sum<T: Num>(v: &Vec<T>) T {
+    var total = 0 as T;
+    for x in v {
+        total += x;
+    }
+    return total;
+}
+
+// `v.min()`: the smallest element; None when there are none.
+fn __zeru_vec_min<T: Ord>(v: &Vec<T>) T? {
+    if v.is_empty() {
+        return None;
+    }
+    var best = v[0];
+    for x in v {
+        if x < best {
+            best = x;
+        }
+    }
+    return best;
+}
+
+// `v.max()`: the largest element; None when there are none.
+fn __zeru_vec_max<T: Ord>(v: &Vec<T>) T? {
+    if v.is_empty() {
+        return None;
+    }
+    var best = v[0];
+    for x in v {
+        if x > best {
+            best = x;
+        }
+    }
+    return best;
+}
+
 // Blocks up to this many bytes come from the heap's size classes; larger
 // ones are mapped whole.
 const HEAP_LARGEST: usize = 1048576;
