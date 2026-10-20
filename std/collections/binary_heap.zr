@@ -1,93 +1,80 @@
-// Zeru Standard Library - BinaryHeap (max-heap, i64 elements)
-// Fixed-capacity array-backed binary max-heap. 1024 elements max.
+// Zeru Standard Library - BinaryHeap (max-heap)
 
-// A max-heap of up to 1024 i64s, held inline in 8 KB; it never allocates.
-pub struct BinaryHeap {
-    data: Array<i64, 1024>,
-    len: usize,
+// A max-heap growing on the heap, the largest value always on top.
+pub struct BinaryHeap<T: Ord> {
+    data: Vec<T>,
 
-    // An empty heap.
-    pub fn new() BinaryHeap {
-        return BinaryHeap { data: [0; 1024], len: 0 };
+    // An empty heap; it allocates on the first push.
+    pub fn new() BinaryHeap<T> {
+        return BinaryHeap { data: Vec.new() };
     }
 
-    // Add `val`; false, leaving the heap as it was, when it holds 1024 already.
-    pub fn push(var self, val: i64) bool {
-        if self.len >= 1024 {
-            return false;
-        }
-        var idx: usize = self.len;
-        self.data[idx] = val;
-        self.len += 1;
-
+    // Add `val`.
+    pub fn push(var self, val: T) {
+        self.data.push(val);
+        var idx = self.data.len() - 1;
         while idx > 0 {
-            var parent: usize = (idx - 1) / 2;
-            if self.data[idx] > self.data[parent] {
-                var tmp: i64 = self.data[idx];
-                self.data[idx] = self.data[parent];
-                self.data[parent] = tmp;
-                idx = parent;
-            } else {
+            var parent = (idx - 1) / 2;
+            if self.data[idx] <= self.data[parent] {
                 break;
             }
+            self.swap(idx, parent);
+            idx = parent;
         }
-        return true;
     }
 
     // Take out the largest value; None when empty.
-    pub fn pop(var self) i64? {
-        if self.len == 0 {
-            return None;
+    pub fn pop(var self) T? {
+        if self.data.len() > 1 {
+            self.swap(0, self.data.len() - 1);
         }
-        var max_val: i64 = self.data[0];
-        self.len -= 1;
-        if self.len == 0 {
-            return max_val;
-        }
-
-        self.data[0] = self.data[self.len];
+        var max_val = self.data.pop();
         var idx: usize = 0;
         while true {
-            var left: usize = 2 * idx + 1;
-            var right: usize = 2 * idx + 2;
-            var largest: usize = idx;
-            if left < self.len && self.data[left] > self.data[largest] {
+            var left = 2 * idx + 1;
+            var right = 2 * idx + 2;
+            var largest = idx;
+            if left < self.data.len() && self.data[left] > self.data[largest] {
                 largest = left;
             }
-            if right < self.len && self.data[right] > self.data[largest] {
+            if right < self.data.len() && self.data[right] > self.data[largest] {
                 largest = right;
             }
             if largest == idx {
                 break;
             }
-            var tmp: i64 = self.data[idx];
-            self.data[idx] = self.data[largest];
-            self.data[largest] = tmp;
+            self.swap(idx, largest);
             idx = largest;
         }
         return max_val;
     }
 
+    fn swap(var self, a: usize, b: usize) {
+        var tmp = self.data[a];
+        self.data[a] = self.data[b];
+        self.data[b] = tmp;
+    }
+
     // The largest value, left in place; None when empty.
-    pub fn peek(self) i64? {
-        if self.len == 0 {
+    pub fn peek(self) (&T)? {
+        if self.data.is_empty() {
             return None;
         }
-        return self.data[0];
+        return &self.data[0];
     }
 
     // How many values it holds.
     pub fn len(self) usize {
-        return self.len;
+        return self.data.len();
     }
 
     // Whether it holds no values.
     pub fn is_empty(self) bool {
-        return self.len == 0;
+        return self.data.is_empty();
     }
 
     // Drop every value.
     pub fn clear(var self) {
-        self.len = 0;
+        self.data.clear();
     }
 }

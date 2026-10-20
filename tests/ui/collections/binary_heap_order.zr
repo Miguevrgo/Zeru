@@ -1,11 +1,11 @@
 import std.collections.binary_heap::{BinaryHeap};
 fn main() {
-    var h = BinaryHeap.new();
+    var h: BinaryHeap<i64> = BinaryHeap.new();
     h.push(5);
     h.push(1);
     h.push(9);
     h.push(3);
-    println("{}", h.peek().unwrap());
+    println("{}", *h.peek().unwrap());
     while !h.is_empty() { print("{} ", h.pop().unwrap()); }
     println("");
 }

@@ -1,106 +1,95 @@
-// Zeru Standard Library - VecDeque (double-ended queue, i64 elements)
-// Fixed-capacity circular buffer. 1024 elements max. O(1) push/pop both ends.
+// Zeru Standard Library - VecDeque (double-ended queue)
 
-// A queue of up to 1024 i64s open at both ends, held inline in 8 KB; it never
-// allocates.
-pub struct VecDeque {
-    data: Array<i64, 1024>,
-    head: usize,
-    len: usize,
+// Move the bottom half of `from`, at least one value, to the empty `to`,
+// reversed so `from`'s bottom value ends on top; so either end pops in
+// amortized O(1).
+fn shift<T>(from: &var Vec<T>, to: &var Vec<T>) {
+    var kept: Vec<T> = Vec.new();
+    while kept.len() + 1 < from.len() {
+        kept.push(from.pop().unwrap());
+    }
+    while !from.is_empty() {
+        to.push(from.pop().unwrap());
+    }
+    while !kept.is_empty() {
+        from.push(kept.pop().unwrap());
+    }
+}
 
-    // An empty queue.
-    pub fn new() VecDeque {
-        return VecDeque { data: [0; 1024], head: 0, len: 0 };
+// A queue open at both ends, growing on the heap: two stacks back to back,
+// `front` holding the first values in reverse and `back` the rest in order.
+pub struct VecDeque<T> {
+    front: Vec<T>,
+    back: Vec<T>,
+
+    // An empty queue; it allocates on the first push.
+    pub fn new() VecDeque<T> {
+        return VecDeque { front: Vec.new(), back: Vec.new() };
     }
 
-    // Add `val` at the back; false, leaving the queue as it was, when it holds
-    // 1024 already.
-    pub fn push_back(var self, val: i64) bool {
-        if self.len >= 1024 {
-            return false;
-        }
-        var tail: usize = (self.head + self.len) & 1023;
-        self.data[tail] = val;
-        self.len += 1;
-        return true;
+    // Add `val` at the back.
+    pub fn push_back(var self, val: T) {
+        self.back.push(val);
     }
 
-    // Add `val` at the front; false, leaving the queue as it was, when it
-    // holds 1024 already.
-    pub fn push_front(var self, val: i64) bool {
-        if self.len >= 1024 {
-            return false;
-        }
-        if self.head == 0 {
-            self.head = 1023;
-        } else {
-            self.head -= 1;
-        }
-        self.data[self.head] = val;
-        self.len += 1;
-        return true;
+    // Add `val` at the front.
+    pub fn push_front(var self, val: T) {
+        self.front.push(val);
     }
 
     // Take out the front value; None when empty.
-    pub fn pop_front(var self) i64? {
-        if self.len == 0 {
-            return None;
+    pub fn pop_front(var self) T? {
+        if self.front.is_empty() {
+            shift(&var self.back, &var self.front);
         }
-        var val: i64 = self.data[self.head];
-        self.head = (self.head + 1) & 1023;
-        self.len -= 1;
-        return val;
+        return self.front.pop();
     }
 
     // Take out the back value; None when empty.
-    pub fn pop_back(var self) i64? {
-        if self.len == 0 {
-            return None;
+    pub fn pop_back(var self) T? {
+        if self.back.is_empty() {
+            shift(&var self.front, &var self.back);
         }
-        self.len -= 1;
-        var tail: usize = (self.head + self.len) & 1023;
-        return self.data[tail];
+        return self.back.pop();
     }
 
     // The front value, left in place; None when empty.
-    pub fn front(self) i64? {
-        if self.len == 0 {
-            return None;
-        }
-        return self.data[self.head];
+    pub fn front(self) (&T)? {
+        return self.at(0);
     }
 
     // The back value, left in place; None when empty.
-    pub fn back(self) i64? {
-        if self.len == 0 {
+    pub fn back(self) (&T)? {
+        if self.is_empty() {
             return None;
         }
-        var tail: usize = (self.head + self.len - 1) & 1023;
-        return self.data[tail];
+        return self.at(self.len() - 1);
     }
 
     // The value `index` places from the front; None past the end.
-    pub fn at(self, index: usize) i64? {
-        if index >= self.len {
-            return None;
+    pub fn at(self, index: usize) (&T)? {
+        if index < self.front.len() {
+            return &self.front[self.front.len() - 1 - index];
         }
-        var real_idx: usize = (self.head + index) & 1023;
-        return self.data[real_idx];
+        if index - self.front.len() < self.back.len() {
+            return &self.back[index - self.front.len()];
+        }
+        return None;
     }
 
     // How many values it holds.
     pub fn len(self) usize {
-        return self.len;
+        return self.front.len() + self.back.len();
     }
 
     // Whether it holds no values.
     pub fn is_empty(self) bool {
-        return self.len == 0;
+        return self.len() == 0;
     }
 
     // Drop every value.
     pub fn clear(var self) {
-        self.head = 0;
-        self.len = 0;
+        self.front.clear();
+        self.back.clear();
     }
 }

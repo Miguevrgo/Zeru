@@ -1,9 +1,28 @@
 import std.collections.vecdeque::{VecDeque};
 fn main() {
-    var d = VecDeque.new();
+    var d: VecDeque<i64> = VecDeque.new();
     d.push_back(1);
     d.push_back(2);
     d.push_front(0);
-    println("{} {} {} {}", d.len(), d.front().unwrap(), d.back().unwrap(), d.at(1).unwrap());
+    println("{} {} {} {}", d.len(), *d.front().unwrap(), *d.back().unwrap(), *d.at(1).unwrap());
     println("{} {} {}", d.pop_front().unwrap(), d.pop_back().unwrap(), d.len());
+
+    var words: VecDeque<Vec<str>> = VecDeque.new();
+    for i in 0..5 {
+        var w: Vec<str> = Vec.new();
+        w.push("w");
+        words.push_back(w);
+    }
+    var sum: usize = 0;
+    for i in 0..1000 {
+        var w = words.pop_front().unwrap();
+        w.push("x");
+        sum += w.len();
+        words.push_back(w);
+        var v = words.pop_back().unwrap();
+        words.push_front(v);
+        var u = words.pop_front().unwrap();
+        words.push_back(u);
+    }
+    println("{} {} {}", sum, words.len(), words.at(4).unwrap().len());
 }

@@ -76,28 +76,28 @@ fn main() {
     if !seen.remove(5) { exit(44); }
     if !seen.is_empty() { exit(45); }
 
-    var heap = BinaryHeap.new();
+    var heap: BinaryHeap<i64> = BinaryHeap.new();
     if heap.peek().is_some() { exit(50); }
     heap.push(3);
     heap.push(9);
     heap.push(1);
     heap.push(7);
     if heap.len() != 4 { exit(51); }
-    if heap.peek().unwrap() != 9 { exit(52); }
+    if *heap.peek().unwrap() != 9 { exit(52); }
     if heap.pop().unwrap() != 9 { exit(53); }
     if heap.pop().unwrap() != 7 { exit(54); }
     if heap.pop().unwrap() != 3 { exit(55); }
     if heap.pop().unwrap() != 1 { exit(56); }
     if heap.pop().is_some() { exit(57); }
 
-    var queue = VecDeque.new();
+    var queue: VecDeque<i64> = VecDeque.new();
     queue.push_back(2);
     queue.push_back(3);
     queue.push_front(1);
     if queue.len() != 3 { exit(60); }
-    if queue.front().unwrap() != 1 { exit(61); }
-    if queue.back().unwrap() != 3 { exit(62); }
-    if queue.at(1).unwrap() != 2 { exit(63); }
+    if *queue.front().unwrap() != 1 { exit(61); }
+    if *queue.back().unwrap() != 3 { exit(62); }
+    if *queue.at(1).unwrap() != 2 { exit(63); }
     if queue.pop_front().unwrap() != 1 { exit(64); }
     if queue.pop_back().unwrap() != 3 { exit(65); }
     if queue.len() != 1 { exit(66); }
