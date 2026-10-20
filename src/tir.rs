@@ -16,12 +16,9 @@ pub struct FnId(pub u32);
 
 pub struct Program {
     pub types: Types,
-    /// Indexed by [`FnId`].
     pub functions: Vec<Function>,
     pub structs: HashMap<Ty, StructLayout>,
     pub enums: HashMap<Ty, EnumLayout>,
-    /// Every type whose values own memory or run a `drop`, as the checker
-    /// decided it.
     pub owning: HashSet<Ty>,
     pub runtime: Runtime,
 }
@@ -41,12 +38,10 @@ pub struct Runtime {
 
 pub struct StructLayout {
     pub fields: Vec<Ty>,
-    /// Its `drop` method, run before its fields are dropped.
     pub drop: Option<FnId>,
 }
 
 pub struct EnumLayout {
-    /// What each variant carries, in order of declaration.
     pub variants: Vec<Vec<Ty>>,
 }
 
@@ -65,15 +60,12 @@ pub struct Function {
     pub locals: Vec<Local>,
     pub body: Block,
     pub span: Span,
-    /// Only `main` is visible outside the module.
     pub exported: bool,
 }
 
 pub struct Local {
     pub name: String,
     pub ty: Ty,
-    /// A view into another place (a `match` binding, a `for .. in &var`
-    /// element, a `self`): it owns nothing and has no slot of its own.
     pub view: bool,
 }
 
@@ -90,10 +82,7 @@ pub struct Stmt {
 
 #[derive(Clone)]
 pub enum StmtKind {
-    /// A new local, which owns its value and drops it as its block ends
-    /// unless the value was moved away first.
     Let(LocalId, Expr),
-    /// An expression evaluated for its effect; an owned result is dropped.
     Expr(Expr),
     Return(Option<Expr>),
     Break,
@@ -107,17 +96,12 @@ pub enum StmtKind {
         cond: Expr,
         body: Block,
     },
-    /// `for var in start..end`, counting up by one.
     ForRange {
         var: LocalId,
         start: Expr,
         end: Expr,
         body: Block,
     },
-    /// `for index, var in seq`: `var` copies each element of an array, a Vec
-    /// or a str, or, when it is a view, is each element, and `index` counts
-    /// them from 0. The loop borrows every element throughout; `within` is
-    /// the sequence as written.
     ForEach {
         index: Option<LocalId>,
         var: LocalId,
@@ -141,34 +125,23 @@ pub enum ExprKind {
     Float(f64),
     Bool(bool),
     Str(Vec<u8>),
-    /// The value of a type with nothing in it (a call returning void).
     Void,
 
-    /// The bits at a place, which keeps its value: plain data, a read of an
-    /// owned value that is not given away, or one given away from a place
-    /// with no drop flag of its own.
     Read(Place),
-    /// The value at a local that gives it away: the local no longer drops it.
     Move(Place),
-    /// A deep copy of what a place holds.
     Copy(Place),
-    /// The address of a place.
     AddressOf(Place),
 
     Unary(UnOp, Box<Expr>),
     Binary(BinOp, Box<Expr>, Box<Expr>),
     And(Box<Expr>, Box<Expr>),
     Or(Box<Expr>, Box<Expr>),
-    /// From the operand's type to this expression's type.
     Cast(Box<Expr>),
 
     Call(FnId, Vec<Expr>),
     Builtin(Builtin, Vec<Expr>),
 
-    /// A tuple, its parts in order.
     Tuple(Vec<Expr>),
-    /// A struct: each value with the position of its field, in the order the
-    /// source writes them, which is the order they are evaluated in.
     Struct(Vec<(u32, Expr)>),
     Array(Vec<Expr>),
     ArrayRepeat(Box<Expr>, u64),
@@ -180,14 +153,11 @@ pub enum ExprKind {
     Ok(Box<Expr>),
     Err(Box<Expr>),
 
-    /// `place = value`. `drop_old` says whether the value it replaces is
-    /// dropped first, for a variable only while it still owns one.
     Assign {
         place: Place,
         value: Box<Expr>,
         drop_old: bool,
     },
-    /// `place op= value`, which evaluates the value first.
     CompoundAssign {
         place: Place,
         op: BinOp,
@@ -198,11 +168,9 @@ pub enum ExprKind {
         scrutinee: Place,
         arms: Vec<Arm>,
     },
-    /// `value?` or `value!`: the payload, or a return of the None or error.
     Try(Box<Expr>),
     Block(Block),
 
-    /// Every value evaluated first, in order, then the text written.
     Print {
         stderr: bool,
         newline: bool,
@@ -330,7 +298,6 @@ pub enum BinOp {
     Le,
     Gt,
     Ge,
-    /// A pointer moved forward or back by a number of its elements.
     PtrAdd,
     PtrSub,
 }
@@ -358,7 +325,6 @@ pub enum Builtin {
     Unwrap,
     UnwrapErr,
     Flush,
-    /// `__zeru_copy_bytes(to, from, count)`, for the prelude's heap.
     CopyBytes,
 }
 
@@ -366,11 +332,7 @@ pub enum Builtin {
 /// the scrutinee.
 #[derive(Clone)]
 pub struct Arm {
-    /// The values it matches: numbers, variants' positions, 1 for `Some`
-    /// and `Ok`, 0 for `None` and `Err`. None for `default`.
     pub tags: Vec<i128>,
-    /// Locals viewing values inside the scrutinee, with where each finds
-    /// its value for each of `tags`.
     pub bindings: Vec<(LocalId, Vec<Payload>)>,
     pub body: Expr,
     pub span: Span,
@@ -381,23 +343,14 @@ pub enum Payload {
     SomeValue,
     OkValue,
     ErrValue,
-    /// Field `field` of the values variant `variant` carries.
-    Variant {
-        variant: u32,
-        field: u32,
-    },
+    Variant { variant: u32, field: u32 },
 }
 
 #[derive(Clone)]
 pub enum Place {
     Local(LocalId),
-    /// A field of a struct or tuple, by position.
     Field(Box<Place>, u32),
-    /// An element of an array, a Vec or a slice, checked against its length.
     Index(Box<Place>, Box<Expr>),
-    /// What a pointer points at, checked for null.
     Deref(Box<Expr>),
-    /// A value with no place of its own, given one for this statement; it is
-    /// dropped at the statement's end if it owns something.
     Temp(Box<Expr>),
 }

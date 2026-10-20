@@ -40,9 +40,9 @@ pub enum Receiver {
 }
 
 /// How many types a type argument may be made of, and how deeply nested,
-/// before checking is taken to never end, as rustc's type length and
-/// recursion limits: a generic that asks for itself at a larger type, as
-/// `f((x, x))` or `f(Box { v: x })` inside `f`, would go on forever.
+/// before checking is taken to never end: a generic that asks for itself at
+/// a larger type, as `f((x, x))` or `f(Box { v: x })` inside `f`, would go
+/// on forever.
 const MAX_TYPE_SIZE: usize = 1 << 16;
 const MAX_TYPE_DEPTH: usize = 32;
 
@@ -93,8 +93,6 @@ pub struct Checker<'a> {
     queued: Vec<Instance>,
     unsatisfied: HashSet<(DefId, Vec<Ty>)>,
     adts_seen: HashSet<Ty>,
-    /// Where an expression failed to check without an error saying why, as
-    /// rustc's delayed bugs: compiling on from there would emit broken code.
     unreported: Cell<Option<Span>>,
 }
 

@@ -1,7 +1,7 @@
 //! Every declaration in the program gets a [`DefId`], and every module a scope
 //! mapping names to them. Names are resolved by looking them up, never by
 //! rewriting the source, so a local can shadow an item and two modules can
-//! both declare `min`. As in Go and Zig, a module sees its own items, what it
+//! both declare `min`. A module sees its own items, what it
 //! imports and, last, the prelude; never the items of the file importing it.
 
 use std::collections::HashMap;
@@ -50,13 +50,11 @@ impl ItemKind {
 }
 
 pub struct Item<'a> {
-    /// As messages show it: `Circle`, `shapes::Circle`, `Circle::area`.
     pub name: String,
     pub kind: ItemKind,
     pub module: ModuleId,
     pub is_pub: bool,
     pub decl: &'a Statement,
-    /// The struct a method belongs to.
     pub owner: Option<DefId>,
 }
 
@@ -65,7 +63,6 @@ pub struct Item<'a> {
 pub struct SourceModule {
     pub name: Option<String>,
     pub program: Program,
-    /// Part of the standard library, which may use the prelude's own items.
     pub std: bool,
 }
 

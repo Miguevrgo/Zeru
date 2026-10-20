@@ -40,7 +40,6 @@ pub struct ZeruError {
     pub kind: ErrorKind,
     pub message: String,
     pub span: Span,
-    /// Further places that explain the error, each with what to say there.
     pub notes: Vec<(String, Span)>,
 }
 
@@ -131,7 +130,6 @@ struct SourceFile {
     name: String,
     start: usize,
     end: usize,
-    /// Where each line begins, as an offset into the file.
     lines: Vec<usize>,
 }
 
@@ -182,8 +180,7 @@ impl Sources {
     }
 }
 
-/// Whether stderr is a terminal, so output to it may be coloured, as cargo
-/// and rustc decide.
+/// Whether stderr is a terminal, so output to it may be coloured.
 pub fn colored() -> bool {
     use std::io::IsTerminal;
     std::io::stderr().is_terminal()

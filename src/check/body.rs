@@ -10,7 +10,7 @@ use crate::ty::{Ty, TyKind, Types};
 use super::infer::{DeferredCall, Var};
 use super::{Checker, Receiver, Scope};
 
-/// One function being checked, as rustc's `FnCtxt`. `diverges` says that
+/// One function being checked. `diverges` says that
 /// control cannot reach the point being checked, since every path to it
 /// returned, broke out or went on; `breaks` says, for each loop around,
 /// whether a `break` leaves it; `borrowed` marks the locals a reference was
@@ -19,7 +19,6 @@ pub(super) struct FnCx<'c, 'a> {
     pub(super) cx: &'c mut Checker<'a>,
     pub(super) scope: Scope,
     ret: Ty,
-    /// A generic instance, whose body is checked once per set of types.
     pub(super) in_instance: bool,
     locals: Vec<tir::Local>,
     mutable: Vec<bool>,
@@ -181,7 +180,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// Decide, once its arm is checked, whether `binding` views the
     /// `scrutinee` or holds a copy: a copy of a value that owns no memory
     /// and is never borrowed reads the same, and lets the arm change the
-    /// scrutinee, as Rust's bindings of `Copy` values.
+    /// scrutinee.
     pub(super) fn settle_binding(&mut self, binding: LocalId, scrutinee: &Place) {
         let view = self.borrowed[binding.0 as usize] || self.cx.owns_heap(self.local_ty(binding));
         self.locals[binding.0 as usize].view = view;

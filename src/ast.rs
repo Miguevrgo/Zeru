@@ -170,7 +170,6 @@ pub enum ExpressionKind {
     BorrowRef(Box<Expression>),
     BorrowRefMut(Box<Expression>),
     Dereference(Box<Expression>),
-    /// `value?` or `value!`: the payload, or a return of the missing value.
     Try {
         operator: Token,
         value: Box<Expression>,
@@ -186,7 +185,7 @@ pub enum ExpressionKind {
     },
 }
 
-/// What a `match` arm takes, with a grammar of its own, as rustc's `Pat`.
+/// What a `match` arm takes, with a grammar of its own.
 #[derive(Debug, Clone)]
 pub struct Pattern {
     pub kind: PatternKind,
@@ -195,16 +194,10 @@ pub struct Pattern {
 
 #[derive(Debug, Clone)]
 pub enum PatternKind {
-    /// The arm taking every value no other arm takes.
     Default,
-    /// A constant expression: a literal, `None`, a constant or a variant by
-    /// its name, or operators over them that bind tighter than `|`.
     Constant(Expression),
-    /// A name inside a payload, bound to the value there; `_` binds nothing.
     Binding(String),
-    /// `Some(p)`, `Ok(p)`, `Err(p)` or `E::V(p, q)`.
     Payload { path: String, fields: Vec<Pattern> },
-    /// `p | q`: any of the alternatives.
     Or(Vec<Pattern>),
 }
 

@@ -85,12 +85,8 @@ pub enum TyKind {
     F64,
     Bool,
     Void,
-    /// A struct or an enum, with the arguments of its type parameters.
     Adt(DefId, Vec<Ty>),
-    /// The type parameter at this position of the item being checked.
     Param(u32),
-    /// An inference variable of a generic call being checked. None is left
-    /// once the call is checked.
     Infer(u32),
     Array(Ty, u64),
     Vec(Ty),
@@ -99,11 +95,8 @@ pub enum TyKind {
     Ref(Ty),
     RefMut(Ty),
     Optional(Ty),
-    /// `T!E`; a plain `T!` fails with an i32.
     Result(Ty, Ty),
     Tuple(Vec<Ty>),
-    /// What an expression that already failed to check has. Every check
-    /// passes it silently, so one mistake is reported once.
     Error,
 }
 

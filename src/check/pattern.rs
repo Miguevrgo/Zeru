@@ -214,7 +214,7 @@ impl FnCx<'_, '_> {
     }
 
     /// An arm's pattern: each alternative takes values no earlier one took,
-    /// and all bind the same names at the same types, as in Rust.
+    /// and all bind the same names at the same types.
     fn shape(&mut self, pattern: &Pattern, subject: Ty, covered: &mut HashSet<i128>) -> Shape {
         let alternatives = match &pattern.kind {
             PatternKind::Default => &[],

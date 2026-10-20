@@ -20,7 +20,7 @@ use crate::token::Token;
 const WIDTH: usize = 100;
 const INDENT: usize = 4;
 
-/// A layout, as in Wadler's prettier printer. `Line` is a space and `Soft`
+/// A layout. `Line` is a space and `Soft`
 /// nothing while their group fits on the line, and both are line breaks
 /// once it does not; `IfBroken` is text only a broken group shows, as a
 /// list's trailing comma; `Suffix` is text that takes no room, as a

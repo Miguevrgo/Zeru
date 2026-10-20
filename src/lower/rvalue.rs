@@ -147,7 +147,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     }
 
     /// Copy a value of `ty`. One made of a few scalars goes through
-    /// registers, as rustc does with a scalar pair: a block copy right after
+    /// registers: a block copy right after
     /// the parts were stored one by one stalls the processor.
     pub(super) fn copy_bits(&mut self, dst: PointerValue<'ctx>, src: PointerValue<'ctx>, ty: Ty) {
         let llvm = self.llvm_ty(ty);

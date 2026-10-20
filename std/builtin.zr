@@ -515,8 +515,8 @@ fn __zeru_str_sub(s: str, from: usize, to: usize) str {
     return *((&parts) as *str);
 }
 
-// `s.split(sep)`: the parts of `s` between each `sep`, as Rust's split; an
-// empty `sep` gives `s` whole.
+// `s.split(sep)`: the parts of `s` between each `sep`; an empty `sep` gives
+// `s` whole.
 fn __zeru_str_split(s: str, sep: str) Vec<str> {
     var parts: Vec<str> = Vec.new();
     var start: usize = 0;
@@ -534,8 +534,8 @@ fn __zeru_str_split(s: str, sep: str) Vec<str> {
     return parts;
 }
 
-// `s.lines()`: the lines of `s` without their "\n" or "\r\n", as Rust's
-// lines; a closing "\n" starts no empty line.
+// `s.lines()`: the lines of `s` without their "\n" or "\r\n"; a closing
+// "\n" starts no empty line.
 fn __zeru_str_lines(s: str) Vec<str> {
     var lines: Vec<str> = Vec.new();
     var start: usize = 0;
@@ -618,8 +618,7 @@ fn __zeru_str_parse_int(s: str) i64! {
 
 // `s.parse_float()`: the number `s` spells, as `-12.5` or `3e-4`; 22
 // (EINVAL) as the error code when it spells none. Exact up to 15 digits and
-// powers of ten up to 22, as Clinger's fast path.
-// ponytail: past those it may be an ulp off; Eisel-Lemire if that matters.
+// powers of ten up to 22; past those it may be an ulp off.
 fn __zeru_str_parse_float(s: str) f64! {
     var at: usize = 0;
     var negative = s.len() > 0 && s[0] == '-';
@@ -810,7 +809,7 @@ fn __zeru_map(size: usize) *u8 {
     return result as *u8;
 }
 
-// The program's memory, as Zig's SmpAllocator without threads: a block of
+// The program's memory: a block of
 // up to HEAP_LARGEST bytes takes the power of two from 16 bytes that fits
 // it, and a freed one waits in its class's list, linked through its first
 // bytes, for the next allocation of that class. New blocks are carved from

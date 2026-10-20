@@ -1,4 +1,4 @@
-//! The mid-level IR, in the manner of rustc's MIR: each function is a graph
+//! The mid-level IR: each function is a graph
 //! of basic blocks over numbered locals. Evaluation order, temporaries,
 //! drops and runtime checks are all written out, so code generation only
 //! translates. `build` makes it from the typed IR and `elaborate` decides
@@ -39,17 +39,14 @@ pub const RETURN: Local = Local(0);
 pub struct Body {
     pub symbol: String,
     pub span: Span,
-    /// Only `main` is visible outside the module.
     pub exported: bool,
     pub arg_count: usize,
     pub locals: Vec<LocalDecl>,
-    /// Block 0 is the entry.
     pub blocks: Vec<BlockData>,
 }
 
 pub struct LocalDecl {
     pub ty: Ty,
-    /// The variable's name, none for a temporary.
     pub name: Option<String>,
 }
 
@@ -60,7 +57,6 @@ pub struct BlockData {
 
 pub struct Statement {
     pub kind: StatementKind,
-    /// What a check here reports, and the line a debugger shows.
     pub span: Span,
 }
 
@@ -71,13 +67,9 @@ pub enum StatementKind {
     VecClear(Place),
     VecReserve(Place, Operand),
     VecShrinkToFit(Place),
-    /// `__zeru_copy_bytes(to, from, count)`.
     CopyBytes(Operand, Operand, Operand),
     Flush,
-    /// The scope of a variable or temporary ends: nothing may refer into it
-    /// from here on. Only the borrow checker reads it.
     StorageDead(Local),
-    /// The text around each value, the values already evaluated.
     Print {
         stderr: bool,
         newline: bool,
@@ -93,7 +85,6 @@ pub struct Terminator {
 
 pub enum TerminatorKind {
     Goto(BlockId),
-    /// Go to the block of the value `discr` has, or else to `otherwise`.
     SwitchInt {
         discr: Operand,
         targets: Vec<(i128, BlockId)>,
@@ -107,12 +98,10 @@ pub enum TerminatorKind {
         dest: Option<Place>,
         target: BlockId,
     },
-    /// Run the drop glue of what `place` holds.
     Drop {
         place: Place,
         target: BlockId,
     },
-    /// Panic unless `cond` holds.
     Assert {
         cond: Operand,
         panic: Panic,
@@ -139,20 +128,14 @@ pub struct Place {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Projection {
     Deref,
-    /// A part of a struct or tuple; of a `T?` or `T!`, 1 is the value and 2
-    /// the error.
     Field(u32),
-    /// An element, unchecked.
     Index(Local),
-    /// The values variant `n` of an enum carries, its fields next.
     Downcast(u32),
 }
 
 #[derive(Clone)]
 pub enum Operand {
-    /// The bits at a place, which keeps its value.
     Copy(Place),
-    /// The value at a place, which no longer owns it.
     Move(Place),
     Constant(Constant),
 }
@@ -165,7 +148,6 @@ pub struct Constant {
 
 #[derive(Clone)]
 pub enum ConstValue {
-    /// An integer, an enum without data, or with a pointer type, null.
     Int(i128),
     Float(f64),
     Bool(bool),
@@ -176,9 +158,7 @@ pub enum ConstValue {
 pub enum Rvalue {
     Use(Operand),
     AddressOf(Place),
-    /// A deep copy, with buffers of its own.
     DeepCopy(Place),
-    /// `checked`: panic on overflow, a zero divisor or an oversized shift.
     Binary {
         op: BinOp,
         left: Operand,
@@ -186,21 +166,17 @@ pub enum Rvalue {
         checked: bool,
     },
     Unary(UnOp, Operand),
-    /// `checked`: panic when a float does not fit the integer type.
     Cast {
         value: Operand,
         to: Ty,
         checked: bool,
     },
-    /// The length of an array, a Vec or a slice.
     Len(Place),
     Capacity(Place),
-    /// The tag of an enum or a `T?`/`T!`, or an integer or bool itself.
     Discriminant(Place),
     Aggregate(Aggregate, Vec<Operand>),
     Repeat(Operand, u64),
     VecRepeat(Operand, u64),
-    /// An empty Vec, with room for as many elements as the operand says.
     VecNew(Option<Operand>),
     VecRemove(Place, Operand),
     VecPop(Place),
@@ -210,7 +186,6 @@ pub enum Rvalue {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Aggregate {
-    /// A tuple or a struct, its fields in order.
     Tuple,
     Array,
     Vec,

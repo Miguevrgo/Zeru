@@ -1,4 +1,4 @@
-//! Inference of a generic call's type arguments, as rustc's: each unknown
+//! Inference of a generic call's type arguments: each unknown
 //! one is an inference variable, bound by unifying the types it meets, and
 //! once the outermost call is checked every variable is written back into
 //! the typed IR or reported.
@@ -61,8 +61,7 @@ impl FnCx<'_, '_> {
     /// Whether a value of type `actual` may go where `target` is wanted,
     /// binding the variables either holds to make it so: the same type, or,
     /// unless `exact`, pointers differing only in what they allow. What a
-    /// `&var T` or a `*T` points at can be written, so its `T` is exact, as
-    /// rustc's `&mut T` is invariant in `T`.
+    /// `&var T` or a `*T` points at can be written, so its `T` is exact.
     pub(super) fn fits(&mut self, target: Ty, actual: Ty, exact: bool) -> bool {
         let (target, actual) = (self.resolve(target), self.resolve(actual));
         let types = &self.cx.types;
@@ -101,7 +100,7 @@ impl FnCx<'_, '_> {
 
     /// The variable `expected` still is, if any, which a number written there
     /// leaves open: it becomes `default` (`i32`, or `f64` once a float was
-    /// written) only if nothing else decides it, as in rustc.
+    /// written) only if nothing else decides it.
     pub(super) fn literal_var(&mut self, expected: Option<Ty>, default: Ty) -> Option<Ty> {
         let ty = self.resolve(expected?);
         let TyKind::Infer(var) = *self.cx.types.kind(ty) else {

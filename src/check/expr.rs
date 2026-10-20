@@ -429,7 +429,7 @@ impl FnCx<'_, '_> {
     }
 
     /// `place` itself, or what it refers to when it holds a reference: a
-    /// field, an element or a method is reached through a `&T` as in Rust.
+    /// field, an element or a method is reached through a `&T`.
     pub(super) fn through_ref(&mut self, place: Place, ty: Ty, span: Span) -> (Place, Ty) {
         match self.cx.types.kind(ty) {
             TyKind::Ref(_) | TyKind::RefMut(_) => self.deref(place, ty, span),
@@ -535,13 +535,13 @@ impl FnCx<'_, '_> {
     }
 
     /// Whether `place` is what a raw `*T` points at, which may hold no value
-    /// yet: writing there drops nothing, as Rust's `ptr::write`.
+    /// yet: writing there drops nothing.
     fn writes_raw(&self, place: &Place) -> bool {
         matches!(place, Place::Deref(pointer) if matches!(self.cx.types.kind(pointer.ty), TyKind::Ptr(_)))
     }
 
     /// The constant whose value `place`, written as `ast`, is part of. A
-    /// constant is a value and not a place, as in rustc, so a write to it
+    /// constant is a value and not a place, so a write to it
     /// would change only a copy.
     pub(super) fn constant_written(&self, place: &Place, ast: &Expression) -> Option<String> {
         if !super::body::in_temporary(place) {

@@ -8,9 +8,9 @@ use crate::{
     token::Token,
 };
 
-/// A recursive descent parser over the whole token list of a file, as in Zig
-/// and Carbon. Each `parse_*` starts on the first token of what it reads and
-/// stops after its last one.
+/// A recursive descent parser over the whole token list of a file. Each
+/// `parse_*` starts on the first token of what it reads and stops after its
+/// last one.
 pub struct Parser {
     tokens: Vec<(Token, Span)>,
     pos: usize,
@@ -21,24 +21,20 @@ pub struct Parser {
     no_struct_literal: bool,
     code_seen: bool,
 
-    /// How many braces are open before the next token.
     depth: usize,
-    /// How many brackets are open, where a `;` may belong to an `[x; n]`.
     brackets: usize,
-    /// How many expressions, types, statements and patterns enclose the
-    /// next token.
     nesting: usize,
     splits: Vec<(usize, (Token, Span))>,
     pub comments: Vec<Span>,
     pub parens: Vec<Span>,
 }
 
-/// How deep code may nest, as Clang limits bracket depth: deeper code is an
+/// How deep code may nest: deeper code is an
 /// error, not a stack overflow in the parser or a later pass.
 const MAX_NESTING: usize = 256;
 
 /// What may follow a `match` in statement position and continue it as an
-/// expression, as in rustc's `expr_is_complete`.
+/// expression.
 const POSTFIX_STARTS: [Token; 3] = [Token::Dot, Token::Question, Token::Bang];
 
 const ITEM_STARTS: [Token; 7] = [
@@ -320,7 +316,7 @@ impl Parser {
     }
 
     /// An expression and its `;`. A `match` ends the statement without one,
-    /// unless a postfix operator continues it, as in rustc.
+    /// unless a postfix operator continues it.
     fn parse_expression_statement(&mut self) -> Option<Statement> {
         let start = self.span();
         let expr = match self.at(&Token::Match) {
@@ -471,8 +467,8 @@ impl Parser {
         Some(args)
     }
 
-    /// Split the `>` that closes a generic type off a longer token, as rustc
-    /// does, so `Vec<Vec<i32>>` and `Vec<i32>= v` read as they look.
+    /// Split the `>` that closes a generic type off a longer token, so
+    /// `Vec<Vec<i32>>` and `Vec<i32>= v` read as they look.
     fn split_closing_angle(&mut self) {
         let rest = match self.peek() {
             Token::ShiftRight => Token::Gt,
@@ -757,7 +753,7 @@ impl Parser {
         self.parse_explicit_call(name)
     }
 
-    /// `function<T, ..>(..)`, a call given its type arguments, as in C++.
+    /// `function<T, ..>(..)`, a call given its type arguments.
     /// What does not read as types closed by `>` and followed by `(` is a
     /// comparison, so the attempt is undone and `function` returned alone.
     fn parse_explicit_call(&mut self, function: Expression) -> Option<Expression> {
@@ -890,7 +886,7 @@ impl Parser {
     }
 
     /// The operators after `left` that bind tighter than `precedence`.
-    /// Comparisons do not chain, as in Rust: `a < b == c` is an error.
+    /// Comparisons do not chain: `a < b == c` is an error.
     fn parse_operators(
         &mut self,
         mut left: Expression,
@@ -1257,9 +1253,8 @@ impl Parser {
 }
 
 #[derive(PartialEq, PartialOrd)]
-/// Loosest first. Bitwise operators bind tighter than comparison, as in Rust,
-/// so `flags & MASK == 0` groups the way it reads instead of C's
-/// `flags & (MASK == 0)`.
+/// Loosest first. Bitwise operators bind tighter than comparison, so
+/// `flags & MASK == 0` groups the way it reads.
 enum Precedence {
     Lowest,
     Assignment,

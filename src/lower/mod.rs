@@ -244,7 +244,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     }
 
     /// Which locals are SSA values rather than slots: temporaries of a
-    /// scalar type assigned once and never borrowed, as rustc's analysis.
+    /// scalar type assigned once and never borrowed.
     fn ssa_locals(&self, body: &Body) -> Vec<bool> {
         let mut defs = vec![0u32; body.locals.len()];
         let mut borrowed = vec![false; body.locals.len()];
@@ -582,7 +582,7 @@ impl SafetyMode {
         }
     }
 
-    /// The LLVM pipeline, as clang runs it at -O0, -O2 and -O3.
+    /// The LLVM pipeline at -O0, -O2 and -O3.
     pub const fn passes(&self) -> &str {
         match self {
             Self::Debug => "default<O0>",

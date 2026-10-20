@@ -1,7 +1,6 @@
-//! Borrow checking and move checking on the MIR, in the manner of rustc's
-//! MIR borrowck. Zeru is single threaded, so a live reference forbids only
-//! what can invalidate the memory it points into, never aliasing or plain
-//! writes.
+//! Borrow checking and move checking on the MIR. Zeru is single threaded,
+//! so a live reference forbids only what can invalidate the memory it
+//! points into, never aliasing or plain writes.
 //!
 //! A loan is taken by `&place`, by `get`, by a `match` binding and by a
 //! `for` loop, all of which the MIR writes as taking an address. A forward

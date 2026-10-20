@@ -35,9 +35,9 @@ fn std_path() -> Option<PathBuf> {
     std_beside(&std::env::current_exe().ok()?)
 }
 
-/// The `std` directory in the closest directory above `exe` that has one,
-/// as Zig finds its lib directory: `~/.zeru/std` for `~/.zeru/bin/zeru`,
-/// and the repository's for `target/release/zeru`.
+/// The `std` directory in the closest directory above `exe` that has one:
+/// `~/.zeru/std` for `~/.zeru/bin/zeru`, and the repository's for
+/// `target/release/zeru`.
 fn std_beside(exe: &Path) -> Option<PathBuf> {
     exe.ancestors()
         .map(|dir| dir.join("std"))

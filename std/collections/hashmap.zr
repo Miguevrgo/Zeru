@@ -1,6 +1,6 @@
 // Zeru Standard Library - HashMap
-// A SwissTable, as Rust's hashbrown: one control byte per slot, sixteen of
-// them per group, compared all at once with SSE2.
+// One control byte per slot, sixteen of them per group, compared all at
+// once with SSE2.
 // A key is an integer, a bool or an enum, hashed by its bits.
 
 // A control byte: a slot never used, one whose entry was removed, or else

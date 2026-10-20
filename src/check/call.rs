@@ -348,8 +348,7 @@ impl FnCx<'_, '_> {
         true
     }
 
-    /// `.copy()` on a `(&T)?`: a `T?` holding a copy of what it refers to,
-    /// as Rust's `cloned()`.
+    /// `.copy()` on a `(&T)?`: a `T?` holding a copy of what it refers to.
     fn copy_referent(&mut self, scrutinee: Place, reference: Ty, inner: Ty, span: Span) -> Expr {
         self.enter();
         let binding = self.declare("", reference, false, true);

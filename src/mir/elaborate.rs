@@ -1,4 +1,4 @@
-//! Drop elaboration, as rustc's: a forward dataflow over the blocks finds,
+//! Drop elaboration: a forward dataflow over the blocks finds,
 //! for each local that owns something, whether it may hold a value and
 //! whether it may not at each of its drops. A drop where it surely holds
 //! one runs, one where it surely does not goes away, and one in between

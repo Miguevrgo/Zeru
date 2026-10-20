@@ -1,5 +1,4 @@
-//! Building each function's MIR from its typed IR, as rustc's
-//! `rustc_mir_build` does. Every value an expression needs is evaluated, in
+//! Building each function's MIR from its typed IR. Every value an expression needs is evaluated, in
 //! source order, into an operand: a constant, or a temporary local. Owned
 //! values are dropped by the scope that holds them, at its end or at any
 //! jump out of it. Assignment evaluates its right side before its target.
@@ -414,7 +413,7 @@ impl<'a> Builder<'a> {
     }
 
     /// `for i, x in seq`: a reference walks from the first element to one
-    /// past the last, as Rust's slice iterator, so the loop borrows every
+    /// past the last, so the loop borrows every
     /// element throughout, and `i`, when written, counts up beside it.
     fn for_each(
         &mut self,
@@ -965,7 +964,7 @@ impl<'a> Builder<'a> {
 
     /// The place a builtin works on, and whether it takes the value away.
     /// One `borrowed` while the other arguments are evaluated is reached
-    /// through a reference taken first, as Rust's two-phase borrows.
+    /// through a reference taken first.
     fn receiver(&mut self, arg: &Expr, borrowed: bool) -> (Place, bool) {
         let outer = replace(&mut self.span, arg.span);
         let receiver = match &arg.kind {
