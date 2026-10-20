@@ -1,0 +1,96 @@
+// Generics and traits: code written once for many types, and the methods a
+// type must have to be used with it.
+
+// <T> names a type the caller picks; the arguments settle it.
+fn pair<T>(a: T, b: T) (T, T) {
+    return (b, a);
+}
+
+// A bound asks for what the code does with T: Ord for < and >, Eq for ==
+// and !=, Num for arithmetic.
+fn largest<T: Ord>(items: &Vec<T>) T {
+    var best = items[0];
+    for item in items {
+        if item > best {
+            best = item;
+        }
+    }
+    return best;
+}
+
+fn average<T: Num>(items: &Vec<T>) T {
+    return items.sum() / items.len() as T;
+}
+
+// When nothing passed in settles T, write it after the name.
+fn zero<T: Num>() T {
+    return 0 as T;
+}
+
+// A generic struct: a stack of anything.
+struct Stack<T> {
+    items: Vec<T>,
+
+    fn new() Stack<T> {
+        return Stack { items: Vec.new() };
+    }
+
+    fn push(var self, item: T) {
+        self.items.push(item);
+    }
+
+    fn pop(var self) T? {
+        return self.items.pop();
+    }
+
+    fn len(self) usize {
+        return self.items.len();
+    }
+}
+
+// A trait lists methods. A type meets it by having them; nothing else to
+// write.
+trait Named {
+    fn name(self) str;
+}
+
+struct Cat {
+    lives: i32,
+
+    fn name(self) str {
+        return "cat";
+    }
+}
+
+struct Robot {
+    model: i32,
+
+    fn name(self) str {
+        return "robot";
+    }
+}
+
+// A trait as a bound: any T with `name` will do.
+fn greet<T: Named>(who: T) {
+    println("hello, {}", who.name());
+}
+
+fn main() {
+    var swapped = pair(1, 2);
+    var words = pair("left", "right");
+    println("{} {} {} {}", swapped.0, swapped.1, words.0, words.1);
+
+    var ints: Vec<i64> = [3, 9, 4];
+    var floats: Vec<f64> = [2.5, 0.5, 1.5];
+    println("{} {} {} {}", largest(&ints), largest(&floats), average(&ints), average(&floats));
+    println("{} {}", zero<i32>(), zero<f64>());
+
+    // The variable's type settles T when new() cannot.
+    var stack: Stack<str> = Stack.new();
+    stack.push("a");
+    stack.push("b");
+    println("{} on top of {} items", stack.pop().unwrap(), stack.len());
+
+    greet(Cat { lives: 9 });
+    greet(Robot { model: 3 });
+}

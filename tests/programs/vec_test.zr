@@ -1,0 +1,141 @@
+// Vec<T> integration test
+// Tests basic Vec operations: push, pop, len, clear, copy
+// Uses exit codes to verify behavior
+
+fn main() {
+    var numbers: Vec<i64> = Vec.new();
+    if numbers.len() != 0 {
+        exit(1);
+    }
+
+    numbers.push(10);
+    numbers.push(20);
+    numbers.push(30);
+    if numbers.len() != 3 {
+        exit(2);
+    }
+
+    numbers.pop();
+    if numbers.len() != 2 {
+        exit(3);
+    }
+
+    numbers.clear();
+    if numbers.len() != 0 {
+        exit(4);
+    }
+
+    numbers.push(100);
+    numbers.push(200);
+    var copied = numbers.copy();
+    if numbers.len() != 2 {
+        exit(5);
+    }
+    if copied.len() != 2 {
+        exit(6);
+    }
+
+    numbers.push(300);
+    if numbers.len() != 3 {
+        exit(7);
+    }
+    if copied.len() != 2 {
+        exit(8);
+    }
+
+    var items: Vec<i64> = Vec.new();
+    var n: i64 = 1;
+    while n <= 4 {
+        items.push(n);
+        n += 1;
+    }
+
+    items[1] = 20;
+    items[2] += 30;
+    if items[1] != 20 {
+        exit(60);
+    }
+    if items[2] != 33 {
+        exit(61);
+    }
+    if items[0] != 1 {
+        exit(62);
+    }
+
+    var walked: i64 = 0;
+    for item in items {
+        walked += item;
+    }
+    if walked != 58 {
+        exit(63);
+    }
+
+    var empty: Vec<i64> = Vec.new();
+    var turns: i32 = 0;
+    for item in empty {
+        turns += 1;
+    }
+    if turns != 0 {
+        exit(64);
+    }
+
+    var reserved: Vec<i64> = Vec.with_capacity(4);
+    if reserved.capacity() != 4 {
+        exit(67);
+    }
+    reserved.push(7);
+    if reserved.len() != 1 || reserved[0] != 7 {
+        exit(68);
+    }
+    if reserved.capacity() != 4 {
+        exit(69);
+    }
+
+    var listed: Vec<i64> = [1, 2, 4];
+    listed.insert(2, 3);
+    listed.insert(4, 5);
+    listed.insert(0, 0);
+    if listed.len() != 6 {
+        exit(70);
+    }
+    var at: usize = 0;
+    while at < 6 {
+        if listed[at] != at as i64 {
+            exit(71);
+        }
+        at += 1;
+    }
+    if listed.remove(0) != 0 || listed.remove(4) != 5 || listed.remove(1) != 2 {
+        exit(72);
+    }
+    if listed.len() != 3 || listed[0] != 1 || listed[1] != 3 || listed[2] != 4 {
+        exit(73);
+    }
+
+    var zeros: Vec<i64> = [0; 100];
+    if zeros.len() != 100 || zeros[99] != 0 {
+        exit(74);
+    }
+    zeros.reserve(200);
+    if zeros.capacity() < 300 || zeros.len() != 100 {
+        exit(75);
+    }
+    zeros.shrink_to_fit();
+    if zeros.capacity() != 100 || zeros[50] != 0 {
+        exit(76);
+    }
+
+    var grid: Vec<Vec<i64>> = [[1, 2], [3]];
+    var twin = grid.copy();
+    twin[0][0] = 9;
+    twin[1].push(4);
+    if grid[0][0] != 1 || grid[1].len() != 1 {
+        exit(77);
+    }
+    if twin[0][0] != 9 || twin[1].len() != 2 {
+        exit(78);
+    }
+
+    println("Vec tests passed!");
+    exit(0);
+}

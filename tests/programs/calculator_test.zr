@@ -1,0 +1,292 @@
+// A calculator: a tokenizer, a recursive descent parser and an evaluator in
+// one pass, with variables, unary minus, `^` for powers and errors carried
+// as codes through `!`. An expression given on the command line is
+// evaluated too.
+
+import std.os;
+
+enum Tok {
+    Num(i64),
+    Var(u8),
+    Op(u8),
+    Open,
+    Close,
+    Assign,
+    End,
+}
+
+const BAD_CHAR: i32 = 1;
+const UNEXPECTED: i32 = 2;
+const UNCLOSED: i32 = 3;
+const DIV_ZERO: i32 = 4;
+const UNSET: i32 = 5;
+const NEG_POWER: i32 = 6;
+
+fn tokenize(text: str) Vec<Tok>! {
+    var out: Vec<Tok> = Vec.new();
+    var i: usize = 0;
+    while i < text.len() {
+        var c = text[i];
+        i += 1;
+        match c {
+            ' ' | '\t' => {}
+            '+' | '-' | '*' | '/' | '%' | '^' => {
+                out.push(Tok::Op(c));
+            }
+            '(' => {
+                out.push(Tok::Open);
+            }
+            ')' => {
+                out.push(Tok::Close);
+            }
+            '=' => {
+                out.push(Tok::Assign);
+            }
+            default => {
+                if c >= 'a' && c <= 'z' {
+                    out.push(Tok::Var(c));
+                } else if c >= '0' && c <= '9' {
+                    var n = (c - '0') as i64;
+                    while i < text.len() && text[i] >= '0' && text[i] <= '9' {
+                        n = n * 10 + (text[i] - '0') as i64;
+                        i += 1;
+                    }
+                    out.push(Tok::Num(n));
+                } else {
+                    return Err(BAD_CHAR);
+                }
+            }
+        }
+    }
+    out.push(Tok::End);
+    return Ok(out);
+}
+
+// The machine state: tokens, a cursor and 26 single-letter variables.
+struct Calc {
+    toks: Vec<Tok>,
+    at: usize,
+    vars: Array<i64?, 26>,
+
+    fn peek(self) Tok {
+        return self.toks[self.at];
+    }
+
+    fn op(self) u8? {
+        return match self.peek() {
+            Tok::Op(c) => c,
+            default => None,
+        };
+    }
+
+    // statement := letter '=' expr | expr
+    fn statement(var self) i64! {
+        match self.peek() {
+            Tok::Var(name) => {
+                match self.toks[self.at + 1] {
+                    Tok::Assign => {
+                        self.at += 2;
+                        var value = self.expr()!;
+                        self.vars[(name - 'a') as usize] = value;
+                        return Ok(value);
+                    }
+                    default => {}
+                }
+            }
+            default => {}
+        }
+        return self.expr();
+    }
+
+    fn expr(var self) i64! {
+        var left = self.term()!;
+        while true {
+            var c = self.op();
+            if c.is_none() {
+                break;
+            }
+            var o = c.unwrap();
+            if o != '+' && o != '-' {
+                break;
+            }
+            self.at += 1;
+            var right = self.term()!;
+            left = match o {
+                '+' => left + right,
+                default => left - right,
+            };
+        }
+        return Ok(left);
+    }
+
+    fn term(var self) i64! {
+        var left = self.power()!;
+        while true {
+            var c = self.op();
+            if c.is_none() {
+                break;
+            }
+            var o = c.unwrap();
+            if o != '*' && o != '/' && o != '%' {
+                break;
+            }
+            self.at += 1;
+            var right = self.power()!;
+            if (o == '/' || o == '%') && right == 0 {
+                return Err(DIV_ZERO);
+            }
+            left = match o {
+                '*' => left * right,
+                '/' => left / right,
+                default => left % right,
+            };
+        }
+        return Ok(left);
+    }
+
+    // `^` binds right to left: 2^3^2 is 2^9.
+    fn power(var self) i64! {
+        var base = self.unary()!;
+        var c = self.op();
+        if c.is_none() || c.unwrap() != '^' {
+            return Ok(base);
+        }
+        self.at += 1;
+        var exp = self.power()!;
+        if exp < 0 {
+            return Err(NEG_POWER);
+        }
+        var result: i64 = 1;
+        for k in 0..exp {
+            result *= base;
+        }
+        return Ok(result);
+    }
+
+    fn unary(var self) i64! {
+        var c = self.op();
+        if c.is_some() && c.unwrap() == '-' {
+            self.at += 1;
+            return Ok(-self.unary()!);
+        }
+        return self.atom();
+    }
+
+    fn atom(var self) i64! {
+        var t = self.peek();
+        self.at += 1;
+        match t {
+            Tok::Num(n) => {
+                return Ok(n);
+            }
+            Tok::Var(name) => {
+                var slot = self.vars[(name - 'a') as usize];
+                if slot.is_none() {
+                    return Err(UNSET);
+                }
+                return Ok(slot.unwrap());
+            }
+            Tok::Open => {
+                var inner = self.expr()!;
+                match self.peek() {
+                    Tok::Close => {
+                        self.at += 1;
+                        return Ok(inner);
+                    }
+                    default => {
+                        return Err(UNCLOSED);
+                    }
+                }
+            }
+            Tok::Op(_) | Tok::Close | Tok::Assign | Tok::End => {
+                return Err(UNEXPECTED);
+            }
+        }
+    }
+
+    // Run one line; the whole line must be used.
+    fn run(var self, line: str) i64! {
+        self.toks = tokenize(line)!;
+        self.at = 0;
+        var value = self.statement()!;
+        match self.peek() {
+            Tok::End => {
+                return Ok(value);
+            }
+            default => {
+                return Err(UNEXPECTED);
+            }
+        }
+    }
+}
+
+fn main() {
+    var calc = Calc { toks: Vec.new(), at: 0, vars: [None; 26] };
+    var lines: Array<str, 14> = [
+        "1 + 2 * 3",
+        "(1 + 2) * 3",
+        "2 ^ 3 ^ 2",
+        "-2 ^ 2",
+        "x = 7",
+        "y = x * x - 1",
+        "y % 5 + -x",
+        "100 / (y - 23)",
+        "7 / (3 - 3)",
+        "z + 1",
+        "(1 + 2",
+        "4 $ 4",
+        "1 2",
+        "2 ^ -1",
+    ];
+    var want: Array<i64, 14> = [
+        7,
+        9,
+        512,
+        4,
+        7,
+        48,
+        -4,
+        4,
+        -DIV_ZERO as i64,
+        -UNSET as i64,
+        -UNCLOSED as i64,
+        -BAD_CHAR as i64,
+        -UNEXPECTED as i64,
+        -NEG_POWER as i64,
+    ];
+    var failures = 0;
+    for i in 0..14 {
+        var seen: i64 = 0;
+        match calc.run(lines[i]) {
+            Ok(v) => {
+                println("{} = {}", lines[i], v);
+                seen = v;
+            }
+            Err(e) => {
+                println("{} -> error {}", lines[i], e);
+                seen = -e as i64;
+            }
+        }
+        if seen != want[i] {
+            failures += 1;
+        }
+    }
+
+    var args = os::args();
+    if args.len() > 1 {
+        match calc.run(args[1]) {
+            Ok(v) => {
+                println("argument: {}", v);
+            }
+            Err(e) => {
+                println("argument: error {}", e);
+            }
+        }
+    }
+
+    if failures != 0 {
+        println("{} failures", failures);
+        exit(1);
+    }
+    exit(0);
+}

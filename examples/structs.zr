@@ -1,0 +1,128 @@
+// Structs, enums and match: a few shapes on a plane, each a struct with
+// methods, its kind an enum, and the matches that take them apart.
+
+const PI: f64 = 3.14159;
+
+// A struct groups named fields; its functions are written inside it.
+struct Point {
+    x: f64,
+    y: f64,
+
+    // A function without `self` belongs to the type: `Point.origin()`.
+    fn origin() Point {
+        return Point { x: 0.0, y: 0.0 };
+    }
+
+    // `self` reads the value the method is called on.
+    fn manhattan(self, other: Point) f64 {
+        var dx = self.x - other.x;
+        var dy = self.y - other.y;
+        if dx < 0.0 {
+            dx = -dx;
+        }
+        if dy < 0.0 {
+            dy = -dy;
+        }
+        return dx + dy;
+    }
+
+    // `var self` may change it; the caller's variable must be `var` too.
+    fn shift(var self, dx: f64, dy: f64) {
+        self.x += dx;
+        self.y += dy;
+    }
+}
+
+// An enum is one of its variants, and a variant may carry values.
+enum Kind {
+    Circle(f64),
+    Rect(f64, f64),
+    Dot,
+}
+
+// Variants that carry nothing compare with ==.
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+struct Shape {
+    at: Point,
+    kind: Kind,
+    color: Color,
+
+    // match takes a value apart: each arm names a pattern, and the variant's
+    // values come out by name.
+    fn area(self) f64 {
+        return match self.kind {
+            Kind::Circle(r) => PI * r * r,
+            Kind::Rect(w, h) => w * h,
+            Kind::Dot => 0.0,
+        };
+    }
+
+    // A tuple holds a few values of any types, read as .0, .1 and so on.
+    fn size(self) (f64, f64) {
+        return match self.kind {
+            Kind::Circle(r) => (2.0 * r, 2.0 * r),
+            Kind::Rect(w, h) => (w, h),
+            Kind::Dot => (0.0, 0.0),
+        };
+    }
+}
+
+// Patterns: | for either, constants, `_` to skip a value, and `default` for
+// whatever no other arm takes.
+fn describe(sides: i32) str {
+    return match sides {
+        0 => "round",
+        3 => "triangle",
+        4 | 5 => "four or five sides",
+        default => "many sides",
+    };
+}
+
+fn main() {
+    var shapes = [
+        Shape { at: Point.origin(), kind: Kind::Circle(1.0), color: Color::Red },
+        Shape { at: Point { x: 2.0, y: 1.0 }, kind: Kind::Rect(3.0, 2.0), color: Color::Blue },
+        Shape { at: Point { x: -1.0, y: 4.0 }, kind: Kind::Dot, color: Color::Red },
+    ];
+
+    var total = 0.0;
+    for shape in shapes {
+        total += shape.area();
+        var size = shape.size();
+        println(
+            "{} x {} at {} from the origin",
+            size.0,
+            size.1,
+            shape.at.manhattan(Point.origin()),
+        );
+    }
+    println("total area {}", total);
+
+    // A match whose arms are blocks is a statement.
+    var reds = 0;
+    for shape in shapes {
+        match shape.kind {
+            Kind::Rect(_, h) => {
+                println("a rectangle {} high", h);
+            }
+            default => {}
+        }
+        if shape.color == Color::Red {
+            reds += 1;
+        }
+    }
+    println("{} red", reds);
+
+    var p = Point.origin();
+    p.shift(1.5, -2.0);
+    println("({}, {})", p.x, p.y);
+
+    for sides in [0, 3, 5, 8] {
+        println("{}", describe(sides));
+    }
+}

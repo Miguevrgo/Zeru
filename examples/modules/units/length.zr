@@ -1,0 +1,9 @@
+// A module in a folder: imported as `units.length`.
+
+pub fn meters(centimeters: i32) f64 {
+    return centimeters as f64 / 100.0;
+}
+
+pub fn kilometers(meters: i32) f64 {
+    return meters as f64 / 1000.0;
+}

@@ -1,0 +1,227 @@
+// A small stack machine: an assembler with forward jumps patched in place,
+// and an interpreter that dispatches on each instruction with a match.
+
+const UNDERFLOW: i32 = 1;
+const DIV_ZERO: i32 = 2;
+const BAD_JUMP: i32 = 3;
+const TOO_LONG: i32 = 4;
+
+enum Op {
+    Push(i64),
+    Load(usize),
+    Store(usize),
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Lt,
+    Jz(usize),
+    Jmp(usize),
+    Print,
+    Halt,
+}
+
+struct Asm {
+    code: Vec<Op>,
+
+    fn new() Asm {
+        return Asm { code: Vec.new() };
+    }
+
+    fn emit(var self, op: Op) usize {
+        self.code.push(op);
+        return self.code.len() - 1;
+    }
+
+    // Point the jump at `at` to `target`, once the target is known.
+    fn patch(var self, at: usize, target: usize) {
+        self.code[at] = match self.code[at] {
+            Op::Jz(_) => Op::Jz(target),
+            default => Op::Jmp(target),
+        };
+    }
+}
+
+struct Machine {
+    stack: Vec<i64>,
+    locals: Array<i64, 8>,
+    out: Vec<i64>,
+
+    fn new() Machine {
+        return Machine { stack: Vec.new(), locals: [0; 8], out: Vec.new() };
+    }
+
+    fn pop(var self) i64! {
+        match self.stack.pop() {
+            Some(v) => {
+                return Ok(v);
+            }
+            None => {
+                return Err(UNDERFLOW);
+            }
+        }
+    }
+
+    // Pop b then a, the operands of `a op b`.
+    fn pair(var self) (i64, i64)! {
+        var b = self.pop()!;
+        var a = self.pop()!;
+        return Ok((a, b));
+    }
+
+    // Run `code` to its Halt; the number of steps taken.
+    fn run(var self, code: &Vec<Op>) u64! {
+        var pc: usize = 0;
+        var steps: u64 = 0;
+        while true {
+            if pc >= code.len() {
+                return Err(BAD_JUMP);
+            }
+            steps += 1;
+            if steps > 100000 {
+                return Err(TOO_LONG);
+            }
+            var op = code[pc];
+            pc += 1;
+            match op {
+                Op::Push(v) => {
+                    self.stack.push(v);
+                }
+                Op::Load(slot) => {
+                    self.stack.push(self.locals[slot]);
+                }
+                Op::Store(slot) => {
+                    self.locals[slot] = self.pop()!;
+                }
+                Op::Add | Op::Sub | Op::Mul | Op::Lt => {
+                    var ab = self.pair()!;
+                    self.stack.push(match op {
+                        Op::Add => ab.0 + ab.1,
+                        Op::Sub => ab.0 - ab.1,
+                        Op::Mul => ab.0 * ab.1,
+                        default => match ab.0 < ab.1 {
+                            true => 1,
+                            false => 0,
+                        },
+                    });
+                }
+                Op::Div | Op::Mod => {
+                    var ab = self.pair()!;
+                    if ab.1 == 0 {
+                        return Err(DIV_ZERO);
+                    }
+                    self.stack.push(match op {
+                        Op::Div => ab.0 / ab.1,
+                        default => ab.0 % ab.1,
+                    });
+                }
+                Op::Jz(target) => {
+                    if self.pop()! == 0 {
+                        pc = target;
+                    }
+                }
+                Op::Jmp(target) => {
+                    pc = target;
+                }
+                Op::Print => {
+                    self.out.push(self.pop()!);
+                }
+                Op::Halt => {
+                    return Ok(steps);
+                }
+            }
+        }
+    }
+}
+
+// while 1 < n: n = n even ? n / 2 : 3n + 1; steps += 1
+fn collatz(a: &var Asm, start: i64) {
+    a.emit(Op::Push(start));
+    a.emit(Op::Store(0));
+    var top = a.code.len();
+    a.emit(Op::Push(1));
+    a.emit(Op::Load(0));
+    a.emit(Op::Lt);
+    var exit_jump = a.emit(Op::Jz(0));
+    a.emit(Op::Load(0));
+    a.emit(Op::Push(2));
+    a.emit(Op::Mod);
+    var even_jump = a.emit(Op::Jz(0));
+    a.emit(Op::Load(0));
+    a.emit(Op::Push(3));
+    a.emit(Op::Mul);
+    a.emit(Op::Push(1));
+    a.emit(Op::Add);
+    a.emit(Op::Store(0));
+    var odd_done = a.emit(Op::Jmp(0));
+    a.patch(even_jump, a.code.len());
+    a.emit(Op::Load(0));
+    a.emit(Op::Push(2));
+    a.emit(Op::Div);
+    a.emit(Op::Store(0));
+    a.patch(odd_done, a.code.len());
+    a.emit(Op::Load(1));
+    a.emit(Op::Push(1));
+    a.emit(Op::Add);
+    a.emit(Op::Store(1));
+    a.emit(Op::Jmp(top));
+    a.patch(exit_jump, a.code.len());
+    a.emit(Op::Load(1));
+    a.emit(Op::Print);
+}
+
+// Euclid: while 0 < b: (a, b) = (b, a % b)
+fn gcd(a: &var Asm, x: i64, y: i64) {
+    a.emit(Op::Push(x));
+    a.emit(Op::Store(2));
+    a.emit(Op::Push(y));
+    a.emit(Op::Store(3));
+    var top = a.code.len();
+    a.emit(Op::Push(0));
+    a.emit(Op::Load(3));
+    a.emit(Op::Lt);
+    var done = a.emit(Op::Jz(0));
+    a.emit(Op::Load(2));
+    a.emit(Op::Load(3));
+    a.emit(Op::Mod);
+    a.emit(Op::Load(3));
+    a.emit(Op::Store(2));
+    a.emit(Op::Store(3));
+    a.emit(Op::Jmp(top));
+    a.patch(done, a.code.len());
+    a.emit(Op::Load(2));
+    a.emit(Op::Print);
+}
+
+fn run_ops(ops: Vec<Op>) u64! {
+    var m = Machine.new();
+    return m.run(&ops);
+}
+
+fn main() {
+    var a = Asm.new();
+    collatz(&var a, 27);
+    gcd(&var a, 1071, 462);
+    a.emit(Op::Halt);
+
+    var m = Machine.new();
+    var steps = m.run(&a.code).unwrap();
+    println("{} instructions ran {} steps", a.code.len(), steps);
+    for v in m.out {
+        println("  printed {}", v);
+    }
+    if m.out.len() != 2 || m.out[0] != 111 || m.out[1] != 21 || steps != 2062 {
+        exit(1);
+    }
+
+    var underflow = run_ops([Op::Push(1), Op::Add, Op::Halt]);
+    var by_zero = run_ops([Op::Push(1), Op::Push(0), Op::Div, Op::Halt]);
+    var forever = run_ops([Op::Jmp(0)]);
+    println("errors: {} {} {}", underflow.unwrap_err(), by_zero.unwrap_err(), forever.unwrap_err());
+    if underflow.unwrap_err() != UNDERFLOW || by_zero.unwrap_err() != DIV_ZERO
+        || forever.unwrap_err() != TOO_LONG {
+        exit(2);
+    }
+    exit(0);
+}

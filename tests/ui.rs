@@ -223,15 +223,20 @@ fn ui() {
     });
 }
 
+/// The examples and the whole programs in tests/programs, each run in every
+/// mode, must exit with 0; a directory's program is its `main.zr` or
+/// `*_test.zr`.
 #[test]
 fn examples() {
     let mut programs = Vec::new();
-    sources(
-        &root().join("examples"),
-        1,
-        |name| name.ends_with("_test.zr"),
-        &mut programs,
-    );
+    for dir in ["examples", "tests/programs"] {
+        sources(
+            &root().join(dir),
+            1,
+            |name| name == "main.zr" || name.ends_with("_test.zr"),
+            &mut programs,
+        );
+    }
     programs.sort();
 
     run_all(&programs, |source, scratch| {

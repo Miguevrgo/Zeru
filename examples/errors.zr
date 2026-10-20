@@ -1,0 +1,102 @@
+// Optionals, errors and text: reading settings written as `key = value`
+// lines, where a value may be missing and a line may be wrong.
+
+// An error is an i32 code; naming the codes keeps them readable.
+const NO_EQUALS: i32 = 1;
+const NOT_A_NUMBER: i32 = 2;
+const UNKNOWN_KEY: i32 = 3;
+
+const SETTINGS: str = `# lines starting with # are comments
+width = 80
+height=24
+
+title = Zeru
+depth = deep
+`;
+
+// `T?` is a T or None. A plain value is wrapped on return.
+fn find(text: str, key: str) str? {
+    for line in text.lines() {
+        var parts = line.split("=");
+        if parts.len() == 2 && parts[0].trim() == key {
+            return parts[1].trim();
+        }
+    }
+    return None;
+}
+
+// `T!` is a T or an error code: Ok(value) or Err(code).
+fn number(text: str, key: str) i64! {
+    var value = find(text, key);
+    if value.is_none() {
+        return Err(UNKNOWN_KEY);
+    }
+    var parsed = value.unwrap().parse_int();
+    if parsed.is_err() {
+        return Err(NOT_A_NUMBER);
+    }
+    return Ok(parsed.unwrap());
+}
+
+// `x!` hands an error back to the caller at once, and `x?` hands back None,
+// so a chain of steps reads straight down.
+fn area(text: str) i64! {
+    var width = number(text, "width")!;
+    var height = number(text, "height")!;
+    return Ok(width * height);
+}
+
+fn first_letter(text: str, key: str) u8? {
+    var value = find(text, key)?;
+    if value.len() == 0 {
+        return None;
+    }
+    return value[0];
+}
+
+// Every line that is not blank or a comment must hold one `=`.
+fn check(text: str) i32! {
+    var settings = 0;
+    for line in text.lines() {
+        var clean = line.trim();
+        if clean.len() == 0 || clean.starts_with("#") {
+            continue;
+        }
+        if clean.split("=").len() != 2 {
+            return Err(NO_EQUALS);
+        }
+        settings += 1;
+    }
+    return Ok(settings);
+}
+
+fn main() {
+    println("{} settings", check(SETTINGS).unwrap());
+    println("area {}", area(SETTINGS).unwrap());
+
+    // match takes both apart, with the value or the code by name.
+    match number(SETTINGS, "depth") {
+        Ok(depth) => println("depth {}", depth),
+        Err(code) => println("depth failed with error {}", code),
+    }
+    match find(SETTINGS, "title") {
+        Some(title) => println("title {} ({} letters)", title, title.len()),
+        None => println("no title"),
+    }
+
+    println("{}", first_letter(SETTINGS, "title").unwrap());
+    println("{}", first_letter(SETTINGS, "color").is_none());
+    println("{}", number(SETTINGS, "color").unwrap_err() == UNKNOWN_KEY);
+    println("{}", check("broken line").unwrap_err());
+
+    // A str is a view of bytes: its length, each byte, and comparisons.
+    var word = "level";
+    var mirrored = true;
+    for i, letter in word {
+        if letter != word[word.len() - 1 - i] {
+            mirrored = false;
+        }
+    }
+    println("{} reads the same backwards: {}", word, mirrored);
+    println("{} {}", "3.75".parse_float().unwrap() * 2.0, word.ends_with("vel"));
+}

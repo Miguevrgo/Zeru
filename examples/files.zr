@@ -1,0 +1,50 @@
+// Files and arguments: count the lines, words and bytes of a file, as `wc`
+// does. `zeru run examples/files.zr -- notes.txt` counts notes.txt; with no
+// argument it writes a file of its own, counts it and removes it.
+
+import std.fs;
+import std.os;
+
+fn main() {
+    // os::args() holds the program's path, then what follows `--`.
+    var args = os::args();
+    var path = "files_example.txt";
+    if args.len() > 1 {
+        path = args[1];
+    } else {
+        fs::write_file(path, "one line\ntwo more words\n\nlast").unwrap();
+    }
+
+    if !fs::exists(path) {
+        eprintln("no file at {}", path);
+        exit(1);
+    }
+
+    // read_file gives the whole file as a str; an error is the system's code,
+    // as 2 for a missing file or 13 for no permission.
+    var text = fs::read_file(path).unwrap();
+    var words = 0;
+    var longest = "";
+    for line in text.lines() {
+        for word in line.split(" ") {
+            if word.len() > 0 {
+                words += 1;
+            }
+            if word.len() > longest.len() {
+                longest = word;
+            }
+        }
+    }
+    println(
+        "{} lines, {} words, {} bytes",
+        text.lines().len(),
+        words,
+        fs::file_size(path).unwrap(),
+    );
+    println("longest word: {}", longest);
+
+    if args.len() == 1 {
+        fs::unlink(path).unwrap();
+        println("missing file error: {}", fs::read_file(path).unwrap_err());
+    }
+}

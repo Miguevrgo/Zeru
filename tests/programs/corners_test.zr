@@ -1,0 +1,198 @@
+// Odd corners that are easy to break: constants, mutual recursion, optionals
+// and results carrying aggregates, a large array, and shadowing in a loop.
+
+const LIMIT: i32 = 10;
+const RATIO: f64 = 1.5;
+const ON: bool = true;
+const GREETING: str = "hi";
+const SPAN: i32 = LIMIT * 2 + 1;
+
+struct Small {
+    n: i32,
+}
+
+struct Maybe {
+    value: i32?,
+    tag: i32,
+}
+
+fn even(n: i32) bool {
+    if n == 0 {
+        return true;
+    }
+    return odd(n - 1);
+}
+
+fn odd(n: i32) bool {
+    if n == 0 {
+        return false;
+    }
+    return even(n - 1);
+}
+
+fn maybe_small(yes: bool) Small? {
+    if yes {
+        return Small { n: 3 };
+    }
+    return None;
+}
+
+fn wrapped(yes: bool) Small! {
+    if yes {
+        return Ok(Small { n: 4 });
+    }
+    return Err(9);
+}
+
+struct Growing {
+    v: Vec<i64>,
+    fn grow(var self) i64 {
+        var i: i64 = 0;
+        while i < 100000 {
+            self.v.push(i);
+            i += 1;
+        }
+        return 7;
+    }
+}
+
+fn doubled(a: i64) i64? {
+    return a * 2;
+}
+
+fn first_over(data: Array<i32, 5>, limit: i32) i32? {
+    var i: usize = 0;
+    while i < 5 {
+        if data[i] > limit {
+            return data[i];
+        }
+        i += 1;
+    }
+    return None;
+}
+
+fn main() {
+    if LIMIT != 10 {
+        exit(1);
+    }
+    if RATIO != 1.5 {
+        exit(2);
+    }
+    if !ON {
+        exit(3);
+    }
+    if SPAN != 21 {
+        exit(21);
+    }
+    if GREETING.len() != 2 {
+        exit(22);
+    }
+    {
+        var LIMIT: i32 = 3;
+        if LIMIT != 3 {
+            exit(23);
+        }
+    }
+
+    if !even(8) {
+        exit(4);
+    }
+    if even(7) {
+        exit(5);
+    }
+    if !odd(9) {
+        exit(6);
+    }
+
+    var some = maybe_small(true);
+    if !some.is_some() {
+        exit(7);
+    }
+    if some.unwrap().n != 3 {
+        exit(8);
+    }
+    if maybe_small(false).is_some() {
+        exit(9);
+    }
+
+    var ok = wrapped(true);
+    if ok.unwrap().n != 4 {
+        exit(10);
+    }
+    if !wrapped(false).is_err() {
+        exit(11);
+    }
+    if wrapped(false).unwrap_err() != 9 {
+        exit(12);
+    }
+
+    var holder = Maybe { value: 5, tag: 1 };
+    if holder.value.unwrap() != 5 {
+        exit(13);
+    }
+    var blank = Maybe { value: None, tag: 2 };
+    if blank.value.is_some() {
+        exit(14);
+    }
+
+    var data: Array<i32, 5> = [1, 5, 9, 2, 7];
+    if first_over(data, 4).unwrap() != 5 {
+        exit(15);
+    }
+    if first_over(data, 100).is_some() {
+        exit(16);
+    }
+
+    var big: Array<i64, 64> = [0; 64];
+    var i: usize = 0;
+    while i < 64 {
+        big[i] = i as i64 * 2;
+        i += 1;
+    }
+    if big[63] != 126 {
+        exit(17);
+    }
+    var total: i64 = 0;
+    for value in big {
+        total += value;
+    }
+    if total != 4032 {
+        exit(18);
+    }
+
+    var counter: i32 = 0;
+    var round: i32 = 0;
+    while round < 3 {
+        var counter: i32 = 10;
+        counter += 1;
+        if counter != 11 {
+            exit(19);
+        }
+        round += 1;
+    }
+    if counter != 0 {
+        exit(20);
+    }
+
+    var a: i64 = 3;
+    var sum: i64? = a + 4;
+    var neg: i64? = -a;
+    var n: i32 = 7;
+    var p: *i32 = &n;
+    var read: i32? = *p;
+    if doubled(a).unwrap() != 6 {
+        exit(21);
+    }
+    if sum.unwrap() != 7 || neg.unwrap() != -3 || read.unwrap() != 7 {
+        exit(22);
+    }
+
+    var g = Growing { v: [1] };
+    g.v[0] = g.grow();
+    if g.v[0] != 7 || g.v.len() != 100001 {
+        exit(23);
+    }
+
+    println("corners: all tests passed");
+    exit(0);
+}

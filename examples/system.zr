@@ -1,0 +1,45 @@
+// Close to the machine: the math, os and net modules, and assembly written
+// inline when nothing else reaches what is needed.
+
+import std.math;
+import std.os;
+import std.net;
+
+// asm takes an instruction template, then outputs, inputs and clobbered
+// registers. `rdtsc` reads the processor's cycle counter.
+fn cycles() u64 {
+    var low: u64 = 0;
+    var high: u64 = 0;
+    asm volatile ("rdtsc" : "={rax}" (low), "={rdx}" (high));
+    return high << 32 | low;
+}
+
+fn main() {
+    // math works for every number type.
+    println("{} {} {}", math::abs(-7), math::max(2.5, 1.5), math::clamp(15, 0, 10));
+    println("{} {}", math::pow(3, 4), math::is_power_of_two(64));
+
+    // os talks to the operating system; each call can fail with its code.
+    var start = os::clock_ns().unwrap();
+    os::sleep_ms(5).unwrap();
+    var waited = os::clock_ns().unwrap() - start;
+    println("pid {} slept at least 5 ms: {}", os::getpid() > 0, waited >= 5_000_000);
+
+    var before = cycles();
+    var after = cycles();
+    println("the cycle counter moves on: {}", after > before);
+
+    // net: a TCP server and a client in one program, talking over loopback.
+    var ip = net::ip4(127, 0, 0, 1);
+    var listener = net::TcpListener.bind(ip, 47614).unwrap();
+    var client = net::TcpStream.connect(ip, 47614).unwrap();
+    var server = listener.accept().unwrap();
+    var message = "ping";
+    client.write_all(message as *u8, message.len()).unwrap();
+    var reply: Array<u8, 4> = [0; 4];
+    var got = server.read(&reply[0], 4).unwrap();
+    println("server got {} bytes, the first one {}", got, reply[0]);
+    server.close();
+    client.close();
+    listener.close();
+}

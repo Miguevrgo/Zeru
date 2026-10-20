@@ -1,0 +1,144 @@
+// Text statistics over a built-in passage: lines, words, letters, the most
+// common words and the longest one. Words are folded to lower case and keyed
+// in a HashMap by their FNV-1a hash, since str keys are not supported yet.
+
+import std.collections.hashmap::{HashMap};
+
+const TEXT: str = `It was the best of times, it was the worst of times,
+it was the age of wisdom, it was the age of foolishness,
+it was the epoch of belief, it was the epoch of incredulity,
+it was the season of Light, it was the season of Darkness,
+it was the spring of hope, it was the winter of despair,
+we had everything before us, we had nothing before us,
+we were all going direct to Heaven, we were all going direct the other way.`;
+
+// One distinct word: where it first appears and how often.
+struct Entry {
+    start: usize,
+    len: usize,
+    count: i64,
+}
+
+fn is_letter(c: u8) bool {
+    return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z';
+}
+
+fn lower(c: u8) u8 {
+    if c >= 'A' && c <= 'Z' {
+        return c + 32;
+    }
+    return c;
+}
+
+// FNV-1a over the word's letters folded to lower case.
+fn word_hash(text: str, start: usize, len: usize) u64 {
+    var h: u64 = 14695981039346656037;
+    for i in start..start + len {
+        h = (h ^ lower(text[i]) as u64) *% 1099511628211;
+    }
+    return h;
+}
+
+// The `len` bytes of `text` from `start`, as a str of their own: there is no
+// slicing syntax, so the (pointer, length) pair is built by hand as os::args
+// does.
+fn substr(text: str, start: usize, len: usize) str {
+    var parts = ((text as *u8) + start, len);
+    return *((&parts) as *str);
+}
+
+// Most frequent first; a tie keeps the order of first appearance.
+fn before(a: &Entry, b: &Entry) bool {
+    if a.count != b.count {
+        return a.count > b.count;
+    }
+    return a.start < b.start;
+}
+
+fn sort_entries(list: &var Vec<Entry>) {
+    for i in 1..list.len() {
+        var item = list[i];
+        var j = i;
+        while j > 0 && before(&item, &list[j - 1]) {
+            list[j] = list[j - 1];
+            j -= 1;
+        }
+        list[j] = item;
+    }
+}
+
+fn main() {
+    var index: HashMap<u64, usize> = HashMap.new();
+    var entries: Vec<Entry> = Vec.new();
+    var lines: i64 = 1;
+    var words: i64 = 0;
+    var letters: i64 = 0;
+    var longest: usize = 0;
+
+    var i: usize = 0;
+    while i < TEXT.len() {
+        if TEXT[i] == '\n' {
+            lines += 1;
+        }
+        if !is_letter(TEXT[i]) {
+            i += 1;
+            continue;
+        }
+        var start = i;
+        while i < TEXT.len() && is_letter(TEXT[i]) {
+            i += 1;
+        }
+        var len = i - start;
+        words += 1;
+        letters += len as i64;
+        var key = word_hash(TEXT, start, len);
+        var known = index.get(key);
+        match known {
+            Some(at) => {
+                entries[*at].count += 1;
+            }
+            None => {
+                index.insert(key, entries.len());
+                entries.push(Entry { start: start, len: len, count: 1 });
+            }
+        }
+        if longest == 0 || len > entries[longest - 1].len {
+            longest = *index.get(key).unwrap() + 1;
+        }
+    }
+
+    var mean = letters as f64 / words as f64;
+    println(
+        "{} lines, {} words, {} distinct, {} letters, {} letters per word",
+        lines,
+        words,
+        entries.len(),
+        letters,
+        mean,
+    );
+    var long = entries[longest - 1];
+    println("longest word: {} ({} letters)", substr(TEXT, long.start, long.len), long.len);
+
+    sort_entries(&var entries);
+    println("most common:");
+    for rank in 0..6 {
+        var e = &entries[rank];
+        println("  {} {}", e.count, substr(TEXT, e.start, e.len));
+    }
+
+    var total: i64 = 0;
+    for e in entries {
+        total += e.count;
+    }
+
+    var top = &entries[0];
+    var ok = lines == 7 && words == 85 && entries.len() == 34 && letters == 319 && total == words
+        && top.count == 11
+        && substr(TEXT, top.start, top.len) == "the"
+        && entries[1].count == 10
+        && long.len == 11;
+    if !ok {
+        exit(1);
+    }
+    exit(0);
+}

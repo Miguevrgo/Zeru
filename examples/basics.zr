@@ -1,0 +1,119 @@
+// The basics: values and their types, operators, control flow, functions and
+// printing. Run it with `zeru run examples/basics.zr`.
+
+const GREETING: str = "Hello, Zeru";
+const LIMIT: i32 = 5;
+
+// Parameters name their types, and the return type follows them.
+fn add(a: i32, b: i32) i32 {
+    return a + b;
+}
+
+// A parameter declared `var` is a copy the body may change.
+fn countdown(var n: i32) {
+    while n > 0 {
+        print("{} ", n);
+        n -= 1;
+    }
+    println("liftoff");
+}
+
+// A function may call itself.
+fn factorial(n: u64) u64 {
+    if n <= 1 {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+fn main() {
+    println("{}!", GREETING);
+
+    // `var` may change and `const` may not; the type is written or inferred.
+    var count: i32 = 0;
+    const answer = 42;
+    var ratio = 0.5;
+    var flag = true;
+    println("{} {} {} {}", count, answer, ratio, flag);
+
+    // Integers i8 to i64, u8 to u64 and usize, floats f32 and f64.
+    var letter: u8 = 'z';
+    var million: u64 = 1_000_000;
+    var hex = 0xff;
+    var bits = 0b1010;
+    var small: f32 = 2.5e-3;
+    println("{} {} {} {} {}", letter, million, hex, bits, small);
+
+    // Quoted strings read escapes; backtick strings keep every character.
+    var quoted = "tab\there, a quote \" and a backslash \\";
+    var raw = `C:\path\kept "as is"`;
+    println("{}", quoted);
+    println("{}", raw);
+
+    // Arithmetic panics on overflow; +% -% *% wrap around instead.
+    var byte: u8 = 250;
+    byte = byte +% 10;
+    println("{} {} {} {}", 7 / 2, 7 % 2, -7 / 2, byte);
+
+    // Comparisons, && || !, and bitwise & | ^ << >>.
+    var inside = count >= 0 && count < LIMIT;
+    var masked = (0b1100 & 0b1010) | 1 << 4;
+    println("{} {} {} {}", inside, !inside, masked, masked ^ 0xff);
+
+    // Each assignment operator has a compound form: += -= *= <<= ...
+    count += 3;
+    count *= 2;
+    count <<= 1;
+    println("{}", count);
+
+    // `as` converts between number types; float to integer drops the fraction.
+    var precise = 3.99;
+    var whole = precise as i32;
+    var wide = whole as i64 * 1_000_000_000;
+    println("{} {}", whole, wide);
+
+    // A name declared again shadows the one before it.
+    var count = count as f64 / 4.0;
+    println("{}", count);
+
+    // if, else if and else; conditions need no parentheses.
+    if answer > 100 {
+        println("big");
+    } else if answer > 10 {
+        println("medium");
+    } else {
+        println("small");
+    }
+
+    // while runs while its condition holds; break leaves, continue skips.
+    var n = 0;
+    while true {
+        n += 1;
+        if n % 2 == 0 {
+            continue;
+        }
+        if n > 7 {
+            break;
+        }
+        print("{} ", n);
+    }
+    println("");
+
+    // for counts over a range, end excluded, or walks a sequence; with two
+    // names the first counts each element's index.
+    for i in 0..LIMIT {
+        print("{} ", i * i);
+    }
+    println("");
+    for i, word in ["zero", "one", "two"] {
+        print("{}={} ", i, word);
+    }
+    println("");
+
+    countdown(3);
+    println("{} {}", add(2, 3), factorial(20));
+
+    // {} prints a value, {{ and }} print braces; eprintln writes to stderr.
+    println("{{}} around {}", "values");
+    eprintln("this goes to stderr");
+}

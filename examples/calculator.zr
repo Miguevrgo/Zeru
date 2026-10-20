@@ -1,0 +1,169 @@
+// A calculator, a whole program built from the pieces of the other examples:
+// text split into tokens, a recursive descent parser and errors as codes.
+// `zeru run examples/calculator.zr -- "2 * (3 + 4)"` evaluates its argument.
+
+import std.os;
+
+const BAD_CHARACTER: i32 = 1;
+const UNEXPECTED: i32 = 2;
+const DIVIDE_BY_ZERO: i32 = 3;
+
+enum Token {
+    Number(i64),
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    Open,
+    Close,
+    End,
+}
+
+fn tokenize(text: str) Vec<Token>! {
+    var tokens: Vec<Token> = Vec.new();
+    var at: usize = 0;
+    while at < text.len() {
+        var c = text[at];
+        if c >= '0' && c <= '9' {
+            var value: i64 = 0;
+            while at < text.len() && text[at] >= '0' && text[at] <= '9' {
+                value = value * 10 + (text[at] - '0') as i64;
+                at += 1;
+            }
+            tokens.push(Token::Number(value));
+            continue;
+        }
+        match c {
+            ' ' => {}
+            '+' => tokens.push(Token::Plus),
+            '-' => tokens.push(Token::Minus),
+            '*' => tokens.push(Token::Star),
+            '/' => tokens.push(Token::Slash),
+            '(' => tokens.push(Token::Open),
+            ')' => tokens.push(Token::Close),
+            default => {
+                return Err(BAD_CHARACTER);
+            }
+        }
+        at += 1;
+    }
+    tokens.push(Token::End);
+    return Ok(tokens);
+}
+
+// Each rule is a method: sum = product (+|- product)*, product = unary
+// (*|/ unary)*, unary = number | -unary | ( sum ).
+struct Parser {
+    tokens: Vec<Token>,
+    at: usize,
+
+    fn peek(self) Token {
+        return self.tokens[self.at];
+    }
+
+    // The next token, stepping past it unless it is the End.
+    fn next(var self) Token {
+        var token = self.peek();
+        match token {
+            Token::End => {}
+            default => self.at += 1,
+        }
+        return token;
+    }
+
+    fn sum(var self) i64! {
+        var value = self.product()!;
+        while true {
+            match self.peek() {
+                Token::Plus => {
+                    self.at += 1;
+                    value += self.product()!;
+                }
+                Token::Minus => {
+                    self.at += 1;
+                    value -= self.product()!;
+                }
+                default => {
+                    return Ok(value);
+                }
+            }
+        }
+        return Ok(value);
+    }
+
+    fn product(var self) i64! {
+        var value = self.unary()!;
+        while true {
+            match self.peek() {
+                Token::Star => {
+                    self.at += 1;
+                    value *= self.unary()!;
+                }
+                Token::Slash => {
+                    self.at += 1;
+                    var divisor = self.unary()!;
+                    if divisor == 0 {
+                        return Err(DIVIDE_BY_ZERO);
+                    }
+                    value /= divisor;
+                }
+                default => {
+                    return Ok(value);
+                }
+            }
+        }
+        return Ok(value);
+    }
+
+    fn unary(var self) i64! {
+        match self.next() {
+            Token::Number(value) => {
+                return Ok(value);
+            }
+            Token::Minus => {
+                return Ok(-self.unary()!);
+            }
+            Token::Open => {
+                var value = self.sum()!;
+                match self.next() {
+                    Token::Close => {
+                        return Ok(value);
+                    }
+                    default => {
+                        return Err(UNEXPECTED);
+                    }
+                }
+            }
+            default => {
+                return Err(UNEXPECTED);
+            }
+        }
+    }
+}
+
+fn evaluate(text: str) i64! {
+    var parser = Parser { tokens: tokenize(text)!, at: 0 };
+    var value = parser.sum()!;
+    if parser.at != parser.tokens.len() - 1 {
+        return Err(UNEXPECTED);
+    }
+    return Ok(value);
+}
+
+fn show(text: str) {
+    match evaluate(text) {
+        Ok(value) => println("{} = {}", text, value),
+        Err(code) => println("{} fails with error {}", text, code),
+    }
+}
+
+fn main() {
+    var args = os::args();
+    if args.len() > 1 {
+        show(args[1]);
+        return;
+    }
+    for text in ["1 + 2 * 3", "2 * (3 + 4) - 5", "-(8 / 2) * -3", "7 / (2 - 2)", "4 +", "3 $ 1"] {
+        show(text);
+    }
+}

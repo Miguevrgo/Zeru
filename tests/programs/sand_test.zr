@@ -1,0 +1,186 @@
+// Falling sand: grains pile up, water spreads, stone stays put.
+// Cells update bottom-up; a cell moved this turn does not move again.
+
+const W: usize = 16;
+const H: usize = 10;
+
+enum Cell {
+    Air,
+    Sand,
+    Water,
+    Stone,
+}
+
+struct World {
+    cells: Array<Cell, 160>,
+    moved: Array<bool, 160>,
+    turn: u32,
+
+    fn new() World {
+        return World { cells: [Cell::Air; 160], moved: [false; 160], turn: 0 };
+    }
+
+    fn at(self, x: usize, y: usize) Cell {
+        return self.cells[y * W + x];
+    }
+
+    fn set(var self, x: usize, y: usize, c: Cell) {
+        self.cells[y * W + x] = c;
+    }
+
+    fn is_air(self, x: usize, y: usize) bool {
+        return match self.at(x, y) {
+            Cell::Air => true,
+            default => false,
+        };
+    }
+
+    // Move the cell at (x, y) to (nx, ny) if that one is air.
+    fn try_move(var self, x: usize, y: usize, nx: usize, ny: usize) bool {
+        if !self.is_air(nx, ny) {
+            return false;
+        }
+        var c = self.at(x, y);
+        self.set(nx, ny, c);
+        self.set(x, y, Cell::Air);
+        self.moved[ny * W + nx] = true;
+        return true;
+    }
+
+    // Down first, then the two diagonals, the side tried first alternating
+    // each turn so piles grow evenly.
+    fn fall(var self, x: usize, y: usize) bool {
+        if y + 1 >= H {
+            return false;
+        }
+        if self.try_move(x, y, x, y + 1) {
+            return true;
+        }
+        var left_first = self.turn % 2 == 0;
+        for i in 0..2 {
+            var go_left = (i == 0) == left_first;
+            if go_left && x > 0 && self.try_move(x, y, x - 1, y + 1) {
+                return true;
+            }
+            if !go_left && x + 1 < W && self.try_move(x, y, x + 1, y + 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    fn flow(var self, x: usize, y: usize) bool {
+        if self.fall(x, y) {
+            return true;
+        }
+        var left_first = self.turn % 2 == 1;
+        if left_first && x > 0 {
+            return self.try_move(x, y, x - 1, y);
+        }
+        if x + 1 < W {
+            return self.try_move(x, y, x + 1, y);
+        }
+        return false;
+    }
+
+    fn step(var self) {
+        self.moved = [false; 160];
+        var y = H;
+        while y > 0 {
+            y -= 1;
+            for x in 0..W {
+                if self.moved[y * W + x] {
+                    continue;
+                }
+                match self.at(x, y) {
+                    Cell::Sand => {
+                        self.fall(x, y);
+                    }
+                    Cell::Water => {
+                        self.flow(x, y);
+                    }
+                    Cell::Air | Cell::Stone => {}
+                }
+            }
+        }
+        self.turn += 1;
+    }
+
+    fn count(self, kind: Cell) usize {
+        var total: usize = 0;
+        for c in self.cells {
+            if c == kind {
+                total += 1;
+            }
+        }
+        return total;
+    }
+
+    // A rolling hash of the whole grid, to compare against a reference run.
+    fn checksum(self) u64 {
+        var h: u64 = 1469598103934665603;
+        for c in self.cells {
+            var v: u64 = match c {
+                Cell::Air => 0,
+                Cell::Sand => 1,
+                Cell::Water => 2,
+                Cell::Stone => 3,
+            };
+            h = (h ^ v) *% 1099511628211;
+        }
+        return h;
+    }
+
+    fn show(self) {
+        for y in 0..H {
+            for x in 0..W {
+                print("{}", match self.at(x, y) {
+                    Cell::Air => " ",
+                    Cell::Sand => "o",
+                    Cell::Water => "~",
+                    Cell::Stone => "#",
+                });
+            }
+            println("|");
+        }
+        println("----------------+ turn {}", self.turn);
+    }
+}
+
+fn main() {
+    var world = World.new();
+    for x in 3..W - 3 {
+        world.set(x, 7, Cell::Stone);
+    }
+    world.set(3, 6, Cell::Stone);
+    world.set(12, 6, Cell::Stone);
+    for x in 6..10 as usize {
+        for y in 0..3 as usize {
+            world.set(x, y, Cell::Sand);
+        }
+    }
+    for x in 0..3 as usize {
+        world.set(x + 1, 0, Cell::Water);
+        world.set(x + 12, 1, Cell::Water);
+    }
+
+    var sand = world.count(Cell::Sand);
+    var water = world.count(Cell::Water);
+    world.show();
+    for gen in 0..30 {
+        world.step();
+        if gen == 4 || gen == 29 {
+            world.show();
+        }
+        if world.count(Cell::Sand) != sand || world.count(Cell::Water) != water {
+            println("matter was lost at turn {}", world.turn);
+            exit(1);
+        }
+    }
+    var sum = world.checksum();
+    println("sand {} water {} checksum {}", sand, water, sum);
+    if sand != 12 || water != 6 || sum != 2612796742563035595 {
+        exit(2);
+    }
+    exit(0);
+}
