@@ -1,0 +1,8 @@
+fn main() {
+    for line in "a b\r\n\nlast\n".lines() {
+        println("[{}] {}", line, line.split(" ").len());
+    }
+    println("{} {} {}", "a,,b,".split(",").len(), "".lines().len(), "ab".split("").len());
+    var parts = "k: v: w".split(": ");
+    println("{} {} {}", parts[0], parts[1], parts[2]);
+}

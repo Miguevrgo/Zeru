@@ -509,6 +509,52 @@ fn __zeru_str_eq(a: str, b: str) bool {
     return true;
 }
 
+// The bytes of `s` from `from` up to `to`, sharing its memory.
+fn __zeru_str_sub(s: str, from: usize, to: usize) str {
+    var parts = ((s as *u8) + from, to - from);
+    return *((&parts) as *str);
+}
+
+// `s.split(sep)`: the parts of `s` between each `sep`, as Rust's split; an
+// empty `sep` gives `s` whole.
+fn __zeru_str_split(s: str, sep: str) Vec<str> {
+    var parts: Vec<str> = Vec.new();
+    var start: usize = 0;
+    var i: usize = 0;
+    while sep.len() > 0 && i + sep.len() <= s.len() {
+        if __zeru_str_sub(s, i, i + sep.len()) == sep {
+            parts.push(__zeru_str_sub(s, start, i));
+            i += sep.len();
+            start = i;
+        } else {
+            i += 1;
+        }
+    }
+    parts.push(__zeru_str_sub(s, start, s.len()));
+    return parts;
+}
+
+// `s.lines()`: the lines of `s` without their "\n" or "\r\n", as Rust's
+// lines; a closing "\n" starts no empty line.
+fn __zeru_str_lines(s: str) Vec<str> {
+    var lines: Vec<str> = Vec.new();
+    var start: usize = 0;
+    for i in 0..s.len() + 1 {
+        if i == s.len() && start == s.len() {
+            break;
+        }
+        if i == s.len() || s[i] == '\n' {
+            var end = i;
+            if end > start && s[end - 1] == '\r' {
+                end -= 1;
+            }
+            lines.push(__zeru_str_sub(s, start, end));
+            start = i + 1;
+        }
+    }
+    return lines;
+}
+
 // Blocks up to this many bytes come from the heap's size classes; larger
 // ones are mapped whole.
 const HEAP_LARGEST: usize = 1048576;

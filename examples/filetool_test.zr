@@ -55,12 +55,12 @@ fn squares(from: u64, to: u64) Vec<u8> {
     return out;
 }
 
-fn count(bytes: &Vec<u8>) Counts {
-    var c = Counts { lines: 0, words: 0, bytes: bytes.len(), longest: 0 };
+fn count(text: str) Counts {
+    var c = Counts { lines: 0, words: 0, bytes: text.len(), longest: 0 };
     var in_word = false;
     var line_len: usize = 0;
-    for b in bytes {
-        match b {
+    for i in 0..text.len() {
+        match text[i] {
             '\n' => {
                 c.lines += 1;
                 if line_len > c.longest {
@@ -85,36 +85,22 @@ fn count(bytes: &Vec<u8>) Counts {
     return c;
 }
 
-fn append(path: *u8, var data: Vec<u8>) i64! {
+fn append(path: str, var data: Vec<u8>) usize! {
     var fd = fs::open(path, fs::O_WRONLY | fs::O_APPEND, 0)!;
     var wrote = fs::write(fd, &data[0], data.len())!;
     fs::close(fd)!;
     return Ok(wrote);
 }
 
-// The whole file, read into a buffer as large as its size.
-fn slurp(path: *u8) Vec<u8>! {
-    var size = fs::file_size(path)! as usize;
-    var buf: Vec<u8> = Vec.with_capacity(size);
-    for i in 0..size {
-        buf.push(0);
-    }
-    var got = fs::read_file(path, &buf[0], size)!;
-    if got as usize != size {
-        return Err(5);
-    }
-    return Ok(buf);
-}
-
 fn main() {
     var args = os::args();
-    var path: *u8 = "build/filetool_demo.txt" as *u8;
+    var path = "build/filetool_demo.txt";
     if args.len() > 1 {
-        path = args[1] as *u8;
+        path = args[1];
     }
 
     var first = squares(1, 12);
-    var written = fs::write_file(path, &first[0], first.len());
+    var written = fs::write_file(path, as_str(&first[0], first.len()));
     if written.is_err() {
         eprintln("cannot write the file: error {}", written.unwrap_err());
         exit(1);
@@ -124,19 +110,16 @@ fn main() {
         exit(2);
     }
 
-    var text = slurp(path).unwrap();
-    var c = count(&text);
+    var text = fs::read_file(path).unwrap();
+    var c = count(text);
     println("{} lines, {} words, {} bytes, longest line {}", c.lines, c.words, c.bytes, c.longest);
-    var start = text.len() - 1;
-    while start > 0 && text[start - 1] != '\n' {
-        start -= 1;
-    }
-    println("last line: {}", as_str(&text[start], text.len() - 1 - start));
+    var lines = text.lines();
+    println("last line: {}", lines[lines.len() - 1]);
 
     if fs::unlink(path).is_err() || fs::exists(path) {
         exit(3);
     }
-    var gone = slurp(path);
+    var gone = fs::read_file(path);
     println("after unlink: error {}", gone.unwrap_err());
 
     if c.lines != 15 || c.words != 60 || c.bytes != 256 || c.longest != 20 || gone.unwrap_err() != NOT_FOUND {

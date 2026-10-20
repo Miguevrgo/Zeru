@@ -1,0 +1,7 @@
+status: exit 0
+-- stdout
+[a b] 2
+[] 1
+[last] 1
+4 0 1
+k v w

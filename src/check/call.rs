@@ -3,7 +3,7 @@
 
 use crate::ast::{Expression, ExpressionKind, TypeSpec, format_pieces};
 use crate::errors::Span;
-use crate::items::{DefId, ItemKind};
+use crate::items::{DefId, ItemKind, ModuleId};
 use crate::tir::{Arm, Builtin, Expr, ExprKind, Payload, Place};
 use crate::ty::{Ty, TyKind, Types};
 
@@ -18,6 +18,8 @@ const PRINTS: &[&str] = &["print", "println", "eprint", "eprintln"];
 /// Writes out what the print streams hold; the compiler emits it.
 const FLUSH_FN: &str = "__zeru_flush";
 const COPY_FN: &str = "__zeru_copy_bytes";
+/// str methods, each the prelude's `__zeru_str_<name>` with the str first.
+const STR_METHODS: &[&str] = &["split", "lines"];
 
 /// The `Vec` methods that change it, so need a receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
@@ -236,6 +238,16 @@ impl FnCx<'_, '_> {
                         Types::USIZE,
                         span,
                     );
+                }
+                if ty == Types::STR
+                    && STR_METHODS.contains(&name)
+                    && let Some(def) = self
+                        .cx
+                        .items
+                        .lookup_value(ModuleId::PRELUDE, &format!("__zeru_str_{name}"))
+                {
+                    let text = self.mk(ExprKind::Read(place), ty, object.span);
+                    return self.call_def(def, Vec::new(), Some(text), args, expected, span);
                 }
                 self.error(format!("Slice has no method '{name}'"), span);
                 self.error_expr(span)
