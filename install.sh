@@ -27,17 +27,22 @@ info "Setting up ${ZERU_HOME}..."
 mkdir -p "${ZERU_BIN}" "${ZERU_STD}"
 ok "Directories ready"
 
-LATEST=$(curl -fsSL -o /dev/null -w '%{url_effective}' \
-    "https://github.com/${REPO}/releases/latest" | sed 's|.*/||') ||
-    err "Failed to resolve latest release"
-ok "Latest release: ${LATEST}"
+if [ "${1:-}" = "--nightly" ]; then
+    LATEST="nightly"
+else
+    LATEST=$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+        "https://github.com/${REPO}/releases/latest" | sed 's|.*/||') ||
+        err "Failed to resolve latest release"
+fi
+ok "Release: ${LATEST}"
 
 BASE_URL="https://github.com/${REPO}/releases/download/${LATEST}"
 
 info "Downloading binary..."
-curl -fsSL --progress-bar "${BASE_URL}/zeru-linux-generic" -o "${ZERU_BIN}/zeru" ||
+curl -fsSL --progress-bar "${BASE_URL}/zeru-linux-generic" -o "${ZERU_BIN}/zeru.new" ||
     err "Failed to download binary"
-chmod +x "${ZERU_BIN}/zeru"
+chmod +x "${ZERU_BIN}/zeru.new"
+mv "${ZERU_BIN}/zeru.new" "${ZERU_BIN}/zeru"
 ok "Binary installed to ${ZERU_BIN}/zeru"
 
 info "Downloading std library..."

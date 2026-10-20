@@ -62,7 +62,14 @@ enum Commands {
     },
     #[command(about = "Remove the build/ directory")]
     Clean,
+    #[command(about = "Install the build of main's latest commit")]
+    Update {
+        #[arg(long, help = "Install the latest release instead")]
+        stable: bool,
+    },
 }
+
+const INSTALLER: &str = "https://raw.githubusercontent.com/Miguevrgo/Zeru/main/install.sh";
 
 fn run_compiler(args: Cli) -> Result<(), CompileError> {
     match args.command {
@@ -99,6 +106,18 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
             if build_dir.exists() {
                 std::fs::remove_dir_all(build_dir)?;
                 status(GREEN, '\u{ea81}', "Cleaned", build_dir.display());
+            }
+        }
+        Commands::Update { stable } => {
+            let channel = if stable { "" } else { " -s -- --nightly" };
+            let installed = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(format!(
+                    "set -o pipefail; curl -fsSL {INSTALLER} | bash{channel}"
+                ))
+                .status()?;
+            if !installed.success() {
+                std::process::exit(1);
             }
         }
     }

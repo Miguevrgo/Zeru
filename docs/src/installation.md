@@ -13,6 +13,9 @@ export PATH="$HOME/.zeru/bin:$PATH"   # add this line to your ~/.bashrc or ~/.zs
 Programs are linked with your system's C compiler (`cc`), which only acts as
 the linker.
 
+`zeru update` then installs the build of `main`'s latest commit, and
+`zeru update --stable` the latest release.
+
 ## Building from source
 
 Zeru is under active development, so `main` is ahead of the latest release.

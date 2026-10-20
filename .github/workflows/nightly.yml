@@ -1,0 +1,45 @@
+name: Nightly
+
+# Each main commit that passes CI replaces the `nightly` prerelease, which
+# `zeru update` installs; /releases/latest skips prereleases.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: ["main"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+jobs:
+  nightly:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: ./.github/actions/setup-llvm
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: |
+          cargo build --release
+          mkdir -p dist
+          cp target/release/zeru dist/zeru-linux-generic
+          tar -czf dist/zeru-std.tar.gz std/
+
+      - name: Replace the nightly release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          gh release delete nightly --cleanup-tag --yes || true
+          gh release create nightly dist/* --prerelease --target "$SHA" \
+            --title "Nightly" --notes "Built from $SHA, the latest main commit that passed CI."
