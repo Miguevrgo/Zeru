@@ -1,0 +1,23 @@
+fn main() {
+    var v: Vec<i64> = [10, 20, 30];
+    for i, x in v {
+        println("{} {}", i, x);
+    }
+    for i, line in "a\nbb\nccc".lines() {
+        println("{}: {} ({})", i, line, line.len());
+    }
+    var n: usize = 0;
+    for b in "hello" {
+        if b == 'l' { n += 1; }
+    }
+    println("{}", n);
+    for i, x in &var v {
+        x = x + i as i64;
+    }
+    println("{} {} {}", v[0], v[1], v[2]);
+    var words: Vec<Vec<str>> = Vec.new();
+    words.push("a b".split(" "));
+    for i, w in words { println("{} {}", i, w.len()); }
+    var arr: Array<i32, 3> = [7, 8, 9];
+    for i, a in arr { if i == 2 { println("{}", a); } }
+}

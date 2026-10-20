@@ -60,6 +60,7 @@ pub enum StatementKind {
         body: Box<Statement>,
     },
     ForIn {
+        index: Option<String>,
         variable: String,
         iterable: Expression,
         body: Box<Statement>,

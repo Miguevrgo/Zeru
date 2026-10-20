@@ -428,10 +428,11 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 StmtKind::While { cond, body }
             }
             StatementKind::ForIn {
+                index,
                 variable,
                 iterable,
                 body,
-            } => self.for_in(variable, iterable, body),
+            } => self.for_in(index.as_deref(), variable, iterable, body),
             StatementKind::Break | StatementKind::Continue if self.breaks.is_empty() => {
                 self.error("Break/Continue can only be used inside loops", span);
                 return None;
@@ -471,11 +472,24 @@ impl<'c, 'a> FnCx<'c, 'a> {
         cond
     }
 
-    /// `for i in a..b` counts; `for x in v` reads each element of an array or
-    /// a Vec, viewing one that owns memory rather than copying it; `for x in
-    /// &var v` lets each be written through `x`.
-    fn for_in(&mut self, variable: &str, iterable: &Expression, body: &Statement) -> StmtKind {
+    /// `for i in a..b` counts; `for x in v` reads each element of an array,
+    /// a Vec or a str, viewing one that owns memory rather than copying it;
+    /// `for x in &var v` lets each be written through `x`; `for i, x in v`
+    /// also counts each element's index in `i`.
+    fn for_in(
+        &mut self,
+        index: Option<&str>,
+        variable: &str,
+        iterable: &Expression,
+        body: &Statement,
+    ) -> StmtKind {
         if let ExpressionKind::Range { start, end } = &iterable.kind {
+            if index.is_some() {
+                self.error(
+                    "A range counts already; write 'for i in a..b'",
+                    iterable.span,
+                );
+            }
             let (start, end) = self.operands(start, end, None);
             let ty = match (start.ty, end.ty) {
                 (a, b) if self.cx.types.is_error(a) || self.cx.types.is_error(b) => Types::ERROR,
@@ -523,6 +537,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
         let seq_ty = seq.1;
         let item = match self.cx.types.kind(seq_ty) {
             TyKind::Array(elem, _) | TyKind::Vec(elem) => *elem,
+            TyKind::Slice(elem) if !writable => *elem,
             TyKind::Error => Types::ERROR,
             _ => {
                 let shown = if writable {
@@ -536,11 +551,13 @@ impl<'c, 'a> FnCx<'c, 'a> {
             }
         };
         self.enter();
+        let index = index.map(|index| self.declare(index, Types::USIZE, false, false));
         let view = writable || self.cx.owns_heap(item);
         let var = self.declare(variable, item, writable, view);
         let (body, _) = self.loop_body(|this| this.branch(body));
         self.leave();
         StmtKind::ForEach {
+            index,
             var,
             seq: seq.0,
             body,

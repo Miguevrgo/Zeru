@@ -589,7 +589,12 @@ impl Parser {
     fn parse_for_statement(&mut self) -> Option<Statement> {
         let start = self.span();
         self.bump();
-        let variable = self.expect_identifier()?;
+        let mut variable = self.expect_identifier()?;
+        let mut index = None;
+        if self.eat(&Token::Comma) {
+            index = Some(variable);
+            variable = self.expect_identifier()?;
+        }
         self.expect(&Token::In)?;
 
         let mut iterable = self.parse_condition()?;
@@ -605,6 +610,7 @@ impl Parser {
         let body = Box::new(self.parse_block()?);
 
         let kind = StatementKind::ForIn {
+            index,
             variable,
             iterable,
             body,

@@ -114,10 +114,12 @@ pub enum StmtKind {
         end: Expr,
         body: Block,
     },
-    /// `for var in seq`: `var` copies each element of an array or a Vec, or,
-    /// when it is a view, is each element. The loop borrows every element
-    /// throughout; `within` is the sequence as written.
+    /// `for index, var in seq`: `var` copies each element of an array, a Vec
+    /// or a str, or, when it is a view, is each element, and `index` counts
+    /// them from 0. The loop borrows every element throughout; `within` is
+    /// the sequence as written.
     ForEach {
+        index: Option<LocalId>,
         var: LocalId,
         seq: Place,
         body: Block,

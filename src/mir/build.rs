@@ -330,13 +330,14 @@ impl<'a> Builder<'a> {
                 body,
             } => self.scope(|this| this.for_range(*var, start, end, body)),
             StmtKind::ForEach {
+                index,
                 var,
                 seq,
                 body,
                 within,
             } => self.scope(|this| {
                 this.span = *within;
-                this.for_each(*var, seq, body)
+                this.for_each(*index, *var, seq, body)
             }),
             StmtKind::Block(block) => self.block(block),
         }
@@ -412,10 +413,16 @@ impl<'a> Builder<'a> {
         );
     }
 
-    /// `for x in seq`: a reference walks from the first element to one past
-    /// the last, as Rust's slice iterator, so the loop borrows every element
-    /// throughout.
-    fn for_each(&mut self, var: tir::LocalId, seq: &tir::Place, body: &tir::Block) {
+    /// `for i, x in seq`: a reference walks from the first element to one
+    /// past the last, as Rust's slice iterator, so the loop borrows every
+    /// element throughout, and `i`, when written, counts up beside it.
+    fn for_each(
+        &mut self,
+        index: Option<tir::LocalId>,
+        var: tir::LocalId,
+        seq: &tir::Place,
+        body: &tir::Block,
+    ) {
         let seq = self.as_place(seq);
         let elem = match self.types().kind(self.place_ty(&seq)) {
             TyKind::Array(elem, _) | TyKind::Vec(elem) | TyKind::Slice(elem) => *elem,
@@ -438,6 +445,12 @@ impl<'a> Builder<'a> {
         };
         self.assign(Place::local(end), step(Operand::Move(Place::local(len))));
         let current = Place::local(at).project(Projection::Deref);
+        let index = index.map(|index| {
+            let index = self.declare(index);
+            self.own(index);
+            self.assign(Place::local(index), Rvalue::Use(constant(0, Types::USIZE)));
+            index
+        });
         self.looping(
             |this| {
                 let end = Operand::Copy(Place::local(end));
@@ -452,7 +465,18 @@ impl<'a> Builder<'a> {
                 }
             },
             body,
-            |this| this.assign(Place::local(at), step(constant(1, Types::USIZE))),
+            |this| {
+                this.assign(Place::local(at), step(constant(1, Types::USIZE)));
+                if let Some(index) = index {
+                    let rvalue = Rvalue::Binary {
+                        op: BinOp::AddWrap,
+                        left: Operand::Copy(Place::local(index)),
+                        right: constant(1, Types::USIZE),
+                        checked: false,
+                    };
+                    this.assign(Place::local(index), rvalue);
+                }
+            },
         );
     }
 

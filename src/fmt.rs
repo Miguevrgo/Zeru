@@ -411,11 +411,15 @@ impl<'s> Printer<'s> {
                 self.statement(body),
             ]),
             S::ForIn {
+                index,
                 variable,
                 iterable,
                 body,
             } => seq(vec![
-                text(format!("for {variable} in ")),
+                text(match index {
+                    Some(index) => format!("for {index}, {variable} in "),
+                    None => format!("for {variable} in "),
+                }),
                 self.expr(iterable),
                 text(" "),
                 self.statement(body),
