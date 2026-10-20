@@ -1,4 +1,4 @@
-//! `zeru fmt`: a file laid out again from its syntax tree, as rustfmt does.
+//! `zeru fmt`: a file laid out again from its syntax tree.
 //! Indents are four spaces, and a line that would pass 100 columns breaks at
 //! its outermost group first: a call's arguments one per line, an operator
 //! chain before each operator, a method chain before each `.`. Comments and
@@ -123,8 +123,7 @@ fn render(doc: &Doc) -> String {
 
 /// Whether `doc` fits flat in `room` columns, with what follows it on the
 /// line, from `rest`, up to its first line break. A block's break ends the
-/// line too, so a call ending in a `match` keeps `f(match x {` together,
-/// as rustfmt does.
+/// line too, so a call ending in a `match` keeps `f(match x {` together.
 fn fits(room: usize, doc: &Doc, rest: &[(usize, bool, &Doc)]) -> bool {
     let mut room = room as isize;
     let mut todo = vec![(true, doc)];
@@ -652,7 +651,7 @@ impl<'s> Printer<'s> {
 
     /// Calls, fields, indexing and `?`/`!` after a root. With two `.`s or
     /// more and a method call among them, it breaks before each `.` when it
-    /// does not fit, as rustfmt lays out a method chain.
+    /// does not fit.
     fn chain(&mut self, expr: &Expression) -> Doc {
         let mut links = Vec::new();
         let mut root = expr;
@@ -798,7 +797,7 @@ mod tests {
     use super::format;
 
     #[test]
-    fn lays_out_as_rustfmt_keeping_comments() {
+    fn lays_out_keeping_comments() {
         let source = "import std.fs;
 // Points.
 struct Point { x: i32,   // across
