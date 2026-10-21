@@ -403,6 +403,16 @@ fn shrink_to_fit(self: &var Vec<T>)
 // Copying
 fn copy(self: &Vec<T>) Vec<T>            // Deep clone
 
+// Written in the prelude
+fn sort(self: &var Vec<T>)               // Ascending, for numbers
+fn swap(self: &var Vec<T>, i: usize, j: usize)
+fn contains(self: &Vec<T>, value: T) bool
+fn sum(self: &Vec<T>) T                  // Numbers
+fn min(self: &Vec<T>) T?                 // Numbers
+fn max(self: &Vec<T>) T?                 // Numbers
+
+// Slicing: v[a..b], v[a..], v[..b] give a &[T] that shares the memory
+
 // Iteration is a `for` loop: `for x in v` reads each element (a copy of
 // plain data), `for x in &var v` writes each one in place
 ```
@@ -448,7 +458,40 @@ fn process(data: Vec<i32>) {
 
 ---
 
-## 7. Comparison with Other Languages
+## 7. Text and Slices
+
+A string literal is a `str`: a pointer and a length into memory that lives as
+long as the program. Text made at runtime is a `String`, which is a `Vec<u8>`
+under another name: it owns its bytes, moves like any `Vec`, and frees them
+when dropped. A `String` goes wherever a `str` is expected, and every `str`
+method, `==` and printing work on it; the `str` it gives shares its memory.
+
+`s[a..b]`, `s[a..]` and `s[..b]` give a view of part of a `str`, `String`,
+`Vec` or array without copying: a `str` for text, a `&[T]` for elements,
+checked to lie within at runtime.
+
+A view must not outlive what it points into, and two rules catch the common
+ways it would:
+
+- The text or slice of a temporary `String`, `Vec` or array can be used
+  within its statement, to print, compare or call `len()`, but not kept: the
+  temporary is freed at the end of the statement. `var t = make().trim();`
+  is an error that asks to store the value in a variable first.
+- A function cannot return the text of a `String` it owns, since the
+  `String` is freed as the function returns.
+
+What the rules do not catch yet is a view kept in a variable while the
+`String` or `Vec` it came from grows or is dropped:
+
+```rust
+var s = String.from("abc");
+var t: str = s;
+s.push_str("a lot more text");   // may move the bytes; t is now stale
+```
+
+---
+
+## 8. Comparison with Other Languages
 
 | Feature | Zeru | Rust | Zig | Go | C++ |
 | --------- | ------ | ------ | ----- | ----- | ----- |
@@ -476,7 +519,7 @@ C    Zig    Rust    Zeru(fast)    Zeru(safe)    C++    Go    Java
 
 ---
 
-## 8. Implementation Roadmap
+## 9. Implementation Roadmap
 
 ### Phase 1: Foundation
 
@@ -501,12 +544,12 @@ C    Zig    Rust    Zeru(fast)    Zeru(safe)    C++    Go    Java
 ### Phase 4: Polish
 
 - [x] Error messages for ownership violations
-- [ ] Documentation and examples
+- [x] Documentation and examples
 - [ ] Performance benchmarks vs Rust/Go
 
 ---
 
-## 9. Open Questions
+## 10. Open Questions
 
 1. **Shared ownership**: Should `Rc<T>` be provided for reference counting?
 2. **Weak references**: Needed for cyclic data structures?

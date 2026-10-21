@@ -109,7 +109,8 @@ To collaborate, you can fork the project, create a branch for the feature/improv
 { "Miguevrgo/zeru-editors", lazy = false, build = "cargo build --release --manifest-path server/Cargo.toml" }
 ```
 
-Vim, VS Code and Emacs get syntax highlighting. Setup for every editor:
+Emacs gets highlighting, indentation and the same language server through eglot; Vim and
+VS Code get highlighting. Setup for every editor:
 
 👉 **<https://github.com/Miguevrgo/zeru-editors>**
 
