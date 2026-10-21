@@ -1,0 +1,17 @@
+fn make() String {
+    return String.from("abc");
+}
+fn take(s: str) str {
+    return s;
+}
+fn local() str {
+    var s = String.from("gone");
+    return s;
+}
+fn main() {
+    var a = make().trim();
+    var b: str = make();
+    var c = take(make());
+    var nums: Vec<i32> = [1];
+    nums.push_str("x");
+}

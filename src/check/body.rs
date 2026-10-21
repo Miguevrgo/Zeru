@@ -271,6 +271,9 @@ impl<'c, 'a> FnCx<'c, 'a> {
         if value.ty == target || types.is_error(value.ty) || types.is_error(target) {
             return Ok(value);
         }
+        if value.ty == Types::STRING && target == Types::STR {
+            return Ok(self.view(value, true));
+        }
         if self.fits(target, value.ty, false) {
             value.ty = self.resolve(target);
             return Ok(value);
@@ -391,6 +394,16 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 let ret = self.ret;
                 let value = value.as_ref().map(|value| {
                     let checked = self.expr(value, Some(ret));
+                    if let ExprKind::Read(place) = &checked.kind
+                        && checked.ty == Types::STRING
+                        && ret == Types::STR
+                        && place.root().is_some()
+                    {
+                        self.error(
+                            "This String is freed when the function returns, so its text cannot be returned; return the String",
+                            checked.span,
+                        );
+                    }
                     let mut value = self.coerce_or(checked, ret, span, |want, got| {
                         format!("Invalid return type. Function expects {want}, returning {got}")
                     });

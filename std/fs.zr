@@ -83,6 +83,19 @@ fn as_str(data: *u8, len: usize) str {
     return *((&parts) as *str);
 }
 
+// The address of room for `count` more bytes at the end of `text`, for a
+// syscall to fill; `filled` then counts the bytes it wrote.
+fn room(text: &var String, count: usize) *u8 {
+    text.reserve(count);
+    var header = text as *usize;
+    return *(header as **u8) + *(header + 1);
+}
+
+fn filled(text: &var String, count: usize) {
+    var header = text as *usize;
+    *(header + 1) += count;
+}
+
 // What kind of thing a path names.
 pub enum Kind {
     File,
@@ -182,9 +195,8 @@ fn write_to(path: str, flags: i64, data: str) ! {
 
 // Reads the whole file at `path` and returns its contents.
 //
-// The text lives in memory that is never freed, so read each file once and
-// keep the result rather than reading it again in a loop. An empty file
-// gives `""`. `File` reads a part, or a line at a time.
+// An empty file gives an empty String. `File` reads a part, or a line at a
+// time.
 //
 // # Errors
 //
@@ -202,34 +214,22 @@ fn write_to(path: str, flags: i64, data: str) ! {
 // println("{} {}", lines.len(), lines[1]); // 2 two
 // println("{}", fs::read_file("missing.txt").unwrap_err()); // 2
 // ```
-pub fn read_file(path: str) str! {
-    var fd = open_path(path, O_RDONLY, 0)!;
+pub fn read_file(path: str) String! {
+    var file = File.open(path)!;
     var stat: Array<i64, 18> = [0; 18];
-    var r = sys_result(syscall2(SYS_FSTAT, fd, (&stat[0]) as i64));
-    if r.is_err() {
-        syscall1(SYS_CLOSE, fd);
-        return Err(r.unwrap_err());
-    }
+    sys_result(syscall2(SYS_FSTAT, file.fd, (&stat[0]) as i64))!;
     var size = stat[6] as usize;
-    if size == 0 {
-        syscall1(SYS_CLOSE, fd);
-        return Ok("");
-    }
-    var data = __zeru_map(size);
-    var total: usize = 0;
-    while total < size {
-        var n = sys_result(syscall3(SYS_READ, fd, (data + total) as i64, (size - total) as i64));
-        if n.is_err() {
-            syscall1(SYS_CLOSE, fd);
-            return Err(n.unwrap_err());
+    var text = String.new();
+    while true {
+        var want = CHUNK;
+        if text.len() < size {
+            want = size - text.len();
         }
-        if n.unwrap() == 0 {
+        if file.read(&var text, want)! == 0 {
             break;
         }
-        total += n.unwrap() as usize;
     }
-    syscall1(SYS_CLOSE, fd);
-    return Ok(as_str(data, total));
+    return Ok(text);
 }
 
 // Writes `data` to the file at `path`, creating it or replacing what it
@@ -271,7 +271,8 @@ pub fn write_file(path: str, data: str) ! {
 //
 // fs::append_file("log.txt", "start\n").unwrap();
 // fs::append_file("log.txt", "stop\n").unwrap();
-// println("{}", fs::read_file("log.txt").unwrap().lines().len()); // 2
+// var log = fs::read_file("log.txt").unwrap();
+// println("{}", log.lines().len()); // 2
 // ```
 pub fn append_file(path: str, data: str) ! {
     write_to(path, O_WRONLY | O_CREAT | O_APPEND, data)!;
@@ -400,15 +401,13 @@ pub struct File {
     //
     // fs::write_file("data.bin", "abcdef").unwrap();
     // var file = fs::File.open("data.bin").unwrap();
-    // var buf: Vec<u8> = Vec.new();
+    // var buf = String.new();
     // println("{}", file.read(&var buf, 4).unwrap()); // 4
     // println("{}", file.read(&var buf, 4).unwrap()); // 2
     // println("{} {}", buf.len(), buf[5] == 'f'); // 6 true
     // ```
-    pub fn read(var self, buf: &var Vec<u8>, count: usize) usize! {
-        buf.reserve(count);
-        var header = buf as *usize;
-        var end = *(header as **u8) + *(header + 1);
+    pub fn read(var self, buf: &var String, count: usize) usize! {
+        var end = room(buf, count);
         var held = self.buffer.len() - self.start;
         if held > 0 {
             var n = count;
@@ -417,11 +416,11 @@ pub struct File {
             }
             __zeru_copy_bytes(end, &self.buffer[self.start], n);
             self.start += n;
-            *(header + 1) += n;
+            filled(buf, n);
             return Ok(n);
         }
         var n = sys_result(syscall3(SYS_READ, self.fd, end as i64, count as i64))! as usize;
-        *(header + 1) += n;
+        filled(buf, n);
         return Ok(n);
     }
 
@@ -474,11 +473,9 @@ pub struct File {
                 at = kept;
                 self.start = 0;
             }
-            self.buffer.reserve(CHUNK);
-            var header = (&var self.buffer) as *usize;
-            var end = *(header as **u8) + *(header + 1);
+            var end = room(&var self.buffer, CHUNK);
             var n = sys_result(syscall3(SYS_READ, self.fd, end as i64, CHUNK as i64))! as usize;
-            *(header + 1) += n;
+            filled(&var self.buffer, n);
             if n == 0 {
                 if self.buffer.len() == 0 {
                     return Ok(None);
@@ -834,15 +831,14 @@ pub fn set_times(path: str, accessed: i64?, modified: i64?) ! {
 
 // One thing in a directory: its name and what kind of thing it is.
 pub struct Entry {
-    name: str,
+    name: String,
     kind: Kind,
 }
 
 // Returns the files, directories and links inside the directory at `path`.
 //
 // "." and ".." are left out, and the order is the file system's own, not
-// sorted. The names live in memory that is never freed. A symlink counts as
-// `Kind::Symlink`, not as what it points to.
+// sorted. A symlink counts as `Kind::Symlink`, not as what it points to.
 //
 // # Errors
 //
@@ -867,20 +863,20 @@ pub struct Entry {
 // println("{} {}", fs::read_dir("box").unwrap().len(), files); // 2 1
 // ```
 pub fn read_dir(path: str) Vec<Entry>! {
-    var fd = open_path(path, O_RDONLY | O_DIRECTORY, 0)!;
+    var dir = File { fd: open_path(path, O_RDONLY | O_DIRECTORY, 0)!, buffer: Vec.new(), start: 0 };
+    var fd = dir.fd;
     var entries: Vec<Entry> = Vec.new();
+    var space = String.new();
+    var batch = room(&var space, DIR_BATCH);
     while true {
-        var batch = __zeru_map(DIR_BATCH);
-        var got = sys_result(syscall3(SYS_GETDENTS64, fd, batch as i64, DIR_BATCH as i64));
-        if got.is_err() {
-            syscall1(SYS_CLOSE, fd);
-            return Err(got.unwrap_err());
-        }
-        if got.unwrap() == 0 {
+        var got = sys_result(
+            syscall3(SYS_GETDENTS64, fd, batch as i64, DIR_BATCH as i64),
+        )! as usize;
+        if got == 0 {
             break;
         }
         var at: usize = 0;
-        while at < got.unwrap() as usize {
+        while at < got {
             var record = batch + at;
             var size = *((record + 16) as *u16) as usize;
             var name = record + 19;
@@ -915,10 +911,9 @@ pub fn read_dir(path: str) Vec<Entry>! {
                     kind = metadata_of(stat).kind;
                 }
             }
-            entries.push(Entry { name: text, kind: kind });
+            entries.push(Entry { name: String.from(text), kind: kind });
         }
     }
-    syscall1(SYS_CLOSE, fd);
     return Ok(entries);
 }
 
@@ -990,8 +985,6 @@ pub fn symlink(target: str, path: str) ! {
 
 // Returns what the symlink at `path` points to, as it was written.
 //
-// The text lives in memory that is never freed.
-//
 // # Errors
 //
 // The errno: 22 (EINVAL) when `path` is not a symlink, 2 (ENOENT) when
@@ -1005,12 +998,14 @@ pub fn symlink(target: str, path: str) ! {
 // fs::symlink("../data/file.txt", "link").unwrap();
 // println("{}", fs::read_link("link").unwrap()); // ../data/file.txt
 // ```
-pub fn read_link(path: str) str! {
+pub fn read_link(path: str) String! {
     var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var p = c_path(path, &buf[0])!;
-    var text = __zeru_map(PATH_MAX);
-    var len = sys_result(syscall3(SYS_READLINK, p, text as i64, PATH_MAX as i64))!;
-    return Ok(as_str(text, len as usize));
+    var text = String.new();
+    var end = room(&var text, PATH_MAX);
+    var len = sys_result(syscall3(SYS_READLINK, p, end as i64, PATH_MAX as i64))!;
+    filled(&var text, len as usize);
+    return Ok(text);
 }
 
 // Creates `path` as a second name for the file `target`, in the order of
@@ -1042,8 +1037,6 @@ pub fn hard_link(target: str, path: str) ! {
 // Returns the absolute path of `path`, with every symlink, "." and ".."
 // resolved.
 //
-// The text lives in memory that is never freed.
-//
 // # Errors
 //
 // The errno: 2 (ENOENT) when nothing is there.
@@ -1057,8 +1050,9 @@ pub fn hard_link(target: str, path: str) ! {
 // var path = fs::real_path("deep/../deep").unwrap();
 // println("{} {}", path.starts_with("/"), path.ends_with("/deep")); // true true
 // ```
-pub fn real_path(path: str) str! {
-    var fd = open_path(path, O_PATH, 0)!;
+pub fn real_path(path: str) String! {
+    var opened = File { fd: open_path(path, O_PATH, 0)!, buffer: Vec.new(), start: 0 };
+    var fd = opened.fd;
     var link: Array<u8, 32> = [0; 32];
     var prefix = "/proc/self/fd/";
     __zeru_copy_bytes(&link[0], prefix as *u8, prefix.len());
@@ -1076,15 +1070,14 @@ pub fn real_path(path: str) str! {
     for i in 0..count {
         link[prefix.len() + i] = digits[count - 1 - i];
     }
-    var text = __zeru_map(PATH_MAX);
-    var len = sys_result(syscall3(SYS_READLINK, (&link[0]) as i64, text as i64, PATH_MAX as i64));
-    syscall1(SYS_CLOSE, fd);
-    return Ok(as_str(text, len! as usize));
+    var text = String.new();
+    var end = room(&var text, PATH_MAX);
+    var len = sys_result(syscall3(SYS_READLINK, (&link[0]) as i64, end as i64, PATH_MAX as i64))!;
+    filled(&var text, len as usize);
+    return Ok(text);
 }
 
 // Returns the working directory, which relative paths start from.
-//
-// The text lives in memory that is never freed.
 //
 // # Errors
 //
@@ -1097,10 +1090,12 @@ pub fn real_path(path: str) str! {
 //
 // println("{}", fs::current_dir().unwrap().starts_with("/")); // true
 // ```
-pub fn current_dir() str! {
-    var text = __zeru_map(PATH_MAX);
-    var len = sys_result(syscall2(SYS_GETCWD, text as i64, PATH_MAX as i64))!;
-    return Ok(as_str(text, len as usize - 1));
+pub fn current_dir() String! {
+    var text = String.new();
+    var end = room(&var text, PATH_MAX);
+    var len = sys_result(syscall2(SYS_GETCWD, end as i64, PATH_MAX as i64))!;
+    filled(&var text, len as usize - 1);
+    return Ok(text);
 }
 
 // Makes `path` the working directory, which relative paths start from.

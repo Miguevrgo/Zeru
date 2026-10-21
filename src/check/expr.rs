@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use crate::ast::StatementKind;
 use crate::ast::{Expression, ExpressionKind, TypeSpec};
 use crate::errors::Span;
-use crate::items::{DefId, ItemKind};
+use crate::items::{DefId, ItemKind, ModuleId};
 use crate::tir::{Asm, BinOp, Expr, ExprKind, Place, UnOp};
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
@@ -26,6 +26,33 @@ impl FnCx<'_, '_> {
             self.cx.unreported.set(Some(span));
         }
         self.mk(ExprKind::Void, Types::ERROR, span)
+    }
+
+    /// The `String` `text` as the `str` its bytes spell, sharing its memory.
+    /// A temporary `String` is freed as its statement ends, so its `str` may
+    /// be used only within it, unless the `str` `escapes`.
+    pub(super) fn view(&mut self, text: Expr, escapes: bool) -> Expr {
+        let span = text.span;
+        let place = match text.kind {
+            ExprKind::Read(place) if !matches!(place, Place::Temp(_)) => place,
+            _ if escapes => {
+                self.error(
+                    "This String is freed at the end of the statement, so its text cannot outlive it; store the String in a variable first",
+                    span,
+                );
+                return self.error_expr(span);
+            }
+            ExprKind::Read(place) => place,
+            _ => Place::Temp(Box::new(text)),
+        };
+        let def = self
+            .cx
+            .items
+            .lookup_value(ModuleId::PRELUDE, "__zeru_string_view")
+            .expect("the prelude defines it");
+        let view = self.cx.instance(def, Vec::new(), span);
+        let address = self.address(place, Types::STRING, false, span);
+        self.mk(ExprKind::Call(view, vec![address]), Types::STR, span)
     }
 
     /// `Ok()` of the `!` type `ret`.
@@ -638,7 +665,15 @@ impl FnCx<'_, '_> {
             Token::Eq | Token::NotEq | Token::Lt | Token::Gt | Token::Leq | Token::Geq
         );
         let hint = expected.filter(|&ty| !comparison && !self.cx.types.contains_var(ty));
-        let (l, r) = self.operands(left, right, hint);
+        let (mut l, mut r) = self.operands(left, right, hint);
+        if matches!(operator, Token::Eq | Token::NotEq) {
+            if l.ty == Types::STRING {
+                l = self.view(l, false);
+            }
+            if r.ty == Types::STRING {
+                r = self.view(r, false);
+            }
+        }
         let types = &self.cx.types;
         if types.is_error(l.ty) || types.is_error(r.ty) {
             return self.error_expr(span);

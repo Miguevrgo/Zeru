@@ -1,15 +1,14 @@
 import std.fs;
 
 fn main() {
-    var big: Vec<u8> = Vec.new();
+    var big = String.new();
     for i in 0..10000 {
         big.push('a' + (i % 26) as u8);
     }
     big.push('\n');
     big.push('\n');
     big.push('x');
-    var text = big.as_str();
-    fs::write_file("big.txt", text).unwrap();
+    fs::write_file("big.txt", big).unwrap();
 
     var file = fs::File.open("big.txt").unwrap();
     var first = file.read_line().unwrap().unwrap();
@@ -30,7 +29,7 @@ fn main() {
     println("{}", mixed.read_line().unwrap().unwrap().len());
 
     fs::create_dir("many").unwrap();
-    var name: Vec<u8> = Vec.new();
+    var name = String.new();
     for i in 0..3000 {
         var path = "many/file_0000";
         name.clear();
@@ -41,7 +40,7 @@ fn main() {
         name[11] = '0' + (i / 100 % 10) as u8;
         name[12] = '0' + (i / 10 % 10) as u8;
         name[13] = '0' + (i % 10) as u8;
-        fs::write_file(name.as_str(), "").unwrap();
+        fs::write_file(name, "").unwrap();
     }
     var entries = fs::read_dir("many").unwrap();
     var files = 0;
@@ -75,7 +74,7 @@ fn main() {
         for b in e.name {
             name.push(b);
         }
-        fs::remove_file(name.as_str()).unwrap();
+        fs::remove_file(name).unwrap();
     }
     fs::remove_dir("many").unwrap();
     fs::remove_file("big.txt").unwrap();

@@ -1,0 +1,39 @@
+fn shout(text: str) bool {
+    return text.ends_with("!");
+}
+
+fn make(c: u8) String {
+    var s = String.new();
+    for i in 0..3 {
+        s.push(c);
+    }
+    return s;
+}
+
+fn main() {
+    var greeting = String.from("hello");
+    greeting.push_str(", world");
+    greeting.push('!');
+    println("{} {} {}", greeting, greeting.len(), greeting[0] == 'h');
+    greeting[0] = 'H';
+    println("{} {}", greeting, shout(greeting));
+    var words = greeting.split(" ");
+    println("{} {} {}", words.len(), words[1], greeting.trim().len());
+    println("{} {}", greeting == "Hello, world!", "x" != greeting);
+    var count = 0;
+    for b in greeting {
+        if b == 'o' {
+            count += 1;
+        }
+    }
+    println("{}", count);
+    println("{} {}", make('a'), make('b') == "bbb");
+    println("{}", make('c').starts_with("cc"));
+    var copy = greeting.copy();
+    greeting.clear();
+    println("[{}] {}", greeting, copy);
+    var t: str = copy;
+    println("{}", t);
+    var n = String.from("42").parse_int();
+    println("{}", n.unwrap());
+}

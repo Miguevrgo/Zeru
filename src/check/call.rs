@@ -31,11 +31,12 @@ const STR_METHODS: &[&str] = &[
 
 /// Vec methods written in the prelude, each `__zeru_vec_<name>` taking a
 /// reference to the Vec first.
-const VEC_STD_METHODS: &[&str] = &["sort", "swap", "contains", "sum", "min", "max", "as_str"];
+const VEC_STD_METHODS: &[&str] = &["sort", "swap", "contains", "sum", "min", "max", "push_str"];
 
 /// The `Vec` methods that change it, so need a receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
     "sort",
+    "push_str",
     "swap",
     "push",
     "pop",
@@ -186,6 +187,17 @@ impl FnCx<'_, '_> {
             if type_name == "Vec" {
                 return self.vec_static(name, type_args, args, expected, span);
             }
+            if type_name == "String" {
+                if name == "from" {
+                    let def = self
+                        .cx
+                        .items
+                        .lookup_value(ModuleId::PRELUDE, "__zeru_string_from")
+                        .expect("the prelude defines it");
+                    return self.call_def(def, Vec::new(), None, args, expected, span);
+                }
+                return self.vec_static(name, type_args, args, Some(Types::STRING), span);
+            }
             if let Some(def) = self.cx.items.lookup_type(self.scope.module, type_name)
                 && self.cx.items.item(def).kind == ItemKind::Struct
             {
@@ -236,15 +248,25 @@ impl FnCx<'_, '_> {
         }
 
         match self.cx.types.kind(ty).clone() {
+            TyKind::Vec(elem) if elem == Types::U8 && STR_METHODS.contains(&name) => {
+                let text = self.mk(ExprKind::Read(place), ty, object.span);
+                let text = self.view(text, matches!(name, "split" | "lines" | "trim"));
+                let def = self
+                    .cx
+                    .items
+                    .lookup_value(ModuleId::PRELUDE, &format!("__zeru_str_{name}"))
+                    .expect("the prelude defines it");
+                self.call_def(def, Vec::new(), Some(text), args, expected, span)
+            }
             TyKind::Vec(elem) => {
                 let mutable = VEC_MUTATORS.contains(&name);
                 if mutable {
                     self.require_mutable(&place, object, span);
                 }
                 let receiver = self.address(place, ty, mutable, object.span);
-                if name == "as_str" && elem != Types::U8 {
+                if name == "push_str" && elem != Types::U8 {
                     let shown = self.ty(ty);
-                    self.error(format!("as_str() needs a Vec<u8>, not {shown}"), span);
+                    self.error(format!("push_str() needs a String, not {shown}"), span);
                     return self.error_expr(span);
                 }
                 if VEC_STD_METHODS.contains(&name)
@@ -387,7 +409,7 @@ impl FnCx<'_, '_> {
         self.mk(ExprKind::Match { scrutinee, arms }, ty, span)
     }
 
-    fn address(&mut self, place: Place, ty: Ty, mutable: bool, span: Span) -> Expr {
+    pub(super) fn address(&mut self, place: Place, ty: Ty, mutable: bool, span: Span) -> Expr {
         let pointer = match mutable {
             true => self.cx.types.intern(TyKind::RefMut(ty)),
             false => self.cx.types.intern(TyKind::Ref(ty)),
@@ -874,6 +896,7 @@ impl FnCx<'_, '_> {
                     let (place, ty) = self.deref(Place::Temp(Box::new(value)), ty, span);
                     self.mk(ExprKind::Read(place), ty, span)
                 }
+                _ if value.ty == Types::STRING => self.view(value, false),
                 _ => value,
             };
             let types = &self.cx.types;

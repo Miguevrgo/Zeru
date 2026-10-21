@@ -117,6 +117,7 @@ impl Types {
     pub const U8: Ty = Ty(10);
     pub const USIZE: Ty = Ty(14);
     pub const STR: Ty = Ty(15);
+    pub const STRING: Ty = Ty(16);
 
     pub fn new() -> Self {
         let mut types = Self {
@@ -137,6 +138,7 @@ impl Types {
             types.intern(TyKind::Int(int));
         }
         types.intern(TyKind::Slice(Self::U8));
+        types.intern(TyKind::Vec(Self::U8));
         types
     }
 
@@ -341,6 +343,7 @@ impl Types {
             TyKind::Param(at) => format!("T{at}"),
             TyKind::Infer(_) => "_".into(),
             TyKind::Array(inner, len) => format!("Array<{}, {len}>", self.show(*inner)),
+            TyKind::Vec(inner) if *inner == Self::U8 => "String".into(),
             TyKind::Vec(inner) => format!("Vec<{}>", self.show(*inner)),
             TyKind::Slice(inner) if *inner == Self::U8 => "str".into(),
             TyKind::Slice(inner) => format!("&[{}]", self.show(*inner)),

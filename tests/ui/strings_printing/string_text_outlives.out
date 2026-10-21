@@ -1,0 +1,38 @@
+status: compile error
+-- stderr
+Error: This String is freed when the function returns, so its text cannot be returned; return the String
+   ╭─[ tests/ui/strings_printing/string_text_outlives.zr:9:12 ]
+   │
+ 9 │     return s;
+   │            ┬
+   │            ╰── This String is freed when the function returns, so its text cannot be returned; return the String
+───╯
+Error: This String is freed at the end of the statement, so its text cannot outlive it; store the String in a variable first
+    ╭─[ tests/ui/strings_printing/string_text_outlives.zr:12:13 ]
+    │
+ 12 │     var a = make().trim();
+    │             ───┬──
+    │                ╰──── This String is freed at the end of the statement, so its text cannot outlive it; store the String in a variable first
+────╯
+Error: This String is freed at the end of the statement, so its text cannot outlive it; store the String in a variable first
+    ╭─[ tests/ui/strings_printing/string_text_outlives.zr:13:18 ]
+    │
+ 13 │     var b: str = make();
+    │                  ───┬──
+    │                     ╰──── This String is freed at the end of the statement, so its text cannot outlive it; store the String in a variable first
+────╯
+Error: This String is freed at the end of the statement, so its text cannot outlive it; store the String in a variable first
+    ╭─[ tests/ui/strings_printing/string_text_outlives.zr:14:18 ]
+    │
+ 14 │     var c = take(make());
+    │                  ───┬──
+    │                     ╰──── This String is freed at the end of the statement, so its text cannot outlive it; store the String in a variable first
+────╯
+Error: push_str() needs a String, not Vec<i32>
+    ╭─[ tests/ui/strings_printing/string_text_outlives.zr:16:5 ]
+    │
+ 16 │     nums.push_str("x");
+    │     ─────────┬────────
+    │              ╰────────── push_str() needs a String, not Vec<i32>
+────╯
+[-] Error: aborting due to previous error

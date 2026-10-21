@@ -106,6 +106,9 @@ impl Checker<'_> {
                 None => self.types.intern(TyKind::Param(at as u32)),
             };
         }
+        if name == "String" {
+            return Types::STRING;
+        }
         if let Some(def) = self.items.lookup_type(scope.module, name) {
             self.check_visible(def, scope.module, span);
             let generics = super::generics_of(self.items.item(def).decl).len();

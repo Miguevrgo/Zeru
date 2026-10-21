@@ -22,10 +22,11 @@ fn main() {
     if rd.is_err() {
         exit(5);
     }
-    if rd.unwrap().len() != 16 {
+    var text = rd.unwrap();
+    if text.len() != 16 {
         exit(6);
     }
-    if rd.unwrap()[0] != 'H' {
+    if text[0] != 'H' {
         exit(7);
     }
 

@@ -1,0 +1,12 @@
+status: exit 0
+-- stdout
+hello, world! 13 true
+Hello, world! true
+2 world! 13
+true true
+2
+aaa true
+true
+[] Hello, world!
+Hello, world!
+42

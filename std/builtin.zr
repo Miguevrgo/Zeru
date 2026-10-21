@@ -745,12 +745,27 @@ fn __zeru_vec_swap<T>(v: &var Vec<T>, i: usize, j: usize) {
     }
 }
 
-// `v.as_str()`: the bytes of the `Vec<u8>` `v` as a str, sharing its
-// memory.
-fn __zeru_vec_as_str<T>(v: &Vec<T>) str {
-    var header = v as *usize;
+// The bytes of `s` as a str, sharing its memory, wherever a String goes
+// for a str.
+fn __zeru_string_view(s: &String) str {
+    var header = s as *usize;
     var parts = (*(header as **u8), *(header + 1));
     return *((&parts) as *str);
+}
+
+// `String.from(text)`: a String holding a copy of `text`.
+fn __zeru_string_from(text: str) String {
+    var s = String.new();
+    s.push_str(text);
+    return s;
+}
+
+// `s.push_str(text)`: `text` added at the end of the String `s`.
+fn __zeru_vec_push_str<T>(v: &var Vec<T>, text: str) {
+    v.reserve(text.len());
+    var header = v as *usize;
+    __zeru_copy_bytes(*(header as **u8) + *(header + 1), text as *u8, text.len());
+    *(header + 1) += text.len();
 }
 
 // `v.contains(value)`: whether an element equals `value`.

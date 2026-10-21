@@ -41,6 +41,11 @@ fn main() {
     println("{}", quoted);
     println("{}", raw);
 
+    var built = String.from("ze");
+    built.push_str("ru");
+    built.push('!');
+    println("{} has {} bytes and starts with z: {}", built, built.len(), built.starts_with("z"));
+
     var byte: u8 = 250;
     byte = byte +% 10;
     println("{} {} {} {}", 7 / 2, 7 % 2, -7 / 2, byte);
