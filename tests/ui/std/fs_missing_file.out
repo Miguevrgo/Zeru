@@ -1,3 +1,4 @@
 status: exit 0
 -- stdout
 true 2
+22 false

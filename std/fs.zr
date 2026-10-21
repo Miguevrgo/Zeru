@@ -46,10 +46,16 @@ pub const PERM_700: i64 = 448;
 const PATH_MAX: usize = 4096;
 
 // `path` and a closing NUL in `buf`, as a syscall takes it; `buf` as an
-// address, or 36 (ENAMETOOLONG) as the error code when it does not fit.
+// address, or the error code: 36 (ENAMETOOLONG) when it does not fit, 22
+// (EINVAL) when it holds a NUL, which would end it early.
 fn c_path(path: str, buf: *u8) i64! {
     if path.len() >= PATH_MAX {
         return Err(36);
+    }
+    for byte in path {
+        if byte == 0 {
+            return Err(22);
+        }
     }
     __zeru_copy_bytes(buf, path as *u8, path.len());
     *(buf + path.len()) = 0;
