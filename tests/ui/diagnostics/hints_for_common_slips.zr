@@ -1,0 +1,12 @@
+fn f(n: i32) i32! {
+    return Ok(n);
+}
+fn main() {
+    var a = f(1) + 1;
+    var arr: Array<i32, 3> = [1, 2, 3];
+    var n = arr.len();
+    var x = 1;
+    if x = 2 {
+    }
+    var o: i32? = Some(3);
+}

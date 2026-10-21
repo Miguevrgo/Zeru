@@ -1,0 +1,31 @@
+status: compile error
+-- stderr
+Error: Binary operation '+' requires operands of same type. Got i32! and i32; take the value out first, with !, ? or .unwrap()
+   ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:5:13 ]
+   │
+ 5 │     var a = f(1) + 1;
+   │             ────┬───
+   │                 ╰───── Binary operation '+' requires operands of same type. Got i32! and i32; take the value out first, with !, ? or .unwrap()
+───╯
+Error: Array<i32, 3> has no method 'len'; its length is 3
+   ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:7:13 ]
+   │
+ 7 │     var n = arr.len();
+   │             ────┬────
+   │                 ╰────── Array<i32, 3> has no method 'len'; its length is 3
+───╯
+Error: If condition must be boolean, got void; to compare, write ==
+   ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:9:8 ]
+   │
+ 9 │     if x = 2 {
+   │        ──┬──
+   │          ╰──── If condition must be boolean, got void; to compare, write ==
+───╯
+Error: Write the value itself, not Some(..): it becomes a T? wherever one is wanted
+    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:11:19 ]
+    │
+ 11 │     var o: i32? = Some(3);
+    │                   ───┬───
+    │                      ╰───── Write the value itself, not Some(..): it becomes a T? wherever one is wanted
+────╯
+[-] Error: aborting due to previous error

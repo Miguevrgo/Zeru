@@ -7,11 +7,11 @@ Error: Function 'nope' not defined
    │             ───┬───
    │                ╰───── Function 'nope' not defined
 ───╯
-Error: Cannot call method on non-struct type i32
+Error: i32 has no method 'foo'
    ╭─[ tests/ui/diagnostics/not_echoed.zr:4:13 ]
    │
  4 │     var y = a.foo();
    │             ───┬───
-   │                ╰───── Cannot call method on non-struct type i32
+   │                ╰───── i32 has no method 'foo'
 ───╯
 [-] Error: aborting due to previous error

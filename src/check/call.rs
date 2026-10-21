@@ -161,7 +161,14 @@ impl FnCx<'_, '_> {
             .lookup_value(module, name)
             .filter(|&def| self.cx.items.item(def).kind == ItemKind::Fn)
         else {
-            self.error(format!("Function '{name}' not defined"), span);
+            let message = match name {
+                "Some" => {
+                    "Write the value itself, not Some(..): it becomes a T? wherever one is wanted"
+                        .to_string()
+                }
+                _ => format!("Function '{name}' not defined"),
+            };
+            self.error(message, span);
             return self.error_expr(span);
         };
         self.cx.check_visible(def, module, span);
@@ -303,7 +310,8 @@ impl FnCx<'_, '_> {
                     let text = self.mk(ExprKind::Read(place), ty, object.span);
                     return self.call_def(def, Vec::new(), Some(text), args, expected, span);
                 }
-                self.error(format!("Slice has no method '{name}'"), span);
+                let shown = self.ty(ty);
+                self.error(format!("{shown} has no method '{name}'"), span);
                 self.error_expr(span)
             }
             TyKind::Optional(_) | TyKind::Result(..) => {
@@ -316,10 +324,7 @@ impl FnCx<'_, '_> {
                 };
                 let Some(owner) = self.cx.is_struct(struct_ty) else {
                     let shown = self.ty(ty);
-                    self.error(
-                        format!("Cannot call method on non-struct type {shown}"),
-                        span,
-                    );
+                    self.error(format!("{shown} has no method '{name}'"), span);
                     return self.error_expr(span);
                 };
                 let TyKind::Adt(_, struct_args) = self.cx.types.kind(struct_ty).clone() else {
@@ -355,12 +360,13 @@ impl FnCx<'_, '_> {
                 let receiver = self.address(place, struct_ty, mutable, object.span);
                 self.call_def(def, known, Some(receiver), args, expected, span)
             }
-            _ => {
+            kind => {
                 let shown = self.ty(ty);
-                self.error(
-                    format!("Cannot call method on non-struct type {shown}"),
-                    span,
-                );
+                let hint = match (kind, name) {
+                    (TyKind::Array(_, len), "len") => format!("; its length is {len}"),
+                    _ => String::new(),
+                };
+                self.error(format!("{shown} has no method '{name}'{hint}"), span);
                 self.error_expr(span)
             }
         }
@@ -530,16 +536,17 @@ impl FnCx<'_, '_> {
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
-        let full = self.cx.items.item(def).name.clone();
+        let full = self.cx.items.shown(def);
         let Some(sig) = self.cx.sig(def) else {
             return self.error_expr(span);
         };
         let skip = usize::from(receiver.is_some());
-        if args.len() != sig.params.len() - skip {
+        let wanted = sig.params.len() - skip;
+        if args.len() != wanted {
+            let plural = if wanted == 1 { "" } else { "s" };
             self.error(
                 format!(
-                    "Function '{full}' expects {} arguments, got {}",
-                    sig.params.len() - skip,
+                    "Function '{full}' expects {wanted} argument{plural}, got {}",
                     args.len()
                 ),
                 span,
@@ -739,7 +746,8 @@ impl FnCx<'_, '_> {
             "new" => Builtin::VecNew,
             "with_capacity" => Builtin::VecWithCapacity,
             _ => {
-                self.error(format!("Vec<T> has no method '{name}'"), span);
+                let shown = self.ty(ty);
+                self.error(format!("{shown} has no function '{name}'"), span);
                 return self.error_expr(span);
             }
         };
@@ -753,10 +761,12 @@ impl FnCx<'_, '_> {
             "insert" => 2,
             _ => 0,
         };
+        let vec = self.cx.types.intern(TyKind::Vec(elem));
+        let owner = self.ty(vec);
         if args.len() != arity {
             let plural = if arity == 1 { "" } else { "s" };
             self.error(
-                format!("Vec::{name}() takes exactly {arity} argument{plural}"),
+                format!("{owner}.{name}() takes exactly {arity} argument{plural}"),
                 span,
             );
             self.check_args_only(args);
@@ -768,14 +778,17 @@ impl FnCx<'_, '_> {
             if is_item {
                 let value = self.expr(arg, Some(elem));
                 let mut value = self.coerce_or(value, elem, span, |want, got| {
-                    format!("Vec::{name}() expects {want}, got {got}")
+                    format!("{owner}.{name}() expects {want}, got {got}")
                 });
                 self.consume(&mut value);
                 values.push(value);
             } else {
                 let value = self.expr(arg, Some(Types::USIZE));
                 if value.ty != Types::USIZE && !self.cx.types.is_error(value.ty) {
-                    self.error(format!("Vec::{name}() index or count must be usize"), span);
+                    self.error(
+                        format!("{owner}.{name}() index or count must be usize"),
+                        span,
+                    );
                 }
                 values.push(value);
             }
@@ -805,7 +818,9 @@ impl FnCx<'_, '_> {
             "shrink_to_fit" => Builtin::VecShrinkToFit,
             _ => {
                 self.check_args_only(args);
-                self.error(format!("Vec<T> has no method '{name}'"), span);
+                let vec = self.cx.types.intern(TyKind::Vec(elem));
+                let shown = self.ty(vec);
+                self.error(format!("{shown} has no method '{name}'"), span);
                 return self.error_expr(span);
             }
         };

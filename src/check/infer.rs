@@ -133,7 +133,7 @@ impl FnCx<'_, '_> {
                 .types
                 .too_big(arg, super::MAX_TYPE_SIZE, super::MAX_TYPE_DEPTH)
         }) {
-            let name = self.cx.items.item(def).name.clone();
+            let name = self.cx.items.shown(def);
             self.error(
                 format!("Checking '{name}' asks for ever larger instances of it, without end"),
                 span,

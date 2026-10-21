@@ -487,7 +487,11 @@ impl<'c, 'a> FnCx<'c, 'a> {
         let cond = self.expr(condition, Some(Types::BOOL));
         if cond.ty != Types::BOOL && !self.cx.types.is_error(cond.ty) {
             let shown = self.ty(cond.ty);
-            self.error(format!("{message}{shown}"), condition.span);
+            let hint = match &condition.kind {
+                ExpressionKind::Assign { .. } => "; to compare, write ==",
+                _ => "",
+            };
+            self.error(format!("{message}{shown}{hint}"), condition.span);
         }
         cond
     }

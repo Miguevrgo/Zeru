@@ -143,5 +143,10 @@ fn main() {
             std::process::exit(1);
         }
     });
-    compiler.unwrap().join().unwrap();
+    if !compiler.is_ok_and(|thread| thread.join().is_ok()) {
+        eprintln!(
+            "internal compiler error: a bug in Zeru stopped it; please report it with the file it compiled"
+        );
+        std::process::exit(101);
+    }
 }

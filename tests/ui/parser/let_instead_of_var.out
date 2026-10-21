@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Zeru declares a variable with 'var', or 'const' when it never changes
+   ╭─[ tests/ui/parser/let_instead_of_var.zr:2:5 ]
+   │
+ 2 │     let x = 5;
+   │     ─┬─
+   │      ╰─── Zeru declares a variable with 'var', or 'const' when it never changes
+───╯
+[-] Error: aborting due to previous error

@@ -731,7 +731,7 @@ impl<'a> Checker<'a> {
                 },
             };
             if !ok {
-                let (base, shown) = (self.items.item(def).name.clone(), self.types.show(arg));
+                let (base, shown) = (self.items.shown(def), self.types.show(arg));
                 self.error(
                     format!(
                         "'{base}' asks for {}: {bound}, which {shown} does not satisfy",

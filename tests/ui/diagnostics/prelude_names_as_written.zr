@@ -1,0 +1,13 @@
+fn main() {
+    var words: Vec<str> = ["b", "a"];
+    words.sort();
+    var flags: Vec<bool> = [true];
+    flags.sum();
+    var s = String.from();
+    var t = "x".trim(1);
+    var u = String.with_capacity(3, 4);
+    var v = String.pop();
+    var w = "abc".shout();
+    var n: Vec<i32> = [1];
+    n.shout();
+}

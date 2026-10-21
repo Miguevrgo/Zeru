@@ -747,9 +747,23 @@ impl FnCx<'_, '_> {
         let (l_ty, r) = match self.coerce(r, l.ty) {
             Ok(r) if !matches!(r.kind, ExprKind::Some(_) | ExprKind::Ok(_)) => (l.ty, r),
             Ok(r) | Err(r) => {
-                let (lt, rt) = (self.ty(l.ty), self.ty(r.ty));
+                let r_ty = match &r.kind {
+                    ExprKind::Some(inner) | ExprKind::Ok(inner) => inner.ty,
+                    _ => r.ty,
+                };
+                let wrapped = [l.ty, r_ty].into_iter().any(|ty| {
+                    matches!(
+                        self.cx.types.kind(ty),
+                        TyKind::Optional(_) | TyKind::Result(..)
+                    )
+                });
+                let hint = match wrapped {
+                    true => "; take the value out first, with !, ? or .unwrap()",
+                    false => "",
+                };
+                let (lt, rt) = (self.ty(l.ty), self.ty(r_ty));
                 self.error(
-                    format!("Binary operation '{operator}' requires operands of same type. Got {lt} and {rt}"),
+                    format!("Binary operation '{operator}' requires operands of same type. Got {lt} and {rt}{hint}"),
                     span,
                 );
                 return self.error_expr(span);

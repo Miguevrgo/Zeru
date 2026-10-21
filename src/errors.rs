@@ -254,6 +254,8 @@ pub enum CompileError {
     Link(std::process::ExitStatus),
     #[error("LLVM rejected the program: {0}")]
     Rejected(String),
+    #[error("{0} file(s) not formatted; zeru fmt formats them")]
+    Unformatted(usize),
 }
 
 #[cfg(test)]

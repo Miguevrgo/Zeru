@@ -1,0 +1,59 @@
+status: compile error
+-- stderr
+Error: 'Vec.sort' asks for T: Ord, which str does not satisfy
+   ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:3:5 ]
+   │
+ 3 │     words.sort();
+   │     ──────┬─────
+   │           ╰─────── 'Vec.sort' asks for T: Ord, which str does not satisfy
+───╯
+Error: 'Vec.sum' asks for T: Num, which bool does not satisfy
+   ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:5:5 ]
+   │
+ 5 │     flags.sum();
+   │     ─────┬─────
+   │          ╰─────── 'Vec.sum' asks for T: Num, which bool does not satisfy
+───╯
+Error: Function 'String.from' expects 1 argument, got 0
+   ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:6:13 ]
+   │
+ 6 │     var s = String.from();
+   │             ──────┬──────
+   │                   ╰──────── Function 'String.from' expects 1 argument, got 0
+───╯
+Error: Function 'str.trim' expects 0 arguments, got 1
+   ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:7:13 ]
+   │
+ 7 │     var t = "x".trim(1);
+   │             ─────┬─────
+   │                  ╰─────── Function 'str.trim' expects 0 arguments, got 1
+───╯
+Error: String.with_capacity() takes exactly 1 argument
+   ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:8:13 ]
+   │
+ 8 │     var u = String.with_capacity(3, 4);
+   │             ─────────────┬────────────
+   │                          ╰────────────── String.with_capacity() takes exactly 1 argument
+───╯
+Error: String has no function 'pop'
+   ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:9:13 ]
+   │
+ 9 │     var v = String.pop();
+   │             ──────┬─────
+   │                   ╰─────── String has no function 'pop'
+───╯
+Error: str has no method 'shout'
+    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:10:13 ]
+    │
+ 10 │     var w = "abc".shout();
+    │             ──────┬──────
+    │                   ╰──────── str has no method 'shout'
+────╯
+Error: Vec<i32> has no method 'shout'
+    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:12:5 ]
+    │
+ 12 │     n.shout();
+    │     ────┬────
+    │         ╰────── Vec<i32> has no method 'shout'
+────╯
+[-] Error: aborting due to previous error

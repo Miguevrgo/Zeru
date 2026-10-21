@@ -1,0 +1,8 @@
+import std.math;
+struct P {
+    x: i32,
+}
+fn main() {
+    println("{}", math::max(P { x: 1 }, P { x: 2 }).x);
+    println("{}", math::abs("x"));
+}

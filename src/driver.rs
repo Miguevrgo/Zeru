@@ -111,6 +111,7 @@ pub fn check(path: &Path, json: bool) -> Result<(), CompileError> {
 /// formatted, changing nothing. `-` formats stdin to stdout.
 pub fn format(files: &[PathBuf], check: bool) -> Result<(), CompileError> {
     let mut failed = false;
+    let mut unformatted = 0;
     for path in files {
         let stdin = path.as_os_str() == "-";
         let source = match stdin {
@@ -122,7 +123,7 @@ pub fn format(files: &[PathBuf], check: bool) -> Result<(), CompileError> {
             Ok(formatted) if formatted == source => {}
             Ok(_) if check => {
                 status(RED, '\u{ea6c}', "Unformatted", path.display());
-                failed = true;
+                unformatted += 1;
             }
             Ok(formatted) => {
                 std::fs::write(path, formatted)?;
@@ -136,9 +137,10 @@ pub fn format(files: &[PathBuf], check: bool) -> Result<(), CompileError> {
             }
         }
     }
-    match failed {
-        true => Err(CompileError::Unknown),
-        false => Ok(()),
+    match (failed, unformatted) {
+        (true, _) => Err(CompileError::Unknown),
+        (false, 0) => Ok(()),
+        (false, count) => Err(CompileError::Unformatted(count)),
     }
 }
 

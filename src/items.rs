@@ -258,6 +258,21 @@ impl<'a> Items<'a> {
         &self.items[def.0 as usize]
     }
 
+    /// The name of `def` as a program calls it: the prelude's functions
+    /// behind the methods of `str`, `Vec` and `String` by those methods.
+    pub fn shown(&self, def: DefId) -> String {
+        let name = &self.item(def).name;
+        let owners = [
+            ("__zeru_str_", "str"),
+            ("__zeru_vec_", "Vec"),
+            ("__zeru_string_", "String"),
+        ];
+        owners
+            .iter()
+            .find_map(|(prefix, owner)| Some(format!("{owner}.{}", name.strip_prefix(prefix)?)))
+            .unwrap_or_else(|| name.clone())
+    }
+
     pub fn method(&self, owner: DefId, name: &str) -> Option<DefId> {
         self.methods.get(&(owner, name.to_string())).copied()
     }

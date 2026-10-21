@@ -311,6 +311,14 @@ impl Parser {
             Token::Continue => p.parse_jump(StatementKind::Continue),
             Token::LBrace => p.parse_block(),
             Token::Import => p.parse_import_statement(),
+            Token::Identifier(word)
+                if word == "let"
+                    && matches!(p.tokens.get(p.pos + 1), Some((Token::Identifier(_), _))) =>
+            {
+                p.error_here(
+                    "Zeru declares a variable with 'var', or 'const' when it never changes",
+                )
+            }
             _ => p.parse_expression_statement(),
         })
     }
