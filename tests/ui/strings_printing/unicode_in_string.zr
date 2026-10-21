@@ -1,0 +1,6 @@
+fn main() {
+    var word = "canción ✅";
+    println("{} {} {}", word, word.len(), word[5]);
+    println(`raw 🚀`);
+    println("{}", "ñ" == "ñ");
+}

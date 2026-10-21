@@ -363,11 +363,10 @@ impl<'a> Lexer<'a> {
                         }
                     }
                 }
-                _ if !ch.is_ascii() => {
+                _ => {
                     self.advance();
-                    problem.get_or_insert("Non-ASCII character in string".to_string());
+                    bytes.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes());
                 }
-                _ => bytes.push(self.advance().unwrap() as u8),
             }
         }
 
@@ -431,23 +430,13 @@ impl<'a> Lexer<'a> {
 
     fn read_raw_string(&mut self) -> Token {
         let mut bytes = Vec::new();
-        let mut non_ascii = false;
 
         while let Some(&ch) = self.peek() {
-            match ch {
-                '`' => {
-                    self.advance();
-                    if non_ascii {
-                        return Token::Illegal("Non-ASCII character in raw string".to_string());
-                    }
-                    return Token::StringLit(bytes);
-                }
-                _ if !ch.is_ascii() => {
-                    self.advance();
-                    non_ascii = true;
-                }
-                _ => bytes.push(self.advance().unwrap() as u8),
+            self.advance();
+            if ch == '`' {
+                return Token::StringLit(bytes);
             }
+            bytes.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes());
         }
 
         Token::Illegal("Unterminated raw string".to_string())
@@ -501,10 +490,10 @@ mod tests {
     }
 
     #[test]
-    fn test_non_ascii_is_reported_after_the_whole_string() {
+    fn test_non_ascii_strings_keep_their_utf8_bytes() {
         for source in ["\"h\u{e9}llo\" x", "`h\u{e9}llo` x"] {
             let mut lexer = Lexer::new(source);
-            assert!(matches!(lexer.next_token().0, Token::Illegal(_)));
+            assert_eq!(lexer.next_token().0, Token::StringLit("h\u{e9}llo".into()));
             assert_eq!(lexer.next_token().0, Token::Identifier("x".to_string()));
         }
     }
