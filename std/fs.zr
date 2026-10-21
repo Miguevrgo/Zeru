@@ -2,6 +2,7 @@
 
 const SYS_OPEN: i64 = 2;
 const SYS_STAT: i64 = 4;
+const SYS_FSTAT: i64 = 5;
 const SYS_LSEEK: i64 = 8;
 const SYS_ACCESS: i64 = 21;
 const SYS_FSYNC: i64 = 74;
@@ -91,7 +92,7 @@ fn c_path(path: str, buf: *u8) i64! {
 // println("{}", fs::read_file("log.txt").unwrap()); // started
 // ```
 pub fn open(path: str, flags: i64, mode: i64) i64! {
-    var buf: Array<u8, 4096> = [0; 4096];
+    var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var p = c_path(path, &buf[0])!;
     return sys_result(syscall3(SYS_OPEN, p, flags, mode));
 }
@@ -217,7 +218,7 @@ pub fn lseek(fd: i64, offset: i64, whence: i64) i64! {
 // println("{}", fs::mkdir("cache", fs::PERM_755).unwrap_err()); // 17
 // ```
 pub fn mkdir(path: str, mode: i64) i64! {
-    var buf: Array<u8, 4096> = [0; 4096];
+    var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var p = c_path(path, &buf[0])!;
     return sys_result(syscall2(SYS_MKDIR, p, mode));
 }
@@ -239,7 +240,7 @@ pub fn mkdir(path: str, mode: i64) i64! {
 // println("{}", fs::exists("tmp")); // false
 // ```
 pub fn rmdir(path: str) i64! {
-    var buf: Array<u8, 4096> = [0; 4096];
+    var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var p = c_path(path, &buf[0])!;
     return sys_result(syscall1(SYS_RMDIR, p));
 }
@@ -264,7 +265,7 @@ pub fn rmdir(path: str) i64! {
 // println("{}", fs::unlink("old.txt").unwrap_err()); // 2
 // ```
 pub fn unlink(path: str) i64! {
-    var buf: Array<u8, 4096> = [0; 4096];
+    var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var p = c_path(path, &buf[0])!;
     return sys_result(syscall1(SYS_UNLINK, p));
 }
@@ -289,8 +290,8 @@ pub fn unlink(path: str) i64! {
 // println("{} {}", fs::exists("draft.txt"), fs::exists("final.txt")); // false true
 // ```
 pub fn rename(old_path: str, new_path: str) i64! {
-    var old_buf: Array<u8, 4096> = [0; 4096];
-    var new_buf: Array<u8, 4096> = [0; 4096];
+    var old_buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
+    var new_buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var old = c_path(old_path, &old_buf[0])!;
     var new = c_path(new_path, &new_buf[0])!;
     return sys_result(syscall2(SYS_RENAME, old, new));
@@ -315,7 +316,7 @@ pub fn rename(old_path: str, new_path: str) i64! {
 // println("{}", fs::file_size("missing.txt").unwrap_err()); // 2
 // ```
 pub fn file_size(path: str) usize! {
-    var buf: Array<u8, 4096> = [0; 4096];
+    var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var p = c_path(path, &buf[0])!;
     var stat: Array<i64, 18> = [0; 18];
     sys_result(syscall2(SYS_STAT, p, (&stat[0]) as i64))!;
@@ -336,7 +337,7 @@ pub fn file_size(path: str) usize! {
 // println("{}", fs::exists("nowhere.txt")); // false
 // ```
 pub fn exists(path: str) bool {
-    var buf: Array<u8, 4096> = [0; 4096];
+    var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var p = c_path(path, &buf[0]);
     return p.is_ok() && syscall2(SYS_ACCESS, p.unwrap(), 0) == 0;
 }
@@ -360,7 +361,7 @@ pub fn exists(path: str) bool {
 // println("{}", fs::read_file("long.txt").unwrap()); // abc
 // ```
 pub fn truncate(path: str, length: i64) i64! {
-    var buf: Array<u8, 4096> = [0; 4096];
+    var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var p = c_path(path, &buf[0])!;
     return sys_result(syscall2(SYS_TRUNCATE, p, length));
 }
@@ -412,11 +413,12 @@ pub fn fsync(fd: i64) i64! {
 // println("{}", fs::read_file("missing.txt").unwrap_err()); // 2
 // ```
 pub fn read_file(path: str) str! {
-    var size = file_size(path)!;
-    if size == 0 {
-        return Ok("");
-    }
     var fd = open(path, O_RDONLY, 0)!;
+    var stat: Array<i64, 18> = [0; 18];
+    var r = sys_result(syscall2(SYS_FSTAT, fd, (&stat[0]) as i64));
+    if r.is_err() { close(fd); return Err(r.unwrap_err()); }
+    var size = stat[6] as usize;
+    if size == 0 { close(fd); return Ok(""); }
     var data = __zeru_map(size);
     var total: usize = 0;
     while total < size {
