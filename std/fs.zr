@@ -545,7 +545,9 @@ pub struct File {
     }
 
     fn drop(var self) {
-        syscall1(SYS_CLOSE, self.fd);
+        if self.fd > 2 {
+            syscall1(SYS_CLOSE, self.fd);
+        }
     }
 }
 

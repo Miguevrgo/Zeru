@@ -1,4 +1,10 @@
 status: exit 0
 -- stdout
-true true 0
+300000 200000 0
+from parent
+[]
+some value that takes room
+0
+137
 true
+true true true

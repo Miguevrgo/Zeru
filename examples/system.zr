@@ -13,10 +13,11 @@ fn main() {
     println("{} {} {}", math::abs(-7), math::max(2.5, 1.5), math::clamp(15, 0, 10));
     println("{} {}", math::pow(3, 4), math::is_power_of_two(64));
 
-    var start = os::clock_ns().unwrap();
-    os::sleep_ms(5).unwrap();
-    var waited = os::clock_ns().unwrap() - start;
-    println("pid {} slept at least 5 ms: {}", os::getpid() > 0, waited >= 5_000_000);
+    var start = os::Clock.now();
+    os::sleep(5);
+    println("pid {} slept at least 5 ms: {}", os::pid() > 0, start.elapsed() >= 5_000_000);
+    var listing = os::output("echo", ["from", "a", "child"]).unwrap();
+    println("{} {}", listing.stdout.trim(), os::random_range(1, 6) <= 6);
 
     var before = cycles();
     var after = cycles();

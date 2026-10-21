@@ -59,6 +59,13 @@ __zeru_simd:
     .p2align 3
 __zeru_stack:
     .quad 0
+
+# The environment once std.os changes it: a Vec<String> of "NAME=value",
+# then whether it holds the kernel's environment yet.
+    .globl __zeru_env
+    .p2align 3
+__zeru_env:
+    .quad 0, 0, 0, 0
     .text
 
 # Copies of up to 64 bytes read everything into registers before writing,

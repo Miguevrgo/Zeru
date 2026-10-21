@@ -2,48 +2,22 @@ import std.fs;
 import std.os;
 
 fn main() {
-    if os::getpid() <= 0 {
+    if os::pid() == 0 || os::parent_pid() == 0 {
         exit(1);
     }
-    if os::getppid() <= 0 {
+    if os::time() < 1000000000 {
         exit(2);
     }
-
-    var t = os::time();
-    if t.is_err() {
+    var clock = os::Clock.now();
+    os::sleep(1);
+    if clock.elapsed() < 1000000 {
         exit(3);
     }
-    if t.unwrap() < 1000000000 {
+    if !fs::current_dir().unwrap().starts_with("/") {
         exit(4);
     }
-
-    var ns = os::clock_ns();
-    if ns.is_err() {
+    if os::run("true", []).unwrap() != 0 {
         exit(5);
     }
-    if ns.unwrap() <= 0 {
-        exit(6);
-    }
-
-    var cwd = fs::current_dir();
-    if cwd.is_err() {
-        exit(7);
-    }
-    if !cwd.unwrap().starts_with("/") {
-        exit(8);
-    }
-
-    if os::getuid() < 0 {
-        exit(9);
-    }
-
-    var host: Array<u8, 65> = [0; 65];
-    if os::hostname(&host[0], 65).is_err() {
-        exit(10);
-    }
-    if os::hostname(&host[0], 0).is_err() {
-        exit(11);
-    }
-
     println("os: all tests passed");
 }

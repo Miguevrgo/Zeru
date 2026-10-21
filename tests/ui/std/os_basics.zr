@@ -1,9 +1,37 @@
 import std.os;
+
 fn main() {
-    var a = os::clock_ns().unwrap();
-    os::sleep_ms(1).unwrap();
-    var b = os::clock_ns().unwrap();
-    var host: Array<u8, 65> = [0; 65];
-    println("{} {} {}", os::getpid() > 0, b > a, os::hostname(&host[0], 0).unwrap());
-    println("{}", os::sleep_ms(-5).is_err());
+    var big = os::output(
+        "sh",
+        ["-c", "head -c 300000 /dev/zero; head -c 200000 /dev/zero >&2"],
+    ).unwrap();
+    println("{} {} {}", big.stdout.len(), big.stderr.len(), big.code);
+    os::set_env("ZERU_TEST", "from parent").unwrap();
+    var child = os::output("sh", ["-c", "echo $ZERU_TEST"]).unwrap();
+    println("{}", child.stdout.trim());
+    os::remove_env("ZERU_TEST").unwrap();
+    var gone = os::output("sh", ["-c", "echo [$ZERU_TEST]"]).unwrap();
+    println("{}", gone.stdout.trim());
+    for i in 0..200000 {
+        os::set_env("COUNTER", "some value that takes room").unwrap();
+    }
+    println("{}", os::env("COUNTER").unwrap());
+    var input = os::read_stdin().unwrap();
+    println("{}", input.len());
+    println("{}", os::run("sh", ["-c", "kill -9 $$"]).unwrap());
+    var start = os::Clock.now();
+    os::sleep(5);
+    println("{}", start.elapsed() >= 5_000_000);
+    var low: u64 = 10;
+    var seen_low = false;
+    var seen_high = false;
+    for i in 0..1000 {
+        var r = os::random_range(low, 12);
+        seen_low = seen_low || r == 10;
+        seen_high = seen_high || r == 12;
+        if r < 10 || r > 12 {
+            println("bad");
+        }
+    }
+    println("{} {} {}", seen_low, seen_high, os::pid() > 0 && os::parent_pid() > 0);
 }

@@ -1,14 +1,56 @@
 // Zeru Standard Library - OS (Linux x86_64)
 
+import std.fs;
+
+const SYS_POLL: i64 = 7;
+const SYS_ACCESS: i64 = 21;
+const SYS_DUP2: i64 = 33;
 const SYS_NANOSLEEP: i64 = 35;
 const SYS_GETPID: i64 = 39;
-const SYS_UNAME: i64 = 63;
+const SYS_FORK: i64 = 57;
+const SYS_EXECVE: i64 = 59;
+const SYS_WAIT4: i64 = 61;
+const SYS_KILL: i64 = 62;
 const SYS_GETUID: i64 = 102;
 const SYS_GETGID: i64 = 104;
-const SYS_GETEUID: i64 = 107;
-const SYS_GETEGID: i64 = 108;
 const SYS_GETPPID: i64 = 110;
 const SYS_CLOCK_GETTIME: i64 = 228;
+const SYS_PIPE2: i64 = 293;
+const SYS_GETRANDOM: i64 = 318;
+
+const EINTR: i64 = 4;
+const O_CLOEXEC: i64 = 524288;
+
+// The signal Ctrl+C sends: asks a program to stop.
+pub const SIGINT: i32 = 2;
+// Ends a program at once; it cannot be caught or ignored.
+pub const SIGKILL: i32 = 9;
+// Asks a program to stop, letting it clean up first; what `kill` sends by
+// default from a shell.
+pub const SIGTERM: i32 = 15;
+
+// `len` bytes at `data` as a str.
+fn as_str(data: *u8, len: usize) str {
+    var parts = (data, len);
+    return *((&parts) as *str);
+}
+
+// The NUL-terminated text at `text`, without its NUL.
+fn c_text(text: *u8) str {
+    var len: usize = 0;
+    while *(text + len) != 0 {
+        len += 1;
+    }
+    return as_str(text, len);
+}
+
+// The stack as the kernel handed it to the program: argc, the argv
+// pointers, a null one, then the environment's and another null one.
+fn stack() *i64 {
+    var stack: i64 = 0;
+    asm ("movq __zeru_stack(%rip), $0" : "=r" (stack));
+    return stack as *i64;
+}
 
 // Returns the command line the program was started with.
 //
@@ -29,143 +71,548 @@ const SYS_CLOCK_GETTIME: i64 = 228;
 // println("hello, {}", args[1]);
 // ```
 pub fn args() Vec<str> {
-    var stack: i64 = 0;
-    asm ("movq __zeru_stack(%rip), $0" : "=r" (stack));
-    var count = *(stack as *i64);
-    var out: Vec<str> = Vec.with_capacity(count as usize);
+    var stack = stack();
+    var count = *stack as usize;
+    var out: Vec<str> = Vec.with_capacity(count);
     for i in 1..count + 1 {
-        var text = *((stack + 8 * i) as *i64) as *u8;
-        var len: usize = 0;
-        while *(text + len) != 0 {
-            len += 1;
-        }
-        var parts = (text, len);
-        out.push(*((&parts) as *str));
+        out.push(c_text(*(stack + i) as *u8));
     }
     return out;
 }
 
-// Returns the id of this process.
-pub fn getpid() i64 { return syscall1(SYS_GETPID, 0); }
-// Returns the id of the process that started this one.
-pub fn getppid() i64 { return syscall1(SYS_GETPPID, 0); }
-// Returns the id of the user running the program, 0 for root.
-pub fn getuid() i64 { return syscall1(SYS_GETUID, 0); }
-// Returns the id of the group running the program.
-pub fn getgid() i64 { return syscall1(SYS_GETGID, 0); }
-// Returns the effective user id, the one permissions are checked against.
-//
-// It differs from `getuid` only in programs installed setuid.
-pub fn geteuid() i64 { return syscall1(SYS_GETEUID, 0); }
-// Returns the effective group id, the one permissions are checked against.
-//
-// It differs from `getgid` only in programs installed setgid.
-pub fn getegid() i64 { return syscall1(SYS_GETEGID, 0); }
-
-// Pauses the program for `ms` milliseconds, returning 0.
-//
-// # Errors
-//
-// The errno: 22 (EINVAL) for a negative `ms`, 4 (EINTR) when a signal
-// wakes it early.
-//
-// # Examples
-//
-// ```zeru
-// import std.os;
-//
-// var start = os::clock_ns().unwrap();
-// os::sleep_ms(20).unwrap();
-// println("{}", os::clock_ns().unwrap() - start >= 20_000_000); // true
-// ```
-pub fn sleep_ms(ms: i64) i64! {
-    var ts: Array<i64, 2> = [ms / 1000, (ms % 1000) * 1000000];
-    return sys_result(syscall2(SYS_NANOSLEEP, (&ts[0]) as i64, 0));
+// The environment as "NAME=value" entries, a copy of the kernel's the first
+// time it is needed, which `set_env` and `remove_env` then change.
+fn environment() *Vec<String> {
+    var at: i64 = 0;
+    asm ("leaq __zeru_env(%rip), $0" : "=r" (at));
+    var table = at as *Vec<String>;
+    var ready = (at + 24) as *i64;
+    if *ready == 0 {
+        *ready = 1;
+        var stack = stack();
+        var entry = stack + *stack + 2;
+        while *entry != 0 {
+            (*table).push(String.from(c_text(*entry as *u8)));
+            entry = entry + 1;
+        }
+    }
+    return table;
 }
 
-// Returns a time in nanoseconds for measuring how long something takes.
+// Where the variable `name` is in the environment.
+fn find_env(table: *Vec<String>, name: str) usize? {
+    for i, entry in *table {
+        if entry.len() > name.len() && entry[name.len()] == '=' && entry.starts_with(name) {
+            return i;
+        }
+    }
+    return None;
+}
+
+// 22 (EINVAL) unless `name` can name a variable: not empty, and no "=" or
+// NUL in it.
+fn check_name(name: str) ! {
+    if name.len() == 0 {
+        return Err(22);
+    }
+    for byte in name {
+        if byte == '=' || byte == 0 {
+            return Err(22);
+        }
+    }
+}
+
+// Returns the value of the environment variable `name`, or None when it is
+// not set.
 //
-// The clock only moves forward and is not the time of day; only the
-// difference between two calls means anything. `time` gives the time of
-// day.
-//
-// # Errors
-//
-// The errno; it does not fail on Linux.
+// The value is a copy, so it stays the same when the variable changes
+// later.
 //
 // # Examples
 //
 // ```zeru
 // import std.os;
 //
-// var start = os::clock_ns().unwrap();
+// os::set_env("GREETING", "hi").unwrap();
+// println("{}", os::env("GREETING").unwrap()); // hi
+// println("{}", os::env("NOT_SET_ANYWHERE").is_none()); // true
+// ```
+pub fn env(name: str) String? {
+    var table = environment();
+    var at = find_env(table, name)?;
+    return String.from((*table)[at][name.len() + 1..]);
+}
+
+// Sets the environment variable `name` to `value`, replacing the value it
+// had.
+//
+// Programs `run` and `output` start see it.
+//
+// # Errors
+//
+// 22 (EINVAL) when `name` is empty or holds "=" or a NUL, or `value` holds a
+// NUL.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// os::set_env("MODE", "fast").unwrap();
+// os::set_env("MODE", "safe").unwrap();
+// println("{}", os::env("MODE").unwrap()); // safe
+// println("{}", os::set_env("A=B", "x").unwrap_err()); // 22
+// ```
+pub fn set_env(name: str, value: str) ! {
+    check_name(name)!;
+    for byte in value {
+        if byte == 0 {
+            return Err(22);
+        }
+    }
+    var entry = String.from(name);
+    entry.push('=');
+    entry.push_str(value);
+    var table = environment();
+    match find_env(table, name) {
+        Some(at) => (*table)[at] = entry,
+        None => (*table).push(entry),
+    }
+}
+
+// Removes the environment variable `name`; nothing happens when it is not
+// set.
+//
+// # Errors
+//
+// 22 (EINVAL) when `name` is empty or holds "=" or a NUL.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// os::set_env("TEMPORARY", "1").unwrap();
+// os::remove_env("TEMPORARY").unwrap();
+// println("{}", os::env("TEMPORARY").is_none()); // true
+// ```
+pub fn remove_env(name: str) ! {
+    check_name(name)!;
+    var table = environment();
+    match find_env(table, name) {
+        Some(at) => {
+            (*table).remove(at);
+        }
+        None => {}
+    }
+}
+
+// Pauses the program for `ms` milliseconds.
+//
+// A signal that arrives meanwhile does not cut it short.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// var clock = os::Clock.now();
+// os::sleep(20);
+// println("{}", clock.elapsed() >= 20_000_000); // true
+// ```
+pub fn sleep(ms: u64) {
+    var time: Array<i64, 2> = [(ms / 1000) as i64, ((ms % 1000) * 1000000) as i64];
+    while syscall2(SYS_NANOSLEEP, (&time[0]) as i64, (&time[0]) as i64) == -EINTR {}
+}
+
+fn clock(id: i64) Array<i64, 2> {
+    var time: Array<i64, 2> = [0; 2];
+    syscall2(SYS_CLOCK_GETTIME, id, (&time[0]) as i64);
+    return time;
+}
+
+// A moment, to measure how much time passes after it.
+//
+// The clock only moves forward, at nanosecond precision, and does not
+// follow the time of day, so setting the system clock does not disturb it.
+// `time` gives the time of day.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// var start = os::Clock.now();
 // var total = 0;
 // for i in 0..1000 {
 //     total += i;
 // }
-// var elapsed = os::clock_ns().unwrap() - start;
-// println("{} {}", total, elapsed >= 0); // 499500 true
+// println("{} {}", total, start.elapsed() < 1_000_000_000); // 499500 true
 // ```
-pub fn clock_ns() i64! {
-    var ts: Array<i64, 2> = [0; 2];
-    sys_result(syscall2(SYS_CLOCK_GETTIME, 1, (&ts[0]) as i64))!;
-    return Ok(ts[0] * 1000000000 + ts[1]);
+pub struct Clock {
+    ns: u64,
+
+    // Returns this moment.
+    pub fn now() Clock {
+        var time = clock(1);
+        return Clock { ns: (time[0] * 1000000000 + time[1]) as u64 };
+    }
+
+    // Returns the nanoseconds since this moment.
+    pub fn elapsed(self) u64 {
+        return Clock.now().ns - self.ns;
+    }
 }
 
 // Returns the time of day as whole seconds since 1970-01-01 00:00 UTC.
 //
-// It follows the system clock, which may be set back or forward; use
-// `clock_ns` to measure durations.
-//
-// # Errors
-//
-// The errno; it does not fail on Linux.
+// It follows the system clock, which may be set back or forward; `Clock`
+// measures durations.
 //
 // # Examples
 //
 // ```zeru
 // import std.os;
 //
-// var now = os::time().unwrap();
-// println("{}", now / 86400 > 20000); // true
+// println("{}", os::time() / 86400 > 20000); // true
 // ```
-pub fn time() i64! {
-    var ts: Array<i64, 2> = [0; 2];
-    sys_result(syscall2(SYS_CLOCK_GETTIME, 0, (&ts[0]) as i64))!;
-    return Ok(ts[0]);
+pub fn time() i64 {
+    return clock(0)[0];
 }
 
-// Writes the name of the machine to `buf` and returns 0.
+// Returns the id of this process.
+pub fn pid() u32 {
+    return syscall1(SYS_GETPID, 0) as u32;
+}
+
+// Returns the id of the process that started this one.
+pub fn parent_pid() u32 {
+    return syscall1(SYS_GETPPID, 0) as u32;
+}
+
+// Returns the id of the user running the program, 0 for root.
+pub fn uid() u32 {
+    return syscall1(SYS_GETUID, 0) as u32;
+}
+
+// Returns the id of the group running the program.
+pub fn gid() u32 {
+    return syscall1(SYS_GETGID, 0) as u32;
+}
+
+// Returns the program's standard input, to read a line or a part at a time.
 //
-// `buf` gets the name and a closing NUL, cut to `size - 1` bytes when
-// longer. 65 bytes fit any host name. A `size` of 0 writes nothing.
-//
-// # Errors
-//
-// The errno; it does not fail on Linux.
+// What a user types arrives a line at a time; what another program or a
+// file feeds it arrives as written. `read_stdin` reads all of it at once.
 //
 // # Examples
 //
 // ```zeru
 // import std.os;
 //
-// var buf: Array<u8, 65> = [0; 65];
-// os::hostname(&buf[0], 65).unwrap();
-// println("{}", buf[0] != 0); // true
+// var input = os::stdin();
+// var lines = 0;
+// while input.read_line().unwrap().is_some() {
+//     lines += 1;
+// }
+// println("{}", lines); // 0
 // ```
-pub fn hostname(buf: *u8, size: usize) i64! {
-    if size == 0 { return Ok(0); }
-    var utsname: Array<u8, 390> = [0; 390];
-    sys_result(syscall1(SYS_UNAME, (&utsname[0]) as i64))!;
-    var i: usize = 0;
-    while i < 64 && i < size - 1 {
-        var src: *u8 = &utsname[65 + i];
-        if *src == 0 { break; }
-        var dst: *u8 = buf + i;
-        *dst = *src;
-        i += 1;
+pub fn stdin() fs::File {
+    return fs::File { fd: 0, buffer: Vec.new(), start: 0 };
+}
+
+// Reads all of the standard input, until it ends.
+//
+// # Errors
+//
+// The errno: 9 (EBADF) when there is no standard input.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// var text = os::read_stdin().unwrap();
+// println("{}", text.lines().len()); // 0
+// ```
+pub fn read_stdin() String! {
+    var input = stdin();
+    var text = String.new();
+    while input.read(&var text, 65536)! > 0 {}
+    return Ok(text);
+}
+
+// `text` and a closing NUL, as a syscall takes it.
+fn c_string(text: str) String {
+    var out = String.from(text);
+    out.push(0);
+    return out;
+}
+
+// The file `program` names: itself when it holds a "/", else the first
+// one of that name in the directories of $PATH that may be run.
+fn locate(program: str) String! {
+    for byte in program {
+        if byte == '/' {
+            return Ok(String.from(program));
+        }
     }
-    var term: *u8 = buf + i;
-    *term = 0;
-    return Ok(0);
+    var path = env("PATH");
+    if path.is_none() {
+        path = String.from("/usr/local/bin:/usr/bin:/bin");
+    }
+    var dirs = path.unwrap();
+    for dir in dirs.split(":") {
+        var full = String.from(dir);
+        full.push('/');
+        full.push_str(program);
+        var c = c_string(full);
+        if syscall2(SYS_ACCESS, (&c[0]) as i64, 1) == 0 {
+            return Ok(full);
+        }
+    }
+    return Err(2);
+}
+
+// The NUL-terminated copies of `texts` packed in one String, and the
+// addresses of each, then a null one, as execve takes them.
+fn c_list(texts: &Vec<str>, packed: &var String) Vec<u64> {
+    var starts: Vec<usize> = Vec.new();
+    for text in texts {
+        starts.push(packed.len());
+        packed.push_str(text);
+        packed.push(0);
+    }
+    var list: Vec<u64> = Vec.new();
+    for at in starts {
+        list.push((&packed[at]) as u64);
+    }
+    list.push(0);
+    return list;
+}
+
+// Start the file `path` with `args`, its standard output going to `out`
+// and its error output to `err` unless they are -1; its pid.
+fn spawn(path: str, args: Vec<str>, out: i32, err: i32) i64! {
+    var argv_texts: Vec<str> = [path];
+    for arg in args {
+        argv_texts.push(arg);
+    }
+    var table = environment();
+    var env_texts: Vec<str> = Vec.new();
+    for entry in *table {
+        env_texts.push(entry);
+    }
+    var argv_packed = String.new();
+    var env_packed = String.new();
+    var argv = c_list(&argv_texts, &var argv_packed);
+    var envp = c_list(&env_texts, &var env_packed);
+    __zeru_flush();
+    var pid = sys_result(syscall1(SYS_FORK, 0))!;
+    if pid == 0 {
+        if out >= 0 {
+            syscall2(SYS_DUP2, out as i64, 1);
+        }
+        if err >= 0 {
+            syscall2(SYS_DUP2, err as i64, 2);
+        }
+        syscall3(SYS_EXECVE, argv[0] as i64, (&argv[0]) as i64, (&envp[0]) as i64);
+        syscall1(SYS_EXIT, 127);
+    }
+    return Ok(pid);
+}
+
+// Wait for the process `pid` to end; its exit code, or 128 and the signal
+// that ended it.
+fn wait(pid: i64) i32! {
+    var status: i32 = 0;
+    while true {
+        var r = syscall5(SYS_WAIT4, pid, (&status) as i64, 0, 0, 0);
+        if r != -EINTR {
+            sys_result(r)!;
+            break;
+        }
+    }
+    if status & 127 == 0 {
+        return Ok((status >> 8) & 255);
+    }
+    return Ok(128 + (status & 127));
+}
+
+// Runs `program` with `args`, waits for it to end and returns its exit code.
+//
+// A `program` without "/" is looked up in the directories of $PATH. It
+// shares the terminal and gets the environment, so it reads and writes as
+// it would when run from a shell. A program ended by a signal gives 128
+// and the signal's number.
+//
+// # Errors
+//
+// 2 (ENOENT) when no such program is found.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// println("{}", os::run("true", []).unwrap()); // 0
+// println("{}", os::run("sh", ["-c", "exit 3"]).unwrap()); // 3
+// println("{}", os::run("no-such-program", []).unwrap_err()); // 2
+// ```
+pub fn run(program: str, args: Vec<str>) i32! {
+    var path = locate(program)!;
+    var pid = spawn(path, args, -1, -1)!;
+    return wait(pid);
+}
+
+// What a program `output` ran wrote, and the code it ended with.
+pub struct Output {
+    code: i32,
+    stdout: String,
+    stderr: String,
+}
+
+// Runs `program` with `args`, waits for it to end and returns what it
+// wrote and its exit code.
+//
+// It works as `run`, but keeps what the program writes instead of showing
+// it.
+//
+// # Errors
+//
+// 2 (ENOENT) when no such program is found.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// var listing = os::output("echo", ["hello", "there"]).unwrap();
+// println("{} {}", listing.stdout.trim(), listing.code); // hello there 0
+// var failed = os::output("sh", ["-c", "echo oops >&2; exit 1"]).unwrap();
+// println("{} {}", failed.stderr.trim(), failed.code); // oops 1
+// ```
+pub fn output(program: str, args: Vec<str>) Output! {
+    var path = locate(program)!;
+    var fds: Array<i32, 4> = [0; 4];
+    sys_result(syscall2(SYS_PIPE2, (&fds[0]) as i64, O_CLOEXEC))!;
+    var out = fs::File { fd: fds[0] as i64, buffer: Vec.new(), start: 0 };
+    var pid: i64 = 0;
+    {
+        var out_end = fs::File { fd: fds[1] as i64, buffer: Vec.new(), start: 0 };
+        sys_result(syscall2(SYS_PIPE2, (&fds[2]) as i64, O_CLOEXEC))!;
+        var err_end = fs::File { fd: fds[3] as i64, buffer: Vec.new(), start: 0 };
+        pid = spawn(path, args, fds[1], fds[3])!;
+    }
+    var err = fs::File { fd: fds[2] as i64, buffer: Vec.new(), start: 0 };
+    var result = Output { code: 0, stdout: String.new(), stderr: String.new() };
+    var polls: Array<i32, 4> = [fds[0], 1, fds[2], 1];
+    var open = 2;
+    while open > 0 {
+        var r = syscall3(SYS_POLL, (&polls[0]) as i64, 2, -1);
+        if r == -EINTR {
+            continue;
+        }
+        sys_result(r)!;
+        if polls[0] >= 0 && polls[1] >> 16 != 0 && out.read(&var result.stdout, 65536)! == 0 {
+            polls[0] = -1;
+            open -= 1;
+        }
+        if polls[2] >= 0 && polls[3] >> 16 != 0 && err.read(&var result.stderr, 65536)! == 0 {
+            polls[2] = -1;
+            open -= 1;
+        }
+        polls[1] = 1;
+        polls[3] = 1;
+    }
+    result.code = wait(pid)!;
+    return Ok(result);
+}
+
+// Sends `signal`, as `SIGTERM`, to the process `pid`.
+//
+// # Errors
+//
+// The errno: 3 (ESRCH) when there is no such process, 1 (EPERM) when it is
+// not yours.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// println("{}", os::kill(4000000, os::SIGTERM).unwrap_err()); // 3
+// ```
+pub fn kill(pid: u32, signal: i32) ! {
+    sys_result(syscall2(SYS_KILL, pid as i64, signal as i64))!;
+}
+
+// Returns a random number from the kernel, any of the 2^64 equally likely.
+//
+// The numbers cannot be predicted, so they are right for keys and tokens as
+// well as games.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// println("{}", os::random() != os::random()); // true
+// ```
+pub fn random() u64 {
+    var value: u64 = 0;
+    while syscall3(SYS_GETRANDOM, (&value) as i64, 8, 0) != 8 {}
+    return value;
+}
+
+// Returns a random number from `first` to `last`, both included, each
+// equally likely.
+//
+// Expects `first <= last`.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// var die = os::random_range(1, 6);
+// println("{}", die >= 1 && die <= 6); // true
+// ```
+pub fn random_range(first: u64, last: u64) u64 {
+    var span = last - first;
+    if span == 18446744073709551615 {
+        return random();
+    }
+    var count = span + 1;
+    var zero: u64 = 0;
+    var unfair = (zero -% count) % count;
+    while true {
+        var value = random();
+        if value >= unfair {
+            return first + value % count;
+        }
+    }
+    return first;
+}
+
+// Returns the directory for temporary files: $TMPDIR when set, else
+// "/tmp".
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// os::remove_env("TMPDIR").unwrap();
+// println("{}", os::temp_dir()); // /tmp
+// ```
+pub fn temp_dir() String {
+    var dir = env("TMPDIR");
+    if dir.is_some() {
+        var path = dir.unwrap();
+        if path.len() > 0 {
+            return path;
+        }
+    }
+    return String.from("/tmp");
 }
