@@ -790,39 +790,114 @@ fn __zeru_order(a: u64, ten: i64, b: u64, two: i64) i32 {
     return left.cmp(right);
 }
 
-// `v.sort()`: `v` in ascending order, by heapsort.
+// `v.sort()`: `v` in ascending order, by introsort: quicksort around a
+// median of three, insertion sort for short runs, and heapsort for a run
+// that keeps splitting badly, so it never takes more than n log n steps.
 fn __zeru_vec_sort<T: Ord>(v: &var Vec<T>) {
-    var start = v.len() / 2;
-    while start > 0 {
-        start -= 1;
-        __zeru_sift(v, start, v.len());
+    var depth: usize = 0;
+    var n = v.len();
+    while n > 1 {
+        depth += 2;
+        n /= 2;
     }
-    var end = v.len();
-    while end > 1 {
-        end -= 1;
-        var top = v[0];
-        v[0] = v[end];
-        v[end] = top;
-        __zeru_sift(v, 0, end);
+    __zeru_quick(v, 0, v.len(), depth);
+}
+
+// Sort `v[low..high]`, falling back on heapsort once `depth` splits are spent.
+fn __zeru_quick<T: Ord>(v: &var Vec<T>, low: usize, high: usize, depth: usize) {
+    var lo = low;
+    var hi = high;
+    var left = depth;
+    while hi - lo > 16 {
+        if left == 0 {
+            __zeru_heap(v, lo, hi);
+            return;
+        }
+        left -= 1;
+        var mid = lo + (hi - lo) / 2;
+        if v[mid] < v[lo] {
+            __zeru_exchange(v, mid, lo);
+        }
+        if v[hi - 1] < v[lo] {
+            __zeru_exchange(v, hi - 1, lo);
+        }
+        if v[hi - 1] < v[mid] {
+            __zeru_exchange(v, hi - 1, mid);
+        }
+        var pivot = v[mid];
+        var i = lo;
+        var j = hi - 1;
+        while true {
+            while v[i] < pivot {
+                i += 1;
+            }
+            while pivot < v[j] {
+                j -= 1;
+            }
+            if i >= j {
+                break;
+            }
+            __zeru_exchange(v, i, j);
+            i += 1;
+            j -= 1;
+        }
+        if j + 1 - lo < hi - j - 1 {
+            __zeru_quick(v, lo, j + 1, left);
+            lo = j + 1;
+        } else {
+            __zeru_quick(v, j + 1, hi, left);
+            hi = j + 1;
+        }
+    }
+    for k in lo + 1..hi {
+        var at = k;
+        var held = v[at];
+        while at > lo && held < v[at - 1] {
+            v[at] = v[at - 1];
+            at -= 1;
+        }
+        v[at] = held;
     }
 }
 
-// Sink `v[at]` below the larger of its children, in the heap `v[..end]`.
-fn __zeru_sift<T: Ord>(v: &var Vec<T>, root: usize, end: usize) {
+// Heapsort `v[low..high]`.
+fn __zeru_heap<T: Ord>(v: &var Vec<T>, low: usize, high: usize) {
+    var count = high - low;
+    var start = count / 2;
+    while start > 0 {
+        start -= 1;
+        __zeru_sift(v, low, start, count);
+    }
+    var end = count;
+    while end > 1 {
+        end -= 1;
+        __zeru_exchange(v, low, low + end);
+        __zeru_sift(v, low, 0, end);
+    }
+}
+
+// Sink element `root` below the larger of its children, in the heap of
+// `end` elements that starts at `v[base]`.
+fn __zeru_sift<T: Ord>(v: &var Vec<T>, base: usize, root: usize, end: usize) {
     var at = root;
     while 2 * at + 1 < end {
         var child = 2 * at + 1;
-        if child + 1 < end && v[child] < v[child + 1] {
+        if child + 1 < end && v[base + child] < v[base + child + 1] {
             child += 1;
         }
-        if v[at] >= v[child] {
+        if v[base + at] >= v[base + child] {
             return;
         }
-        var held = v[at];
-        v[at] = v[child];
-        v[child] = held;
+        __zeru_exchange(v, base + at, base + child);
         at = child;
     }
+}
+
+// Exchange `v[i]` and `v[j]`, plain data that copies.
+fn __zeru_exchange<T>(v: &var Vec<T>, i: usize, j: usize) {
+    var held = v[i];
+    v[i] = v[j];
+    v[j] = held;
 }
 
 // `v.swap(i, j)`: exchange two elements. Their bytes trade places, so it
