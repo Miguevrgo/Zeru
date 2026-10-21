@@ -17,6 +17,8 @@ fn main() {
     println("{} {} {} {}", v.len(), last.unwrap(), removed, v[0]);
     v.sort();
     println("{} {} {} {}", v[0], v.sum(), v.max().unwrap(), v.contains(8));
+    var tail = v[1..];
+    println("{} {}", tail.len(), tail[0]);
     v.swap(0, 2);
     v.clear();
     println("{}", v.is_empty());

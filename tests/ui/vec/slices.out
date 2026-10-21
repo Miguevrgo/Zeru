@@ -1,0 +1,11 @@
+status: exit 0
+-- stdout
+L 23
+R 4
+L 105
+[zeru] [lang] [zeru lang] []
+3 2 12
+2 40
+0
+cd
+ll

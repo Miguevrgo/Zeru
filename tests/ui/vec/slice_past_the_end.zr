@@ -1,0 +1,6 @@
+//@ checked
+fn main() {
+    var s = "abc";
+    var n: usize = 5;
+    println("{}", s[1..n]);
+}

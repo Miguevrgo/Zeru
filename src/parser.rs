@@ -1138,12 +1138,23 @@ impl Parser {
 
         let kind = match operator {
             Token::LBracket => {
-                let index =
-                    self.allowing_struct_literals(|p| p.parse_expression(Precedence::Lowest))?;
-                self.expect(&Token::RBracket)?;
-                ExpressionKind::Index {
-                    left,
-                    index: Box::new(index),
+                let bound = |p: &mut Self| match p.at(&Token::DotDot) || p.at(&Token::RBracket) {
+                    true => Some(None),
+                    false => p
+                        .allowing_struct_literals(|p| p.parse_expression(Precedence::Lowest))
+                        .map(|e| Some(Box::new(e))),
+                };
+                let start = bound(self)?;
+                if self.eat(&Token::DotDot) {
+                    let end = bound(self)?;
+                    self.expect(&Token::RBracket)?;
+                    ExpressionKind::Slice { left, start, end }
+                } else {
+                    let Some(index) = start else {
+                        return self.error_here("Expected an index or a range");
+                    };
+                    self.expect(&Token::RBracket)?;
+                    ExpressionKind::Index { left, index }
                 }
             }
             Token::LParen => {

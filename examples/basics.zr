@@ -45,6 +45,7 @@ fn main() {
     built.push_str("ru");
     built.push('!');
     println("{} has {} bytes and starts with z: {}", built, built.len(), built.starts_with("z"));
+    println("{} {} {}", built[..2], built[2..4], "L23"[1..].parse_int().unwrap());
 
     var byte: u8 = 250;
     byte = byte +% 10;

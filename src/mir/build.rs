@@ -1040,6 +1040,7 @@ impl<'a> Builder<'a> {
                     Builtin::VecShrinkToFit => {
                         return self.push(StatementKind::VecShrinkToFit(held));
                     }
+                    Builtin::Slice => self.slice(held, args),
                     Builtin::Flush
                     | Builtin::CopyBytes
                     | Builtin::VecNew
@@ -1050,6 +1051,56 @@ impl<'a> Builder<'a> {
         if let Some(dest) = dest {
             self.assign(dest, rvalue);
         }
+    }
+
+    /// The elements of `held` from `args[1]` up to `args[2]`, or to its end
+    /// when there is none, checked to lie within it.
+    fn slice(&mut self, held: Place, args: &[Expr]) -> Rvalue {
+        let len = self.temp(Types::USIZE);
+        self.assign(Place::local(len), Rvalue::Len(held.clone()));
+        let from = self.as_temp(&args[1]);
+        let to = match args.get(2) {
+            Some(end) => self.as_temp(end),
+            None => len,
+        };
+        if self.checks {
+            let ordered = self.binary(
+                BinOp::Le,
+                Operand::Copy(Place::local(from)),
+                Operand::Copy(Place::local(to)),
+            );
+            self.assert(ordered, Panic::Bounds);
+            let inside = self.binary(
+                BinOp::Le,
+                Operand::Copy(Place::local(to)),
+                Operand::Copy(Place::local(len)),
+            );
+            self.assert(inside, Panic::Bounds);
+        }
+        let first = held.project(Projection::Index(from));
+        let pointer = self
+            .program
+            .types
+            .intern(TyKind::Ref(self.place_ty(&first)));
+        let data = self.temp(pointer);
+        self.assign(Place::local(data), Rvalue::AddressOf(first));
+        let count = self.temp(Types::USIZE);
+        self.assign(
+            Place::local(count),
+            Rvalue::Binary {
+                op: BinOp::Sub,
+                left: Operand::Copy(Place::local(to)),
+                right: Operand::Copy(Place::local(from)),
+                checked: false,
+            },
+        );
+        Rvalue::Aggregate(
+            Aggregate::Tuple,
+            vec![
+                Operand::Move(Place::local(data)),
+                Operand::Move(Place::local(count)),
+            ],
+        )
     }
 
     /// `unwrap()` or `unwrap_err()` of the `T?` or `T!` at `held`, checked.

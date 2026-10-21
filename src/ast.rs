@@ -159,6 +159,11 @@ pub enum ExpressionKind {
         left: Box<Expression>,
         index: Box<Expression>,
     },
+    Slice {
+        left: Box<Expression>,
+        start: Option<Box<Expression>>,
+        end: Option<Box<Expression>>,
+    },
     Cast {
         left: Box<Expression>,
         target: TypeSpec,
@@ -231,6 +236,7 @@ impl Drop for Expression {
         let mut kind = std::mem::replace(&mut self.kind, E::None);
         while let E::Infix { left, .. }
         | E::Index { left, .. }
+        | E::Slice { left, .. }
         | E::Cast { left, .. }
         | E::Call { function: left, .. }
         | E::Get { object: left, .. }

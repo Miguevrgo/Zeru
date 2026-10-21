@@ -1,0 +1,3 @@
+status: signal 6
+-- stderr
+panic at tests/ui/vec/slice_past_the_end.zr:5:19: index out of bounds

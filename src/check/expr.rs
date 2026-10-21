@@ -7,7 +7,7 @@ use crate::ast::StatementKind;
 use crate::ast::{Expression, ExpressionKind, TypeSpec};
 use crate::errors::Span;
 use crate::items::{DefId, ItemKind, ModuleId};
-use crate::tir::{Asm, BinOp, Expr, ExprKind, Place, UnOp};
+use crate::tir::{Asm, BinOp, Builtin, Expr, ExprKind, Place, UnOp};
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
@@ -53,6 +53,53 @@ impl FnCx<'_, '_> {
         let view = self.cx.instance(def, Vec::new(), span);
         let address = self.address(place, Types::STRING, false, span);
         self.mk(ExprKind::Call(view, vec![address]), Types::STR, span)
+    }
+
+    /// `left[start..end]`: the elements of an array, Vec or slice, or the
+    /// bytes of a str or String, from `start`, 0 if not written, up to `end`,
+    /// the length if not written, sharing their memory.
+    fn slice(
+        &mut self,
+        left: &Expression,
+        start: &Option<Box<Expression>>,
+        end: &Option<Box<Expression>>,
+        span: Span,
+    ) -> Expr {
+        let (place, ty) = self.place(left);
+        let (place, ty) = self.through_ref(place, ty, left.span);
+        let elem = match *self.cx.types.kind(ty) {
+            TyKind::Array(elem, _) | TyKind::Vec(elem) | TyKind::Slice(elem) => elem,
+            TyKind::Error => return self.error_expr(span),
+            _ => {
+                let shown = self.ty(ty);
+                self.error(format!("Cannot slice {shown}"), span);
+                return self.error_expr(span);
+            }
+        };
+        if matches!(place, Place::Temp(_)) && !matches!(self.cx.types.kind(ty), TyKind::Slice(_)) {
+            let shown = self.ty(ty);
+            self.error(
+                format!("This {shown} is freed at the end of the statement, so a slice of it cannot outlive it; store it in a variable first"),
+                left.span,
+            );
+            return self.error_expr(span);
+        }
+        let bound = |this: &mut Self, bound: &Expression| {
+            let value = this.value(bound, Some(Types::USIZE));
+            this.coerce_or(value, Types::USIZE, bound.span, |want, got| {
+                format!("A slice bound must be {want}, got {got}")
+            })
+        };
+        let from = match start {
+            Some(start) => bound(self, start),
+            None => self.mk(ExprKind::Int(0), Types::USIZE, span),
+        };
+        let mut args = vec![self.address(place, ty, false, left.span), from];
+        if let Some(end) = end {
+            args.push(bound(self, end));
+        }
+        let slice = self.cx.types.intern(TyKind::Slice(elem));
+        self.mk(ExprKind::Builtin(Builtin::Slice, args), slice, span)
     }
 
     /// `Ok()` of the `!` type `ret`.
@@ -129,6 +176,7 @@ impl FnCx<'_, '_> {
                 }
             },
             ExpressionKind::Identifier(name) => self.identifier(name, span),
+            ExpressionKind::Slice { left, start, end } => self.slice(left, start, end, span),
             ExpressionKind::Get { .. }
             | ExpressionKind::Index { .. }
             | ExpressionKind::Dereference(_) => {

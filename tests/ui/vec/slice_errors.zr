@@ -1,0 +1,9 @@
+fn make() Vec<i32> {
+    return [1, 2];
+}
+fn main() {
+    var x = make()[1..];
+    var n = 5;
+    var y = n[1..];
+    var z = "abc"[true..];
+}

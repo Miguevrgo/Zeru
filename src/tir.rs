@@ -326,6 +326,7 @@ pub enum Builtin {
     UnwrapErr,
     Flush,
     CopyBytes,
+    Slice,
 }
 
 /// One arm of a `match`; `span` is its pattern, where its bindings borrow

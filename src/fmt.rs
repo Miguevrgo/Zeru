@@ -585,7 +585,9 @@ impl<'s> Printer<'s> {
                     .collect();
                 seq(vec![text(format!("{name} ")), list("{", fields, "}", true)])
             }
-            E::Call { .. } | E::Get { .. } | E::Index { .. } | E::Try { .. } => self.chain(expr),
+            E::Call { .. } | E::Get { .. } | E::Index { .. } | E::Slice { .. } | E::Try { .. } => {
+                self.chain(expr)
+            }
             E::ArrayLiteral(items) => {
                 let items = items.iter().map(|item| self.expr(item)).collect();
                 list("[", items, "]", false)
@@ -665,7 +667,7 @@ impl<'s> Printer<'s> {
             let inner = match &root.kind {
                 E::Call { function, .. } => function,
                 E::Get { object, .. } => object,
-                E::Index { left, .. } => left,
+                E::Index { left, .. } | E::Slice { left, .. } => left,
                 E::Try { value, .. } => value,
                 _ => break,
             };
@@ -698,6 +700,14 @@ impl<'s> Printer<'s> {
                     seq(vec![text(type_args), list("(", args, ")", false)])
                 }
                 E::Index { index, .. } => seq(vec![text("["), self.expr(index), text("]")]),
+                E::Slice { start, end, .. } => {
+                    let mut parts = vec![text("[")];
+                    parts.extend(start.iter().map(|start| self.expr(start)));
+                    parts.push(text(".."));
+                    parts.extend(end.iter().map(|end| self.expr(end)));
+                    parts.push(text("]"));
+                    seq(parts)
+                }
                 E::Try { operator, .. } => text(operator.to_string()),
                 _ => unreachable!(),
             });
