@@ -166,10 +166,9 @@ impl<'ctx> Lower<'_, 'ctx> {
 
     /// The element type of an array, a Vec or a slice.
     pub(super) fn element_ty(&self, seq: Ty) -> Ty {
-        match self.types().kind(seq) {
-            TyKind::Array(elem, _) | TyKind::Vec(elem) | TyKind::Slice(elem) => *elem,
-            _ => unreachable!("{} has no elements", self.types().show(seq)),
-        }
+        self.types()
+            .elem(seq)
+            .unwrap_or_else(|| unreachable!("{} has no elements", self.types().show(seq)))
     }
 
     /// The address of element `index` (a usize) of the sequence at `base`,

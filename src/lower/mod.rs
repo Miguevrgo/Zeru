@@ -159,7 +159,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         let ptr = self.ptr_type().into();
         let ret = body.locals[0].ty;
         let mut params: Vec<BasicMetadataTypeEnum> = Vec::new();
-        if self.in_memory(ret) && !body.exported {
+        if self.in_memory(ret) {
             params.push(ptr);
         }
         for decl in &body.locals[1..=body.arg_count] {
@@ -167,9 +167,6 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 true => self.llvm_ty(decl.ty).into(),
                 false => ptr,
             });
-        }
-        if body.exported {
-            return self.context.i32_type().fn_type(&params, false);
         }
         match ret {
             ret if ret == Types::VOID || self.in_memory(ret) => {
@@ -188,12 +185,12 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     /// runtime's are global.
     fn declare(&mut self, body: &Body) -> FunctionValue<'ctx> {
         let fn_type = self.signature(body);
-        let linkage = (!body.exported).then_some(Linkage::Internal);
         let symbol = match runtime::runtime_symbol(&body.symbol) {
             true => format!("{}.zeru", body.symbol),
             false => body.symbol.clone(),
         };
-        self.module.add_function(&symbol, fn_type, linkage)
+        self.module
+            .add_function(&symbol, fn_type, Some(Linkage::Internal))
     }
 
     fn define(&mut self, id: FnId) {
@@ -209,7 +206,8 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         let ssa = self.ssa_locals(body);
         let mut args = value.get_param_iter();
         let ret = body.locals[0].ty;
-        let sret = (self.in_memory(ret) && !body.exported)
+        let sret = self
+            .in_memory(ret)
             .then(|| args.next().unwrap().into_pointer_value());
         self.locals = Vec::with_capacity(body.locals.len());
         for (at, decl) in body.locals.iter().enumerate() {
@@ -369,10 +367,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             TerminatorKind::Return => {
                 let body = self.body();
                 let ret = body.locals[0].ty;
-                if body.exported {
-                    let zero = self.context.i32_type().const_zero();
-                    self.builder.build_return(Some(&zero)).unwrap();
-                } else if ret == Types::VOID || self.in_memory(ret) {
+                if ret == Types::VOID || self.in_memory(ret) {
                     self.builder.build_return(None).unwrap();
                 } else {
                     let value = self.read(&Place::local(RETURN)).imm();
@@ -408,11 +403,11 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             } => {
                 let holds = self.operand(cond).imm().into_int_value();
                 let panic = self.panic_block(match panic {
-                    Panic::Null => "null",
-                    Panic::Bounds => "bounds",
-                    Panic::UnwrapNone => "unwrap_none",
-                    Panic::Unwrap => "unwrap",
-                    Panic::UnwrapErr => "unwrap_err",
+                    Panic::Null => "null pointer dereference",
+                    Panic::Bounds => "index out of bounds",
+                    Panic::UnwrapNone => "unwrap on None",
+                    Panic::Unwrap => "unwrap on Err",
+                    Panic::UnwrapErr => "unwrap_err on Ok",
                 });
                 self.builder
                     .build_conditional_branch(holds, self.block_of(*target), panic)

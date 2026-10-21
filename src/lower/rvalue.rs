@@ -77,7 +77,6 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
 
     fn constant(&mut self, constant: &Constant) -> Val<'ctx> {
         let llvm = match &constant.value {
-            ConstValue::Void => return Val::Unit,
             ConstValue::Str(_) => {
                 let slot = self.alloca(constant.ty, "str");
                 self.build_str(constant, slot);

@@ -39,7 +39,7 @@ pub struct BinaryHeap<T: Ord> {
             if self.data[idx] <= self.data[parent] {
                 break;
             }
-            self.swap(idx, parent);
+            __zeru_exchange(&var self.data, idx, parent);
             idx = parent;
         }
     }
@@ -60,33 +60,11 @@ pub struct BinaryHeap<T: Ord> {
     // ```
     pub fn pop(var self) T? {
         if self.data.len() > 1 {
-            self.swap(0, self.data.len() - 1);
+            __zeru_exchange(&var self.data, 0, self.data.len() - 1);
         }
-        var max_val = self.data.pop();
-        var idx: usize = 0;
-        while true {
-            var left = 2 * idx + 1;
-            var right = 2 * idx + 2;
-            var largest = idx;
-            if left < self.data.len() && self.data[left] > self.data[largest] {
-                largest = left;
-            }
-            if right < self.data.len() && self.data[right] > self.data[largest] {
-                largest = right;
-            }
-            if largest == idx {
-                break;
-            }
-            self.swap(idx, largest);
-            idx = largest;
-        }
-        return max_val;
-    }
-
-    fn swap(var self, a: usize, b: usize) {
-        var tmp = self.data[a];
-        self.data[a] = self.data[b];
-        self.data[b] = tmp;
+        var largest = self.data.pop();
+        __zeru_sift(&var self.data, 0, 0, self.data.len());
+        return largest;
     }
 
     // Returns a reference to the largest value, or None when the heap is empty.

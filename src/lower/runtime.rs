@@ -21,8 +21,6 @@ use crate::ty::{Ty, TyKind, Types};
 
 use super::{Lower, Val};
 
-pub(super) const FLUSH_FN: &str = "__zeru_flush";
-
 /// The entry point and the functions LLVM calls by name, in assembly.
 const START: &str = include_str!("start.s");
 
@@ -109,25 +107,13 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
 
     /// A block that panics with the message `label` names, at the span
     /// being lowered.
-    pub(super) fn panic_block(&mut self, label: &str) -> BasicBlock<'ctx> {
-        let what = match label {
-            "null" => "null pointer dereference",
-            "bounds" => "index out of bounds",
-            "div" => "division by zero, or MIN / -1",
-            "shift" => "shift by the operand's width or more",
-            "overflow" => "arithmetic overflow",
-            "unwrap_none" => "unwrap on None",
-            "unwrap" => "unwrap on Err",
-            "unwrap_err" => "unwrap_err on Ok",
-            "float_cast" => "float out of range for the integer type",
-            other => other,
-        };
+    pub(super) fn panic_block(&mut self, what: &str) -> BasicBlock<'ctx> {
         let message = match self.sources.position(self.span) {
             Some((file, line, column)) => format!("panic at {file}:{line}:{column}: {what}\n"),
             None => format!("panic: {what}\n"),
         };
         let here = self.builder.get_insert_block().expect("inside a block");
-        let panic_bb = self.append(&format!("{label}_panic"));
+        let panic_bb = self.append("panic");
         let panic = self.panic_fn();
         self.builder.position_at_end(panic_bb);
         let text = self.const_bytes(message.as_bytes());
@@ -141,9 +127,9 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     }
 
     /// Panic when `condition` holds, then carry on in a fresh block.
-    fn trap_if(&mut self, condition: IntValue<'ctx>, label: &str) {
-        let panic_bb = self.panic_block(label);
-        let ok_bb = self.append(&format!("{label}_ok"));
+    fn trap_if(&mut self, condition: IntValue<'ctx>, what: &str) {
+        let panic_bb = self.panic_block(what);
+        let ok_bb = self.append("ok");
         self.builder
             .build_conditional_branch(condition, panic_bb, ok_bb)
             .unwrap();
@@ -178,7 +164,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             let overflows = b.build_and(lhs_is_min, minus_one, "div_overflow").unwrap();
             invalid = b.build_or(invalid, overflows, "div_invalid").unwrap();
         }
-        self.trap_if(invalid, "div");
+        self.trap_if(invalid, "division by zero, or MIN / -1");
     }
 
     pub(super) fn check_shift(&mut self, amount: IntValue<'ctx>) {
@@ -188,7 +174,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             .builder
             .build_int_compare(IntPredicate::UGE, amount, width, "shift_wide")
             .unwrap();
-        self.trap_if(too_wide, "shift");
+        self.trap_if(too_wide, "shift by the operand's width or more");
     }
 
     /// Trap unless `value`, truncated, fits `int_type`. NaN never fits.
@@ -230,7 +216,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             )
             .unwrap();
         let outside = b.build_or(below, above, "outside").unwrap();
-        self.trap_if(outside, "float_cast");
+        self.trap_if(outside, "float out of range for the integer type");
     }
 
     /// `+`, `-` and `*` through LLVM's overflow intrinsics, trapping when one
@@ -266,7 +252,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             .build_extract_value(pair, 1, "overflowed")
             .unwrap()
             .into_int_value();
-        self.trap_if(overflowed, "overflow");
+        self.trap_if(overflowed, "arithmetic overflow");
         self.builder.build_extract_value(pair, 0, "value").unwrap()
     }
 
@@ -606,7 +592,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     pub(super) fn create_flush(&mut self) {
         let streams = self.streams.expect("streams come first");
         let function = self.module.add_function(
-            FLUSH_FN,
+            crate::tir::FLUSH_FN,
             self.context.void_type().fn_type(&[], false),
             Some(Linkage::Internal),
         );
@@ -620,10 +606,10 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     }
 
     /// `__zeru_start`, which `_start` in start.s calls with no libc under it:
-    /// `main`, then the flush, giving back `main`'s exit code.
+    /// `main`, then the flush, giving back the exit code 0.
     pub(super) fn create_start(&mut self) {
         self.module.set_inline_assembly(START);
-        let Some(main) = self.bodies.iter().position(|body| body.exported) else {
+        let Some(main) = self.bodies.iter().position(|body| body.symbol == "main") else {
             return;
         };
         let flush = self.flush.expect("the flush comes first");
@@ -632,11 +618,11 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             .module
             .add_function("__zeru_start", i32_type.fn_type(&[], false), None);
         self.in_helper(function, |this| {
-            let code = this
-                .call_fn(FnId(main as u32), &[])
-                .expect("main gives a code");
+            this.call_fn(FnId(main as u32), &[]);
             this.builder.build_call(flush, &[], "").unwrap();
-            this.builder.build_return(Some(&code)).unwrap();
+            this.builder
+                .build_return(Some(&i32_type.const_zero()))
+                .unwrap();
         });
     }
 

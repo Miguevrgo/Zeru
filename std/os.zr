@@ -29,21 +29,6 @@ pub const SIGKILL: i32 = 9;
 // default from a shell.
 pub const SIGTERM: i32 = 15;
 
-// `len` bytes at `data` as a str.
-fn as_str(data: *u8, len: usize) str {
-    var parts = (data, len);
-    return *((&parts) as *str);
-}
-
-// The NUL-terminated text at `text`, without its NUL.
-fn c_text(text: *u8) str {
-    var len: usize = 0;
-    while *(text + len) != 0 {
-        len += 1;
-    }
-    return as_str(text, len);
-}
-
 // The stack as the kernel handed it to the program: argc, the argv
 // pointers, a null one, then the environment's and another null one.
 fn stack() *i64 {
@@ -75,7 +60,7 @@ pub fn args() Vec<str> {
     var count = *stack as usize;
     var out: Vec<str> = Vec.with_capacity(count);
     for i in 1..count + 1 {
-        out.push(c_text(*(stack + i) as *u8));
+        out.push(__zeru_c_text(*(stack + i) as *u8));
     }
     return out;
 }
@@ -92,7 +77,7 @@ fn environment() *Vec<String> {
         var stack = stack();
         var entry = stack + *stack + 2;
         while *entry != 0 {
-            (*table).push(String.from(c_text(*entry as *u8)));
+            (*table).push(String.from(__zeru_c_text(*entry as *u8)));
             entry = entry + 1;
         }
     }

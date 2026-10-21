@@ -69,14 +69,13 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
         })
         .collect();
     let mut body_block = fx.block(body);
-    let is_main = fx.cx.is_main(def);
     if fx.cx.types.is_unit_result(ret) && !fx.diverges {
         let ok = fx.unit_ok(ret, span);
         body_block.stmts.push(tir::Stmt {
             kind: StmtKind::Return(Some(ok)),
             span,
         });
-    } else if ret != Types::VOID && !is_main && !fx.diverges {
+    } else if ret != Types::VOID && !fx.diverges {
         let at = body.last().map_or(span, |stmt| stmt.span);
         fx.cx.error(
             format!("Function '{name}' can finish without returning a value"),
@@ -105,7 +104,6 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
         locals,
         body: body_block,
         span,
-        exported: is_main,
     }
 }
 

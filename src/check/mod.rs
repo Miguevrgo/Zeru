@@ -840,13 +840,16 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// The prelude functions generated code calls on its own.
-    /// An instance of a function the prelude defines for the compiler's use.
-    pub(super) fn prelude_fn(&mut self, name: &str) -> FnId {
-        let def = self
-            .items
+    /// A function the prelude defines for the compiler's use.
+    pub(super) fn prelude_def(&self, name: &str) -> DefId {
+        self.items
             .lookup_value(ModuleId::PRELUDE, name)
-            .expect("the prelude defines it");
+            .expect("the prelude defines it")
+    }
+
+    /// An instance of the prelude's non-generic function `name`.
+    pub(super) fn prelude_fn(&mut self, name: &str) -> FnId {
+        let def = self.prelude_def(name);
         self.instance(def, Vec::new(), Span::default())
     }
 
@@ -889,8 +892,8 @@ fn generics_of(decl: &Statement) -> &[TypeParameter] {
     }
 }
 
-/// The program's entry point: `main` in the root file.
 impl Checker<'_> {
+    /// Whether `def` is the program's entry point: `main` in the root file.
     fn is_main(&self, def: DefId) -> bool {
         let item = self.items.item(def);
         item.owner.is_none() && item.module == ModuleId::ROOT && item.name == "main"

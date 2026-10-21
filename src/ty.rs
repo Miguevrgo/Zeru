@@ -199,6 +199,14 @@ impl Types {
         matches!(self.kind(ty), TyKind::Result(ok, _) if *self.kind(*ok) == TyKind::Tuple(Vec::new()))
     }
 
+    /// The element type of an array, a Vec or a slice.
+    pub fn elem(&self, ty: Ty) -> Option<Ty> {
+        match self.kind(ty) {
+            TyKind::Array(elem, _) | TyKind::Vec(elem) | TyKind::Slice(elem) => Some(*elem),
+            _ => None,
+        }
+    }
+
     pub fn as_int(&self, ty: Ty) -> Option<IntTy> {
         match self.kind(ty) {
             TyKind::Int(int) => Some(*int),
@@ -214,21 +222,28 @@ impl Types {
         self.as_int(ty).is_some() || self.is_float(ty)
     }
 
-    /// Whether `ty` has a part for which `leaf` holds.
-    pub fn has(&self, ty: Ty, leaf: &dyn Fn(&TyKind) -> bool) -> bool {
-        match self.kind(ty) {
-            TyKind::Adt(_, args) | TyKind::Tuple(args) => {
-                args.iter().any(|&arg| self.has(arg, leaf))
-            }
-            TyKind::Result(ok, err) => self.has(*ok, leaf) || self.has(*err, leaf),
+    /// The types written inside `ty`, its arguments, elements or pointee,
+    /// or None when it is a leaf.
+    fn args(&self, ty: Ty) -> Option<Vec<Ty>> {
+        Some(match self.kind(ty) {
+            TyKind::Adt(_, args) | TyKind::Tuple(args) => args.clone(),
+            TyKind::Result(ok, err) => vec![*ok, *err],
             TyKind::Array(inner, _)
             | TyKind::Vec(inner)
             | TyKind::Slice(inner)
             | TyKind::Ptr(inner)
             | TyKind::Ref(inner)
             | TyKind::RefMut(inner)
-            | TyKind::Optional(inner) => self.has(*inner, leaf),
-            kind => leaf(kind),
+            | TyKind::Optional(inner) => vec![*inner],
+            _ => return None,
+        })
+    }
+
+    /// Whether `ty` has a leaf for which `leaf` holds.
+    pub fn has(&self, ty: Ty, leaf: &dyn Fn(&TyKind) -> bool) -> bool {
+        match self.args(ty) {
+            Some(args) => args.into_iter().any(|arg| self.has(arg, leaf)),
+            None => leaf(self.kind(ty)),
         }
     }
 
@@ -257,19 +272,8 @@ impl Types {
             if count > size || level > depth {
                 return true;
             }
-            let inner = |t: &Ty| (*t, level + 1);
-            match self.kind(ty) {
-                TyKind::Adt(_, args) | TyKind::Tuple(args) => parts.extend(args.iter().map(inner)),
-                TyKind::Result(ok, err) => parts.extend([inner(ok), inner(err)]),
-                TyKind::Array(t, _)
-                | TyKind::Vec(t)
-                | TyKind::Slice(t)
-                | TyKind::Ptr(t)
-                | TyKind::Ref(t)
-                | TyKind::RefMut(t)
-                | TyKind::Optional(t) => parts.push(inner(t)),
-                _ => {}
-            }
+            let args = self.args(ty).unwrap_or_default();
+            parts.extend(args.into_iter().map(|arg| (arg, level + 1)));
         }
         false
     }

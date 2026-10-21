@@ -3,7 +3,7 @@
 
 use crate::ast::{Expression, ExpressionKind, TypeSpec, format_pieces};
 use crate::errors::Span;
-use crate::items::{DefId, ItemKind, ModuleId};
+use crate::items::{DefId, ItemKind};
 use crate::tir::{Arm, Builtin, Expr, ExprKind, Payload, Place};
 use crate::ty::{Ty, TyKind, Types};
 
@@ -16,7 +16,6 @@ use super::expr::is_number_literal;
 const PRINTS: &[&str] = &["print", "println", "eprint", "eprintln"];
 
 /// Writes out what the print streams hold; the compiler emits it.
-const FLUSH_FN: &str = "__zeru_flush";
 const COPY_FN: &str = "__zeru_copy_bytes";
 /// str methods, each the prelude's `__zeru_str_<name>` with the str first.
 const STR_METHODS: &[&str] = &[
@@ -101,7 +100,7 @@ impl FnCx<'_, '_> {
         if PRINTS.contains(&name) {
             return self.print(name, args, span);
         }
-        if name == FLUSH_FN && self.local(name).is_none() {
+        if name == crate::tir::FLUSH_FN && self.local(name).is_none() {
             return self.mk(
                 ExprKind::Builtin(Builtin::Flush, Vec::new()),
                 Types::VOID,
@@ -201,11 +200,7 @@ impl FnCx<'_, '_> {
                     return self.error_expr(span);
                 }
                 if name == "from" {
-                    let def = self
-                        .cx
-                        .items
-                        .lookup_value(ModuleId::PRELUDE, "__zeru_string_from")
-                        .expect("the prelude defines it");
+                    let def = self.cx.prelude_def("__zeru_string_from");
                     return self.call_def(def, Vec::new(), None, args, expected, span);
                 }
                 return self.vec_static(name, &[], args, Some(Types::STRING), span);
@@ -263,12 +258,7 @@ impl FnCx<'_, '_> {
             TyKind::Vec(elem) if elem == Types::U8 && STR_METHODS.contains(&name) => {
                 let text = self.mk(ExprKind::Read(place), ty, object.span);
                 let text = self.view(text);
-                let def = self
-                    .cx
-                    .items
-                    .lookup_value(ModuleId::PRELUDE, &format!("__zeru_str_{name}"))
-                    .expect("the prelude defines it");
-                self.call_def(def, Vec::new(), Some(text), args, expected, span)
+                self.str_method(text, name, args, expected, span)
             }
             TyKind::Vec(elem) => {
                 let mutable = VEC_MUTATORS.contains(&name);
@@ -281,12 +271,8 @@ impl FnCx<'_, '_> {
                     self.error(format!("push_str() needs a String, not {shown}"), span);
                     return self.error_expr(span);
                 }
-                if VEC_STD_METHODS.contains(&name)
-                    && let Some(def) = self
-                        .cx
-                        .items
-                        .lookup_value(ModuleId::PRELUDE, &format!("__zeru_vec_{name}"))
-                {
+                if VEC_STD_METHODS.contains(&name) {
+                    let def = self.cx.prelude_def(&format!("__zeru_vec_{name}"));
                     return self.call_def(def, vec![elem], Some(receiver), args, expected, span);
                 }
                 self.vec_method(name, elem, receiver, args, span)
@@ -295,20 +281,14 @@ impl FnCx<'_, '_> {
                 if name == "len" && args.is_empty() {
                     let slice = self.mk(ExprKind::Read(place), ty, object.span);
                     return self.mk(
-                        ExprKind::Builtin(Builtin::SliceLen, vec![slice]),
+                        ExprKind::Builtin(Builtin::Len, vec![slice]),
                         Types::USIZE,
                         span,
                     );
                 }
-                if ty == Types::STR
-                    && STR_METHODS.contains(&name)
-                    && let Some(def) = self
-                        .cx
-                        .items
-                        .lookup_value(ModuleId::PRELUDE, &format!("__zeru_str_{name}"))
-                {
+                if ty == Types::STR && STR_METHODS.contains(&name) {
                     let text = self.mk(ExprKind::Read(place), ty, object.span);
-                    return self.call_def(def, Vec::new(), Some(text), args, expected, span);
+                    return self.str_method(text, name, args, expected, span);
                 }
                 let shown = self.ty(ty);
                 self.error(format!("{shown} has no method '{name}'"), span);
@@ -418,6 +398,20 @@ impl FnCx<'_, '_> {
             },
         ];
         self.mk(ExprKind::Match { scrutinee, arms }, ty, span)
+    }
+
+    /// `text.name(args)`, a `str` method the prelude writes as
+    /// `__zeru_str_<name>`.
+    fn str_method(
+        &mut self,
+        text: Expr,
+        name: &str,
+        args: &[Expression],
+        expected: Option<Ty>,
+        span: Span,
+    ) -> Expr {
+        let def = self.cx.prelude_def(&format!("__zeru_str_{name}"));
+        self.call_def(def, Vec::new(), Some(text), args, expected, span)
     }
 
     pub(super) fn address(&mut self, place: Place, ty: Ty, mutable: bool, span: Span) -> Expr {
@@ -805,7 +799,7 @@ impl FnCx<'_, '_> {
         span: Span,
     ) -> Expr {
         let builtin = match name {
-            "len" => Builtin::VecLen,
+            "len" => Builtin::Len,
             "capacity" => Builtin::VecCapacity,
             "is_empty" => Builtin::VecIsEmpty,
             "push" => Builtin::VecPush,
@@ -827,7 +821,7 @@ impl FnCx<'_, '_> {
         let mut values = vec![receiver];
         values.extend(self.vec_args(name, elem, args, span));
         let ty = match builtin {
-            Builtin::VecLen | Builtin::VecCapacity => Types::USIZE,
+            Builtin::Len | Builtin::VecCapacity => Types::USIZE,
             Builtin::VecIsEmpty => Types::BOOL,
             Builtin::VecRemove => elem,
             Builtin::VecGet => {

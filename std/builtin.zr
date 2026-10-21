@@ -509,9 +509,14 @@ fn __zeru_str_eq(a: str, b: str) bool {
     return true;
 }
 
-// The bytes of `s` from `from` up to `to`, sharing its memory.
-fn __zeru_str_sub(s: str, from: usize, to: usize) str {
-    var parts = ((s as *u8) + from, to - from);
+// The NUL-terminated text at `text`, without its NUL, as the kernel hands
+// over the program's arguments and the names in a directory.
+fn __zeru_c_text(text: *u8) str {
+    var len: usize = 0;
+    while *(text + len) != 0 {
+        len += 1;
+    }
+    var parts = (text, len);
     return *((&parts) as *str);
 }
 
@@ -522,15 +527,15 @@ fn __zeru_str_split(s: str, sep: str) Vec<str> {
     var start: usize = 0;
     var i: usize = 0;
     while sep.len() > 0 && i + sep.len() <= s.len() {
-        if __zeru_str_sub(s, i, i + sep.len()) == sep {
-            parts.push(__zeru_str_sub(s, start, i));
+        if s[i..i + sep.len()] == sep {
+            parts.push(s[start..i]);
             i += sep.len();
             start = i;
         } else {
             i += 1;
         }
     }
-    parts.push(__zeru_str_sub(s, start, s.len()));
+    parts.push(s[start..]);
     return parts;
 }
 
@@ -548,7 +553,7 @@ fn __zeru_str_lines(s: str) Vec<str> {
             if i < s.len() && end > start && s[end - 1] == '\r' {
                 end -= 1;
             }
-            lines.push(__zeru_str_sub(s, start, end));
+            lines.push(s[start..end]);
             start = i + 1;
         }
     }
@@ -565,7 +570,7 @@ fn __zeru_str_trim(s: str) str {
     while end > start && __zeru_is_space(s[end - 1]) {
         end -= 1;
     }
-    return __zeru_str_sub(s, start, end);
+    return s[start..end];
 }
 
 fn __zeru_is_space(byte: u8) bool {
@@ -574,12 +579,12 @@ fn __zeru_is_space(byte: u8) bool {
 
 // `s.starts_with(prefix)`: whether `s` begins with `prefix`.
 fn __zeru_str_starts_with(s: str, prefix: str) bool {
-    return prefix.len() <= s.len() && __zeru_str_sub(s, 0, prefix.len()) == prefix;
+    return prefix.len() <= s.len() && s[..prefix.len()] == prefix;
 }
 
 // `s.ends_with(suffix)`: whether `s` ends with `suffix`.
 fn __zeru_str_ends_with(s: str, suffix: str) bool {
-    return suffix.len() <= s.len() && __zeru_str_sub(s, s.len() - suffix.len(), s.len()) == suffix;
+    return suffix.len() <= s.len() && s[s.len() - suffix.len()..] == suffix;
 }
 
 // `s.parse_int()`: the integer `s` spells, with an optional sign; 22
@@ -658,7 +663,7 @@ fn __zeru_str_parse_float(s: str) f64! {
         return Err(22);
     }
     if at < s.len() && (s[at] == 'e' || s[at] == 'E') {
-        var power = __zeru_str_parse_int(__zeru_str_sub(s, at + 1, s.len()))!;
+        var power = __zeru_str_parse_int(s[at + 1..])!;
         if power > 1000 {
             power = 1000;
         } else if power < -1000 {
@@ -934,10 +939,22 @@ fn __zeru_string_from(text: str) String {
 
 // `s.push_str(text)`: `text` added at the end of the String `s`.
 fn __zeru_vec_push_str<T>(v: &var Vec<T>, text: str) {
-    v.reserve(text.len());
+    __zeru_copy_bytes(__zeru_room(v, text.len()), text as *u8, text.len());
+    __zeru_filled(v, text.len());
+}
+
+// The address of room for `count` more bytes at the end of the String `v`,
+// to fill before `__zeru_filled` counts them.
+fn __zeru_room<T>(v: &var Vec<T>, count: usize) *u8 {
+    v.reserve(count);
     var header = v as *usize;
-    __zeru_copy_bytes(*(header as **u8) + *(header + 1), text as *u8, text.len());
-    *(header + 1) += text.len();
+    return *(header as **u8) + *(header + 1);
+}
+
+// Count `count` more bytes of the String `v` as written.
+fn __zeru_filled<T>(v: &var Vec<T>, count: usize) {
+    var header = v as *usize;
+    *(header + 1) += count;
 }
 
 // `v.contains(value)`: whether an element equals `value`.

@@ -60,7 +60,6 @@ pub struct Function {
     pub locals: Vec<Local>,
     pub body: Block,
     pub span: Span,
-    pub exported: bool,
 }
 
 pub struct Local {
@@ -302,9 +301,13 @@ pub enum BinOp {
     PtrSub,
 }
 
+/// The prelude function that writes out what `print` buffered, which the
+/// program calls by name and code generation defines.
+pub const FLUSH_FN: &str = "__zeru_flush";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Builtin {
-    VecLen,
+    Len,
     VecCapacity,
     VecIsEmpty,
     VecPush,
@@ -317,7 +320,6 @@ pub enum Builtin {
     VecShrinkToFit,
     VecNew,
     VecWithCapacity,
-    SliceLen,
     IsSome,
     IsNone,
     IsOk,

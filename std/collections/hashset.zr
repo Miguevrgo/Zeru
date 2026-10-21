@@ -41,11 +41,9 @@ pub struct HashSet<K: Eq> {
     // println("{}", tags.insert(1)); // false
     // ```
     pub fn insert(var self, key: K) bool {
-        if self.members.contains(key) {
-            return false;
-        }
+        var before = self.members.len();
         self.members.insert(key, true);
-        return true;
+        return self.members.len() > before;
     }
 
     // Returns whether `key` is a member.

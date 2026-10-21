@@ -77,25 +77,6 @@ fn on_paths(nr: i64, first: str, second: str) ! {
     sys_result(syscall2(nr, a, b))!;
 }
 
-// `len` bytes at `data` as a str.
-fn as_str(data: *u8, len: usize) str {
-    var parts = (data, len);
-    return *((&parts) as *str);
-}
-
-// The address of room for `count` more bytes at the end of `text`, for a
-// syscall to fill; `filled` then counts the bytes it wrote.
-fn room(text: &var String, count: usize) *u8 {
-    text.reserve(count);
-    var header = text as *usize;
-    return *(header as **u8) + *(header + 1);
-}
-
-fn filled(text: &var String, count: usize) {
-    var header = text as *usize;
-    *(header + 1) += count;
-}
-
 // What kind of thing a path names.
 pub enum Kind {
     File,
@@ -407,7 +388,7 @@ pub struct File {
     // println("{} {}", buf.len(), buf[5] == 'f'); // 6 true
     // ```
     pub fn read(var self, buf: &var String, count: usize) usize! {
-        var end = room(buf, count);
+        var end = __zeru_room(buf, count);
         var held = self.buffer.len() - self.start;
         if held > 0 {
             var n = count;
@@ -416,11 +397,11 @@ pub struct File {
             }
             __zeru_copy_bytes(end, &self.buffer[self.start], n);
             self.start += n;
-            filled(buf, n);
+            __zeru_filled(buf, n);
             return Ok(n);
         }
         var n = sys_result(syscall3(SYS_READ, self.fd, end as i64, count as i64))! as usize;
-        filled(buf, n);
+        __zeru_filled(buf, n);
         return Ok(n);
     }
 
@@ -473,9 +454,9 @@ pub struct File {
                 at = kept;
                 self.start = 0;
             }
-            var end = room(&var self.buffer, CHUNK);
+            var end = __zeru_room(&var self.buffer, CHUNK);
             var n = sys_result(syscall3(SYS_READ, self.fd, end as i64, CHUNK as i64))! as usize;
-            filled(&var self.buffer, n);
+            __zeru_filled(&var self.buffer, n);
             if n == 0 {
                 if self.buffer.len() == 0 {
                     return Ok(None);
@@ -498,7 +479,7 @@ pub struct File {
         if stop == self.start {
             return String.new();
         }
-        return String.from(as_str((&self.buffer[self.start]) as *u8, stop - self.start));
+        return String.from(self.buffer[self.start..stop]);
     }
 
     // Moves to `offset` bytes from the start, where the next read or write
@@ -671,17 +652,7 @@ pub fn exists(path: str) bool {
 // ```
 pub fn is_file(path: str) bool {
     var meta = metadata(path);
-    if meta.is_err() {
-        return false;
-    }
-    match meta.unwrap().kind {
-        Kind::File => {
-            return true;
-        }
-        default => {
-            return false;
-        }
-    }
+    return meta.is_ok() && meta.unwrap().kind == Kind::File;
 }
 
 // Returns whether `path` is a directory, following symlinks.
@@ -697,17 +668,7 @@ pub fn is_file(path: str) bool {
 // ```
 pub fn is_dir(path: str) bool {
     var meta = metadata(path);
-    if meta.is_err() {
-        return false;
-    }
-    match meta.unwrap().kind {
-        Kind::Dir => {
-            return true;
-        }
-        default => {
-            return false;
-        }
-    }
+    return meta.is_ok() && meta.unwrap().kind == Kind::Dir;
 }
 
 // Returns what the file system knows about `path`, following symlinks.
@@ -894,7 +855,7 @@ pub fn read_dir(path: str) Vec<Entry>! {
     var fd = dir.fd;
     var entries: Vec<Entry> = Vec.new();
     var space = String.new();
-    var batch = room(&var space, DIR_BATCH);
+    var batch = __zeru_room(&var space, DIR_BATCH);
     while true {
         var got = sys_result(
             syscall3(SYS_GETDENTS64, fd, batch as i64, DIR_BATCH as i64),
@@ -907,24 +868,14 @@ pub fn read_dir(path: str) Vec<Entry>! {
             var record = batch + at;
             var size = *((record + 16) as *u16) as usize;
             var name = record + 19;
-            var len: usize = 0;
-            while *(name + len) != 0 {
-                len += 1;
-            }
-            var text = as_str(name, len);
+            var text = __zeru_c_text(name);
             at += size;
             if text == "." || text == ".." {
                 continue;
             }
-            var kind = Kind::Other;
             var tag = *(record + 18);
-            if tag == 8 {
-                kind = Kind::File;
-            } else if tag == 4 {
-                kind = Kind::Dir;
-            } else if tag == 10 {
-                kind = Kind::Symlink;
-            } else if tag == 0 {
+            var kind = kind_of((tag as u32) << 12);
+            if tag == 0 {
                 var stat: Array<i64, 18> = [0; 18];
                 var looked = syscall5(
                     SYS_NEWFSTATAT,
@@ -1030,7 +981,7 @@ pub fn read_link(path: str) String! {
     var p = c_path(path, &buf[0])!;
     var text: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var len = sys_result(syscall3(SYS_READLINK, p, (&text[0]) as i64, PATH_MAX as i64))!;
-    return Ok(String.from(as_str(&text[0], len as usize)));
+    return Ok(String.from(text[..len as usize]));
 }
 
 // Creates `path` as a second name for the file `target`, in the order of
@@ -1099,7 +1050,7 @@ pub fn real_path(path: str) String! {
     var len = sys_result(
         syscall3(SYS_READLINK, (&link[0]) as i64, (&text[0]) as i64, PATH_MAX as i64),
     )!;
-    return Ok(String.from(as_str(&text[0], len as usize)));
+    return Ok(String.from(text[..len as usize]));
 }
 
 // Returns the working directory, which relative paths start from.
@@ -1118,7 +1069,7 @@ pub fn real_path(path: str) String! {
 pub fn current_dir() String! {
     var text: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var len = sys_result(syscall2(SYS_GETCWD, (&text[0]) as i64, PATH_MAX as i64))!;
-    return Ok(String.from(as_str(&text[0], len as usize - 1)));
+    return Ok(String.from(text[..len as usize - 1]));
 }
 
 // Makes `path` the working directory, which relative paths start from.

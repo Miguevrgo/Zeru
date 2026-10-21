@@ -182,13 +182,6 @@ impl Parser {
     }
 
     /// The name that should follow the last token read.
-    fn expect_identifier(&mut self) -> Option<String> {
-        match self.peek() {
-            Token::Identifier(_) => self.identifier("a name"),
-            _ => self.expected("a name"),
-        }
-    }
-
     fn identifier(&mut self, what: &str) -> Option<String> {
         if let Token::Identifier(name) = self.peek() {
             let name = name.clone();
@@ -266,13 +259,14 @@ impl Parser {
             if !self.at_any(&[Token::Import, Token::Semicolon]) {
                 self.code_seen = true;
             }
+            let is_pub = self.eat(&Token::Pub);
             let stmt = match self.peek() {
                 Token::Const => self.parse_var_statement(true),
                 Token::Fn => self.parse_function_statement(),
                 Token::Struct => self.parse_struct_statement(),
                 Token::Enum => self.parse_enum_statement(),
                 Token::Trait => self.parse_trait_statement(),
-                Token::Pub => self.parse_public(),
+                _ if is_pub => self.error_here("'pub' goes before fn, struct, enum, trait or const"),
                 Token::Import => self.parse_import_statement(),
                 Token::Semicolon => {
                     self.bump();
@@ -283,7 +277,11 @@ impl Parser {
                     let message = format!("Unexpected '{token}' at top level, expected fn, struct, enum, trait, const or import");
                     self.error_here(message)
                 }
-            };
+            }
+            .map(|mut stmt| {
+                stmt.is_pub = is_pub;
+                stmt
+            });
 
             match stmt {
                 Some(statement) => statements.push(statement),
@@ -354,7 +352,7 @@ impl Parser {
     fn parse_var_statement(&mut self, is_const: bool) -> Option<Statement> {
         let start = self.span();
         self.bump();
-        let name = self.expect_identifier()?;
+        let name = self.identifier("a name")?;
         let type_annotation = match self.eat(&Token::Colon) {
             true => Some(self.parse_annotation()?),
             false => None,
@@ -513,7 +511,7 @@ impl Parser {
     fn parse_function_statement(&mut self) -> Option<Statement> {
         let start = self.span();
         self.bump();
-        let name = self.expect_identifier()?;
+        let name = self.identifier("a name")?;
         let type_params = self.parse_type_parameters()?;
         self.expect(&Token::LParen)?;
         let params = self.parse_list(&Token::RParen, Self::parse_parameter)?;
@@ -598,11 +596,11 @@ impl Parser {
     fn parse_for_statement(&mut self) -> Option<Statement> {
         let start = self.span();
         self.bump();
-        let mut variable = self.expect_identifier()?;
+        let mut variable = self.identifier("a name")?;
         let mut index = None;
         if self.eat(&Token::Comma) {
             index = Some(variable);
-            variable = self.expect_identifier()?;
+            variable = self.identifier("a name")?;
         }
         self.expect(&Token::In)?;
 
@@ -630,7 +628,7 @@ impl Parser {
     fn parse_struct_statement(&mut self) -> Option<Statement> {
         let start = self.span();
         self.bump();
-        let name = self.expect_identifier()?;
+        let name = self.identifier("a name")?;
         let type_params = self.parse_type_parameters()?;
         self.expect(&Token::LBrace)?;
 
@@ -699,24 +697,10 @@ impl Parser {
         self.eat(&Token::Comma);
     }
 
-    fn parse_public(&mut self) -> Option<Statement> {
-        self.bump();
-        let mut item = match self.peek() {
-            Token::Fn => self.parse_function_statement(),
-            Token::Struct => self.parse_struct_statement(),
-            Token::Enum => self.parse_enum_statement(),
-            Token::Trait => self.parse_trait_statement(),
-            Token::Const => self.parse_var_statement(true),
-            _ => self.error_here("'pub' goes before fn, struct, enum, trait or const"),
-        }?;
-        item.is_pub = true;
-        Some(item)
-    }
-
     fn parse_enum_statement(&mut self) -> Option<Statement> {
         let start = self.span();
         self.bump();
-        let name = self.expect_identifier()?;
+        let name = self.identifier("a name")?;
         self.expect(&Token::LBrace)?;
         let variants = self.parse_list(&Token::RBrace, |p| {
             let name = p.identifier("enum variant name")?;
@@ -732,13 +716,13 @@ impl Parser {
     fn parse_trait_statement(&mut self) -> Option<Statement> {
         let start = self.span();
         self.bump();
-        let name = self.expect_identifier()?;
+        let name = self.identifier("a name")?;
         self.expect(&Token::LBrace)?;
 
         let mut methods = Vec::new();
         while !self.at_any(&[Token::RBrace, Token::Eof]) {
             self.expect(&Token::Fn)?;
-            let name = self.expect_identifier()?;
+            let name = self.identifier("a name")?;
             self.expect(&Token::LParen)?;
             let params = self.parse_list(&Token::RParen, Self::parse_parameter)?;
             let return_type =
@@ -856,7 +840,7 @@ impl Parser {
     fn parse_path(&mut self, separator: &Token) -> Option<Vec<String>> {
         let mut path = vec![self.identifier("a name")?];
         while self.eat(separator) {
-            path.push(self.expect_identifier()?);
+            path.push(self.identifier("a name")?);
         }
         Some(path)
     }

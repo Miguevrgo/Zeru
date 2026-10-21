@@ -39,7 +39,6 @@ pub const RETURN: Local = Local(0);
 pub struct Body {
     pub symbol: String,
     pub span: Span,
-    pub exported: bool,
     pub arg_count: usize,
     pub locals: Vec<LocalDecl>,
     pub blocks: Vec<BlockData>,
@@ -153,7 +152,6 @@ pub enum ConstValue {
     Float(f64),
     Bool(bool),
     Str(Vec<u8>),
-    Void,
 }
 
 pub enum Rvalue {
@@ -303,12 +301,7 @@ impl TerminatorKind {
 impl Body {
     /// The type of what `place` holds.
     pub fn place_ty(&self, program: &Program, place: &Place) -> Ty {
-        let mut ty = self.locals[place.local.0 as usize].ty;
-        let mut variant = None;
-        for projection in &place.projection {
-            ty = program.project_ty(ty, *projection, &mut variant);
-        }
-        ty
+        program.projected(self.locals[place.local.0 as usize].ty, &place.projection)
     }
 
     pub fn operand_ty(&self, program: &Program, operand: &Operand) -> Ty {
@@ -322,6 +315,15 @@ impl Body {
 impl Program {
     /// The type `projection` reaches from a `ty`, `variant` keeping the
     /// variant a `Downcast` chose for the field after it.
+    /// The type `projection` reaches from a value of `ty`.
+    pub fn projected(&self, mut ty: Ty, projection: &[Projection]) -> Ty {
+        let mut variant = None;
+        for &step in projection {
+            ty = self.project_ty(ty, step, &mut variant);
+        }
+        ty
+    }
+
     pub fn project_ty(&self, ty: Ty, projection: Projection, variant: &mut Option<u32>) -> Ty {
         match (projection, self.types.kind(ty)) {
             (

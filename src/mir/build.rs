@@ -109,7 +109,7 @@ impl<'a> Builder<'a> {
         }
         self.stmts(&function.body.stmts);
         if self.current.is_some() {
-            if function.ret == Types::VOID || function.exported {
+            if function.ret == Types::VOID {
                 self.exit(0, 0);
                 self.terminate(TerminatorKind::Return);
             } else {
@@ -130,7 +130,6 @@ impl<'a> Builder<'a> {
         Body {
             symbol: function.symbol.clone(),
             span: function.span,
-            exported: function.exported,
             arg_count: function.params.len(),
             locals: self.locals,
             blocks,
@@ -423,10 +422,10 @@ impl<'a> Builder<'a> {
         body: &tir::Block,
     ) {
         let seq = self.as_place(seq);
-        let elem = match self.types().kind(self.place_ty(&seq)) {
-            TyKind::Array(elem, _) | TyKind::Vec(elem) | TyKind::Slice(elem) => *elem,
-            _ => unreachable!("only an array or a Vec is walked"),
-        };
+        let elem = self
+            .types()
+            .elem(self.place_ty(&seq))
+            .expect("only an array, a Vec or a slice is walked");
         let pointer = self.program.types.intern(TyKind::Ref(elem));
         let len = self.temp(Types::USIZE);
         self.assign(Place::local(len), Rvalue::Len(seq.clone()));
@@ -471,12 +470,8 @@ impl<'a> Builder<'a> {
     }
 
     fn place_ty(&self, place: &Place) -> Ty {
-        let mut ty = self.locals[place.local.0 as usize].ty;
-        let mut variant = None;
-        for &projection in &place.projection {
-            ty = self.program.project_ty(ty, projection, &mut variant);
-        }
-        ty
+        self.program
+            .projected(self.locals[place.local.0 as usize].ty, &place.projection)
     }
 
     /// The place `place` names, what its indices and pointers need evaluated
@@ -577,7 +572,6 @@ impl<'a> Builder<'a> {
             ExprKind::Float(value) => ConstValue::Float(*value),
             ExprKind::Bool(value) => ConstValue::Bool(*value),
             ExprKind::Str(bytes) => ConstValue::Str(bytes.clone()),
-            ExprKind::Void => ConstValue::Void,
             ExprKind::Variant(index, _) if self.is_plain_enum(expr.ty) => {
                 ConstValue::Int(i128::from(*index))
             }
@@ -987,7 +981,7 @@ impl<'a> Builder<'a> {
             _ => {
                 let (held, moved) = self.receiver(&args[0], args.len() > 1);
                 match builtin {
-                    Builtin::VecLen | Builtin::SliceLen => Rvalue::Len(held),
+                    Builtin::Len => Rvalue::Len(held),
                     Builtin::VecCapacity => Rvalue::Capacity(held),
                     Builtin::VecIsEmpty => {
                         let len = self.temp(Types::USIZE);

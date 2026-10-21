@@ -76,10 +76,10 @@ impl FnCx<'_, '_> {
     ) -> Expr {
         let (place, ty) = self.place(left);
         let (place, ty) = self.through_ref(place, ty, left.span);
-        let elem = match *self.cx.types.kind(ty) {
-            TyKind::Array(elem, _) | TyKind::Vec(elem) | TyKind::Slice(elem) => elem,
-            TyKind::Error => return self.error_expr(span),
-            _ => {
+        let elem = match self.cx.types.elem(ty) {
+            Some(elem) => elem,
+            None if self.cx.types.is_error(ty) => return self.error_expr(span),
+            None => {
                 let shown = self.ty(ty);
                 self.error(format!("Cannot slice {shown}"), span);
                 return self.error_expr(span);
@@ -664,10 +664,7 @@ impl FnCx<'_, '_> {
             }
             Place::Index(base, _) => {
                 let base = self.place_ty(base)?;
-                match self.cx.types.kind(base) {
-                    TyKind::Array(elem, _) | TyKind::Vec(elem) | TyKind::Slice(elem) => *elem,
-                    _ => return None,
-                }
+                self.cx.types.elem(base)?
             }
             Place::Deref(pointer) => match self.cx.types.kind(pointer.ty) {
                 TyKind::Ptr(inner) | TyKind::Ref(inner) | TyKind::RefMut(inner) => *inner,
