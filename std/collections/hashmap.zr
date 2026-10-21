@@ -47,21 +47,61 @@ fn lowest(bits: u32) usize {
     return at as usize;
 }
 
-// A map from integer, bool or enum keys to values, growing on the heap as
-// entries come.
+// A map from keys to values, growing on the heap as entries come.
+//
+// Keys are integers, bools or enums; each key holds one value. Looking up,
+// adding and removing a key take O(1) time on average.
+//
+// # Examples
+//
+// ```zeru
+// import std.collections.hashmap::{HashMap};
+//
+// var stock: HashMap<i64, i32> = HashMap.new();
+// stock.insert(1001, 5);
+// stock.insert(1002, 0);
+// stock.insert(1001, 4);
+// println("{}", stock.len()); // 2
+// match stock.get(1001) {
+//     Some(count) => println("{}", *count), // 4
+//     None => println("unknown item"),
+// }
+// println("{}", stock.contains(1003)); // false
+// ```
 pub struct HashMap<K: Eq, V> {
     groups: Vec<u64>,
     slots: Vec<(K, V)?>,
     len: usize,
     room: usize,
 
-    // An empty map; it allocates on the first insert.
+    // Returns an empty map.
+    //
+    // It allocates nothing until the first `insert`.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.hashmap::{HashMap};
+    //
+    // var ages: HashMap<i32, i32> = HashMap.new();
+    // println("{}", ages.is_empty()); // true
+    // ```
     pub fn new() HashMap<K, V> {
         return HashMap { groups: Vec.new(), slots: Vec.new(), len: 0, room: 0 };
     }
 
-    // Store `value` under `key`, in place of what was there; the map grows
-    // when full.
+    // Stores `value` under `key`, replacing the value already there.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.hashmap::{HashMap};
+    //
+    // var scores: HashMap<i32, i32> = HashMap.new();
+    // scores.insert(7, 10);
+    // scores.insert(7, 25);
+    // println("{} {}", scores.len(), *scores.get(7).unwrap()); // 1 25
+    // ```
     pub fn insert(var self, key: K, value: V) {
         var found = self.find(key);
         if found.is_some() {
@@ -96,7 +136,21 @@ pub struct HashMap<K: Eq, V> {
         self.len += 1;
     }
 
-    // The value under `key`, if any; `.copy()` gives a copy of it.
+    // Returns a reference to the value under `key`, or None when there is none.
+    //
+    // `*` reads the value through the reference; `.copy()` on the result gives
+    // a `V?` holding a copy.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.hashmap::{HashMap};
+    //
+    // var names: HashMap<i32, str> = HashMap.new();
+    // names.insert(1, "ann");
+    // println("{}", *names.get(1).unwrap()); // ann
+    // println("{}", names.get(2).is_none()); // true
+    // ```
     pub fn get(self, key: K) (&V)? {
         var found = self.find(key);
         if found.is_none() {
@@ -108,14 +162,36 @@ pub struct HashMap<K: Eq, V> {
         }
     }
 
-    // Whether there is an entry under `key`.
+    // Returns whether there is a value under `key`.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.hashmap::{HashMap};
+    //
+    // var seen: HashMap<i32, bool> = HashMap.new();
+    // seen.insert(3, true);
+    // println("{} {}", seen.contains(3), seen.contains(4)); // true false
+    // ```
     pub fn contains(self, key: K) bool {
         return self.find(key).is_some();
     }
 
-    // Drop the entry under `key`; false when there was none. Its slot goes
-    // back to never used only if its group still has one never used, since
-    // then no search ever went past that group.
+    // Removes the entry under `key` and returns whether there was one.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.hashmap::{HashMap};
+    //
+    // var open: HashMap<i32, bool> = HashMap.new();
+    // open.insert(5, true);
+    // println("{}", open.remove(5)); // true
+    // println("{}", open.remove(5)); // false
+    // ```
+    //
+    // A removed slot goes back to never used only when its group still has
+    // one, since then no search ever went past that group.
     pub fn remove(var self, key: K) bool {
         var found = self.find(key);
         if found.is_none() {
@@ -133,7 +209,18 @@ pub struct HashMap<K: Eq, V> {
         return true;
     }
 
-    // Drop every entry.
+    // Removes every entry.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.hashmap::{HashMap};
+    //
+    // var cache: HashMap<i32, i32> = HashMap.new();
+    // cache.insert(1, 1);
+    // cache.clear();
+    // println("{}", cache.is_empty()); // true
+    // ```
     pub fn clear(var self) {
         self.groups.clear();
         self.slots.clear();
@@ -141,12 +228,12 @@ pub struct HashMap<K: Eq, V> {
         self.room = 0;
     }
 
-    // How many entries it holds.
+    // Returns how many entries the map holds.
     pub fn len(self) usize {
         return self.len;
     }
 
-    // Whether it holds no entries.
+    // Returns whether the map holds no entries.
     pub fn is_empty(self) bool {
         return self.len == 0;
     }

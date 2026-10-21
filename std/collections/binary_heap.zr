@@ -1,15 +1,36 @@
 // Zeru Standard Library - BinaryHeap (max-heap)
 
-// A max-heap growing on the heap, the largest value always on top.
+// A collection that always gives back its largest value first, growing on
+// the heap.
+//
+// Values are any type `<` compares. `push` and `pop` take O(log n) time,
+// `peek` O(1). It suits picking the most urgent task or the biggest scores
+// without sorting everything.
+//
+// # Examples
+//
+// ```zeru
+// import std.collections.binary_heap::{BinaryHeap};
+//
+// var heap: BinaryHeap<i32> = BinaryHeap.new();
+// for n in [3, 10, 1, 7] {
+//     heap.push(n);
+// }
+// println("{}", heap.pop().unwrap()); // 10
+// println("{}", heap.pop().unwrap()); // 7
+// println("{}", heap.len()); // 2
+// ```
 pub struct BinaryHeap<T: Ord> {
     data: Vec<T>,
 
-    // An empty heap; it allocates on the first push.
+    // Returns an empty heap.
+    //
+    // It allocates nothing until the first `push`.
     pub fn new() BinaryHeap<T> {
         return BinaryHeap { data: Vec.new() };
     }
 
-    // Add `val`.
+    // Adds `val`.
     pub fn push(var self, val: T) {
         self.data.push(val);
         var idx = self.data.len() - 1;
@@ -23,7 +44,20 @@ pub struct BinaryHeap<T: Ord> {
         }
     }
 
-    // Take out the largest value; None when empty.
+    // Removes the largest value and returns it, or None when the heap is empty.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.binary_heap::{BinaryHeap};
+    //
+    // var heap: BinaryHeap<f64> = BinaryHeap.new();
+    // heap.push(1.5);
+    // heap.push(4.0);
+    // println("{}", heap.pop().unwrap()); // 4.0
+    // println("{}", heap.pop().unwrap()); // 1.5
+    // println("{}", heap.pop().is_none()); // true
+    // ```
     pub fn pop(var self) T? {
         if self.data.len() > 1 {
             self.swap(0, self.data.len() - 1);
@@ -55,7 +89,20 @@ pub struct BinaryHeap<T: Ord> {
         self.data[b] = tmp;
     }
 
-    // The largest value, left in place; None when empty.
+    // Returns a reference to the largest value, or None when the heap is empty.
+    //
+    // The value stays in the heap.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.binary_heap::{BinaryHeap};
+    //
+    // var heap: BinaryHeap<i32> = BinaryHeap.new();
+    // heap.push(5);
+    // heap.push(9);
+    // println("{} {}", *heap.peek().unwrap(), heap.len()); // 9 2
+    // ```
     pub fn peek(self) (&T)? {
         if self.data.is_empty() {
             return None;
@@ -63,17 +110,17 @@ pub struct BinaryHeap<T: Ord> {
         return &self.data[0];
     }
 
-    // How many values it holds.
+    // Returns how many values the heap holds.
     pub fn len(self) usize {
         return self.data.len();
     }
 
-    // Whether it holds no values.
+    // Returns whether the heap holds no values.
     pub fn is_empty(self) bool {
         return self.data.is_empty();
     }
 
-    // Drop every value.
+    // Removes every value.
     pub fn clear(var self) {
         self.data.clear();
     }

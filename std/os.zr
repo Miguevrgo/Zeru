@@ -11,8 +11,24 @@ const SYS_GETEGID: i64 = 108;
 const SYS_GETPPID: i64 = 110;
 const SYS_CLOCK_GETTIME: i64 = 228;
 
-// The command line the program was started with, its own path first. The
-// Vec is allocated; its strings point into the process's memory, not copies.
+// Returns the command line the program was started with.
+//
+// The first element is the path the program was run as, so the arguments
+// the user typed start at index 1. The strings point into the process's
+// own memory and stay valid for the whole run.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// var args = os::args();
+// if args.len() < 2 {
+//     eprintln("usage: {} <name>", args[0]);
+//     return;
+// }
+// println("hello, {}", args[1]);
+// ```
 pub fn args() Vec<str> {
     var stack: i64 = 0;
     asm ("movq __zeru_stack(%rip), $0" : "=r" (stack));
@@ -30,50 +46,137 @@ pub fn args() Vec<str> {
     return out;
 }
 
-// This process's id.
+// Returns the id of this process.
 pub fn getpid() i64 { return syscall1(SYS_GETPID, 0); }
-// The id of the process that started this one.
+// Returns the id of the process that started this one.
 pub fn getppid() i64 { return syscall1(SYS_GETPPID, 0); }
-// The real user id.
+// Returns the id of the user running the program, 0 for root.
 pub fn getuid() i64 { return syscall1(SYS_GETUID, 0); }
-// The real group id.
+// Returns the id of the group running the program.
 pub fn getgid() i64 { return syscall1(SYS_GETGID, 0); }
-// The effective user id, the one permissions are checked against.
+// Returns the effective user id, the one permissions are checked against.
+//
+// It differs from `getuid` only in programs installed setuid.
 pub fn geteuid() i64 { return syscall1(SYS_GETEUID, 0); }
-// The effective group id, the one permissions are checked against.
+// Returns the effective group id, the one permissions are checked against.
+//
+// It differs from `getgid` only in programs installed setgid.
 pub fn getegid() i64 { return syscall1(SYS_GETEGID, 0); }
 
-// Write the working directory and a closing NUL to `buf`; its length with the
-// NUL, or the errno as the error code, 34 (ERANGE) when `size` is too small.
+// Writes the working directory to `buf` and returns its length.
+//
+// `buf` gets the path and a closing NUL, and `size` is how many bytes it
+// has room for; the length returned counts the NUL. 4096 bytes fit any
+// path.
+//
+// # Errors
+//
+// The errno: 34 (ERANGE) when the path does not fit in `size` bytes.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// var buf: Array<u8, 4096> = [0; 4096];
+// var len = os::getcwd(&buf[0], 4096).unwrap();
+// println("{}", buf[0] == '/' && len > 1); // true
+// ```
 pub fn getcwd(buf: *u8, size: usize) i64! {
     return sys_result(syscall2(SYS_GETCWD, buf as i64, size as i64));
 }
 
-// Block for `ms` milliseconds; 0, or the errno as the error code: 22 (EINVAL)
-// for a negative `ms`, 4 (EINTR) when a signal wakes it early.
+// Pauses the program for `ms` milliseconds, returning 0.
+//
+// # Errors
+//
+// The errno: 22 (EINVAL) for a negative `ms`, 4 (EINTR) when a signal
+// wakes it early.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// var start = os::clock_ns().unwrap();
+// os::sleep_ms(20).unwrap();
+// println("{}", os::clock_ns().unwrap() - start >= 20_000_000); // true
+// ```
 pub fn sleep_ms(ms: i64) i64! {
     var ts: Array<i64, 2> = [ms / 1000, (ms % 1000) * 1000000];
     return sys_result(syscall2(SYS_NANOSLEEP, (&ts[0]) as i64, 0));
 }
 
-// Nanoseconds on the monotonic clock, for timing between two calls; not the
-// time of day. The errno as the error code.
+// Returns a time in nanoseconds for measuring how long something takes.
+//
+// The clock only moves forward and is not the time of day; only the
+// difference between two calls means anything. `time` gives the time of
+// day.
+//
+// # Errors
+//
+// The errno; it does not fail on Linux.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// var start = os::clock_ns().unwrap();
+// var total = 0;
+// for i in 0..1000 {
+//     total += i;
+// }
+// var elapsed = os::clock_ns().unwrap() - start;
+// println("{} {}", total, elapsed >= 0); // 499500 true
+// ```
 pub fn clock_ns() i64! {
     var ts: Array<i64, 2> = [0; 2];
     sys_result(syscall2(SYS_CLOCK_GETTIME, 1, (&ts[0]) as i64))!;
     return Ok(ts[0] * 1000000000 + ts[1]);
 }
 
-// Whole seconds since 1970-01-01 UTC by the wall clock; the errno as the
-// error code.
+// Returns the time of day as whole seconds since 1970-01-01 00:00 UTC.
+//
+// It follows the system clock, which may be set back or forward; use
+// `clock_ns` to measure durations.
+//
+// # Errors
+//
+// The errno; it does not fail on Linux.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// var now = os::time().unwrap();
+// println("{}", now / 86400 > 20000); // true
+// ```
 pub fn time() i64! {
     var ts: Array<i64, 2> = [0; 2];
     sys_result(syscall2(SYS_CLOCK_GETTIME, 0, (&ts[0]) as i64))!;
     return Ok(ts[0]);
 }
 
-// Write the host name and a closing NUL to `buf`, cut to `size - 1` bytes;
-// 0, or the errno as the error code. Writes nothing when `size` is 0.
+// Writes the name of the machine to `buf` and returns 0.
+//
+// `buf` gets the name and a closing NUL, cut to `size - 1` bytes when
+// longer. 65 bytes fit any host name. A `size` of 0 writes nothing.
+//
+// # Errors
+//
+// The errno; it does not fail on Linux.
+//
+// # Examples
+//
+// ```zeru
+// import std.os;
+//
+// var buf: Array<u8, 65> = [0; 65];
+// os::hostname(&buf[0], 65).unwrap();
+// println("{}", buf[0] != 0); // true
+// ```
 pub fn hostname(buf: *u8, size: usize) i64! {
     if size == 0 { return Ok(0); }
     var utsname: Array<u8, 390> = [0; 390];

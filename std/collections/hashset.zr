@@ -3,16 +3,43 @@
 
 import std.collections.hashmap::{HashMap};
 
-// A set of integer, bool or enum keys, growing on the heap as members come.
+// A set of distinct keys, growing on the heap as members come.
+//
+// Keys are integers, bools or enums. Adding, finding and removing a key
+// take O(1) time on average.
+//
+// # Examples
+//
+// ```zeru
+// import std.collections.hashset::{HashSet};
+//
+// var seen: HashSet<i32> = HashSet.new();
+// for n in [4, 7, 4, 9, 7] {
+//     seen.insert(n);
+// }
+// println("{} {}", seen.len(), seen.contains(9)); // 3 true
+// ```
 pub struct HashSet<K: Eq> {
     members: HashMap<K, bool>,
 
-    // An empty set; it allocates on the first insert.
+    // Returns an empty set.
+    //
+    // It allocates nothing until the first `insert`.
     pub fn new() HashSet<K> {
         return HashSet { members: HashMap.new() };
     }
 
-    // Add `key`; false when it was a member already.
+    // Adds `key` and returns whether it was new.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.hashset::{HashSet};
+    //
+    // var tags: HashSet<i32> = HashSet.new();
+    // println("{}", tags.insert(1)); // true
+    // println("{}", tags.insert(1)); // false
+    // ```
     pub fn insert(var self, key: K) bool {
         if self.members.contains(key) {
             return false;
@@ -21,27 +48,38 @@ pub struct HashSet<K: Eq> {
         return true;
     }
 
-    // Whether `key` is a member.
+    // Returns whether `key` is a member.
     pub fn contains(self, key: K) bool {
         return self.members.contains(key);
     }
 
-    // Drop `key`; false when it was not a member.
+    // Removes `key` and returns whether it was a member.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.hashset::{HashSet};
+    //
+    // var ids: HashSet<i64> = HashSet.new();
+    // ids.insert(42);
+    // println("{}", ids.remove(42)); // true
+    // println("{}", ids.remove(42)); // false
+    // ```
     pub fn remove(var self, key: K) bool {
         return self.members.remove(key);
     }
 
-    // Drop every member.
+    // Removes every member.
     pub fn clear(var self) {
         self.members.clear();
     }
 
-    // How many members it holds.
+    // Returns how many members the set holds.
     pub fn len(self) usize {
         return self.members.len();
     }
 
-    // Whether it holds no members.
+    // Returns whether the set holds no members.
     pub fn is_empty(self) bool {
         return self.members.is_empty();
     }

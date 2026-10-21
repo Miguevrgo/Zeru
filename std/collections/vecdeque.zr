@@ -16,28 +16,63 @@ fn shift<T>(from: &var Vec<T>, to: &var Vec<T>) {
     }
 }
 
-// A queue open at both ends, growing on the heap: two stacks back to back,
-// `front` holding the first values in reverse and `back` the rest in order.
+// A queue that adds and takes values at both ends, growing on the heap.
+//
+// `push_back` and `pop_front` make it a first in, first out queue;
+// `push_back` and `pop_back` a stack. Every push and pop takes O(1) time
+// on average.
+//
+// # Examples
+//
+// ```zeru
+// import std.collections.vecdeque::{VecDeque};
+//
+// var queue: VecDeque<str> = VecDeque.new();
+// queue.push_back("second");
+// queue.push_back("third");
+// queue.push_front("first");
+// println("{}", queue.pop_front().unwrap()); // first
+// println("{}", queue.pop_back().unwrap()); // third
+// println("{}", queue.len()); // 1
+// ```
+//
+// It is two stacks back to back: `front` holds the first values in
+// reverse and `back` the rest in order.
 pub struct VecDeque<T> {
     front: Vec<T>,
     back: Vec<T>,
 
-    // An empty queue; it allocates on the first push.
+    // Returns an empty queue.
+    //
+    // It allocates nothing until the first push.
     pub fn new() VecDeque<T> {
         return VecDeque { front: Vec.new(), back: Vec.new() };
     }
 
-    // Add `val` at the back.
+    // Adds `val` at the back.
     pub fn push_back(var self, val: T) {
         self.back.push(val);
     }
 
-    // Add `val` at the front.
+    // Adds `val` at the front.
     pub fn push_front(var self, val: T) {
         self.front.push(val);
     }
 
-    // Take out the front value; None when empty.
+    // Removes the front value and returns it, or None when the queue is empty.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.vecdeque::{VecDeque};
+    //
+    // var jobs: VecDeque<i32> = VecDeque.new();
+    // jobs.push_back(1);
+    // jobs.push_back(2);
+    // println("{}", jobs.pop_front().unwrap()); // 1
+    // println("{}", jobs.pop_front().unwrap()); // 2
+    // println("{}", jobs.pop_front().is_none()); // true
+    // ```
     pub fn pop_front(var self) T? {
         if self.front.is_empty() {
             shift(&var self.back, &var self.front);
@@ -45,7 +80,18 @@ pub struct VecDeque<T> {
         return self.front.pop();
     }
 
-    // Take out the back value; None when empty.
+    // Removes the back value and returns it, or None when the queue is empty.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.vecdeque::{VecDeque};
+    //
+    // var undo: VecDeque<i32> = VecDeque.new();
+    // undo.push_back(1);
+    // undo.push_back(2);
+    // println("{}", undo.pop_back().unwrap()); // 2
+    // ```
     pub fn pop_back(var self) T? {
         if self.back.is_empty() {
             shift(&var self.front, &var self.back);
@@ -53,12 +99,27 @@ pub struct VecDeque<T> {
         return self.back.pop();
     }
 
-    // The front value, left in place; None when empty.
+    // Returns a reference to the front value, or None when the queue is empty.
+    //
+    // The value stays in the queue.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.vecdeque::{VecDeque};
+    //
+    // var line: VecDeque<i32> = VecDeque.new();
+    // line.push_back(8);
+    // line.push_back(9);
+    // println("{} {}", *line.front().unwrap(), line.len()); // 8 2
+    // ```
     pub fn front(self) (&T)? {
         return self.at(0);
     }
 
-    // The back value, left in place; None when empty.
+    // Returns a reference to the back value, or None when the queue is empty.
+    //
+    // The value stays in the queue.
     pub fn back(self) (&T)? {
         if self.is_empty() {
             return None;
@@ -66,7 +127,19 @@ pub struct VecDeque<T> {
         return self.at(self.len() - 1);
     }
 
-    // The value `index` places from the front; None past the end.
+    // Returns a reference to the value `index` places from the front, or None
+    // past the end.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.vecdeque::{VecDeque};
+    //
+    // var q: VecDeque<i32> = VecDeque.new();
+    // q.push_back(2);
+    // q.push_front(1);
+    // println("{} {}", *q.at(1).unwrap(), q.at(2).is_none()); // 2 true
+    // ```
     pub fn at(self, index: usize) (&T)? {
         if index < self.front.len() {
             return &self.front[self.front.len() - 1 - index];
@@ -77,17 +150,17 @@ pub struct VecDeque<T> {
         return None;
     }
 
-    // How many values it holds.
+    // Returns how many values the queue holds.
     pub fn len(self) usize {
         return self.front.len() + self.back.len();
     }
 
-    // Whether it holds no values.
+    // Returns whether the queue holds no values.
     pub fn is_empty(self) bool {
         return self.len() == 0;
     }
 
-    // Drop every value.
+    // Removes every value.
     pub fn clear(var self) {
         self.front.clear();
         self.back.clear();

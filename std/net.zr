@@ -27,12 +27,36 @@ const SYS_SETSOCKOPT: i64 = 54;
 const SOL_SOCKET: i64 = 1;
 const SO_REUSEADDR: i64 = 2;
 
-// Build IPv4 address from octets: ip4(127, 0, 0, 1)
+// Returns the IPv4 address `a.b.c.d` as one number, as `bind`, `connect`
+// and `send_to` take it.
+//
+// # Examples
+//
+// ```zeru
+// import std.net;
+//
+// var localhost = net::ip4(127, 0, 0, 1);
+// var any = net::ip4(0, 0, 0, 0);
+// println("{} {}", localhost, any); // 2130706433 0
+// ```
 pub fn ip4(a: u32, b: u32, c: u32, d: u32) u32 {
     return (a << 24) | (b << 16) | (c << 8) | d;
 }
 
-// Build sockaddr_in (16 bytes) for bind/connect.
+// Returns `ip` and `port` laid out as the 16-byte `sockaddr_in` the socket
+// syscalls take.
+//
+// `bind`, `connect` and `send_to` build it themselves; it is only needed to
+// call those syscalls directly.
+//
+// # Examples
+//
+// ```zeru
+// import std.net;
+//
+// var addr = net::make_addr(net::ip4(127, 0, 0, 1), 8080);
+// println("{} {} {}", addr[2], addr[3], addr[4]); // 31 144 127
+// ```
 pub fn make_addr(ip: u32, port: u16) Array<u8, 16> {
     var addr: Array<u8, 16> = [0; 16];
     addr[0] = AF_INET as u8;
@@ -47,12 +71,54 @@ pub fn make_addr(ip: u32, port: u16) Array<u8, 16> {
 }
 
 
-// A TCP socket waiting for connections on an IPv4 address.
+// A TCP socket waiting for connections on an IPv4 address and port.
+//
+// Make one with `bind`, then take each client with `accept`, which gives a
+// `TcpStream` to talk to it.
+//
+// # Examples
+//
+// ```zeru
+// import std.net;
+//
+// var ip = net::ip4(127, 0, 0, 1);
+// var listener = net::TcpListener.bind(ip, 47701).unwrap();
+// var client = net::TcpStream.connect(ip, 47701).unwrap();
+// var server = listener.accept().unwrap();
+// var message = "ping";
+// client.write_all(message as *u8, message.len()).unwrap();
+// var buf: Array<u8, 4> = [0; 4];
+// println("{}", server.read_all(&buf[0], 4).unwrap()); // 4
+// client.close().unwrap();
+// server.close().unwrap();
+// listener.close().unwrap();
+// ```
 pub struct TcpListener {
     fd: i64,
 
-    // Listen on `ip` and `port`, with SO_REUSEADDR and a backlog of 128; the
-    // errno as the error code, 98 (EADDRINUSE) when the port is taken.
+    // Starts listening for connections on `ip` and `port`.
+    //
+    // `net::ip4(0, 0, 0, 0)` listens on every address of the machine,
+    // `net::ip4(127, 0, 0, 1)` only on this machine. The port may be reused
+    // right after a previous program on it ends, and up to 128 clients may wait
+    // for `accept`.
+    //
+    // # Errors
+    //
+    // The errno: 98 (EADDRINUSE) when another socket has the port, 13 (EACCES)
+    // for a port under 1024 without root, 99 (EADDRNOTAVAIL) when `ip` is not
+    // one of the machine's.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.net;
+    //
+    // var ip = net::ip4(127, 0, 0, 1);
+    // var first = net::TcpListener.bind(ip, 47702).unwrap();
+    // println("{}", net::TcpListener.bind(ip, 47702).unwrap_err()); // 98
+    // first.close().unwrap();
+    // ```
     pub fn bind(ip: u32, port: u16) TcpListener! {
         var fd = sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_STREAM, 0))!;
         var one: i32 = 1;
@@ -65,25 +131,89 @@ pub struct TcpListener {
         return Ok(TcpListener { fd: fd });
     }
 
-    // Block until the next connection comes; the errno as the error code.
+    // Waits for the next client to connect and returns the connection.
+    //
+    // It blocks until one comes.
+    //
+    // # Errors
+    //
+    // The errno: 9 (EBADF) when the listener is closed, 4 (EINTR) when a
+    // signal interrupts the wait.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.net;
+    //
+    // var ip = net::ip4(127, 0, 0, 1);
+    // var listener = net::TcpListener.bind(ip, 47703).unwrap();
+    // var client = net::TcpStream.connect(ip, 47703).unwrap();
+    // var server = listener.accept().unwrap();
+    // println("connected"); // connected
+    // server.close().unwrap();
+    // client.close().unwrap();
+    // listener.close().unwrap();
+    // ```
     pub fn accept(self) TcpStream! {
         var fd = sys_result(syscall3(SYS_ACCEPT, self.fd, 0, 0))!;
         return Ok(TcpStream { fd: fd });
     }
 
-    // Stop listening; 0, or the errno as the error code.
+    // Stops listening and frees the port, returning 0.
+    //
+    // Connections `accept` gave stay open.
+    //
+    // # Errors
+    //
+    // The errno: 9 (EBADF) when it was closed already.
     pub fn close(self) i64! {
         return sys_result(syscall1(SYS_CLOSE, self.fd));
     }
 }
 
 
-// A TCP connection.
+// A TCP connection, made with `connect` or given by `TcpListener.accept`.
+//
+// Bytes written at one end are read at the other in the same order. Close
+// it with `close` when done.
+//
+// # Examples
+//
+// ```zeru
+// import std.net;
+//
+// var ip = net::ip4(127, 0, 0, 1);
+// var listener = net::TcpListener.bind(ip, 47704).unwrap();
+// var client = net::TcpStream.connect(ip, 47704).unwrap();
+// var server = listener.accept().unwrap();
+// var request = "hello";
+// client.write_all(request as *u8, request.len()).unwrap();
+// client.shutdown(net::SHUT_WR).unwrap();
+// var buf: Array<u8, 64> = [0; 64];
+// println("{}", server.read_all(&buf[0], 64).unwrap()); // 5
+// client.close().unwrap();
+// server.close().unwrap();
+// listener.close().unwrap();
+// ```
 pub struct TcpStream {
     fd: i64,
 
-    // Connect to `ip` and `port`; the errno as the error code, 111
-    // (ECONNREFUSED) when nothing listens there.
+    // Connects to the server at `ip` and `port`.
+    //
+    // # Errors
+    //
+    // The errno: 111 (ECONNREFUSED) when nothing listens there, 110
+    // (ETIMEDOUT) when the server does not answer, 101 (ENETUNREACH) when
+    // there is no route to it.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.net;
+    //
+    // var refused = net::TcpStream.connect(net::ip4(127, 0, 0, 1), 47705);
+    // println("{}", refused.unwrap_err()); // 111
+    // ```
     pub fn connect(ip: u32, port: u16) TcpStream! {
         var fd = sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_STREAM, 0))!;
         var addr = make_addr(ip, port);
@@ -92,20 +222,75 @@ pub struct TcpStream {
         return Ok(TcpStream { fd: fd });
     }
 
-    // Read up to `len` bytes into `buf`, blocking until some come; how many,
-    // 0 once the peer has closed, or the errno as the error code.
+    // Reads up to `len` bytes into `buf` and returns how many came.
+    //
+    // It blocks until at least one byte comes, and may return fewer than
+    // `len` even when more are on the way; `read_all` waits for them all. 0
+    // means the other end has closed.
+    //
+    // # Errors
+    //
+    // The errno: 104 (ECONNRESET) when the other end drops the connection, 9
+    // (EBADF) when it is closed.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.net;
+    //
+    // var ip = net::ip4(127, 0, 0, 1);
+    // var listener = net::TcpListener.bind(ip, 47706).unwrap();
+    // var client = net::TcpStream.connect(ip, 47706).unwrap();
+    // var server = listener.accept().unwrap();
+    // var text = "hi";
+    // client.write(text as *u8, text.len()).unwrap();
+    // var buf: Array<u8, 16> = [0; 16];
+    // println("{}", server.read(&buf[0], 16).unwrap()); // 2
+    // client.close().unwrap();
+    // println("{}", server.read(&buf[0], 16).unwrap()); // 0
+    // server.close().unwrap();
+    // listener.close().unwrap();
+    // ```
     pub fn read(self, buf: *u8, len: usize) i64! {
         return sys_result(syscall3(SYS_READ, self.fd, buf as i64, len as i64));
     }
 
-    // Send up to `len` bytes of `buf`; how many, which may be fewer, or the
-    // errno as the error code. `write_all` sends them all.
+    // Sends up to `len` bytes of `buf` and returns how many went.
+    //
+    // It may send fewer than `len`; `write_all` sends them all.
+    //
+    // # Errors
+    //
+    // The errno: 32 (EPIPE) when the other end has closed, 104 (ECONNRESET)
+    // when it dropped the connection.
     pub fn write(self, buf: *u8, len: usize) i64! {
         return sys_result(syscall3(SYS_WRITE, self.fd, buf as i64, len as i64));
     }
 
-    // Send all `len` bytes of `buf`; `len`, or the errno of the first failed
-    // write as the error code.
+    // Sends all `len` bytes of `buf`, returning `len`.
+    //
+    // It calls `write` until everything is sent.
+    //
+    // # Errors
+    //
+    // The errno of the first `write` that fails; some bytes may have gone
+    // before it.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.net;
+    //
+    // var ip = net::ip4(127, 0, 0, 1);
+    // var listener = net::TcpListener.bind(ip, 47707).unwrap();
+    // var client = net::TcpStream.connect(ip, 47707).unwrap();
+    // var server = listener.accept().unwrap();
+    // var text = "the whole message";
+    // println("{}", client.write_all(text as *u8, text.len()).unwrap()); // 17
+    // client.close().unwrap();
+    // server.close().unwrap();
+    // listener.close().unwrap();
+    // ```
     pub fn write_all(self, buf: *u8, len: usize) i64! {
         var total: i64 = 0;
         var remaining: usize = len;
@@ -117,8 +302,31 @@ pub struct TcpStream {
         return Ok(total);
     }
 
-    // Read until `buf_size` bytes have come or the peer closes; how many, or
-    // the errno of the first failed read as the error code.
+    // Reads into `buf` until `buf_size` bytes came or the other end closes,
+    // and returns how many came.
+    //
+    // # Errors
+    //
+    // The errno of the first `read` that fails; some bytes may be in `buf`
+    // before it.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.net;
+    //
+    // var ip = net::ip4(127, 0, 0, 1);
+    // var listener = net::TcpListener.bind(ip, 47708).unwrap();
+    // var client = net::TcpStream.connect(ip, 47708).unwrap();
+    // var server = listener.accept().unwrap();
+    // var text = "abc";
+    // client.write_all(text as *u8, text.len()).unwrap();
+    // client.close().unwrap();
+    // var buf: Array<u8, 64> = [0; 64];
+    // println("{}", server.read_all(&buf[0], 64).unwrap()); // 3
+    // server.close().unwrap();
+    // listener.close().unwrap();
+    // ```
     pub fn read_all(self, buf: *u8, buf_size: usize) i64! {
         var total: i64 = 0;
         var remaining: usize = buf_size;
@@ -131,25 +339,61 @@ pub struct TcpStream {
         return Ok(total);
     }
 
-    // End reading, writing or both as `how`, a `SHUT_*`, says, keeping the
-    // socket open; 0, or the errno as the error code.
+    // Ends reading, writing or both, returning 0, while the connection stays
+    // open until `close`.
+    //
+    // `how` is `SHUT_RD`, `SHUT_WR` or `SHUT_RDWR`. After `SHUT_WR` the other
+    // end reads 0, the end of the stream, but can still send a reply.
+    //
+    // # Errors
+    //
+    // The errno: 107 (ENOTCONN) when it is not connected.
     pub fn shutdown(self, how: i64) i64! {
         return sys_result(syscall2(SYS_SHUTDOWN, self.fd, how));
     }
 
-    // Close the connection; 0, or the errno as the error code.
+    // Closes the connection, returning 0.
+    //
+    // The other end reads 0, the end of the stream.
+    //
+    // # Errors
+    //
+    // The errno: 9 (EBADF) when it was closed already.
     pub fn close(self) i64! {
         return sys_result(syscall1(SYS_CLOSE, self.fd));
     }
 }
 
 
-// A UDP socket bound to an IPv4 address.
+// A UDP socket bound to an IPv4 address and port.
+//
+// Each `send_to` sends one datagram, and each `recv` takes one. Datagrams
+// may be lost or come in a different order.
+//
+// # Examples
+//
+// ```zeru
+// import std.net;
+//
+// var ip = net::ip4(127, 0, 0, 1);
+// var a = net::UdpSocket.bind(ip, 47711).unwrap();
+// var b = net::UdpSocket.bind(ip, 47712).unwrap();
+// var text = "hey";
+// a.send_to(text as *u8, text.len(), ip, 47712).unwrap();
+// var buf: Array<u8, 16> = [0; 16];
+// println("{}", b.recv(&buf[0], 16).unwrap()); // 3
+// a.close().unwrap();
+// b.close().unwrap();
+// ```
 pub struct UdpSocket {
     fd: i64,
 
-    // Bind to `ip` and `port`; the errno as the error code, 98 (EADDRINUSE)
-    // when the port is taken.
+    // Opens a UDP socket on `ip` and `port`.
+    //
+    // # Errors
+    //
+    // The errno: 98 (EADDRINUSE) when another socket has the port, 13 (EACCES)
+    // for a port under 1024 without root.
     pub fn bind(ip: u32, port: u16) UdpSocket! {
         var fd = sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_DGRAM, 0))!;
         var addr = make_addr(ip, port);
@@ -158,20 +402,34 @@ pub struct UdpSocket {
         return Ok(UdpSocket { fd: fd });
     }
 
-    // Send `len` bytes of `buf` as one datagram to `ip` and `port`; how many,
-    // or the errno as the error code.
+    // Sends `len` bytes of `buf` as one datagram to `ip` and `port`, and
+    // returns how many went.
+    //
+    // # Errors
+    //
+    // The errno: 90 (EMSGSIZE) when `len` is too big for one datagram.
     pub fn send_to(self, buf: *u8, len: usize, ip: u32, port: u16) i64! {
         var addr = make_addr(ip, port);
         return sys_result(syscall6(SYS_SENDTO, self.fd, buf as i64, len as i64, 0, (&addr[0]) as i64, 16));
     }
 
-    // Block for the next datagram and copy it to `buf`; its bytes, cut to
-    // `len` with the rest lost, or the errno as the error code.
+    // Waits for the next datagram, copies it to `buf` and returns its size.
+    //
+    // A datagram longer than `len` is cut to `len` and the rest is lost.
+    //
+    // # Errors
+    //
+    // The errno: 9 (EBADF) when the socket is closed, 4 (EINTR) when a signal
+    // interrupts the wait.
     pub fn recv(self, buf: *u8, len: usize) i64! {
         return sys_result(syscall6(SYS_RECVFROM, self.fd, buf as i64, len as i64, 0, 0, 0));
     }
 
-    // Close the socket; 0, or the errno as the error code.
+    // Closes the socket and frees its port, returning 0.
+    //
+    // # Errors
+    //
+    // The errno: 9 (EBADF) when it was closed already.
     pub fn close(self) i64! {
         return sys_result(syscall1(SYS_CLOSE, self.fd));
     }

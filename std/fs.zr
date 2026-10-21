@@ -62,64 +62,232 @@ fn c_path(path: str, buf: *u8) i64! {
     return Ok(buf as i64);
 }
 
-// Open `path` with `O_*` flags and `mode` as a created file's permissions;
-// the fd, or the errno as the error code.
+// Opens the file at `path` and returns its file descriptor.
+//
+// `flags` says how: one of `O_RDONLY`, `O_WRONLY` or `O_RDWR`, joined with
+// `|` to any of `O_CREAT`, `O_TRUNC`, `O_APPEND` and `O_EXCL`. When
+// `O_CREAT` creates the file, `mode` gives its permissions, as `PERM_644`;
+// otherwise `mode` is ignored. Close the descriptor with `close` when done.
+//
+// To read or write a whole file at once, `read_file` and `write_file` are
+// simpler.
+//
+// # Errors
+//
+// The errno: 2 (ENOENT) when the file is missing and `O_CREAT` is not
+// given, 13 (EACCES) without permission, 17 (EEXIST) when `O_EXCL` finds
+// it there, 36 (ENAMETOOLONG) when `path` has 4096 bytes or more and 22
+// (EINVAL) when it holds a NUL.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// var fd = fs::open("log.txt", fs::O_WRONLY | fs::O_CREAT | fs::O_APPEND, fs::PERM_644).unwrap();
+// var line = "started\n";
+// fs::write(fd, line as *u8, line.len()).unwrap();
+// fs::close(fd).unwrap();
+// println("{}", fs::read_file("log.txt").unwrap()); // started
+// ```
 pub fn open(path: str, flags: i64, mode: i64) i64! {
     var buf: Array<u8, 4096> = [0; 4096];
     var p = c_path(path, &buf[0])!;
     return sys_result(syscall3(SYS_OPEN, p, flags, mode));
 }
 
-// Close `fd`; 0, or the errno as the error code.
+// Closes the file descriptor `fd`, returning 0.
+//
+// The descriptor must not be used after this, even when it fails.
+//
+// # Errors
+//
+// The errno: 9 (EBADF) when `fd` is not open, 5 (EIO) when data written
+// earlier could not reach the disk.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// var fd = fs::open("empty.txt", fs::O_WRONLY | fs::O_CREAT, fs::PERM_644).unwrap();
+// println("{}", fs::close(fd).unwrap()); // 0
+// println("{}", fs::close(fd).unwrap_err()); // 9
+// ```
 pub fn close(fd: i64) i64! {
     return sys_result(syscall1(SYS_CLOSE, fd));
 }
 
-// Read up to `count` bytes into `buf`; how many, 0 at the end of the file,
-// or the errno as the error code.
+// Reads up to `count` bytes from `fd` into `buf` and returns how many came.
+//
+// It may read fewer than `count`, so call it again for the rest; 0 means
+// the end of the file. `buf` must have room for `count` bytes.
+//
+// # Errors
+//
+// The errno: 9 (EBADF) when `fd` is not open for reading, 21 (EISDIR) when
+// it is a directory.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// fs::write_file("data.txt", "hello").unwrap();
+// var fd = fs::open("data.txt", fs::O_RDONLY, 0).unwrap();
+// var buf: Array<u8, 16> = [0; 16];
+// println("{}", fs::read(fd, &buf[0], 16).unwrap()); // 5
+// println("{}", fs::read(fd, &buf[0], 16).unwrap()); // 0
+// fs::close(fd).unwrap();
+// ```
 pub fn read(fd: i64, buf: *u8, count: usize) usize! {
     var n = sys_result(syscall3(SYS_READ, fd, buf as i64, count as i64))!;
     return Ok(n as usize);
 }
 
-// Write up to `count` bytes of `buf`; how many, which may be fewer, or the
-// errno as the error code.
+// Writes up to `count` bytes of `buf` to `fd` and returns how many went.
+//
+// It may write fewer than `count`, so call it again for the rest.
+//
+// # Errors
+//
+// The errno: 9 (EBADF) when `fd` is not open for writing, 28 (ENOSPC) when
+// the disk is full.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// var fd = fs::open("out.txt", fs::O_WRONLY | fs::O_CREAT | fs::O_TRUNC, fs::PERM_644).unwrap();
+// var text = "abc";
+// println("{}", fs::write(fd, text as *u8, text.len()).unwrap()); // 3
+// fs::close(fd).unwrap();
+// ```
 pub fn write(fd: i64, buf: *u8, count: usize) usize! {
     var n = sys_result(syscall3(SYS_WRITE, fd, buf as i64, count as i64))!;
     return Ok(n as usize);
 }
 
-// Move `fd`'s offset to `offset` bytes from `whence`, a `SEEK_*`; the new
-// offset from the start, or the errno as the error code.
+// Moves the offset of `fd`, where its next read or write happens, and
+// returns the new offset from the start.
+//
+// `whence` says what `offset` counts from: `SEEK_SET` the start, `SEEK_CUR`
+// the current offset, `SEEK_END` the end. `lseek(fd, 0, SEEK_END)` gives
+// the size of the file.
+//
+// # Errors
+//
+// The errno: 9 (EBADF) when `fd` is not open, 22 (EINVAL) when the new
+// offset would be negative, 29 (ESPIPE) for a pipe or socket.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// fs::write_file("abc.txt", "abcdef").unwrap();
+// var fd = fs::open("abc.txt", fs::O_RDONLY, 0).unwrap();
+// println("{}", fs::lseek(fd, 0, fs::SEEK_END).unwrap()); // 6
+// println("{}", fs::lseek(fd, 2, fs::SEEK_SET).unwrap()); // 2
+// var buf: Array<u8, 1> = [0; 1];
+// fs::read(fd, &buf[0], 1).unwrap();
+// println("{}", buf[0] == 'c'); // true
+// fs::close(fd).unwrap();
+// ```
 pub fn lseek(fd: i64, offset: i64, whence: i64) i64! {
     return sys_result(syscall3(SYS_LSEEK, fd, offset, whence));
 }
 
-// Create a directory at `path` with permissions `mode`; 0, or the errno as
-// the error code.
+// Creates a directory at `path` with permissions `mode`, returning 0.
+//
+// The directory above it must exist already.
+//
+// # Errors
+//
+// The errno: 17 (EEXIST) when something is there already, 2 (ENOENT) when
+// the directory above is missing, 13 (EACCES) without permission.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// println("{}", fs::mkdir("cache", fs::PERM_755).unwrap()); // 0
+// println("{}", fs::mkdir("cache", fs::PERM_755).unwrap_err()); // 17
+// ```
 pub fn mkdir(path: str, mode: i64) i64! {
     var buf: Array<u8, 4096> = [0; 4096];
     var p = c_path(path, &buf[0])!;
     return sys_result(syscall2(SYS_MKDIR, p, mode));
 }
 
-// Remove the empty directory at `path`; 0, or the errno as the error code.
+// Removes the empty directory at `path`, returning 0.
+//
+// # Errors
+//
+// The errno: 39 (ENOTEMPTY) when it holds anything, 2 (ENOENT) when it
+// does not exist, 20 (ENOTDIR) when it is not a directory.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// fs::mkdir("tmp", fs::PERM_755).unwrap();
+// println("{}", fs::rmdir("tmp").unwrap()); // 0
+// println("{}", fs::exists("tmp")); // false
+// ```
 pub fn rmdir(path: str) i64! {
     var buf: Array<u8, 4096> = [0; 4096];
     var p = c_path(path, &buf[0])!;
     return sys_result(syscall1(SYS_RMDIR, p));
 }
 
-// Delete the file at `path`; not for directories. 0, or the errno as the
-// error code.
+// Deletes the file at `path`, returning 0.
+//
+// For files, links and the like; `rmdir` removes directories. A file still
+// open elsewhere stays readable there until it is closed.
+//
+// # Errors
+//
+// The errno: 2 (ENOENT) when nothing is there, 21 (EISDIR) for a directory,
+// 13 (EACCES) without permission.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// fs::write_file("old.txt", "bye").unwrap();
+// println("{}", fs::unlink("old.txt").unwrap()); // 0
+// println("{}", fs::unlink("old.txt").unwrap_err()); // 2
+// ```
 pub fn unlink(path: str) i64! {
     var buf: Array<u8, 4096> = [0; 4096];
     var p = c_path(path, &buf[0])!;
     return sys_result(syscall1(SYS_UNLINK, p));
 }
 
-// Move `old_path` to `new_path`, replacing a file already there; 0, or the
-// errno as the error code.
+// Moves the file or directory at `old_path` to `new_path`, returning 0.
+//
+// A file already at `new_path` is replaced. Both paths must be on the same
+// file system.
+//
+// # Errors
+//
+// The errno: 2 (ENOENT) when `old_path` does not exist, 18 (EXDEV) when the
+// paths are on different file systems, 13 (EACCES) without permission.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// fs::write_file("draft.txt", "text").unwrap();
+// fs::rename("draft.txt", "final.txt").unwrap();
+// println("{} {}", fs::exists("draft.txt"), fs::exists("final.txt")); // false true
+// ```
 pub fn rename(old_path: str, new_path: str) i64! {
     var old_buf: Array<u8, 4096> = [0; 4096];
     var new_buf: Array<u8, 4096> = [0; 4096];
@@ -128,8 +296,24 @@ pub fn rename(old_path: str, new_path: str) i64! {
     return sys_result(syscall2(SYS_RENAME, old, new));
 }
 
-// The size in bytes of the file at `path`, following symlinks; the errno as
-// the error code, 2 (ENOENT) when missing.
+// Returns the size in bytes of the file at `path`.
+//
+// A symlink gives the size of the file it points to.
+//
+// # Errors
+//
+// The errno: 2 (ENOENT) when nothing is there, 13 (EACCES) without
+// permission to look.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// fs::write_file("five.txt", "12345").unwrap();
+// println("{}", fs::file_size("five.txt").unwrap()); // 5
+// println("{}", fs::file_size("missing.txt").unwrap_err()); // 2
+// ```
 pub fn file_size(path: str) usize! {
     var buf: Array<u8, 4096> = [0; 4096];
     var p = c_path(path, &buf[0])!;
@@ -138,30 +322,95 @@ pub fn file_size(path: str) usize! {
     return Ok(stat[6] as usize);
 }
 
-// Whether something exists at `path`; false on any error, such as no
-// permission to look.
+// Returns whether there is a file, directory or anything else at `path`.
+//
+// Any error, such as no permission to look, gives false.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// fs::write_file("here.txt", "").unwrap();
+// println("{}", fs::exists("here.txt")); // true
+// println("{}", fs::exists("nowhere.txt")); // false
+// ```
 pub fn exists(path: str) bool {
     var buf: Array<u8, 4096> = [0; 4096];
     var p = c_path(path, &buf[0]);
     return p.is_ok() && syscall2(SYS_ACCESS, p.unwrap(), 0) == 0;
 }
 
-// Cut or zero-extend the file at `path` to `length` bytes; 0, or the errno
-// as the error code.
+// Cuts the file at `path` to `length` bytes, returning 0.
+//
+// A `length` past the end grows the file with zero bytes instead.
+//
+// # Errors
+//
+// The errno: 2 (ENOENT) when the file is missing, 21 (EISDIR) for a
+// directory, 22 (EINVAL) for a negative `length`.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// fs::write_file("long.txt", "abcdef").unwrap();
+// fs::truncate("long.txt", 3).unwrap();
+// println("{}", fs::read_file("long.txt").unwrap()); // abc
+// ```
 pub fn truncate(path: str, length: i64) i64! {
     var buf: Array<u8, 4096> = [0; 4096];
     var p = c_path(path, &buf[0])!;
     return sys_result(syscall2(SYS_TRUNCATE, p, length));
 }
 
-// Wait until what was written to `fd` is on disk; 0, or the errno as the
-// error code.
+// Waits until everything written to `fd` is on the disk, returning 0.
+//
+// Without it, written data may sit in memory for a while and be lost if the
+// machine goes down.
+//
+// # Errors
+//
+// The errno: 9 (EBADF) when `fd` is not open, 5 (EIO) when the disk fails.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// var fd = fs::open("safe.txt", fs::O_WRONLY | fs::O_CREAT, fs::PERM_644).unwrap();
+// var text = "important";
+// fs::write(fd, text as *u8, text.len()).unwrap();
+// println("{}", fs::fsync(fd).unwrap()); // 0
+// fs::close(fd).unwrap();
+// ```
 pub fn fsync(fd: i64) i64! {
     return sys_result(syscall1(SYS_FSYNC, fd));
 }
 
-// The contents of the file at `path`, as many bytes as its size, in memory
-// that is never freed; the errno as the error code.
+// Reads the whole file at `path` and returns its contents.
+//
+// The text lives in memory that is never freed, so read each file once and
+// keep the result rather than reading it again in a loop. An empty file
+// gives `""`.
+//
+// # Errors
+//
+// The errno: 2 (ENOENT) when the file is missing, 13 (EACCES) without
+// permission, 21 (EISDIR) for a directory.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// fs::write_file("hello.txt", "one\ntwo\n").unwrap();
+// var text = fs::read_file("hello.txt").unwrap();
+// var lines = text.lines();
+// println("{} {}", lines.len(), lines[1]); // 2 two
+// println("{}", fs::read_file("missing.txt").unwrap_err()); // 2
+// ```
 pub fn read_file(path: str) str! {
     var size = file_size(path)!;
     if size == 0 {
@@ -181,8 +430,24 @@ pub fn read_file(path: str) str! {
     return Ok(*((&parts) as *str));
 }
 
-// Create or replace the file at `path` with `data`, as `PERM_644`; how many
-// bytes, or the errno as the error code.
+// Writes `data` to the file at `path` and returns how many bytes went.
+//
+// The file is created with permissions `PERM_644` when missing, and
+// emptied first when it exists.
+//
+// # Errors
+//
+// The errno: 2 (ENOENT) when the directory it goes in is missing, 13
+// (EACCES) without permission, 28 (ENOSPC) when the disk is full.
+//
+// # Examples
+//
+// ```zeru
+// import std.fs;
+//
+// println("{}", fs::write_file("note.txt", "remember").unwrap()); // 8
+// println("{}", fs::read_file("note.txt").unwrap()); // remember
+// ```
 pub fn write_file(path: str, data: str) usize! {
     var fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, PERM_644)!;
     var total: usize = 0;

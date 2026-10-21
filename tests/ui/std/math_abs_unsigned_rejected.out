@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: Cannot negate unsigned type u32
-    ╭─[ std/math.zr:39:16 ]
+    ╭─[ std/math.zr:92:16 ]
     │
- 39 │         return -num;
+ 92 │         return -num;
     │                ──┬─
     │                  ╰─── Cannot negate unsigned type u32
     │
