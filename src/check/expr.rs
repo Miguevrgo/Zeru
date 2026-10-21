@@ -28,6 +28,15 @@ impl FnCx<'_, '_> {
         self.mk(ExprKind::Void, Types::ERROR, span)
     }
 
+    /// `Ok()` of the `!` type `ret`.
+    pub(super) fn unit_ok(&self, ret: Ty, span: Span) -> Expr {
+        let TyKind::Result(unit, _) = *self.cx.types.kind(ret) else {
+            unreachable!("a ! type")
+        };
+        let unit = self.mk(ExprKind::Tuple(Vec::new()), unit, span);
+        self.mk(ExprKind::Ok(Box::new(unit)), ret, span)
+    }
+
     pub(super) fn expr(&mut self, e: &Expression, expected: Option<Ty>) -> Expr {
         let expected = expected.map(|ty| self.resolve(ty));
         let errors = self.cx.errors.len();

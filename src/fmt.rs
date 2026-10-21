@@ -438,7 +438,7 @@ impl<'s> Printer<'s> {
                 let params = params.iter().map(|param| text(param_text(param))).collect();
                 let ret = return_type
                     .as_ref()
-                    .map_or(String::new(), |ty| format!(" {}", ty_text(ty)));
+                    .map_or(String::new(), |ty| format!(" {}", return_text(ty)));
                 seq(vec![
                     text(format!("{public}fn {name}{}", generics(type_params))),
                     list("(", params, ")", false),
@@ -506,7 +506,7 @@ impl<'s> Printer<'s> {
                         let ret = method
                             .return_type
                             .as_ref()
-                            .map_or(String::new(), |ty| format!(" {}", ty_text(ty)));
+                            .map_or(String::new(), |ty| format!(" {}", return_text(ty)));
                         seq(vec![
                             text(format!("fn {}", method.name)),
                             list("(", params, ")", false),
@@ -736,6 +736,14 @@ impl<'s> Printer<'s> {
                 group(seq(parts))
             }
         }
+    }
+}
+
+/// A return type, `()!` written as `!`.
+fn return_text(ty: &TypeSpec) -> String {
+    match ty {
+        TypeSpec::Result(inner) if **inner == TypeSpec::Tuple(Vec::new()) => "!".into(),
+        _ => ty_text(ty),
     }
 }
 

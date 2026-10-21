@@ -68,9 +68,15 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
             fx.declare(param, ty, *mutable, receiver)
         })
         .collect();
-    let body_block = fx.block(body);
+    let mut body_block = fx.block(body);
     let is_main = fx.cx.is_main(def);
-    if ret != Types::VOID && !is_main && !fx.diverges {
+    if fx.cx.types.is_unit_result(ret) && !fx.diverges {
+        let ok = fx.unit_ok(ret, span);
+        body_block.stmts.push(tir::Stmt {
+            kind: StmtKind::Return(Some(ok)),
+            span,
+        });
+    } else if ret != Types::VOID && !is_main && !fx.diverges {
         let at = body.last().map_or(span, |stmt| stmt.span);
         fx.cx.error(
             format!("Function '{name}' can finish without returning a value"),
@@ -392,7 +398,9 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     value
                 });
                 self.diverges = true;
-                if value.is_none() && ret != Types::VOID {
+                if value.is_none() && self.cx.types.is_unit_result(ret) {
+                    self.error("A ! function returns early with 'return Ok();'", span);
+                } else if value.is_none() && ret != Types::VOID {
                     let want = self.ty(ret);
                     self.error(
                         format!("Invalid return type. Function expects {want}, returning void"),

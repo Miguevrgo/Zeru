@@ -608,6 +608,11 @@ impl FnCx<'_, '_> {
     }
 
     fn ok(&mut self, args: &[Expression], expected: Option<Ty>, span: Span) -> Expr {
+        if let (Some(ret), []) = (expected, args)
+            && self.cx.types.is_unit_result(ret)
+        {
+            return self.unit_ok(ret, span);
+        }
         let [arg] = args else {
             self.error("Ok() takes exactly one argument", span);
             self.check_args_only(args);

@@ -527,6 +527,11 @@ impl Parser {
         if self.at_any(body_starts) {
             return Some(None);
         }
+        if self.eat(&Token::Bang) {
+            return Some(Some(TypeSpec::Result(Box::new(
+                TypeSpec::Tuple(Vec::new()),
+            ))));
+        }
         self.parse_type().map(Some)
     }
 

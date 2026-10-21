@@ -1,0 +1,31 @@
+status: compile error
+-- stderr
+Error: A ! function returns early with 'return Ok();'
+   ╭─[ tests/ui/optionals_results/bang_return_errors.zr:2:5 ]
+   │
+ 2 │     return;
+   │     ───┬───
+   │        ╰───── A ! function returns early with 'return Ok();'
+───╯
+Error: Invalid return type. Function expects !, returning i32!
+   ╭─[ tests/ui/optionals_results/bang_return_errors.zr:5:5 ]
+   │
+ 5 │     return Ok(1);
+   │     ──────┬──────
+   │           ╰──────── Invalid return type. Function expects !, returning i32!
+───╯
+Error: Ok() takes exactly one argument
+   ╭─[ tests/ui/optionals_results/bang_return_errors.zr:8:12 ]
+   │
+ 8 │     return Ok();
+   │            ──┬─
+   │              ╰─── Ok() takes exactly one argument
+───╯
+Error: Type mismatch for variable 'r'. Annotated as i32 but got !
+    ╭─[ tests/ui/optionals_results/bang_return_errors.zr:11:5 ]
+    │
+ 11 │     var r: i32 = a();
+    │     ────────┬────────
+    │             ╰────────── Type mismatch for variable 'r'. Annotated as i32 but got !
+────╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,41 @@
+fn check(x: i32) ! {
+    if x > 10 {
+        return Err(34);
+    }
+    if x == 0 {
+        return Ok();
+    }
+    if x < 0 {
+        return Err(22);
+    }
+}
+
+fn both(a: i32, b: i32) ! {
+    check(a)!;
+    check(b)!;
+}
+
+struct Counter {
+    n: i32,
+
+    fn bump(var self) ! {
+        if self.n == 2 {
+            return Err(7);
+        }
+        self.n += 1;
+    }
+}
+
+fn main() {
+    check(5).unwrap();
+    println("{} {}", check(0).is_ok(), check(-1).unwrap_err());
+    println("{} {}", both(1, 2).is_ok(), both(1, 50).unwrap_err());
+    match check(3) {
+        Ok(_) => println("ok"),
+        Err(code) => println("error {}", code),
+    }
+    var c = Counter { n: 0 };
+    c.bump().unwrap();
+    c.bump().unwrap();
+    println("{}", c.bump().unwrap_err());
+}

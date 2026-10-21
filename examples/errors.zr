@@ -38,6 +38,15 @@ fn area(text: str) i64! {
     return Ok(width * height);
 }
 
+fn require(text: str, key: str) ! {
+    if key.len() == 0 {
+        return Ok();
+    }
+    if find(text, key).is_none() {
+        return Err(UNKNOWN_KEY);
+    }
+}
+
 fn first_letter(text: str, key: str) u8? {
     var value = find(text, key)?;
     if value.len() == 0 {
@@ -78,6 +87,8 @@ fn main() {
     println("{}", first_letter(SETTINGS, "color").is_none());
     println("{}", number(SETTINGS, "color").unwrap_err() == UNKNOWN_KEY);
     println("{}", check("broken line").unwrap_err());
+    require(SETTINGS, "title").unwrap();
+    println("{}", require(SETTINGS, "color").unwrap_err() == UNKNOWN_KEY);
 
     var word = "level";
     var mirrored = true;

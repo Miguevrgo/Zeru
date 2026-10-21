@@ -192,6 +192,12 @@ impl Types {
         ty == Self::ERROR
     }
 
+    /// Whether `ty` is `!`, the result of a function that returns nothing
+    /// but may fail.
+    pub fn is_unit_result(&self, ty: Ty) -> bool {
+        matches!(self.kind(ty), TyKind::Result(ok, _) if *self.kind(*ok) == TyKind::Tuple(Vec::new()))
+    }
+
     pub fn as_int(&self, ty: Ty) -> Option<IntTy> {
         match self.kind(ty) {
             TyKind::Int(int) => Some(*int),
@@ -342,6 +348,7 @@ impl Types {
             TyKind::Ref(inner) => format!("&{}", self.show(*inner)),
             TyKind::RefMut(inner) => format!("&var {}", self.show(*inner)),
             TyKind::Optional(inner) => format!("{}?", self.show_operand(*inner)),
+            TyKind::Result(..) if self.is_unit_result(ty) => "!".into(),
             TyKind::Result(ok, _) => format!("{}!", self.show_operand(*ok)),
             TyKind::Tuple(items) if items.len() == 1 => format!("({},)", list(items)),
             TyKind::Tuple(items) => format!("({})", list(items)),
