@@ -1,10 +1,12 @@
 //! `zeru fmt`: a file laid out again from its syntax tree.
 //! Indents are four spaces, and a line that would pass 100 columns breaks at
 //! its outermost group first: a call's arguments one per line, an operator
-//! chain before each operator, a method chain before each `.`. Comments and
-//! single blank lines stay where they were; a comment inside an expression,
-//! which has no place in the new layout, is an error instead. The result is
-//! parsed again and must give the same tree and comments, or nothing changes.
+//! chain before each operator, a method chain before each `.`; a block may
+//! end a line only as a list's last item. Comments, after a statement or a
+//! `{` too, and single blank lines stay where they were; a comment inside an
+//! expression, which has no place in the new layout, is an error instead.
+//! The result is parsed again and must give the same tree and comments, or
+//! nothing changes.
 
 use std::collections::HashSet;
 
@@ -57,10 +59,24 @@ fn group(doc: Doc) -> Doc {
 
 /// `items` between `open` and `close`: on one line when they fit, with a
 /// space inside the brackets if `padded`, else one per line with a
-/// trailing comma.
+/// trailing comma. Only the last item may be a block that spans lines
+/// while the list stays on one: one before it would put the items after it
+/// on the block's last line.
 fn list(open: &str, items: Vec<Doc>, close: &str, padded: bool) -> Doc {
     if items.is_empty() {
         return text(format!("{open}{close}"));
+    }
+    if items[..items.len() - 1].iter().any(breaks) {
+        let lines = items
+            .into_iter()
+            .flat_map(|item| [Doc::Hard, item, text(",")])
+            .collect();
+        return seq(vec![
+            text(open),
+            Doc::Indent(Box::new(seq(lines))),
+            Doc::Hard,
+            text(close),
+        ]);
     }
     let edge = || if padded { Doc::Line } else { Doc::Soft };
     let mut inside = vec![edge()];
@@ -79,6 +95,17 @@ fn list(open: &str, items: Vec<Doc>, close: &str, padded: bool) -> Doc {
     ]))
 }
 
+/// Whether `doc` always spans lines, as a block does.
+fn breaks(doc: &Doc) -> bool {
+    match doc {
+        Doc::Hard => true,
+        Doc::Text(text) => text.contains('\n'),
+        Doc::Nest(doc) | Doc::Indent(doc) | Doc::Group(doc) => breaks(doc),
+        Doc::Seq(docs) => docs.iter().any(breaks),
+        Doc::Suffix(_) | Doc::Line | Doc::Soft | Doc::IfBroken(_) => false,
+    }
+}
+
 fn width(text: &str) -> usize {
     text.chars().count()
 }
@@ -92,7 +119,10 @@ fn render(doc: &Doc) -> String {
             out.extend(std::iter::repeat_n(' ', indent));
         }
         out.push_str(text);
-        *column += width(text);
+        *column = match text.rsplit_once('\n') {
+            Some((_, last)) => width(last),
+            None => *column + width(text),
+        };
     };
     let mut stack = vec![(0, false, doc)];
     while let Some((indent, flat, doc)) = stack.pop() {
@@ -137,7 +167,10 @@ fn fits(room: usize, doc: &Doc, rest: &[(usize, bool, &Doc)]) -> bool {
             },
         };
         match doc {
-            Doc::Text(text) if text.contains('\n') => return !flat,
+            Doc::Text(text) if text.contains('\n') => {
+                let first = text.split('\n').next().unwrap_or_default();
+                return room >= width(first) as isize;
+            }
             Doc::Text(text) => room -= width(text) as isize,
             Doc::IfBroken(text) if !flat => room -= width(text) as isize,
             Doc::Suffix(_) | Doc::IfBroken(_) => {}
@@ -318,6 +351,18 @@ impl<'s> Printer<'s> {
     ) -> Vec<Doc> {
         let mut out = Vec::new();
         let mut last = None;
+        if let Some(&comment) = self.comments.get(self.next)
+            && items
+                .first()
+                .is_none_or(|item| comment.start < extent(self, item).start)
+            && self.src[..comment.start]
+                .trim_end_matches([' ', '\t'])
+                .ends_with('{')
+        {
+            out.push(Doc::Suffix(format!(" {}", self.source(comment).trim_end())));
+            self.next += 1;
+            last = Some(comment.end);
+        }
         for item in items {
             let span = extent(self, item);
             self.comments_before(span.start, &mut out, &mut last);
@@ -564,7 +609,11 @@ impl<'s> Printer<'s> {
             E::None => text("None"),
             E::Identifier(name) => text(name),
             E::Prefix { operator, right } => {
-                seq(vec![text(operator.to_string()), self.expr(right)])
+                let doubled = matches!(&right.kind, E::Prefix { operator: inner, .. } if inner == operator)
+                    && *operator == Token::Minus
+                    && !self.parens.contains(&right.span);
+                let space = if doubled { " " } else { "" };
+                seq(vec![text(format!("{operator}{space}")), self.expr(right)])
             }
             E::Infix {
                 left,
@@ -880,6 +929,36 @@ fn main() {
 ";
         assert_eq!(format(source).unwrap(), expected);
         assert!(format("fn main() { f(1, /* here */ 2); }").is_err());
+    }
+
+    #[test]
+    fn keeps_brace_comments_raw_strings_and_minus_signs() {
+        let source = "fn main() {
+    if a { // why
+        f(match x { 1 => 2, default => 3 }, last_argument);
+    }
+    var s = `one
+two`; var n = - - 3;
+}
+";
+        let expected = "fn main() {
+    if a { // why
+        f(
+            match x {
+                1 => 2,
+                default => 3,
+            },
+            last_argument,
+        );
+    }
+    var s = `one
+two`;
+    var n = - -3;
+}
+";
+        let formatted = format(source).unwrap();
+        assert_eq!(formatted, expected);
+        assert_eq!(format(&formatted).unwrap(), formatted);
     }
 
     #[test]
