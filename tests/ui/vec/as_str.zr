@@ -1,0 +1,10 @@
+fn main() {
+    var text: Vec<u8> = Vec.new();
+    println("[{}] {}", text.as_str(), text.as_str().len());
+    for b in "hello" {
+        text.push(b);
+    }
+    text.push('!');
+    var s = text.as_str();
+    println("{} {} {}", s, s.len(), s == "hello!");
+}

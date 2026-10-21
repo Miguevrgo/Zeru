@@ -31,7 +31,7 @@ const STR_METHODS: &[&str] = &[
 
 /// Vec methods written in the prelude, each `__zeru_vec_<name>` taking a
 /// reference to the Vec first.
-const VEC_STD_METHODS: &[&str] = &["sort", "swap", "contains", "sum", "min", "max"];
+const VEC_STD_METHODS: &[&str] = &["sort", "swap", "contains", "sum", "min", "max", "as_str"];
 
 /// The `Vec` methods that change it, so need a receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
@@ -242,6 +242,11 @@ impl FnCx<'_, '_> {
                     self.require_mutable(&place, object, span);
                 }
                 let receiver = self.address(place, ty, mutable, object.span);
+                if name == "as_str" && elem != Types::U8 {
+                    let shown = self.ty(ty);
+                    self.error(format!("as_str() needs a Vec<u8>, not {shown}"), span);
+                    return self.error_expr(span);
+                }
                 if VEC_STD_METHODS.contains(&name)
                     && let Some(def) = self
                         .cx

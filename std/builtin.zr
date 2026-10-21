@@ -745,6 +745,14 @@ fn __zeru_vec_swap<T>(v: &var Vec<T>, i: usize, j: usize) {
     }
 }
 
+// `v.as_str()`: the bytes of the `Vec<u8>` `v` as a str, sharing its
+// memory.
+fn __zeru_vec_as_str<T>(v: &Vec<T>) str {
+    var header = v as *usize;
+    var parts = (*(header as **u8), *(header + 1));
+    return *((&parts) as *str);
+}
+
 // `v.contains(value)`: whether an element equals `value`.
 fn __zeru_vec_contains<T: Eq>(v: &Vec<T>, value: T) bool {
     for x in v {

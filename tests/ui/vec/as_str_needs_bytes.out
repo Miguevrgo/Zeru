@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: as_str() needs a Vec<u8>, not Vec<i32>
+   ╭─[ tests/ui/vec/as_str_needs_bytes.zr:3:5 ]
+   │
+ 3 │     nums.as_str();
+   │     ──────┬──────
+   │           ╰──────── as_str() needs a Vec<u8>, not Vec<i32>
+───╯
+[-] Error: aborting due to previous error

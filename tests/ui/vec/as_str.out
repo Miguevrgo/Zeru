@@ -1,0 +1,4 @@
+status: exit 0
+-- stdout
+[] 0
+hello! 6 true

@@ -1,10 +1,5 @@
 import std.fs;
 
-fn text_of(v: &Vec<u8>) str {
-    var parts = ((&v[0]) as *u8, v.len());
-    return *((&parts) as *str);
-}
-
 fn main() {
     var big: Vec<u8> = Vec.new();
     for i in 0..10000 {
@@ -13,7 +8,7 @@ fn main() {
     big.push('\n');
     big.push('\n');
     big.push('x');
-    var text = text_of(&big);
+    var text = big.as_str();
     fs::write_file("big.txt", text).unwrap();
 
     var file = fs::File.open("big.txt").unwrap();
@@ -46,7 +41,7 @@ fn main() {
         name[11] = '0' + (i / 100 % 10) as u8;
         name[12] = '0' + (i / 10 % 10) as u8;
         name[13] = '0' + (i % 10) as u8;
-        fs::write_file(text_of(&name), "").unwrap();
+        fs::write_file(name.as_str(), "").unwrap();
     }
     var entries = fs::read_dir("many").unwrap();
     var files = 0;
@@ -80,7 +75,7 @@ fn main() {
         for b in e.name {
             name.push(b);
         }
-        fs::remove_file(text_of(&name)).unwrap();
+        fs::remove_file(name.as_str()).unwrap();
     }
     fs::remove_dir("many").unwrap();
     fs::remove_file("big.txt").unwrap();

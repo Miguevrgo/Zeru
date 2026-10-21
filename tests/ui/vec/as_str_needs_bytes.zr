@@ -1,0 +1,4 @@
+fn main() {
+    var nums: Vec<i32> = [1];
+    nums.as_str();
+}
