@@ -1,0 +1,6 @@
+status: compile error
+-- stderr
+[-] Error: LLVM rejected the program: <inline asm>:1:2: invalid instruction mnemonic 'bogusinstr'
+        bogusinstr %rax
+        ^~~~~~~~~~
+

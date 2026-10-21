@@ -14,11 +14,12 @@ impl Checker<'_> {
             TypeSpec::Generic { name, args } if name == "Array" && args.len() == 2 => {
                 let elem = self.resolve_type(&args[0], scope, span);
                 let len = match &args[1] {
-                    TypeSpec::IntLiteral(len) => *len,
+                    TypeSpec::IntLiteral(len) => self.fitting_length(i128::from(*len), span),
                     TypeSpec::Named(name) => match self.items.lookup_value(scope.module, name) {
                         Some(def) if self.items.item(def).kind == ItemKind::Const => {
                             self.check_visible(def, scope.module, span);
-                            let value = self.const_value(def, span);
+                            let mut value = self.const_value(def, span);
+                            value.span = span;
                             self.length(&value)
                         }
                         _ => {
@@ -30,6 +31,9 @@ impl Checker<'_> {
                         self.error("Array length must be an integer or a constant", span);
                         return Types::ERROR;
                     }
+                };
+                let Some(len) = len else {
+                    return Types::ERROR;
                 };
                 self.intern_or_error(TyKind::Array(elem, len), &[elem])
             }

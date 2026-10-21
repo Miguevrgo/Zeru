@@ -23,23 +23,17 @@ use super::{Lower, Val};
 
 pub(super) const FLUSH_FN: &str = "__zeru_flush";
 
-/// The global symbols start.s defines.
-pub(super) const SYMBOLS: [&str; 14] = [
-    "_start",
-    "__zeru_start",
-    "__zeru_detect_simd",
-    "__zeru_simd",
-    "memcpy",
-    "memmove",
-    "memset",
-    "memcmp",
-    "bcmp",
-    "trunc",
-    "truncf",
-    "fmod",
-    "fmodf",
-    "abort",
-];
+/// The entry point and the functions LLVM calls by name, in assembly.
+const START: &str = include_str!("start.s");
+
+/// Whether start.s, or the `__zeru_start` it calls, defines `symbol`, which
+/// a function of the program then cannot take.
+pub(super) fn runtime_symbol(symbol: &str) -> bool {
+    symbol == "__zeru_start"
+        || START
+            .lines()
+            .any(|line| line.strip_suffix(':') == Some(symbol))
+}
 
 impl<'a, 'ctx> Lower<'a, 'ctx> {
     /// A read-only global holding `bytes` and a terminating NUL, which a
@@ -628,7 +622,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     /// `__zeru_start`, which `_start` in start.s calls with no libc under it:
     /// `main`, then the flush, giving back `main`'s exit code.
     pub(super) fn create_start(&mut self) {
-        self.module.set_inline_assembly(include_str!("start.s"));
+        self.module.set_inline_assembly(START);
         let Some(main) = self.bodies.iter().position(|body| body.exported) else {
             return;
         };
@@ -736,7 +730,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         }
     }
 
-    pub(super) fn asm(&mut self, asm: &Asm, ty: Ty) -> Val<'ctx> {
+    pub(super) fn asm(&mut self, asm: &'a Asm) {
         let Asm {
             template,
             constraints,
@@ -755,15 +749,16 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 self.llvm_ty(ty)
             })
             .collect();
-        let word = self.usize_type().as_basic_type_enum();
-        let output_type = match output_tys.as_slice() {
-            [] => word,
-            [single] => *single,
-            many => self.context.struct_type(many, false).into(),
-        };
         let params: Vec<_> = inputs.iter().map(|v| v.get_type().into()).collect();
-        let fn_type = output_type.fn_type(&params, false);
-        let asm = self.context.create_inline_asm(
+        let fn_type = match output_tys.as_slice() {
+            [] => self.context.void_type().fn_type(&params, false),
+            [single] => single.fn_type(&params, false),
+            many => self
+                .context
+                .struct_type(many, false)
+                .fn_type(&params, false),
+        };
+        let asm_fn = self.context.create_inline_asm(
             fn_type,
             template.clone(),
             constraints.clone(),
@@ -773,13 +768,13 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             false,
         );
         let args: Vec<BasicMetadataValueEnum> = inputs.iter().map(|v| (*v).into()).collect();
-        let result = self
+        let call = self
             .builder
-            .build_indirect_call(fn_type, asm, &args, "asm")
-            .unwrap()
-            .try_as_basic_value()
-            .basic()
+            .build_indirect_call(fn_type, asm_fn, &args, "asm")
             .unwrap();
+        let Some(result) = call.try_as_basic_value().basic() else {
+            return;
+        };
         for (at, place) in outputs.iter().enumerate() {
             let target = self.place(place);
             let value = match outputs.len() {
@@ -791,10 +786,5 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             };
             self.builder.build_store(target, value).unwrap();
         }
-        let llvm = self.llvm_ty(ty);
-        if result.get_type() == llvm {
-            return Val::Imm(result);
-        }
-        Val::Imm(llvm.const_zero())
     }
 }

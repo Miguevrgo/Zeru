@@ -331,9 +331,6 @@ impl<'a> Cx<'a> {
                     Rvalue::VecPop(place) | Rvalue::VecRemove(place, _) => {
                         out.push((place.clone(), Role::Realloc))
                     }
-                    Rvalue::Asm(asm) => {
-                        out.extend(asm.outputs.iter().map(|place| (place.clone(), Role::Write)))
-                    }
                     _ => {}
                 }
                 out.push((dest.clone(), Role::Write));
@@ -344,6 +341,9 @@ impl<'a> Cx<'a> {
             | StatementKind::VecReserve(place, _)
             | StatementKind::VecShrinkToFit(place) => out.push((place.clone(), Role::Realloc)),
             StatementKind::StorageDead(local) => out.push((Place::local(*local), Role::Dead)),
+            StatementKind::Asm(asm) => {
+                out.extend(asm.outputs.iter().map(|place| (place.clone(), Role::Write)))
+            }
             StatementKind::CopyBytes(..) | StatementKind::Flush | StatementKind::Print { .. } => {}
         }
         out

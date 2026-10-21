@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: An asm operand goes in a register, so it is a number, a bool or a pointer, not str
+   ╭─[ tests/ui/inline_asm/operand_not_a_register.zr:5:50 ]
+   │
+ 5 │     asm volatile ("mov $1, $0" : "=r" (r) : "r" (text));
+   │                                                  ──┬─
+   │                                                    ╰─── An asm operand goes in a register, so it is a number, a bool or a pointer, not str
+───╯
+Error: An asm operand goes in a register, so it is a number, a bool or a pointer, not str
+   ╭─[ tests/ui/inline_asm/operand_not_a_register.zr:6:33 ]
+   │
+ 6 │     asm volatile ("nop" : "=r" (s));
+   │                                 ┬
+   │                                 ╰── An asm operand goes in a register, so it is a number, a bool or a pointer, not str
+───╯
+[-] Error: aborting due to previous error

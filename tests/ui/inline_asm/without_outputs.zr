@@ -1,0 +1,6 @@
+fn main() {
+    var r: i64 = 0;
+    asm volatile ("nop");
+    asm volatile ("movq $$7, $0" : "=r" (r));
+    println("{}", r);
+}

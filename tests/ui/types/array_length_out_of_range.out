@@ -1,0 +1,45 @@
+status: compile error
+-- stderr
+Error: An array length goes from 0 to 4294967295, not 4294967298
+   ╭─[ tests/ui/types/array_length_out_of_range.zr:4:5 ]
+   │
+ 4 │     var a: Array<u8, 4294967298> = [0; 2];
+   │     ───────────────────┬──────────────────
+   │                        ╰──────────────────── An array length goes from 0 to 4294967295, not 4294967298
+───╯
+Error: An array length must be a constant integer
+   ╭─[ tests/ui/types/array_length_out_of_range.zr:5:5 ]
+   │
+ 5 │     var b: Array<i32, B> = [1];
+   │     ─────────────┬─────────────
+   │                  ╰─────────────── An array length must be a constant integer
+───╯
+Error: An array length goes from 0 to 4294967295, not 4294967298
+   ╭─[ tests/ui/types/array_length_out_of_range.zr:6:5 ]
+   │
+ 6 │     var c: Array<u8, HUGE> = [0; HUGE];
+   │     ─────────────────┬─────────────────
+   │                      ╰─────────────────── An array length goes from 0 to 4294967295, not 4294967298
+───╯
+Error: An array length goes from 0 to 4294967295, not 4294967298
+   ╭─[ tests/ui/types/array_length_out_of_range.zr:6:34 ]
+   │
+ 6 │     var c: Array<u8, HUGE> = [0; HUGE];
+   │                                  ──┬─
+   │                                    ╰─── An array length goes from 0 to 4294967295, not 4294967298
+───╯
+Error: An array length must be a constant integer
+   ╭─[ tests/ui/types/array_length_out_of_range.zr:7:17 ]
+   │
+ 7 │     var d = [0; -1];
+   │                 ─┬
+   │                  ╰── An array length must be a constant integer
+───╯
+Error: Literal -1 does not fit in usize
+   ╭─[ tests/ui/types/array_length_out_of_range.zr:7:17 ]
+   │
+ 7 │     var d = [0; -1];
+   │                 ─┬
+   │                  ╰── Literal -1 does not fit in usize
+───╯
+[-] Error: aborting due to previous error

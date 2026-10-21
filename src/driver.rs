@@ -2,10 +2,17 @@
 //! into the typed IR, build the MIR, lower that to LLVM, emit an object file
 //! and link it statically, with no libc, through the system C compiler.
 
-use inkwell::context::Context;
+use inkwell::context::{AsContextRef, Context};
+use inkwell::llvm_sys::LLVMDiagnosticSeverity;
+use inkwell::llvm_sys::core::{
+    LLVMContextSetDiagnosticHandler, LLVMDisposeMessage, LLVMGetDiagInfoDescription,
+    LLVMGetDiagInfoSeverity,
+};
+use inkwell::llvm_sys::prelude::LLVMDiagnosticInfoRef;
 use inkwell::passes::PassBuilderOptions;
 use inkwell::targets::FileType;
 use std::collections::HashMap;
+use std::ffi::{CStr, c_void};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -135,6 +142,20 @@ pub fn format(files: &[PathBuf], check: bool) -> Result<(), CompileError> {
     }
 }
 
+/// Keep each error LLVM reports, as an asm instruction it does not know, in
+/// the `Vec<String>` at `errors`: without this LLVM prints it and goes on.
+extern "C" fn collect_error(info: LLVMDiagnosticInfoRef, errors: *mut c_void) {
+    unsafe {
+        if LLVMGetDiagInfoSeverity(info) != LLVMDiagnosticSeverity::LLVMDSError {
+            return;
+        }
+        let text = LLVMGetDiagInfoDescription(info);
+        let message = CStr::from_ptr(text).to_string_lossy().into_owned();
+        LLVMDisposeMessage(text);
+        (*errors.cast::<Vec<String>>()).push(message);
+    }
+}
+
 pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, CompileError> {
     if !path.extension().is_some_and(|ext| ext == "zr") {
         status(YELLOW, '\u{ea6c}', "Warning", "Zeru extension is .zr");
@@ -161,7 +182,15 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
         report_errors(&errors, &sources);
         CompileError::Unknown
     })?;
+    let mut rejected: Vec<String> = Vec::new();
     let context = Context::create();
+    unsafe {
+        LLVMContextSetDiagnosticHandler(
+            (&context).as_ctx_ref(),
+            Some(collect_error),
+            (&raw mut rejected).cast(),
+        );
+    }
     let module = context.create_module(name);
     let machine = crate::lower::host_machine(mode);
     crate::lower::lower(
@@ -176,6 +205,11 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
     options.set_loop_slp_vectorization(mode != SafetyMode::Debug);
     module.run_passes(mode.passes(), &machine, options)?;
     machine.write_to_file(&module, FileType::Object, &object_path)?;
+    rejected.dedup();
+    if !rejected.is_empty() {
+        std::fs::remove_file(object_path)?;
+        return Err(CompileError::Rejected(rejected.join("\n")));
+    }
     let link = Command::new("cc")
         .arg(&object_path)
         .arg("-o")

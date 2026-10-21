@@ -189,7 +189,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     fn declare(&mut self, body: &Body) -> FunctionValue<'ctx> {
         let fn_type = self.signature(body);
         let linkage = (!body.exported).then_some(Linkage::Internal);
-        let symbol = match runtime::SYMBOLS.contains(&body.symbol.as_str()) {
+        let symbol = match runtime::runtime_symbol(&body.symbol) {
             true => format!("{}.zeru", body.symbol),
             false => body.symbol.clone(),
         };
@@ -255,17 +255,17 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         };
         for block in &body.blocks {
             for statement in &block.statements {
-                if let StatementKind::Assign(place, rvalue) = &statement.kind {
-                    define(place);
-                    match rvalue {
-                        Rvalue::AddressOf(place)
-                            if place.projection.first() != Some(&Projection::Deref) =>
+                match &statement.kind {
+                    StatementKind::Assign(place, rvalue) => {
+                        define(place);
+                        if let Rvalue::AddressOf(place) = rvalue
+                            && place.projection.first() != Some(&Projection::Deref)
                         {
                             borrowed[place.local.0 as usize] = true
                         }
-                        Rvalue::Asm(asm) => asm.outputs.iter().for_each(&mut define),
-                        _ => {}
                     }
+                    StatementKind::Asm(asm) => asm.outputs.iter().for_each(&mut define),
+                    _ => {}
                 }
             }
             if let TerminatorKind::Call {
@@ -327,6 +327,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 pieces,
                 values,
             } => self.print(*stderr, *newline, pieces, values),
+            StatementKind::Asm(asm) => self.asm(asm),
         }
     }
 

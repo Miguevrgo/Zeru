@@ -1,0 +1,17 @@
+import std.net;
+
+fn main() {
+    var ip = net::ip4(127, 0, 0, 1);
+    var listener = net::TcpListener.bind(ip, 47911).unwrap();
+    var client = net::TcpStream.connect(ip, 47911).unwrap();
+    var server = listener.accept().unwrap();
+    client.close().unwrap();
+    var buf: Array<u8, 1000> = [0; 1000];
+    var failed = false;
+    for i in 0..5 {
+        if server.write(&buf[0], 1000).is_err() {
+            failed = true;
+        }
+    }
+    println("a write failed: {}, and the program goes on", failed);
+}

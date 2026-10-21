@@ -1,0 +1,8 @@
+fn main() {
+    var text = "abc";
+    var r: i64 = 0;
+    var s: str = "";
+    asm volatile ("mov $1, $0" : "=r" (r) : "r" (text));
+    asm volatile ("nop" : "=r" (s));
+    asm volatile ("nop");
+}

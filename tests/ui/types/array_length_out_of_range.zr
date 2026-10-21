@@ -1,0 +1,8 @@
+const B: bool = true;
+const HUGE: usize = 4294967298;
+fn main() {
+    var a: Array<u8, 4294967298> = [0; 2];
+    var b: Array<i32, B> = [1];
+    var c: Array<u8, HUGE> = [0; HUGE];
+    var d = [0; -1];
+}

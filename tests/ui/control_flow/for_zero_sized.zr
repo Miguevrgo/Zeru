@@ -1,0 +1,12 @@
+struct Tick {}
+fn main() {
+    var v: Vec<Tick> = Vec.new();
+    v.push(Tick {});
+    v.push(Tick {});
+    v.push(Tick {});
+    var n = 0;
+    for t in v {
+        n += 1;
+    }
+    println("{} {}", v.len(), n);
+}

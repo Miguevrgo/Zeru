@@ -28,6 +28,26 @@ impl FnCx<'_, '_> {
         self.mk(ExprKind::Void, Types::ERROR, span)
     }
 
+    /// Report an asm operand of type `ty` that does not fit a register: only
+    /// numbers, bools and pointers go in one.
+    fn asm_operand(&mut self, ty: Ty, span: Span) {
+        let types = &self.cx.types;
+        let fits = types.is_number(ty)
+            || ty == Types::BOOL
+            || types.is_error(ty)
+            || matches!(
+                types.kind(ty),
+                TyKind::Ptr(_) | TyKind::Ref(_) | TyKind::RefMut(_)
+            );
+        if !fits {
+            let shown = self.ty(ty);
+            self.error(
+                format!("An asm operand goes in a register, so it is a number, a bool or a pointer, not {shown}"),
+                span,
+            );
+        }
+    }
+
     /// The `String` `text` as the `str` its bytes spell, sharing its memory.
     pub(super) fn view(&mut self, text: Expr) -> Expr {
         let span = text.span;
@@ -198,7 +218,9 @@ impl FnCx<'_, '_> {
             ExpressionKind::ArrayLiteral(elements) => self.array_literal(elements, inner, span),
             ExpressionKind::ArrayRepeat { value, count } => {
                 let count = self.value(count, Some(Types::USIZE));
-                let count = self.cx.length(&count);
+                let Some(count) = self.cx.length(&count) else {
+                    return self.error_expr(span);
+                };
                 self.array_repeat(value, count, inner, span)
             }
             ExpressionKind::Range { .. } => {
@@ -222,6 +244,9 @@ impl FnCx<'_, '_> {
                 is_volatile,
             } => {
                 let values: Vec<Expr> = inputs.iter().map(|op| self.expr(&op.expr, None)).collect();
+                for value in &values {
+                    self.asm_operand(value.ty, value.span);
+                }
                 let mut places = Vec::new();
                 for output in outputs {
                     if !matches!(output.expr.kind, ExpressionKind::Identifier(_)) {
@@ -230,7 +255,9 @@ impl FnCx<'_, '_> {
                             output.expr.span,
                         );
                     }
-                    places.push(self.place(&output.expr).0);
+                    let (place, ty) = self.place(&output.expr);
+                    self.asm_operand(ty, output.expr.span);
+                    places.push(place);
                 }
                 let constraints: Vec<String> = outputs
                     .iter()
@@ -245,7 +272,7 @@ impl FnCx<'_, '_> {
                     inputs: values,
                     volatile: *is_volatile,
                 }));
-                self.mk(kind, Types::I64, span)
+                self.mk(kind, Types::VOID, span)
             }
         }
     }

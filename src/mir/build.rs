@@ -430,30 +430,23 @@ impl<'a> Builder<'a> {
         let pointer = self.program.types.intern(TyKind::Ref(elem));
         let len = self.temp(Types::USIZE);
         self.assign(Place::local(len), Rvalue::Len(seq.clone()));
-        let first = self.temp(Types::USIZE);
-        self.assign(Place::local(first), Rvalue::Use(constant(0, Types::USIZE)));
-        let at = self.local(pointer, Some("for".to_string()));
-        let element = seq.project(Projection::Index(first));
-        self.assign(Place::local(at), Rvalue::AddressOf(element));
-        let end = self.temp(pointer);
-        let step = |by: Operand| Rvalue::Binary {
-            op: BinOp::PtrAdd,
-            left: Operand::Copy(Place::local(at)),
-            right: by,
-            checked: false,
+        let count = match index {
+            Some(index) => {
+                let index = self.declare(index);
+                self.own(index);
+                index
+            }
+            None => self.temp(Types::USIZE),
         };
-        self.assign(Place::local(end), step(Operand::Move(Place::local(len))));
+        self.assign(Place::local(count), Rvalue::Use(constant(0, Types::USIZE)));
+        let at = self.local(pointer, Some("for".to_string()));
+        let element = seq.project(Projection::Index(count));
+        self.assign(Place::local(at), Rvalue::AddressOf(element));
         let current = Place::local(at).project(Projection::Deref);
-        let index = index.map(|index| {
-            let index = self.declare(index);
-            self.own(index);
-            self.assign(Place::local(index), Rvalue::Use(constant(0, Types::USIZE)));
-            index
-        });
         self.looping(
             |this| {
-                let end = Operand::Copy(Place::local(end));
-                this.binary(BinOp::Ne, Operand::Copy(Place::local(at)), end)
+                let len = Operand::Copy(Place::local(len));
+                this.binary(BinOp::Lt, Operand::Copy(Place::local(count)), len)
             },
             |this| match this.function.locals[var.0 as usize].view {
                 true => this.views[var.0 as usize] = Some(current),
@@ -465,16 +458,14 @@ impl<'a> Builder<'a> {
             },
             body,
             |this| {
-                this.assign(Place::local(at), step(constant(1, Types::USIZE)));
-                if let Some(index) = index {
-                    let rvalue = Rvalue::Binary {
-                        op: BinOp::AddWrap,
-                        left: Operand::Copy(Place::local(index)),
-                        right: constant(1, Types::USIZE),
-                        checked: false,
-                    };
-                    this.assign(Place::local(index), rvalue);
-                }
+                let next = |place: Local, op| Rvalue::Binary {
+                    op,
+                    left: Operand::Copy(Place::local(place)),
+                    right: constant(1, Types::USIZE),
+                    checked: false,
+                };
+                this.assign(Place::local(at), next(at, BinOp::PtrAdd));
+                this.assign(Place::local(count), next(count, BinOp::AddWrap));
             },
         );
     }
@@ -746,13 +737,13 @@ impl<'a> Builder<'a> {
                     .iter()
                     .map(|place| self.as_place(place))
                     .collect();
-                Rvalue::Asm(Box::new(Asm {
+                return self.push(StatementKind::Asm(Box::new(Asm {
                     template: asm.template.clone(),
                     constraints: asm.constraints.clone(),
                     outputs,
                     inputs,
                     volatile: asm.volatile,
-                }))
+                })));
             }
             ExprKind::Int(_)
             | ExprKind::Float(_)

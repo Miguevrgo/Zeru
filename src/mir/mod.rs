@@ -69,6 +69,7 @@ pub enum StatementKind {
     VecShrinkToFit(Place),
     CopyBytes(Operand, Operand, Operand),
     Flush,
+    Asm(Box<Asm>),
     StorageDead(Local),
     Print {
         stderr: bool,
@@ -181,7 +182,6 @@ pub enum Rvalue {
     VecRemove(Place, Operand),
     VecPop(Place),
     VecGet(Place, Operand),
-    Asm(Box<Asm>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -232,6 +232,7 @@ impl StatementKind {
             StatementKind::VecInsert(_, at, item) => vec![at, item],
             StatementKind::CopyBytes(to, from, count) => vec![to, from, count],
             StatementKind::Print { values, .. } => values.iter().collect(),
+            StatementKind::Asm(asm) => asm.inputs.iter().collect(),
             StatementKind::VecClear(_)
             | StatementKind::VecShrinkToFit(_)
             | StatementKind::Flush
@@ -253,7 +254,6 @@ impl Rvalue {
             Rvalue::Binary { left, right, .. } => vec![left, right],
             Rvalue::Aggregate(_, values) => values.iter().collect(),
             Rvalue::VecNew(capacity) => capacity.iter().collect(),
-            Rvalue::Asm(asm) => asm.inputs.iter().collect(),
             Rvalue::AddressOf(_)
             | Rvalue::DeepCopy(_)
             | Rvalue::Len(_)

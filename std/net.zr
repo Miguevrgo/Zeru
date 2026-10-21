@@ -19,6 +19,7 @@ const SYS_SOCKET: i64 = 41;
 const SYS_CONNECT: i64 = 42;
 const SYS_ACCEPT: i64 = 43;
 const SYS_SENDTO: i64 = 44;
+const MSG_NOSIGNAL: i64 = 16384;
 const SYS_RECVFROM: i64 = 45;
 const SYS_SHUTDOWN: i64 = 48;
 const SYS_BIND: i64 = 49;
@@ -264,7 +265,7 @@ pub struct TcpStream {
     // The errno: 32 (EPIPE) when the other end has closed, 104 (ECONNRESET)
     // when it dropped the connection.
     pub fn write(self, buf: *u8, len: usize) i64! {
-        return sys_result(syscall3(SYS_WRITE, self.fd, buf as i64, len as i64));
+        return sys_result(syscall6(SYS_SENDTO, self.fd, buf as i64, len as i64, MSG_NOSIGNAL, 0, 0));
     }
 
     // Sends all `len` bytes of `buf`, returning `len`.
@@ -295,7 +296,7 @@ pub struct TcpStream {
         var total: i64 = 0;
         var remaining: usize = len;
         while remaining > 0 {
-            var n = sys_result(syscall3(SYS_WRITE, self.fd, (buf + total as usize) as i64, remaining as i64))!;
+            var n = self.write(buf + total as usize, remaining)!;
             total = total + n;
             remaining = remaining - n as usize;
         }

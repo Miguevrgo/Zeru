@@ -1,0 +1,9 @@
+fn strlen(n: i32) i32 {
+    return n + 1;
+}
+fn __zeru_env() i32 {
+    return 2;
+}
+fn main() {
+    println("{} {}", strlen(4), __zeru_env());
+}

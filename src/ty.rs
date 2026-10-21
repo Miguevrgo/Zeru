@@ -113,7 +113,6 @@ impl Types {
     pub const F32: Ty = Ty(3);
     pub const F64: Ty = Ty(4);
     pub const I32: Ty = Ty(7);
-    pub const I64: Ty = Ty(8);
     pub const U8: Ty = Ty(10);
     pub const USIZE: Ty = Ty(14);
     pub const STR: Ty = Ty(15);
@@ -380,8 +379,8 @@ mod tests {
         let mut types = Types::new();
         let param = types.intern(TyKind::Param(0));
         let optional = types.intern(TyKind::Optional(param));
-        let concrete = types.subst(optional, &[Types::I64]);
-        assert_eq!(types.show(concrete), "i64?");
-        assert_eq!(types.subst(Types::BOOL, &[Types::I64]), Types::BOOL);
+        let concrete = types.subst(optional, &[Types::I32]);
+        assert_eq!(types.show(concrete), "i32?");
+        assert_eq!(types.subst(Types::BOOL, &[Types::I32]), Types::BOOL);
     }
 }

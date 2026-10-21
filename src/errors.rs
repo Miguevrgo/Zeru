@@ -252,6 +252,8 @@ pub enum CompileError {
     InvalidPath,
     #[error("linking failed: cc exited with {0}")]
     Link(std::process::ExitStatus),
+    #[error("LLVM rejected the program: {0}")]
+    Rejected(String),
 }
 
 #[cfg(test)]

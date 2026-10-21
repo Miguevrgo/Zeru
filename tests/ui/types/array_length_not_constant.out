@@ -1,18 +1,18 @@
 status: compile error
 -- stderr
-Error: An array length must be a constant integer, 0 or more
+Error: An array length must be a constant integer
    ╭─[ tests/ui/types/array_length_not_constant.zr:4:17 ]
    │
  4 │     var a = [0; n];
    │                 ┬
-   │                 ╰── An array length must be a constant integer, 0 or more
+   │                 ╰── An array length must be a constant integer
 ───╯
-Error: An array length must be a constant integer, 0 or more
+Error: An array length goes from 0 to 4294967295, not -1
    ╭─[ tests/ui/types/array_length_not_constant.zr:5:17 ]
    │
  5 │     var b = [0; BELOW];
    │                 ──┬──
-   │                   ╰──── An array length must be a constant integer, 0 or more
+   │                   ╰──── An array length goes from 0 to 4294967295, not -1
 ───╯
 Error: Array length 'n' is not a constant
    ╭─[ tests/ui/types/array_length_not_constant.zr:6:5 ]

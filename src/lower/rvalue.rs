@@ -249,7 +249,6 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 }
             }
             Rvalue::VecRemove(vec, at) => self.vec_remove(vec, at),
-            Rvalue::Asm(asm) => self.asm(asm, ty),
         };
         self.store(dest, value, ty);
     }

@@ -61,22 +61,31 @@ impl Checker<'_> {
         checked
     }
 
-    /// The length a constant integer expression gives an array; 0 after
-    /// reporting one that is not constant or is negative.
-    pub(super) fn length(&mut self, expr: &Expr) -> u64 {
-        let value = self.types.as_int(expr.ty).and(self.eval(expr));
-        match value.and_then(|value| u64::try_from(value).ok()) {
-            Some(len) => len,
+    /// The length a constant integer expression gives an array; None
+    /// after reporting one that is not constant or does not fit.
+    pub(super) fn length(&mut self, expr: &Expr) -> Option<u64> {
+        match self.types.as_int(expr.ty).and(self.eval(expr)) {
+            Some(value) => self.fitting_length(value, expr.span),
             None => {
                 if expr.ty != Types::ERROR {
-                    self.error(
-                        "An array length must be a constant integer, 0 or more",
-                        expr.span,
-                    );
+                    self.error("An array length must be a constant integer", expr.span);
                 }
-                0
+                None
             }
         }
+    }
+
+    /// `value` as an array length, which LLVM holds in 32 bits; None after
+    /// reporting one outside that.
+    pub(super) fn fitting_length(&mut self, value: i128, span: Span) -> Option<u64> {
+        let len = u32::try_from(value).ok().map(u64::from);
+        if len.is_none() {
+            self.error(
+                format!("An array length goes from 0 to {}, not {value}", u32::MAX),
+                span,
+            );
+        }
+        len
     }
 
     /// The integer an expression always has, if it is made of constants and
