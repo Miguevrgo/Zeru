@@ -10,11 +10,11 @@ fn main() {
     if !fs::exists(path) {
         exit(2);
     }
-    var sz = fs::file_size(path);
-    if sz.is_err() {
+    var meta = fs::metadata(path);
+    if meta.is_err() {
         exit(3);
     }
-    if sz.unwrap() != 16 {
+    if meta.unwrap().size != 16 {
         exit(4);
     }
 
@@ -30,21 +30,21 @@ fn main() {
     }
 
     var path2 = "build/test_fs2.txt";
-    var fd = fs::open(path2, fs::O_WRONLY | fs::O_CREAT | fs::O_TRUNC, fs::PERM_644);
-    if fd.is_err() {
+    var file = fs::File.create(path2);
+    if file.is_err() {
         exit(8);
     }
-    var w2 = fs::write(fd.unwrap(), "test" as *u8, 4);
-    if w2.is_err() {
+    var out = file.unwrap();
+    if out.write("test").is_err() {
         exit(9);
     }
-    if fs::close(fd.unwrap()).is_err() {
+    if fs::read_file(path2).unwrap() != "test" {
         exit(10);
     }
-    if fs::unlink(path).is_err() {
+    if fs::remove_file(path).is_err() {
         exit(11);
     }
-    if fs::unlink(path2).is_err() {
+    if fs::remove_file(path2).is_err() {
         exit(12);
     }
     if fs::exists(path) {

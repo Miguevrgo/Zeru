@@ -3,7 +3,6 @@
 const SYS_NANOSLEEP: i64 = 35;
 const SYS_GETPID: i64 = 39;
 const SYS_UNAME: i64 = 63;
-const SYS_GETCWD: i64 = 79;
 const SYS_GETUID: i64 = 102;
 const SYS_GETGID: i64 = 104;
 const SYS_GETEUID: i64 = 107;
@@ -62,29 +61,6 @@ pub fn geteuid() i64 { return syscall1(SYS_GETEUID, 0); }
 //
 // It differs from `getgid` only in programs installed setgid.
 pub fn getegid() i64 { return syscall1(SYS_GETEGID, 0); }
-
-// Writes the working directory to `buf` and returns its length.
-//
-// `buf` gets the path and a closing NUL, and `size` is how many bytes it
-// has room for; the length returned counts the NUL. 4096 bytes fit any
-// path.
-//
-// # Errors
-//
-// The errno: 34 (ERANGE) when the path does not fit in `size` bytes.
-//
-// # Examples
-//
-// ```zeru
-// import std.os;
-//
-// var buf: Array<u8, 4096> = [0; 4096];
-// var len = os::getcwd(&buf[0], 4096).unwrap();
-// println("{}", buf[0] == '/' && len > 1); // true
-// ```
-pub fn getcwd(buf: *u8, size: usize) i64! {
-    return sys_result(syscall2(SYS_GETCWD, buf as i64, size as i64));
-}
 
 // Pauses the program for `ms` milliseconds, returning 0.
 //

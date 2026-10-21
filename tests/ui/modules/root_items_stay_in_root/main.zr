@@ -6,7 +6,7 @@ fn sys_result(r: i64) i64! {
 }
 
 fn main() {
-    match fs::close(12345) {
+    match fs::remove_file("no/such/file") {
         Ok(_) => println("closed"),
         Err(e) => println("error {}", e),
     }

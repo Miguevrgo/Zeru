@@ -1,0 +1,90 @@
+import std.fs;
+
+fn text_of(v: &Vec<u8>) str {
+    var parts = ((&v[0]) as *u8, v.len());
+    return *((&parts) as *str);
+}
+
+fn main() {
+    var big: Vec<u8> = Vec.new();
+    for i in 0..10000 {
+        big.push('a' + (i % 26) as u8);
+    }
+    big.push('\n');
+    big.push('\n');
+    big.push('x');
+    var text = text_of(&big);
+    fs::write_file("big.txt", text).unwrap();
+
+    var file = fs::File.open("big.txt").unwrap();
+    var first = file.read_line().unwrap().unwrap();
+    var empty = file.read_line().unwrap().unwrap();
+    var last = file.read_line().unwrap().unwrap();
+    println("{} {} {} {}", first.len(), first[9999] == 'a' + (9999 % 26) as u8, empty.len(), last);
+    println("{}", file.read_line().unwrap().is_none());
+
+    var mixed = fs::File.open("big.txt").unwrap();
+    var buf: Vec<u8> = Vec.new();
+    mixed.read(&var buf, 3).unwrap();
+    var rest = mixed.read_line().unwrap().unwrap();
+    println("{} {} {}", buf.len(), rest.len(), rest[0] == 'd');
+    var more: Vec<u8> = Vec.new();
+    var n = mixed.read(&var more, 100).unwrap();
+    println("{} {}", n, more[0] == '\n');
+    mixed.seek(0).unwrap();
+    println("{}", mixed.read_line().unwrap().unwrap().len());
+
+    fs::create_dir("many").unwrap();
+    var name: Vec<u8> = Vec.new();
+    for i in 0..3000 {
+        var path = "many/file_0000";
+        name.clear();
+        for b in path {
+            name.push(b);
+        }
+        name[10] = '0' + (i / 1000) as u8;
+        name[11] = '0' + (i / 100 % 10) as u8;
+        name[12] = '0' + (i / 10 % 10) as u8;
+        name[13] = '0' + (i % 10) as u8;
+        fs::write_file(text_of(&name), "").unwrap();
+    }
+    var entries = fs::read_dir("many").unwrap();
+    var files = 0;
+    for e in entries {
+        if e.name.starts_with("file_") {
+            files += 1;
+        }
+    }
+    println("{} {}", entries.len(), files);
+
+    fs::copy_file("big.txt", "copy.txt").unwrap();
+    println("{}", fs::metadata("copy.txt").unwrap().size);
+    fs::symlink("big.txt", "link.txt").unwrap();
+    println(
+        "{} {}",
+        fs::real_path("link.txt").unwrap().ends_with("/big.txt"),
+        fs::read_link("link.txt").unwrap(),
+    );
+    println("{} {}", fs::is_file("link.txt"), fs::is_dir("many"));
+    println(
+        "{} {}",
+        fs::read_dir("big.txt").unwrap_err(),
+        fs::File.open("many").unwrap().read_line().unwrap_err(),
+    );
+
+    for e in fs::read_dir("many").unwrap() {
+        name.clear();
+        for b in "many/" {
+            name.push(b);
+        }
+        for b in e.name {
+            name.push(b);
+        }
+        fs::remove_file(text_of(&name)).unwrap();
+    }
+    fs::remove_dir("many").unwrap();
+    fs::remove_file("big.txt").unwrap();
+    fs::remove_file("copy.txt").unwrap();
+    fs::remove_file("link.txt").unwrap();
+    println("{}", fs::exists("many"));
+}

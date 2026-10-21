@@ -1,3 +1,4 @@
+import std.fs;
 import std.os;
 
 fn main() {
@@ -24,12 +25,11 @@ fn main() {
         exit(6);
     }
 
-    var cwd: Array<u8, 256> = [0; 256];
-    var cwd_r = os::getcwd(&cwd[0], 256);
-    if cwd_r.is_err() {
+    var cwd = fs::current_dir();
+    if cwd.is_err() {
         exit(7);
     }
-    if cwd[0] != 47 {
+    if !cwd.unwrap().starts_with("/") {
         exit(8);
     }
 

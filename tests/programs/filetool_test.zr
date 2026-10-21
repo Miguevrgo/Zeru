@@ -86,10 +86,8 @@ fn count(text: str) Counts {
 }
 
 fn append(path: str, var data: Vec<u8>) usize! {
-    var fd = fs::open(path, fs::O_WRONLY | fs::O_APPEND, 0)!;
-    var wrote = fs::write(fd, &data[0], data.len())!;
-    fs::close(fd)!;
-    return Ok(wrote);
+    fs::append_file(path, as_str(&data[0], data.len()))!;
+    return Ok(data.len());
 }
 
 fn main() {
@@ -116,7 +114,7 @@ fn main() {
     var lines = text.lines();
     println("last line: {}", lines[lines.len() - 1]);
 
-    if fs::unlink(path).is_err() || fs::exists(path) {
+    if fs::remove_file(path).is_err() || fs::exists(path) {
         exit(3);
     }
     var gone = fs::read_file(path);

@@ -32,12 +32,12 @@ fn main() {
         "{} lines, {} words, {} bytes",
         text.lines().len(),
         words,
-        fs::file_size(path).unwrap(),
+        fs::metadata(path).unwrap().size,
     );
     println("longest word: {}", longest);
 
     if args.len() == 1 {
-        fs::unlink(path).unwrap();
+        fs::remove_file(path).unwrap();
         println("missing file error: {}", fs::read_file(path).unwrap_err());
     }
 }

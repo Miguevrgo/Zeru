@@ -1,0 +1,13 @@
+status: exit 0
+-- stdout
+10000 true 0 x
+true
+3 9997 true
+2 true
+10000
+3000 3000
+10003
+true big.txt
+true true
+20 21
+false
