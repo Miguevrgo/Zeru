@@ -1,5 +1,0 @@
-const N: usize = 2;
-fn main() {
-    var g: Array<Array<i32, 2>, 2> = [[0; N]; 2];
-    println("{}", g[0][0]);
-}

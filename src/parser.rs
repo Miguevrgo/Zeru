@@ -1208,16 +1208,11 @@ impl Parser {
         let first = self.parse_expression(Precedence::Lowest)?;
 
         if self.eat(&Token::Semicolon) {
-            let after = self.tokens.get(self.pos + 1).map(|(token, _)| token);
-            let operator = after.is_some_and(|token| token_precedence(token) > Precedence::Lowest);
-            let (Token::Int(count), false) = (self.peek().clone(), operator) else {
-                return self.error_here("Array repeat count must be an integer literal");
-            };
-            self.bump();
+            let count = self.parse_expression(Precedence::Lowest)?;
             self.expect(&Token::RBracket)?;
             return Some(ExpressionKind::ArrayRepeat {
                 value: Box::new(first),
-                count,
+                count: Box::new(count),
             });
         }
 

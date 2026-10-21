@@ -594,7 +594,9 @@ impl<'s> Printer<'s> {
             E::ArrayRepeat { value, count } => seq(vec![
                 text("["),
                 self.expr(value),
-                text(format!("; {count}]")),
+                text("; "),
+                self.expr(count),
+                text("]"),
             ]),
             E::Assign {
                 target,

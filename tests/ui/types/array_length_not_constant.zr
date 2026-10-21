@@ -1,0 +1,7 @@
+const BELOW: i64 = -1;
+fn main() {
+    var n: usize = 3;
+    var a = [0; n];
+    var b = [0; BELOW];
+    var c: Array<u8, n> = [0; 3];
+}

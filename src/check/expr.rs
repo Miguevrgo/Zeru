@@ -132,7 +132,9 @@ impl FnCx<'_, '_> {
             ExpressionKind::Cast { left, target } => self.cast(left, target, span),
             ExpressionKind::ArrayLiteral(elements) => self.array_literal(elements, inner, span),
             ExpressionKind::ArrayRepeat { value, count } => {
-                self.array_repeat(value, *count, inner, span)
+                let count = self.value(count, Some(Types::USIZE));
+                let count = self.cx.length(&count);
+                self.array_repeat(value, count, inner, span)
             }
             ExpressionKind::Range { .. } => {
                 self.error("A range only goes in a 'for' loop", span);

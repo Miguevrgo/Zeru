@@ -1,0 +1,24 @@
+status: compile error
+-- stderr
+Error: An array length must be a constant integer, 0 or more
+   ╭─[ tests/ui/types/array_length_not_constant.zr:4:17 ]
+   │
+ 4 │     var a = [0; n];
+   │                 ┬
+   │                 ╰── An array length must be a constant integer, 0 or more
+───╯
+Error: An array length must be a constant integer, 0 or more
+   ╭─[ tests/ui/types/array_length_not_constant.zr:5:17 ]
+   │
+ 5 │     var b = [0; BELOW];
+   │                 ──┬──
+   │                   ╰──── An array length must be a constant integer, 0 or more
+───╯
+Error: Array length 'n' is not a constant
+   ╭─[ tests/ui/types/array_length_not_constant.zr:6:5 ]
+   │
+ 6 │     var c: Array<u8, n> = [0; 3];
+   │     ──────────────┬──────────────
+   │                   ╰──────────────── Array length 'n' is not a constant
+───╯
+[-] Error: aborting due to previous error

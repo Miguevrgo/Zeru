@@ -61,6 +61,24 @@ impl Checker<'_> {
         checked
     }
 
+    /// The length a constant integer expression gives an array; 0 after
+    /// reporting one that is not constant or is negative.
+    pub(super) fn length(&mut self, expr: &Expr) -> u64 {
+        let value = self.types.as_int(expr.ty).and(self.eval(expr));
+        match value.and_then(|value| u64::try_from(value).ok()) {
+            Some(len) => len,
+            None => {
+                if expr.ty != Types::ERROR {
+                    self.error(
+                        "An array length must be a constant integer, 0 or more",
+                        expr.span,
+                    );
+                }
+                0
+            }
+        }
+    }
+
     /// The integer an expression always has, if it is made of constants and
     /// stays within its type; a bool counts as 0 or 1.
     pub(super) fn eval(&self, expr: &Expr) -> Option<i128> {

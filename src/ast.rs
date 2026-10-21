@@ -148,7 +148,7 @@ pub enum ExpressionKind {
     },
     ArrayRepeat {
         value: Box<Expression>,
-        count: u64,
+        count: Box<Expression>,
     },
     Assign {
         target: Box<Expression>,

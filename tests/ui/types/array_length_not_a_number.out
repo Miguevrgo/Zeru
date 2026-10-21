@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: Array length must be an integer literal
+Error: Array length 'i32' is not a constant
    ╭─[ tests/ui/types/array_length_not_a_number.zr:2:5 ]
    │
  2 │     var a: Array<i32, i32> = [1];
    │     ──────────────┬──────────────
-   │                   ╰──────────────── Array length must be an integer literal
+   │                   ╰──────────────── Array length 'i32' is not a constant
 ───╯
 [-] Error: aborting due to previous error

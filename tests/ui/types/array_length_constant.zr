@@ -1,0 +1,8 @@
+const N: usize = 2;
+const BITS: usize = 1 << 4;
+fn main() {
+    var g: Array<Array<i32, N>, 2> = [[3; N]; 2];
+    var wide: Array<u8, BITS> = [1; BITS];
+    var doubled: Array<i64, 4> = [5; N * 2];
+    println("{} {} {}", g[1][1], wide[15], doubled[3]);
+}
