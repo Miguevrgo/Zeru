@@ -37,16 +37,17 @@ fi
 ok "Release: ${LATEST}"
 
 BASE_URL="https://github.com/${REPO}/releases/download/${LATEST}"
+FRESH="?t=$(date +%s)"
 
 info "Downloading binary..."
-curl -fsSL --progress-bar "${BASE_URL}/zeru-linux-generic" -o "${ZERU_BIN}/zeru.new" ||
+curl -fsSL --progress-bar "${BASE_URL}/zeru-linux-generic${FRESH}" -o "${ZERU_BIN}/zeru.new" ||
     err "Failed to download binary"
 chmod +x "${ZERU_BIN}/zeru.new"
 mv "${ZERU_BIN}/zeru.new" "${ZERU_BIN}/zeru"
 ok "Binary installed to ${ZERU_BIN}/zeru"
 
 info "Downloading std library..."
-curl -fsSL --progress-bar "${BASE_URL}/zeru-std.tar.gz" |
+curl -fsSL --progress-bar "${BASE_URL}/zeru-std.tar.gz${FRESH}" |
     tar -xz -C "${ZERU_STD}" --strip-components=1 ||
     err "Failed to download std library"
 ok "Std library installed to ${ZERU_STD}"
