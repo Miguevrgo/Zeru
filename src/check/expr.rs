@@ -123,7 +123,7 @@ impl FnCx<'_, '_> {
     }
 
     /// `e` where its value is used, which something returning nothing has
-    /// not, as in C.
+    /// not.
     pub(super) fn value(&mut self, e: &Expression, expected: Option<Ty>) -> Expr {
         let value = self.expr(e, expected);
         if value.ty != Types::VOID {
@@ -277,9 +277,8 @@ impl FnCx<'_, '_> {
         }
     }
 
-    /// An integer written out, negated when `negative`: of the integer type
-    /// its context expects, or i32 when nothing does. A value that does not
-    /// fit is an error, not a quiet wrap.
+    /// A float written out: of the float type its context expects, or f64
+    /// when nothing does.
     pub(super) fn float_literal(&mut self, value: f64, expected: Option<Ty>, span: Span) -> Expr {
         if let Some(var) = self.literal_var(expected, Types::F64) {
             return self.mk(ExprKind::Float(value), var, span);
@@ -295,6 +294,9 @@ impl FnCx<'_, '_> {
         }
     }
 
+    /// An integer written out, negated when `negative`: of the integer type
+    /// its context expects, or i32 when nothing does. A value that does not
+    /// fit is an error, not a quiet wrap.
     pub(super) fn int_literal(
         &mut self,
         value: u64,

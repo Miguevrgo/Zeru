@@ -748,8 +748,6 @@ impl<'a> Checker<'a> {
         satisfied
     }
 
-    /// A type meets a trait by having its methods; there is no other way to
-    /// say that it does. Names and how many parameters they take are compared.
     /// A type meets a trait by having its methods, with the same parameter
     /// and return types; there is no other way to say that it does.
     fn has_trait_methods(&mut self, ty: Ty, trait_def: DefId) -> bool {

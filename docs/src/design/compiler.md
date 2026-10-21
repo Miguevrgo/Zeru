@@ -2,7 +2,7 @@
 
 The compiler is a pipeline of passes. Each pass reads the output of the one
 before and produces something the next one reads; no pass revisits a decision
-an earlier one made. The layout follows what rustc, Zig and Carbon do.
+an earlier one made.
 
 ```text
 source ─▶ lexer ─▶ parser ─▶ items ─▶ check ─▶ mir ─▶ lower ─▶ LLVM ─▶ cc
@@ -21,12 +21,12 @@ source ─▶ lexer ─▶ parser ─▶ items ─▶ check ─▶ mir ─▶ lo
 ## Names
 
 A name is resolved by looking it up, never by rewriting the source. Each module
-has a scope from names to `DefId`s, split into types, traits and values. As in
-Go and Zig, a module sees its own items first, then the names its selective
-imports bring in, then the prelude's, and reaches the items of a module it
-imports through `module::name`. No module sees the root file's items, and a
-name imported twice is an error. A local shadows any item of the same name,
-because locals are looked up first, by the checker.
+has a scope from names to `DefId`s, split into types, traits and values. A
+module sees its own items first, then the names its selective imports bring in,
+then the prelude's, and reaches the items of a module it imports through
+`module::name`. No module sees the root file's items, and a name imported twice
+is an error. A local shadows any item of the same name, because locals are
+looked up first, by the checker.
 
 ## Types
 
@@ -41,15 +41,13 @@ the way the programmer writes it, so messages never show internal names.
 `check/mod.rs` resolves item signatures and owns the queue of function
 instances. An instance is a `DefId` with its type arguments; it is made the
 first time something needs it and checked once. A generic function is checked
-at each set of types it is called with, as Zig and C++ templates are. When a
-generic instance fails, every error it reports carries a note pointing at the
-call that asked for it.
+at each set of types it is called with. When a generic instance fails, every
+error it reports carries a note pointing at the call that asked for it.
 
-`check/body.rs` checks one instance in a function context (`FnCx`), in the
-manner of rustc's `FnCtxt`. Locals are numbered `LocalId`s. Expressions are
-in `expr.rs`, calls and built-in methods in `call.rs`, `match` in
-`pattern.rs`, and constant evaluation, at the width of each integer type, in
-`consts.rs`.
+`check/body.rs` checks one instance in a function context (`FnCx`). Locals are
+numbered `LocalId`s. Expressions are in `expr.rs`, calls and built-in methods
+in `call.rs`, `match` in `pattern.rs`, and constant evaluation, at the width of
+each integer type, in `consts.rs`.
 
 The checker decides what each expression means, and nothing about where
 values go afterwards:
@@ -60,7 +58,7 @@ values go afterwards:
   needs no flow. Whether a moved local is used again is the borrow
   checker's question.
 - As it walks, `FnCx::diverges` says whether control can reach the current
-  point, as rustc's: a `return`, `break` or `continue` sets it, an `if`
+  point: a `return`, `break` or `continue` sets it, an `if`
   diverges when both branches do, a `match` when every arm does, and a
   `while true` with no `break` out of it. It decides that a function can
   finish without returning a value, and which arms of a `match` leave, so
@@ -86,7 +84,7 @@ checker has decided all of it before code generation starts.
 ## The MIR
 
 `mir/` turns the typed IR of each function into a graph of basic blocks over
-numbered locals, as rustc's MIR does. Local 0 is the return place, then come
+numbered locals. Local 0 is the return place, then come
 the arguments, the variables and the temporaries. A statement assigns an
 rvalue to a place or runs a built-in; a block ends in a terminator: a jump, a
 switch on an integer, a call, a drop, a check, or a return.
@@ -103,15 +101,14 @@ switch on an integer, a call, a drop, a check, or a return.
   of the statements it leaves first.
 - `match` is a switch on the discriminant. Each binding is set as its arm
   is entered: a copy of a value that owns no memory, refers to nothing and
-  is never borrowed, as Rust's bindings of `Copy` values, or else a
-  reference into the value matched.
-- `for x in seq` walks a reference from the first element to one past the
-  last, as Rust's slice iterator; `x` is a copy of the element, or for
+  is never borrowed, or else a reference into the value matched.
+- `for x in seq` walks a reference over the elements, counting them, so
+  zero-sized ones are visited too; `x` is a copy of the element, or for
   `&var` or an element that owns memory, the element itself.
 - A built-in method's receiver, and the base of an element whose index
   calls something, is reached through a reference taken before its
-  arguments are evaluated. As with Rust's two-phase borrows, taking a
-  `&var` changes nothing; what it is used for is checked where it is used.
+  arguments are evaluated. Taking a `&var` changes nothing; what it is
+  used for is checked where it is used.
 - Every scope ends its locals with a `StorageDead`, after their drops, at
   its end and at every exit; a statement ends its temporaries.
 - Runtime checks (bounds, null, `unwrap`) are `Assert` terminators, and the
@@ -119,17 +116,17 @@ switch on an integer, a call, a drop, a check, or a return.
   operation; none exist in release-fast.
 
 `mir/borrowck.rs` then checks the body (see below), and
-`mir/elaborate.rs` decides each drop, as rustc's drop elaboration: a
+`mir/elaborate.rs` decides each drop: a
 forward dataflow over the blocks finds whether the local may hold a value
 there and whether it may not. A drop runs, goes away, or tests a drop flag, a
 bool local raised as the value arrives and lowered as it leaves.
 
 ## The borrow checker
 
-`mir/borrowck.rs` checks references and moves on the MIR of each function,
-in the manner of rustc's MIR borrowck. Zeru is single threaded, so a live
-reference forbids only what can invalidate the memory it points into, never
-aliasing or plain writes (`docs/src/design/memory.md`, section 2).
+`mir/borrowck.rs` checks references and moves on the MIR of each function. Zeru
+is single threaded, so a live reference forbids only what can invalidate the
+memory it points into, never aliasing or plain writes
+(`docs/src/design/memory.md`, section 2).
 
 - **Loans.** `&place` and `&var place` take a loan; so do `get`, a `match`
   binding and a `for` loop, which the MIR writes as taking an address. A raw
@@ -140,8 +137,8 @@ aliasing or plain writes (`docs/src/design/memory.md`, section 2).
   Through a reference a local holds, a path continues from the places that
   reference may point at, so an access through `*m` is the same access to
   what `m` borrows. A reference a call returns may point anywhere inside
-  what its reference arguments point at, and takes a loan of its own, as a
-  reborrow in rustc: paths through it compare exactly with paths through
+  what its reference arguments point at, and takes a loan of its own: paths
+  through it compare exactly with paths through
   the same result, unless the call returned another that is still live.
 - **Calls.** A call may do anything a `&var` lets it do: each `&var` its
   arguments carry, directly or inside a struct, a `T?` or a `self`, may
@@ -174,8 +171,7 @@ live, not with the square of its size.
 
 ## Lowering
 
-`lower/` translates the MIR and makes no decision of its own. It follows
-the memory model of rustc's code generation:
+`lower/` translates the MIR and makes no decision of its own:
 
 - Scalars (integers, floats, bools, pointers, enums without data) are SSA
   values: a temporary assigned once and never borrowed has no slot at all.
@@ -188,7 +184,7 @@ the memory model of rustc's code generation:
 
 ## Tests
 
-`tests/ui` holds snapshot tests in the style of rustc's UI tests. Each `.zr`
+`tests/ui` holds snapshot tests. Each `.zr`
 file is built in every safety mode, run, and its status, output and
 diagnostics compared against the `.out` file next to it. `BLESS=1 cargo test
 --test ui` rewrites the snapshots, and a review of their diff shows exactly

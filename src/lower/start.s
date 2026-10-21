@@ -16,8 +16,8 @@ _start:
     mov $60, %eax
     syscall
 
-# The widest vectors the processor and the kernel allow, as glibc chooses
-# them: 2 for AVX-512, 1 for AVX2, 0 for the SSE2 every x86-64 has.
+# The widest vectors the processor and the kernel allow: 2 for AVX-512, 1
+# for AVX2, 0 for the SSE2 every x86-64 has.
 __zeru_detect_simd:
     push %rbx
     mov $1, %eax
@@ -499,7 +499,7 @@ truncf:
 2:
     ret
 
-# The x87 partial remainder, repeated until complete, is exact, as in musl.
+# The x87 partial remainder, repeated until complete, is exact.
     .globl fmod
     .type fmod, @function
 fmod:

@@ -1,7 +1,7 @@
 //! LLVM types for the IR's types, and addressing inside aggregates.
 //!
 //! Layouts: `Vec<T>` is `{ *T, len, cap }`, a slice `{ *T, len }`, `T?` is
-//! `{ i1, T }`, `T!E` is `{ i1, T, E }`, an enum whose variants carry
+//! `{ i1, T }`, `T!` is `{ i1, T, i32 }`, an enum whose variants carry
 //! nothing is its `i32` tag, and one that carries values is `{ i32, [N x
 //! i64] }`, the values of the variant held in the payload area.
 

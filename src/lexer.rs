@@ -405,7 +405,7 @@ impl<'a> Lexer<'a> {
         })
     }
 
-    /// `'a'` or `'\\n'`: the value of one ASCII character, typed like any
+    /// `'a'` or `'\n'`: the value of one ASCII character, typed like any
     /// other integer literal.
     fn read_char(&mut self) -> Token {
         let value = match self.advance() {

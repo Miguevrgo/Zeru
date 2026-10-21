@@ -1255,9 +1255,9 @@ impl Parser {
     }
 }
 
-#[derive(PartialEq, PartialOrd)]
 /// Loosest first. Bitwise operators bind tighter than comparison, so
 /// `flags & MASK == 0` groups the way it reads.
+#[derive(PartialEq, PartialOrd)]
 enum Precedence {
     Lowest,
     Assignment,

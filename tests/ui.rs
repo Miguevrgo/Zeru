@@ -1,4 +1,4 @@
-//! Snapshot tests in the style of rustc's UI tests. Each `tests/ui/<group>/<name>.zr`,
+//! Snapshot tests. Each `tests/ui/<group>/<name>.zr`,
 //! and each `main.zr` of a multi-file test, is built and run in every safety mode and
 //! must match `<name>.out`. `BLESS=1 cargo test --test ui` rewrites the snapshots.
 //! A first line `//@ checked` skips release-fast, which drops the runtime checks.

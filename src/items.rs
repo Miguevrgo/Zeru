@@ -326,8 +326,9 @@ impl<'a> Items<'a> {
         self.lookup(from, Namespace::Trait, path)
     }
 
-    /// Whether code in `from` may name `def`: anything public, anything in
-    /// the prelude or the root file, and anything of its own module.
+    /// Whether code in `from` may name `def`: anything public, anything of
+    /// its own module or the root file, and the prelude's private items from
+    /// a module of the standard library.
     pub fn visible(&self, def: DefId, from: ModuleId) -> bool {
         let item = self.item(def);
         item.is_pub
