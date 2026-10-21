@@ -71,6 +71,16 @@ pub fn make_addr(ip: u32, port: u16) Array<u8, 16> {
     return addr;
 }
 
+// Close the socket `fd` once, marking it closed with -1 so a later close
+// or drop does not close a number the system gave to another file.
+fn close_fd(fd: &var i64) i64! {
+    if *fd < 0 {
+        return Err(9);
+    }
+    var closed = sys_result(syscall1(SYS_CLOSE, *fd));
+    *fd = -1;
+    return closed;
+}
 
 // A TCP socket waiting for connections on an IPv4 address and port.
 //
@@ -126,9 +136,15 @@ pub struct TcpListener {
         syscall5(SYS_SETSOCKOPT, fd, SOL_SOCKET, SO_REUSEADDR, (&one) as i64, 4);
         var addr = make_addr(ip, port);
         var r: i64 = syscall3(SYS_BIND, fd, (&addr[0]) as i64, 16);
-        if r < 0 { syscall1(SYS_CLOSE, fd); return Err((-r) as i32); }
+        if r < 0 {
+            syscall1(SYS_CLOSE, fd);
+            return Err((-r) as i32);
+        }
         r = syscall2(SYS_LISTEN, fd, 128);
-        if r < 0 { syscall1(SYS_CLOSE, fd); return Err((-r) as i32); }
+        if r < 0 {
+            syscall1(SYS_CLOSE, fd);
+            return Err((-r) as i32);
+        }
         return Ok(TcpListener { fd: fd });
     }
 
@@ -162,16 +178,20 @@ pub struct TcpListener {
 
     // Stops listening and frees the port, returning 0.
     //
-    // Connections `accept` gave stay open.
+    // It happens by itself when the listener goes out of scope; `close`
+    // gives the error, if any. Connections `accept` gave stay open.
     //
     // # Errors
     //
     // The errno: 9 (EBADF) when it was closed already.
-    pub fn close(self) i64! {
-        return sys_result(syscall1(SYS_CLOSE, self.fd));
+    pub fn close(var self) i64! {
+        return close_fd(&var self.fd);
+    }
+
+    fn drop(var self) {
+        close_fd(&var self.fd);
     }
 }
-
 
 // A TCP connection, made with `connect` or given by `TcpListener.accept`.
 //
@@ -219,7 +239,10 @@ pub struct TcpStream {
         var fd = sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_STREAM, 0))!;
         var addr = make_addr(ip, port);
         var r: i64 = syscall3(SYS_CONNECT, fd, (&addr[0]) as i64, 16);
-        if r < 0 { syscall1(SYS_CLOSE, fd); return Err((-r) as i32); }
+        if r < 0 {
+            syscall1(SYS_CLOSE, fd);
+            return Err((-r) as i32);
+        }
         return Ok(TcpStream { fd: fd });
     }
 
@@ -265,7 +288,9 @@ pub struct TcpStream {
     // The errno: 32 (EPIPE) when the other end has closed, 104 (ECONNRESET)
     // when it dropped the connection.
     pub fn write(self, buf: *u8, len: usize) i64! {
-        return sys_result(syscall6(SYS_SENDTO, self.fd, buf as i64, len as i64, MSG_NOSIGNAL, 0, 0));
+        return sys_result(
+            syscall6(SYS_SENDTO, self.fd, buf as i64, len as i64, MSG_NOSIGNAL, 0, 0),
+        );
     }
 
     // Sends all `len` bytes of `buf`, returning `len`.
@@ -332,8 +357,12 @@ pub struct TcpStream {
         var total: i64 = 0;
         var remaining: usize = buf_size;
         while remaining > 0 {
-            var n = sys_result(syscall3(SYS_READ, self.fd, (buf + total as usize) as i64, remaining as i64))!;
-            if n == 0 { break; }
+            var n = sys_result(
+                syscall3(SYS_READ, self.fd, (buf + total as usize) as i64, remaining as i64),
+            )!;
+            if n == 0 {
+                break;
+            }
             total = total + n;
             remaining = remaining - n as usize;
         }
@@ -355,16 +384,20 @@ pub struct TcpStream {
 
     // Closes the connection, returning 0.
     //
-    // The other end reads 0, the end of the stream.
+    // It happens by itself when the stream goes out of scope; `close` gives
+    // the error, if any. The other end reads 0, the end of the stream.
     //
     // # Errors
     //
     // The errno: 9 (EBADF) when it was closed already.
-    pub fn close(self) i64! {
-        return sys_result(syscall1(SYS_CLOSE, self.fd));
+    pub fn close(var self) i64! {
+        return close_fd(&var self.fd);
+    }
+
+    fn drop(var self) {
+        close_fd(&var self.fd);
     }
 }
-
 
 // A UDP socket bound to an IPv4 address and port.
 //
@@ -399,7 +432,10 @@ pub struct UdpSocket {
         var fd = sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_DGRAM, 0))!;
         var addr = make_addr(ip, port);
         var r: i64 = syscall3(SYS_BIND, fd, (&addr[0]) as i64, 16);
-        if r < 0 { syscall1(SYS_CLOSE, fd); return Err((-r) as i32); }
+        if r < 0 {
+            syscall1(SYS_CLOSE, fd);
+            return Err((-r) as i32);
+        }
         return Ok(UdpSocket { fd: fd });
     }
 
@@ -411,7 +447,9 @@ pub struct UdpSocket {
     // The errno: 90 (EMSGSIZE) when `len` is too big for one datagram.
     pub fn send_to(self, buf: *u8, len: usize, ip: u32, port: u16) i64! {
         var addr = make_addr(ip, port);
-        return sys_result(syscall6(SYS_SENDTO, self.fd, buf as i64, len as i64, 0, (&addr[0]) as i64, 16));
+        return sys_result(
+            syscall6(SYS_SENDTO, self.fd, buf as i64, len as i64, 0, (&addr[0]) as i64, 16),
+        );
     }
 
     // Waits for the next datagram, copies it to `buf` and returns its size.
@@ -428,10 +466,17 @@ pub struct UdpSocket {
 
     // Closes the socket and frees its port, returning 0.
     //
+    // It happens by itself when the socket goes out of scope; `close` gives
+    // the error, if any.
+    //
     // # Errors
     //
     // The errno: 9 (EBADF) when it was closed already.
-    pub fn close(self) i64! {
-        return sys_result(syscall1(SYS_CLOSE, self.fd));
+    pub fn close(var self) i64! {
+        return close_fd(&var self.fd);
+    }
+
+    fn drop(var self) {
+        close_fd(&var self.fd);
     }
 }

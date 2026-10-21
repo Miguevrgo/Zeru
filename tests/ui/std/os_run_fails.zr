@@ -1,0 +1,11 @@
+import std.os;
+fn main() {
+    println("{}", os::run("./no-such-file", []).unwrap_err());
+    println("{}", os::output("/no/such/prog", []).unwrap_err());
+    println("{}", os::run("sh", ["-c", "exit 127"]).unwrap());
+    println("{}", os::output("echo", ["ok"]).unwrap().stdout.trim());
+    for i in 0..2000 {
+        os::run("./no-such-file", []).unwrap_err();
+    }
+    println("{}", os::run("true", []).unwrap());
+}

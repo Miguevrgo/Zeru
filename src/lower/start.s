@@ -66,6 +66,13 @@ __zeru_stack:
     .p2align 3
 __zeru_env:
     .quad 0, 0, 0, 0
+
+# The one fs::File std.os reads standard input through, so what it buffers
+# stays for the next read: all zero is fd 0 with an empty buffer.
+    .globl __zeru_stdin
+    .p2align 3
+__zeru_stdin:
+    .quad 0, 0, 0, 0, 0
     .text
 
 # Copies of up to 64 bytes read everything into registers before writing,

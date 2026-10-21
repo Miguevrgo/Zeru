@@ -1,0 +1,17 @@
+import std.net;
+
+fn once(listener: &net::TcpListener, ip: u32) bool {
+    var client = net::TcpStream.connect(ip, 47933).unwrap();
+    var server = listener.accept().unwrap();
+    return true;
+}
+
+fn main() {
+    var ip = net::ip4(127, 0, 0, 1);
+    var listener = net::TcpListener.bind(ip, 47933).unwrap();
+    for i in 0..3000 {
+        once(&listener, ip);
+    }
+    var client = net::TcpStream.connect(ip, 47933).unwrap();
+    println("{} {}", client.close().is_ok(), client.close().unwrap_err());
+}

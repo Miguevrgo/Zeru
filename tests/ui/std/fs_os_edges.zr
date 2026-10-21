@@ -1,0 +1,21 @@
+import std.fs;
+import std.os;
+fn main() {
+    fs::write_file("old.txt", "").unwrap();
+    fs::set_times("old.txt", None, -1500000000).unwrap();
+    println("{}", fs::metadata("old.txt").unwrap().modified);
+    fs::symlink("nowhere.txt", "dangling").unwrap();
+    println("{} {}", fs::exists("dangling"), fs::exists("nowhere.txt"));
+    os::set_env("A", "B=c").unwrap();
+    println("{}", os::env("A=B").is_none());
+    var parts = "a\rb\r".lines();
+    println("{} {}", parts.len(), parts[0].len());
+    println("{}", "x\r\ny\n".lines()[0].len());
+    fs::write_file("cr.txt", "one\r\ntwo\r").unwrap();
+    var file = fs::File.open("cr.txt").unwrap();
+    println("{}", file.read_line().unwrap().unwrap().len());
+    println("{}", file.read_line().unwrap().unwrap().len());
+    fs::remove_file("old.txt").unwrap();
+    fs::remove_file("dangling").unwrap();
+    fs::remove_file("cr.txt").unwrap();
+}

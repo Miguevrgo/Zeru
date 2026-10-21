@@ -188,6 +188,11 @@ impl FnCx<'_, '_> {
                 return self.vec_static(name, type_args, args, expected, span);
             }
             if type_name == "String" {
+                if !type_args.is_empty() {
+                    self.error("'String' takes no type arguments", span);
+                    self.check_args_only(args);
+                    return self.error_expr(span);
+                }
                 if name == "from" {
                     let def = self
                         .cx
@@ -196,7 +201,7 @@ impl FnCx<'_, '_> {
                         .expect("the prelude defines it");
                     return self.call_def(def, Vec::new(), None, args, expected, span);
                 }
-                return self.vec_static(name, type_args, args, Some(Types::STRING), span);
+                return self.vec_static(name, &[], args, Some(Types::STRING), span);
             }
             if let Some(def) = self.cx.items.lookup_type(self.scope.module, type_name)
                 && self.cx.items.item(def).kind == ItemKind::Struct

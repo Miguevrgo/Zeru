@@ -545,7 +545,7 @@ fn __zeru_str_lines(s: str) Vec<str> {
         }
         if i == s.len() || s[i] == '\n' {
             var end = i;
-            if end > start && s[end - 1] == '\r' {
+            if i < s.len() && end > start && s[end - 1] == '\r' {
                 end -= 1;
             }
             lines.push(__zeru_str_sub(s, start, end));
@@ -616,9 +616,8 @@ fn __zeru_str_parse_int(s: str) i64! {
     return Ok(value as i64);
 }
 
-// `s.parse_float()`: the number `s` spells, as `-12.5` or `3e-4`; 22
-// (EINVAL) as the error code when it spells none. Exact up to 15 digits and
-// powers of ten up to 22; past those it may be an ulp off.
+// `s.parse_float()`: the number `s` spells, as `-12.5` or `3e-4`, rounded
+// to the nearest f64; 22 (EINVAL) as the error code when it spells none.
 fn __zeru_str_parse_float(s: str) f64! {
     var at: usize = 0;
     var negative = s.len() > 0 && s[0] == '-';
@@ -630,6 +629,7 @@ fn __zeru_str_parse_float(s: str) f64! {
     var exponent: i64 = 0;
     var seen = false;
     var point = false;
+    var inexact = false;
     while at < s.len() {
         if s[at] == '.' && !point {
             point = true;
@@ -643,8 +643,11 @@ fn __zeru_str_parse_float(s: str) f64! {
                 if point {
                     exponent -= 1;
                 }
-            } else if !point {
-                exponent += 1;
+            } else {
+                inexact = inexact || s[at] != '0';
+                if !point {
+                    exponent += 1;
+                }
             }
         } else {
             break;
@@ -656,33 +659,135 @@ fn __zeru_str_parse_float(s: str) f64! {
     }
     if at < s.len() && (s[at] == 'e' || s[at] == 'E') {
         var power = __zeru_str_parse_int(__zeru_str_sub(s, at + 1, s.len()))!;
+        if power > 1000 {
+            power = 1000;
+        } else if power < -1000 {
+            power = -1000;
+        }
         exponent += power;
         at = s.len();
     }
     if at != s.len() {
         return Err(22);
     }
-    var value = mantissa as f64;
-    var scale: f64 = 1.0;
-    var steps = exponent;
-    if steps < 0 {
-        steps = -steps;
-    }
-    if steps > 400 {
-        steps = 400;
-    }
-    for i in 0..steps {
-        scale *= 10.0;
-    }
-    if exponent < 0 {
-        value /= scale;
-    } else {
-        value *= scale;
+    var value: f64 = 0.0;
+    if mantissa != 0 && exponent > 309 {
+        value = 1.0 / 0.0;
+    } else if mantissa != 0 && exponent >= -343 {
+        value = __zeru_nearest(mantissa, exponent, inexact);
     }
     if negative {
         value = -value;
     }
     return Ok(value);
+}
+
+const POW10: Array<f64, 23> = [
+    1e0,
+    1e1,
+    1e2,
+    1e3,
+    1e4,
+    1e5,
+    1e6,
+    1e7,
+    1e8,
+    1e9,
+    1e10,
+    1e11,
+    1e12,
+    1e13,
+    1e14,
+    1e15,
+    1e16,
+    1e17,
+    1e18,
+    1e19,
+    1e20,
+    1e21,
+    1e22,
+];
+
+// The f64 nearest mantissa * 10^exponent, a tie going to the even one, or
+// up when `inexact` says digits past the mantissa were dropped: a guess
+// within a few ulps, then moved an ulp at a time by exact comparisons with
+// the halfway points around it.
+fn __zeru_nearest(mantissa: u64, exponent: i64, inexact: bool) f64 {
+    var value = mantissa as f64;
+    var left = exponent;
+    while left > 0 {
+        var step = left;
+        if step > 22 {
+            step = 22;
+        }
+        value *= POW10[step];
+        left -= step;
+    }
+    while left < 0 {
+        var step = 0 - left;
+        if step > 22 {
+            step = 22;
+        }
+        value /= POW10[step];
+        left += step;
+    }
+    if exponent >= -22 && exponent <= 22 && mantissa < 9007199254740992 && !inexact {
+        return value;
+    }
+    if value > 1.7976931348623157e308 {
+        value = 1.7976931348623157e308;
+    }
+    while true {
+        var bits = *((&value) as *u64);
+        var m = bits & 4503599627370495;
+        var k: i64 = -1074;
+        if bits >> 52 != 0 {
+            m = m | 4503599627370496;
+            k = (bits >> 52) as i64 - 1075;
+        }
+        var up = __zeru_order(mantissa, exponent, 2 * m + 1, k - 1);
+        if up > 0 || up == 0 && (inexact || m % 2 == 1) {
+            bits += 1;
+            value = *((&bits) as *f64);
+            if bits >> 52 == 2047 {
+                break;
+            }
+            continue;
+        }
+        if m == 0 {
+            break;
+        }
+        var down = 0;
+        if m == 4503599627370496 && k > -1074 {
+            down = __zeru_order(mantissa, exponent, 4 * m - 1, k - 2);
+        } else {
+            down = __zeru_order(mantissa, exponent, 2 * m - 1, k - 1);
+        }
+        if down < 0 || down == 0 && !inexact && m % 2 == 1 {
+            bits -= 1;
+            value = *((&bits) as *f64);
+            continue;
+        }
+        break;
+    }
+    return value;
+}
+
+// -1, 0 or 1 as a * 10^ten is below, equal to or above b * 2^two.
+fn __zeru_order(a: u64, ten: i64, b: u64, two: i64) i32 {
+    var left = __zeru_big(a);
+    var right = __zeru_big(b);
+    if ten >= 0 {
+        left.mul_pow10(ten);
+    } else {
+        right.mul_pow10(0 - ten);
+    }
+    if two >= 0 {
+        right.mul_pow2(two);
+    } else {
+        left.mul_pow2(0 - two);
+    }
+    return left.cmp(right);
 }
 
 // `v.sort()`: `v` in ascending order, by heapsort.

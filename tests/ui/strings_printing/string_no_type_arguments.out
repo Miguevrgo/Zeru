@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'String' takes no type arguments
+   ╭─[ tests/ui/strings_printing/string_no_type_arguments.zr:2:13 ]
+   │
+ 2 │     var s = String.new<i64>();
+   │             ────────┬────────
+   │                     ╰────────── 'String' takes no type arguments
+───╯
+[-] Error: aborting due to previous error

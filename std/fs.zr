@@ -5,10 +5,10 @@ const SYS_STAT: i64 = 4;
 const SYS_FSTAT: i64 = 5;
 const SYS_LSTAT: i64 = 6;
 const SYS_LSEEK: i64 = 8;
-const SYS_ACCESS: i64 = 21;
 const SYS_SENDFILE: i64 = 40;
 const SYS_CHDIR: i64 = 80;
 const SYS_GETCWD: i64 = 79;
+const SYS_FTRUNCATE: i64 = 77;
 const SYS_RENAME: i64 = 82;
 const SYS_MKDIR: i64 = 83;
 const SYS_RMDIR: i64 = 84;
@@ -456,7 +456,7 @@ pub struct File {
         while true {
             while at < self.buffer.len() {
                 if self.buffer[at] == '\n' {
-                    var line = self.take(at);
+                    var line = self.take(at, true);
                     self.start = at + 1;
                     return Ok(line);
                 }
@@ -480,7 +480,7 @@ pub struct File {
                 if self.buffer.len() == 0 {
                     return Ok(None);
                 }
-                var last = self.take(self.buffer.len());
+                var last = self.take(self.buffer.len(), false);
                 self.start = self.buffer.len();
                 return Ok(last);
             }
@@ -488,10 +488,11 @@ pub struct File {
         return Ok(None);
     }
 
-    // The buffered bytes from `start` up to `end`, without a closing "\r".
-    fn take(self, end: usize) String? {
+    // The buffered bytes from `start` up to `end`, without the "\r" of a
+    // "\r\n" when `newline` says a "\n" is at `end`.
+    fn take(self, end: usize, newline: bool) String? {
         var stop = end;
-        if stop > self.start && self.buffer[stop - 1] == '\r' {
+        if newline && stop > self.start && self.buffer[stop - 1] == '\r' {
             stop -= 1;
         }
         if stop == self.start {
@@ -604,7 +605,8 @@ pub fn rename(from: str, to: str) ! {
 // # Errors
 //
 // The errno: 2 (ENOENT) when `from` is missing, 21 (EISDIR) when either is
-// a directory, 28 (ENOSPC) when the disk is full.
+// a directory, 28 (ENOSPC) when the disk is full, 22 (EINVAL) when both
+// paths name the same file, which is left as it was.
 //
 // # Examples
 //
@@ -617,11 +619,20 @@ pub fn rename(from: str, to: str) ! {
 // ```
 pub fn copy_file(from: str, to: str) ! {
     var source = File.open(from)!;
-    var stat: Array<i64, 18> = [0; 18];
-    sys_result(syscall2(SYS_FSTAT, source.fd, (&stat[0]) as i64))!;
-    var mode = metadata_of(stat).mode as i64;
-    var target = File.create(to)!;
-    sys_result(syscall2(SYS_FCHMOD, target.fd, mode))!;
+    var target = File {
+        fd: open_path(to, O_WRONLY | O_CREAT, 0o644)!,
+        buffer: Vec.new(),
+        start: 0,
+    };
+    var read: Array<i64, 18> = [0; 18];
+    var written: Array<i64, 18> = [0; 18];
+    sys_result(syscall2(SYS_FSTAT, source.fd, (&read[0]) as i64))!;
+    sys_result(syscall2(SYS_FSTAT, target.fd, (&written[0]) as i64))!;
+    if read[0] == written[0] && read[1] == written[1] {
+        return Err(22);
+    }
+    sys_result(syscall2(SYS_FTRUNCATE, target.fd, 0))!;
+    sys_result(syscall2(SYS_FCHMOD, target.fd, metadata_of(read).mode as i64))!;
     while true {
         var n = sys_result(syscall5(SYS_SENDFILE, target.fd, source.fd, 0, 1073741824, 0))!;
         if n == 0 {
@@ -643,7 +654,7 @@ pub fn copy_file(from: str, to: str) ! {
 // println("{} {}", fs::exists("here.txt"), fs::exists("nowhere.txt")); // true false
 // ```
 pub fn exists(path: str) bool {
-    return on_path(SYS_ACCESS, path, 0).is_ok();
+    return symlink_metadata(path).is_ok();
 }
 
 // Returns whether `path` is a file, following symlinks.
@@ -821,14 +832,28 @@ pub fn set_times(path: str, accessed: i64?, modified: i64?) ! {
     var p = c_path(path, &buf[0])!;
     var times: Array<i64, 4> = [0, UTIME_OMIT, 0, UTIME_OMIT];
     if accessed.is_some() {
-        times[0] = accessed.unwrap() / 1000000000;
-        times[1] = accessed.unwrap() % 1000000000;
+        var time = timespec(accessed.unwrap());
+        times[0] = time.0;
+        times[1] = time.1;
     }
     if modified.is_some() {
-        times[2] = modified.unwrap() / 1000000000;
-        times[3] = modified.unwrap() % 1000000000;
+        var time = timespec(modified.unwrap());
+        times[2] = time.0;
+        times[3] = time.1;
     }
     sys_result(syscall5(SYS_UTIMENSAT, AT_FDCWD, p, (&times[0]) as i64, 0, 0))!;
+}
+
+// Nanoseconds since 1970 as the seconds and nanoseconds a syscall takes,
+// the nanoseconds never negative, even before 1970.
+fn timespec(ns: i64) (i64, i64) {
+    var seconds = ns / 1000000000;
+    var rest = ns % 1000000000;
+    if rest < 0 {
+        seconds -= 1;
+        rest += 1000000000;
+    }
+    return (seconds, rest);
 }
 
 // One thing in a directory: its name and what kind of thing it is.
@@ -1003,11 +1028,9 @@ pub fn symlink(target: str, path: str) ! {
 pub fn read_link(path: str) String! {
     var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var p = c_path(path, &buf[0])!;
-    var text = String.new();
-    var end = room(&var text, PATH_MAX);
-    var len = sys_result(syscall3(SYS_READLINK, p, end as i64, PATH_MAX as i64))!;
-    filled(&var text, len as usize);
-    return Ok(text);
+    var text: Array<u8, PATH_MAX> = [0; PATH_MAX];
+    var len = sys_result(syscall3(SYS_READLINK, p, (&text[0]) as i64, PATH_MAX as i64))!;
+    return Ok(String.from(as_str(&text[0], len as usize)));
 }
 
 // Creates `path` as a second name for the file `target`, in the order of
@@ -1072,11 +1095,11 @@ pub fn real_path(path: str) String! {
     for i in 0..count {
         link[prefix.len() + i] = digits[count - 1 - i];
     }
-    var text = String.new();
-    var end = room(&var text, PATH_MAX);
-    var len = sys_result(syscall3(SYS_READLINK, (&link[0]) as i64, end as i64, PATH_MAX as i64))!;
-    filled(&var text, len as usize);
-    return Ok(text);
+    var text: Array<u8, PATH_MAX> = [0; PATH_MAX];
+    var len = sys_result(
+        syscall3(SYS_READLINK, (&link[0]) as i64, (&text[0]) as i64, PATH_MAX as i64),
+    )!;
+    return Ok(String.from(as_str(&text[0], len as usize)));
 }
 
 // Returns the working directory, which relative paths start from.
@@ -1093,11 +1116,9 @@ pub fn real_path(path: str) String! {
 // println("{}", fs::current_dir().unwrap().starts_with("/")); // true
 // ```
 pub fn current_dir() String! {
-    var text = String.new();
-    var end = room(&var text, PATH_MAX);
-    var len = sys_result(syscall2(SYS_GETCWD, end as i64, PATH_MAX as i64))!;
-    filled(&var text, len as usize - 1);
-    return Ok(text);
+    var text: Array<u8, PATH_MAX> = [0; PATH_MAX];
+    var len = sys_result(syscall2(SYS_GETCWD, (&text[0]) as i64, PATH_MAX as i64))!;
+    return Ok(String.from(as_str(&text[0], len as usize - 1)));
 }
 
 // Makes `path` the working directory, which relative paths start from.

@@ -1,0 +1,14 @@
+import std.fs;
+fn main() {
+    fs::write_file("same.txt", "keep me").unwrap();
+    println("{}", fs::copy_file("same.txt", "same.txt").unwrap_err());
+    fs::hard_link("same.txt", "alias.txt").unwrap();
+    println("{}", fs::copy_file("same.txt", "alias.txt").unwrap_err());
+    println("{}", fs::read_file("same.txt").unwrap());
+    fs::write_file("other.txt", "a much longer text than the source").unwrap();
+    fs::copy_file("same.txt", "other.txt").unwrap();
+    println("{}", fs::read_file("other.txt").unwrap());
+    fs::remove_file("same.txt").unwrap();
+    fs::remove_file("alias.txt").unwrap();
+    fs::remove_file("other.txt").unwrap();
+}

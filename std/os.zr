@@ -138,6 +138,9 @@ fn check_name(name: str) ! {
 // println("{}", os::env("NOT_SET_ANYWHERE").is_none()); // true
 // ```
 pub fn env(name: str) String? {
+    if check_name(name).is_err() {
+        return None;
+    }
     var table = environment();
     var at = find_env(table, name)?;
     return String.from((*table)[at][name.len() + 1..]);
@@ -302,8 +305,10 @@ pub fn gid() u32 {
 
 // Returns the program's standard input, to read a line or a part at a time.
 //
-// What a user types arrives a line at a time; what another program or a
-// file feeds it arrives as written. `read_stdin` reads all of it at once.
+// It is the same File on every call, so what one read takes ahead is there
+// for the next. What a user types arrives a line at a time; what another
+// program or a file feeds it arrives as written. `read_stdin` reads all of it
+// at once.
 //
 // # Examples
 //
@@ -317,8 +322,10 @@ pub fn gid() u32 {
 // }
 // println("{}", lines); // 0
 // ```
-pub fn stdin() fs::File {
-    return fs::File { fd: 0, buffer: Vec.new(), start: 0 };
+pub fn stdin() &var fs::File {
+    var at: i64 = 0;
+    asm ("leaq __zeru_stdin(%rip), $0" : "=r" (at));
+    return &var *(at as *fs::File);
 }
 
 // Reads all of the standard input, until it ends.
@@ -392,7 +399,9 @@ fn c_list(texts: &Vec<str>, packed: &var String) Vec<u64> {
 }
 
 // Start the file `path` with `args`, its standard output going to `out`
-// and its error output to `err` unless they are -1; its pid.
+// and its error output to `err` unless they are -1; its pid, or the errno
+// of the `execve` that could not start it, which a pipe closed by a
+// successful one brings back from the child.
 fn spawn(path: str, args: Vec<str>, out: i32, err: i32) i64! {
     var argv_texts: Vec<str> = [path];
     for arg in args {
@@ -407,17 +416,35 @@ fn spawn(path: str, args: Vec<str>, out: i32, err: i32) i64! {
     var env_packed = String.new();
     var argv = c_list(&argv_texts, &var argv_packed);
     var envp = c_list(&env_texts, &var env_packed);
-    __zeru_flush();
-    var pid = sys_result(syscall1(SYS_FORK, 0))!;
-    if pid == 0 {
-        if out >= 0 {
-            syscall2(SYS_DUP2, out as i64, 1);
+    var ends: Array<i32, 2> = [0; 2];
+    sys_result(syscall2(SYS_PIPE2, (&ends[0]) as i64, O_CLOEXEC))!;
+    var report = fs::File { fd: ends[0] as i64, buffer: Vec.new(), start: 0 };
+    var pid: i64 = 0;
+    {
+        var reported = fs::File { fd: ends[1] as i64, buffer: Vec.new(), start: 0 };
+        __zeru_flush();
+        pid = sys_result(syscall1(SYS_FORK, 0))!;
+        if pid == 0 {
+            if out >= 0 {
+                syscall2(SYS_DUP2, out as i64, 1);
+            }
+            if err >= 0 {
+                syscall2(SYS_DUP2, err as i64, 2);
+            }
+            var failed = 0
+                - syscall3(SYS_EXECVE, argv[0] as i64, (&argv[0]) as i64, (&envp[0]) as i64);
+            syscall3(SYS_WRITE, reported.fd, (&failed) as i64, 8);
+            syscall1(SYS_EXIT, 127);
         }
-        if err >= 0 {
-            syscall2(SYS_DUP2, err as i64, 2);
-        }
-        syscall3(SYS_EXECVE, argv[0] as i64, (&argv[0]) as i64, (&envp[0]) as i64);
-        syscall1(SYS_EXIT, 127);
+    }
+    var failed: i64 = 0;
+    var got = -EINTR;
+    while got == -EINTR {
+        got = syscall3(SYS_READ, report.fd, (&failed) as i64, 8);
+    }
+    if got == 8 {
+        wait(pid)!;
+        return Err(failed as i32);
     }
     return Ok(pid);
 }
@@ -448,7 +475,8 @@ fn wait(pid: i64) i32! {
 //
 // # Errors
 //
-// 2 (ENOENT) when no such program is found.
+// The errno of starting it: 2 (ENOENT) when no such program is found, 13
+// (EACCES) when it is not a program that may be run.
 //
 // # Examples
 //
@@ -480,7 +508,8 @@ pub struct Output {
 //
 // # Errors
 //
-// 2 (ENOENT) when no such program is found.
+// The errno of starting it: 2 (ENOENT) when no such program is found, 13
+// (EACCES) when it is not a program that may be run.
 //
 // # Examples
 //
