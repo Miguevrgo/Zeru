@@ -1,0 +1,46 @@
+status: compile error
+-- stderr
+Error: Cannot change 's' while 't' still refers into it
+   ╭─[ tests/ui/strings_printing/views_are_borrows.zr:4:5 ]
+   │
+ 4 │     s.push('Y');
+   │     ─────┬─────
+   │          ╰─────── Cannot change 's' while 't' still refers into it
+   │
+   ├─[ tests/ui/strings_printing/views_are_borrows.zr:4:5 ]
+   │
+ 3 │     var t: str = s;
+   │                  ┬
+   │                  ╰── borrowed here
+   │
+ 5 │     println("{}", t);
+   │                   ┬
+   │                   ╰── used later here
+───╯
+Error: Cannot change 'v' while 'part' still refers into it
+    ╭─[ tests/ui/strings_printing/views_are_borrows.zr:11:5 ]
+    │
+ 11 │     v.clear();
+    │     ────┬────
+    │         ╰────── Cannot change 'v' while 'part' still refers into it
+    │
+    ├─[ tests/ui/strings_printing/views_are_borrows.zr:11:5 ]
+    │
+ 10 │     var part = v[0..2];
+    │                ───┬───
+    │                   ╰───── borrowed here
+    │
+ 12 │     println("{}", part[0]);
+    │                   ───┬───
+    │                      ╰───── used later here
+────╯
+Error: Cannot change 's' while a reference into it is still in use
+    ╭─[ tests/ui/strings_printing/views_are_borrows.zr:17:5 ]
+    │
+ 17 │     s.push_str(s);
+    │     ──────┬────┬─
+    │           ╰──────── Cannot change 's' while a reference into it is still in use
+    │                │
+    │                ╰─── borrowed here
+────╯
+[-] Error: aborting due to previous error

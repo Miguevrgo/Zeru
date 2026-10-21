@@ -1,0 +1,14 @@
+fn at(v: &Vec<String>, i: usize) &String {
+    return &v[i];
+}
+fn main() {
+    var env: Vec<String> = Vec.new();
+    env.push(String.from("a"));
+    env.push(String.from("b"));
+    var refs: Vec<&String> = Vec.new();
+    for i in 0..env.len() {
+        refs.push(at(&env, i));
+    }
+    env.push(String.from("c"));
+    println("{}", *refs[0]);
+}

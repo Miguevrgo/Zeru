@@ -1,0 +1,15 @@
+fn main() {
+    var env: Vec<String> = Vec.new();
+    env.push(String.from("a"));
+    env.push(String.from("b"));
+    var refs: Vec<&String> = Vec.new();
+    for i in 0..env.len() {
+        refs.push(&env[i]);
+    }
+    println("{}", refs.len());
+    var texts: Vec<str> = Vec.new();
+    for i in 0..env.len() {
+        texts.push(env[i]);
+    }
+    println("{} {}", texts.len(), texts[1]);
+}

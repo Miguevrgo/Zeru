@@ -358,7 +358,7 @@ impl Program {
                 .is_some_and(|e| e.variants.iter().any(|v| !v.is_empty()))
         };
         let found = match (part, kind) {
-            (Part::Ref, TyKind::Ref(_) | TyKind::RefMut(_)) => true,
+            (Part::Ref, TyKind::Ref(_) | TyKind::RefMut(_) | TyKind::Slice(_)) => true,
             (Part::Owning, TyKind::Vec(_)) => true,
             (Part::Owning | Part::Variant, TyKind::Optional(_) | TyKind::Result(..)) => true,
             (Part::Owning | Part::Variant, _) => payloads(),
@@ -369,7 +369,14 @@ impl Program {
             return found;
         }
         seen.push(ty);
-        let parts: Vec<Ty> = match kind {
+        self.parts(ty)
+            .into_iter()
+            .any(|inner| self.reaches(inner, part, seen))
+    }
+
+    /// The types a value of `ty` holds directly, not behind a pointer.
+    fn parts(&self, ty: Ty) -> Vec<Ty> {
+        match self.types.kind(ty) {
             TyKind::Vec(inner) | TyKind::Array(inner, _) | TyKind::Optional(inner) => vec![*inner],
             TyKind::Result(value, error) => vec![*value, *error],
             TyKind::Tuple(parts) => parts.clone(),
@@ -381,9 +388,46 @@ impl Program {
                     .map_or(Vec::new(), |e| e.variants.concat()),
             },
             _ => Vec::new(),
-        };
-        parts
-            .into_iter()
-            .any(|inner| self.reaches(inner, part, seen))
+        }
+    }
+
+    /// Whether a value of `view` may point into memory a value of `owner`
+    /// holds: always through a `&` or `&var`, and through a slice only when
+    /// `owner` itself stores elements of the slice's type.
+    pub fn may_point_into(&self, view: Ty, owner: Ty) -> bool {
+        let mut stack = vec![view];
+        let mut seen = Vec::new();
+        while let Some(ty) = stack.pop() {
+            if seen.contains(&ty) {
+                continue;
+            }
+            seen.push(ty);
+            match self.types.kind(ty) {
+                TyKind::Ref(_) | TyKind::RefMut(_) => return true,
+                TyKind::Slice(elem) if self.stores(owner, *elem, &mut Vec::new()) => return true,
+                TyKind::Slice(_) => {}
+                _ => stack.extend(self.parts(ty)),
+            }
+        }
+        false
+    }
+
+    /// Whether a value of `ty` is or stores elements of type `elem` itself.
+    fn stores(&self, ty: Ty, elem: Ty, seen: &mut Vec<Ty>) -> bool {
+        if ty == elem {
+            return true;
+        }
+        if seen.contains(&ty) {
+            return false;
+        }
+        seen.push(ty);
+        match self.types.kind(ty) {
+            TyKind::Vec(inner) | TyKind::Array(inner, _) if *inner == elem => true,
+            TyKind::Ref(inner) | TyKind::RefMut(inner) => self.stores(*inner, elem, seen),
+            _ => self
+                .parts(ty)
+                .into_iter()
+                .any(|part| self.stores(part, elem, seen)),
+        }
     }
 }

@@ -1,12 +1,5 @@
 status: compile error
 -- stderr
-Error: This Vec<i32> is freed at the end of the statement, so a slice of it cannot outlive it; store it in a variable first
-   ╭─[ tests/ui/vec/slice_errors.zr:5:13 ]
-   │
- 5 │     var x = make()[1..];
-   │             ───┬──
-   │                ╰──── This Vec<i32> is freed at the end of the statement, so a slice of it cannot outlive it; store it in a variable first
-───╯
 Error: Cannot slice i32
    ╭─[ tests/ui/vec/slice_errors.zr:7:13 ]
    │

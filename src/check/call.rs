@@ -250,7 +250,7 @@ impl FnCx<'_, '_> {
         match self.cx.types.kind(ty).clone() {
             TyKind::Vec(elem) if elem == Types::U8 && STR_METHODS.contains(&name) => {
                 let text = self.mk(ExprKind::Read(place), ty, object.span);
-                let text = self.view(text, matches!(name, "split" | "lines" | "trim"));
+                let text = self.view(text);
                 let def = self
                     .cx
                     .items
@@ -896,7 +896,7 @@ impl FnCx<'_, '_> {
                     let (place, ty) = self.deref(Place::Temp(Box::new(value)), ty, span);
                     self.mk(ExprKind::Read(place), ty, span)
                 }
-                _ if value.ty == Types::STRING => self.view(value, false),
+                _ if value.ty == Types::STRING => self.view(value),
                 _ => value,
             };
             let types = &self.cx.types;

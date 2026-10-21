@@ -1,6 +1,9 @@
 fn make() String {
     return String.from("abc");
 }
+fn make_vec() Vec<i32> {
+    return [1, 2];
+}
 fn take(s: str) str {
     return s;
 }
@@ -8,10 +11,25 @@ fn local() str {
     var s = String.from("gone");
     return s;
 }
+fn local_slice() &[i32] {
+    var v: Vec<i32> = [1, 2];
+    return v[..];
+}
+struct Person {
+    name: String,
+
+    fn get(self) str {
+        return self.name;
+    }
+}
 fn main() {
     var a = make().trim();
     var b: str = make();
     var c = take(make());
-    var nums: Vec<i32> = [1];
-    nums.push_str("x");
+    var x = make_vec()[1..];
+    println("{}", make().len() + make()[1..].len());
+    println("{}", take(make()) == "abc");
+    println("{} {} {} {}", a, b, c, x[0]);
+    var p = Person { name: String.from("ann") };
+    println("{}", p.get());
 }

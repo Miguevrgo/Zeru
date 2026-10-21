@@ -1,0 +1,24 @@
+status: compile error
+-- stderr
+Error: Cannot write through a slice, which may point at read-only memory
+   ╭─[ tests/ui/strings_printing/write_through_str.zr:6:13 ]
+   │
+ 6 │     var p = &var s[0];
+   │             ────┬────
+   │                 ╰────── Cannot write through a slice, which may point at read-only memory
+───╯
+Error: Cannot write through a slice, which may point at read-only memory
+   ╭─[ tests/ui/strings_printing/write_through_str.zr:7:10 ]
+   │
+ 7 │     bump(&var s[1]);
+   │          ────┬────
+   │              ╰────── Cannot write through a slice, which may point at read-only memory
+───╯
+Error: Cannot write through a slice, which may point at read-only memory
+   ╭─[ tests/ui/strings_printing/write_through_str.zr:8:5 ]
+   │
+ 8 │     s[2] = 'x';
+   │     ─────┬────
+   │          ╰────── Cannot write through a slice, which may point at read-only memory
+───╯
+[-] Error: aborting due to previous error

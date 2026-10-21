@@ -427,8 +427,8 @@ pub struct File {
     // Reads the next line, without its "\n" or "\r\n", or None at the end
     // of the file.
     //
-    // The line points into the file's own buffer, so it changes on the next
-    // read of the file. A last line without "\n" still counts.
+    // The line is a String of its own, kept as long as needed. A last line
+    // without "\n" still counts.
     //
     // # Errors
     //
@@ -451,7 +451,7 @@ pub struct File {
     // }
     // println("{}", count); // 2
     // ```
-    pub fn read_line(var self) (str?)! {
+    pub fn read_line(var self) (String?)! {
         var at = self.start;
         while true {
             while at < self.buffer.len() {
@@ -489,15 +489,15 @@ pub struct File {
     }
 
     // The buffered bytes from `start` up to `end`, without a closing "\r".
-    fn take(self, end: usize) str? {
+    fn take(self, end: usize) String? {
         var stop = end;
         if stop > self.start && self.buffer[stop - 1] == '\r' {
             stop -= 1;
         }
         if stop == self.start {
-            return "";
+            return String.new();
         }
-        return as_str((&self.buffer[self.start]) as *u8, stop - self.start);
+        return String.from(as_str((&self.buffer[self.start]) as *u8, stop - self.start));
     }
 
     // Moves to `offset` bytes from the start, where the next read or write

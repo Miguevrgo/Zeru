@@ -503,6 +503,7 @@ impl<'a> Cx<'a> {
                 Step::Variant(at)
             }
             (Projection::Field(at), _) => Step::Field(at),
+            (Projection::Index(_), TyKind::Slice(_)) => Step::Deref,
             (Projection::Index(_), kind) => Step::Index {
                 heap: matches!(kind, TyKind::Vec(_)),
             },
@@ -720,13 +721,20 @@ impl<'a> Cx<'a> {
         facts: &BTreeSet<Fact>,
         dest: &Place,
     ) -> Vec<(usize, bool)> {
-        if !self.has(self.ty(dest), Part::Ref) {
+        let into = self.ty(dest);
+        if !self.has(into, Part::Ref) {
             return Vec::new();
         }
         let live = self.alive(facts, &self.live_out(b));
         let mut returned = Vec::new();
         for &(loan, _) in carried {
             let origin = self.loans[loan].from.unwrap_or(loan);
+            if !self
+                .program
+                .may_point_into(into, self.ty(&self.loans[origin].place))
+            {
+                continue;
+            }
             let derived = *self.derived.entry((b, origin)).or_insert_with(|| {
                 self.loans.push(Loan {
                     place: self.loans[origin].place.clone(),
@@ -981,7 +989,7 @@ impl<'a> Cx<'a> {
             let Some(root) = hit else {
                 continue;
             };
-            let holder = self.best_holder(loan, holder, live);
+            let holder = self.best_holder(loan, holder, root, live);
             let what = self.describe(root, "a temporary value");
             let verb = match rule {
                 Rule::Move => "move",
@@ -1002,8 +1010,14 @@ impl<'a> Cx<'a> {
     }
 
     /// Whether `rule`'s access to `accessed` invalidates a loan on `loan`.
+    /// An access reached through a reference a call derived from a `&`
+    /// changes nothing, since nothing is written through a `&`.
     fn invalidates(&self, accessed: &Path, loan: &Path, rule: Rule) -> bool {
-        if accessed.root != loan.root {
+        let shared = accessed
+            .anchor
+            .as_ref()
+            .is_some_and(|(at, _)| !self.loans[*at].mutable);
+        if accessed.root != loan.root || shared {
             return false;
         }
         let (q, l, deep) = match (&accessed.anchor, &loan.anchor) {
@@ -1050,7 +1064,7 @@ impl<'a> Cx<'a> {
             if holder == local || !inside || self.reported.contains(&loan) {
                 continue;
             }
-            let holder = self.best_holder(loan, holder, live);
+            let holder = self.best_holder(loan, holder, local, live);
             let what = self.describe(local, "a temporary value");
             let message = match (holder == RETURN, self.name(local), self.name(holder)) {
                 (true, ..) => format!("Cannot return a reference into {what}, which ends with this function"),
@@ -1088,15 +1102,14 @@ impl<'a> Cx<'a> {
     }
 
     /// The local to name as holding `loan`: `holder`, or a named one live
-    /// with it.
-    fn best_holder(&self, loan: usize, holder: Local, live: &[Fact]) -> Local {
-        match self.name(holder) {
-            Some(_) => holder,
-            None => live
-                .iter()
-                .find(|fact| fact.1 == loan && self.name(fact.0).is_some())
-                .map_or(holder, |fact| fact.0),
+    /// with it other than `root`, the local the access reaches.
+    fn best_holder(&self, loan: usize, holder: Local, root: Local, live: &[Fact]) -> Local {
+        if holder != root && self.name(holder).is_some() {
+            return holder;
         }
+        live.iter()
+            .find(|fact| fact.1 == loan && fact.0 != root && self.name(fact.0).is_some())
+            .map_or(holder, |fact| fact.0)
     }
 
     fn describe(&self, local: Local, unnamed: &str) -> String {

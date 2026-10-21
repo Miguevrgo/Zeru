@@ -1,0 +1,9 @@
+fn bump(b: &var u8) {
+    *b += 1;
+}
+fn main() {
+    var s = "abc";
+    var p = &var s[0];
+    bump(&var s[1]);
+    s[2] = 'x';
+}

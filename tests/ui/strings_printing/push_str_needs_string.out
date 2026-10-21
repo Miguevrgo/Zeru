@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: push_str() needs a String, not Vec<i32>
+   ╭─[ tests/ui/strings_printing/push_str_needs_string.zr:3:5 ]
+   │
+ 3 │     nums.push_str("x");
+   │     ─────────┬────────
+   │              ╰────────── push_str() needs a String, not Vec<i32>
+───╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,20 @@
+status: compile error
+-- stderr
+Error: Cannot change 'env' while 'refs' still refers into it
+    ╭─[ tests/ui/references/call_refs_collected_then_changed.zr:12:5 ]
+    │
+ 12 │     env.push(String.from("c"));
+    │     ─────────────┬────────────
+    │                  ╰────────────── Cannot change 'env' while 'refs' still refers into it
+    │
+    ├─[ tests/ui/references/call_refs_collected_then_changed.zr:12:5 ]
+    │
+ 10 │         refs.push(at(&env, i));
+    │                      ──┬─
+    │                        ╰─── borrowed here
+    │
+ 13 │     println("{}", *refs[0]);
+    │                    ───┬───
+    │                       ╰───── used later here
+────╯
+[-] Error: aborting due to previous error

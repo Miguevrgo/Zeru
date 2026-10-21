@@ -1,0 +1,24 @@
+fn grows() {
+    var s = String.from("ab");
+    var t: str = s;
+    s.push('Y');
+    println("{}", t);
+}
+
+fn cleared() {
+    var v: Vec<i32> = [1, 2, 3];
+    var part = v[0..2];
+    v.clear();
+    println("{}", part[0]);
+}
+
+fn appends_itself() {
+    var s = String.from("abc");
+    s.push_str(s);
+}
+
+fn main() {
+    grows();
+    cleared();
+    appends_itself();
+}

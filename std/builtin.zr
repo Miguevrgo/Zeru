@@ -745,14 +745,6 @@ fn __zeru_vec_swap<T>(v: &var Vec<T>, i: usize, j: usize) {
     }
 }
 
-// The bytes of `s` as a str, sharing its memory, wherever a String goes
-// for a str.
-fn __zeru_string_view(s: &String) str {
-    var header = s as *usize;
-    var parts = (*(header as **u8), *(header + 1));
-    return *((&parts) as *str);
-}
-
 // `String.from(text)`: a String holding a copy of `text`.
 fn __zeru_string_from(text: str) String {
     var s = String.new();

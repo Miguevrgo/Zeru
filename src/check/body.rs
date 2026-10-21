@@ -272,7 +272,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             return Ok(value);
         }
         if value.ty == Types::STRING && target == Types::STR {
-            return Ok(self.view(value, true));
+            return Ok(self.view(value));
         }
         if self.fits(target, value.ty, false) {
             value.ty = self.resolve(target);
@@ -335,6 +335,16 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     );
                 }
             }
+            Place::Index(base, _)
+                if self
+                    .place_ty(base)
+                    .is_some_and(|ty| matches!(self.cx.types.kind(ty), TyKind::Slice(_))) =>
+            {
+                self.error(
+                    "Cannot write through a slice, which may point at read-only memory",
+                    span,
+                );
+            }
             Place::Field(base, _) | Place::Index(base, _) => self.require_var_root(base, span),
             Place::Deref(pointer) => {
                 if matches!(self.cx.types.kind(pointer.ty), TyKind::Ref(_)) {
@@ -394,16 +404,6 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 let ret = self.ret;
                 let value = value.as_ref().map(|value| {
                     let checked = self.expr(value, Some(ret));
-                    if let ExprKind::Read(place) = &checked.kind
-                        && checked.ty == Types::STRING
-                        && ret == Types::STR
-                        && place.root().is_some()
-                    {
-                        self.error(
-                            "This String is freed when the function returns, so its text cannot be returned; return the String",
-                            checked.span,
-                        );
-                    }
                     let mut value = self.coerce_or(checked, ret, span, |want, got| {
                         format!("Invalid return type. Function expects {want}, returning {got}")
                     });
