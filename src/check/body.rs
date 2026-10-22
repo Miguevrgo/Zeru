@@ -1,10 +1,10 @@
 //! Checking one function instance: its locals and scopes, whether control
 //! can reach each point, and its statements.
 
-use crate::ast::{Expression, ExpressionKind, Statement, StatementKind};
+use crate::ast::{Expression, ExpressionKind, Names, Statement, StatementKind};
 use crate::errors::Span;
 use crate::items::DefId;
-use crate::tir::{self, Block, Expr, ExprKind, LocalId, Place, Stmt, StmtKind};
+use crate::tir::{self, Block, Expr, ExprKind, LocalId, Place, Stmt, StmtKind, Unpack, Walk};
 use crate::ty::{Ty, TyKind, Types};
 
 use super::infer::{DeferredCall, Var};
@@ -398,6 +398,32 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 let local = self.declare(name, ty, !is_const, false);
                 StmtKind::Let(local, value)
             }
+            StatementKind::VarTuple {
+                names,
+                is_const,
+                value,
+            } => {
+                let hints: Vec<Option<Ty>> =
+                    names.iter().map(|names| self.names_type(names)).collect();
+                let mut value = match &value.kind {
+                    ExpressionKind::Tuple(items) if items.len() == names.len() => {
+                        self.tuple(items, hints, value.span)
+                    }
+                    _ => {
+                        let whole = hints.iter().copied().collect::<Option<Vec<Ty>>>();
+                        let whole = whole.map(|parts| self.cx.types.intern(TyKind::Tuple(parts)));
+                        self.value(value, whole)
+                    }
+                };
+                self.consume(&mut value);
+                self.cx.note_types_in(value.ty, span);
+                let target = self.declare_names(names, value.ty, !is_const, span);
+                let kind = ExprKind::Unpack {
+                    target,
+                    value: Box::new(value),
+                };
+                StmtKind::Expr(self.mk(kind, Types::VOID, span))
+            }
             StatementKind::Return(value) => {
                 let ret = self.ret;
                 let value = value.as_ref().map(|value| {
@@ -497,11 +523,12 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// `for i in a..b` counts; `for x in v` reads each element of an array,
     /// a Vec or a str, viewing one that owns memory rather than copying it;
     /// `for x in &var v` lets each be written through `x`; `for i, x in v`
-    /// also counts each element's index in `i`.
+    /// also counts each element's index in `i`; `for (a, b) in v` takes each
+    /// element apart, and `for (x, y) in zip(xs, ys)` walks two at once.
     fn for_in(
         &mut self,
         index: Option<&str>,
-        variable: &str,
+        variable: &Names,
         iterable: &Expression,
         body: &Statement,
     ) -> StmtKind {
@@ -525,8 +552,16 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     Types::ERROR
                 }
             };
+            let name = match variable {
+                Names::One(name, _) => name.as_str(),
+                Names::Skip => "",
+                Names::Tuple(_) => {
+                    self.error("A range gives one number at a time", iterable.span);
+                    ""
+                }
+            };
             self.enter();
-            let var = self.declare(variable, ty, false, false);
+            let var = self.declare(name, ty, false, false);
             let (body, _) = self.loop_body(|this| this.branch(body));
             self.leave();
             return StmtKind::ForRange {
@@ -536,7 +571,73 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 body,
             };
         }
+        let sequences = match (&iterable.kind, variable) {
+            (
+                ExpressionKind::Call {
+                    function,
+                    arguments,
+                    ..
+                },
+                Names::Tuple(names),
+            ) if self.is_zip(function) && arguments.len() == 2 && names.len() == 2 => {
+                arguments.iter().zip(names).collect()
+            }
+            (ExpressionKind::Call { function, .. }, _) if self.is_zip(function) => {
+                self.error(
+                    "zip walks two sequences side by side: for (a, b) in zip(xs, ys)",
+                    iterable.span,
+                );
+                return StmtKind::Block(Block { stmts: Vec::new() });
+            }
+            _ => vec![(iterable, variable)],
+        };
+        let sequences: Vec<_> = sequences
+            .into_iter()
+            .map(|(iterable, names)| (self.sequence(iterable), names))
+            .collect();
+        self.enter();
+        let index = index.map(|index| self.declare(index, Types::USIZE, false, false));
+        let walks = sequences
+            .into_iter()
+            .map(|((seq, item, writable), names)| {
+                let view = writable || self.cx.owns_heap(item);
+                let (var, unpack) = match names {
+                    Names::One(name, _) => (self.declare(name, item, writable, view), None),
+                    Names::Skip => (self.declare("", item, writable, view), None),
+                    Names::Tuple(parts) => {
+                        let var = self.declare("", item, writable, view);
+                        let unpack = self.view_names(parts, item, writable, iterable.span);
+                        (var, Some(unpack))
+                    }
+                };
+                Walk { seq, var, unpack }
+            })
+            .collect();
+        let (body, _) = self.loop_body(|this| this.branch(body));
+        self.leave();
+        StmtKind::ForEach {
+            index,
+            walks,
+            body,
+            within: iterable.span,
+        }
+    }
 
+    /// Whether `function` is `zip`, which only a `for` walks, rather than a
+    /// function of that name.
+    fn is_zip(&self, function: &Expression) -> bool {
+        matches!(&function.kind, ExpressionKind::Identifier(name) if name == "zip")
+            && self.local("zip").is_none()
+            && self
+                .cx
+                .items
+                .lookup_value(self.scope.module, "zip")
+                .is_none()
+    }
+
+    /// What a `for` walks: the place of the sequence, the type of its
+    /// elements, and whether the loop may write them.
+    fn sequence(&mut self, iterable: &Expression) -> (Place, Ty, bool) {
         let (inner, mut writable) = match &iterable.kind {
             ExpressionKind::BorrowRefMut(inner) => (inner.as_ref(), true),
             ExpressionKind::BorrowRef(inner) => (inner.as_ref(), false),
@@ -572,18 +673,89 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 Types::ERROR
             }
         };
-        self.enter();
-        let index = index.map(|index| self.declare(index, Types::USIZE, false, false));
-        let view = writable || self.cx.owns_heap(item);
-        let var = self.declare(variable, item, writable, view);
-        let (body, _) = self.loop_body(|this| this.branch(body));
-        self.leave();
-        StmtKind::ForEach {
-            index,
-            var,
-            seq: seq.0,
-            body,
-            within: iterable.span,
+        (seq.0, item, writable)
+    }
+
+    /// The type `names` declare when each name has one written.
+    fn names_type(&mut self, names: &Names) -> Option<Ty> {
+        match names {
+            Names::One(_, Some(spec)) => {
+                let scope = self.scope.clone();
+                Some(self.cx.resolve_type(spec, &scope, Span::default()))
+            }
+            Names::One(_, None) | Names::Skip => None,
+            Names::Tuple(names) => {
+                let parts = names
+                    .iter()
+                    .map(|names| self.names_type(names))
+                    .collect::<Option<Vec<Ty>>>()?;
+                Some(self.cx.types.intern(TyKind::Tuple(parts)))
+            }
+        }
+    }
+
+    /// The parts of a tuple of type `ty` that `names` declare, `mutable`
+    /// for `var`, each checked against its written type.
+    fn declare_names(&mut self, names: &[Names], ty: Ty, mutable: bool, span: Span) -> Unpack {
+        let parts = self.parts(names.len(), ty, span);
+        let parts = names
+            .iter()
+            .zip(parts)
+            .map(|(names, part)| match names {
+                Names::Skip => Unpack::Skip,
+                Names::Tuple(inner) => self.declare_names(inner, part, mutable, span),
+                Names::One(name, spec) => {
+                    let written = spec.as_ref().and_then(|_| self.names_type(names));
+                    if let Some(want) = written
+                        && want != part
+                        && !self.cx.types.is_error(part)
+                    {
+                        let (want, got) = (self.ty(want), self.ty(part));
+                        self.error(
+                            format!("Type mismatch for variable '{name}'. Annotated as {want} but got {got}"),
+                            span,
+                        );
+                    }
+                    Unpack::Declare(self.declare(name, part, mutable, false))
+                }
+            })
+            .collect();
+        Unpack::Tuple(parts)
+    }
+
+    /// The parts of each element of type `ty` a `for` names, each a view of
+    /// the element's part or a copy of it, as the element itself would be.
+    fn view_names(&mut self, names: &[Names], ty: Ty, writable: bool, span: Span) -> Unpack {
+        let parts = self.parts(names.len(), ty, span);
+        let parts = names
+            .iter()
+            .zip(parts)
+            .map(|(names, part)| match names {
+                Names::Skip => Unpack::Skip,
+                Names::Tuple(inner) => self.view_names(inner, part, writable, span),
+                Names::One(name, _) => {
+                    let view = writable || self.cx.owns_heap(part);
+                    Unpack::Declare(self.declare(name, part, writable, view))
+                }
+            })
+            .collect();
+        Unpack::Tuple(parts)
+    }
+
+    /// The types of the `count` parts of a tuple of type `ty`, or errors
+    /// when it is not one.
+    pub(super) fn parts(&mut self, count: usize, ty: Ty, span: Span) -> Vec<Ty> {
+        match self.cx.types.kind(ty).clone() {
+            TyKind::Tuple(parts) if parts.len() == count => parts,
+            TyKind::Error => vec![Types::ERROR; count],
+            _ => {
+                let shown = self.ty(ty);
+                self.error(
+                    format!("Cannot take {shown} apart into {count} names"),
+                    span,
+                );
+                vec![Types::ERROR; count]
+            }
         }
     }
 

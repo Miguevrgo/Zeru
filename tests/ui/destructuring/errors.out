@@ -1,0 +1,52 @@
+status: compile error
+-- stderr
+Error: Cannot take i32 apart into 2 names
+   ╭─[ tests/ui/destructuring/errors.zr:6:5 ]
+   │
+ 6 │     var (a, b) = 5;
+   │     ───────┬───────
+   │            ╰───────── Cannot take i32 apart into 2 names
+───╯
+Error: Cannot reassign constant variable 'c'
+   ╭─[ tests/ui/destructuring/errors.zr:8:5 ]
+   │
+ 8 │     c = 3;
+   │     ──┬──
+   │       ╰──── Cannot reassign constant variable 'c'
+───╯
+Error: Type mismatch for variable 'e'. Annotated as i64 but got i32
+   ╭─[ tests/ui/destructuring/errors.zr:9:5 ]
+   │
+ 9 │     var (e: i64, f) = divide(1, 2);
+   │     ───────────────┬───────────────
+   │                    ╰───────────────── Type mismatch for variable 'e'. Annotated as i64 but got i32
+───╯
+Error: A range gives one number at a time
+    ╭─[ tests/ui/destructuring/errors.zr:11:19 ]
+    │
+ 11 │     for (x, y) in 0..3 {}
+    │                   ──┬─
+    │                     ╰─── A range gives one number at a time
+────╯
+Error: Type mismatch in assignment. Expected Vec<i32>, got i32
+    ╭─[ tests/ui/destructuring/errors.zr:13:5 ]
+    │
+ 13 │     (m, xs) = (2, 3);
+    │     ────────┬───────
+    │             ╰───────── Type mismatch in assignment. Expected Vec<i32>, got i32
+────╯
+Error: zip walks two sequences side by side: for (a, b) in zip(xs, ys)
+    ╭─[ tests/ui/destructuring/errors.zr:14:19 ]
+    │
+ 14 │     for (p, q) in zip(xs) {}
+    │                   ───┬───
+    │                      ╰───── zip walks two sequences side by side: for (a, b) in zip(xs, ys)
+────╯
+Error: zip walks two sequences side by side in a for: for (a, b) in zip(xs, ys)
+    ╭─[ tests/ui/destructuring/errors.zr:15:13 ]
+    │
+ 15 │     var z = zip(xs, xs);
+    │             ─────┬─────
+    │                  ╰─────── zip walks two sequences side by side in a for: for (a, b) in zip(xs, ys)
+────╯
+[-] Error: aborting due to previous error

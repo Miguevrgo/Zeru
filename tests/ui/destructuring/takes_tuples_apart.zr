@@ -1,0 +1,86 @@
+struct N {
+    id: i32,
+    fn drop(var self) {
+        println("drop {}", self.id);
+    }
+}
+
+fn divide(a: i32, b: i32) (i32, i32) {
+    return (a / b, a % b);
+}
+
+fn two() (N, N) {
+    return (N { id: 1 }, N { id: 2 });
+}
+
+fn main() {
+    var (q, r) = divide(17, 5);
+    println("{} {}", q, r);
+    const (x: i64, y: u8) = (3, 4);
+    println("{} {}", x, y);
+    var (a, (b, c), _) = (1, (2.5, "c"), true);
+    println("{} {} {}", a, b, c);
+    var (first, second) = two();
+    println("got {} {}", first.id, second.id);
+    {
+        var (kept, _) = two();
+        println("kept {}", kept.id);
+    }
+    var m = 1;
+    var n = 2;
+    (m, n) = (n, m);
+    println("{} {}", m, n);
+    var v: Vec<i32> = [1, 2, 3];
+    (v[0], v[2]) = (v[2], v[0]);
+    println("{}", v);
+    var s1: Vec<i32> = [1];
+    var s2: Vec<i32> = [2, 2];
+    (s1, s2) = (s2, s1);
+    println("{} {}", s1, s2);
+    (q, _) = divide(9, 2);
+    println("{}", q);
+    var pairs: Vec<(i32, str)> = [(1, "one"), (2, "two")];
+    for (k, name) in pairs {
+        print("{}={} ", k, name);
+    }
+    println("");
+    for i, (k, _) in pairs {
+        print("{}:{} ", i, k);
+    }
+    println("");
+    var points: Vec<(i32, i32)> = [(1, 2), (3, 4)];
+    for (px, py) in &var points {
+        px *= 10;
+        py += 1;
+    }
+    println("{}", points);
+    var xs: Vec<i32> = [1, 2, 3, 4];
+    var ys: Array<i32, 3> = [10, 20, 30];
+    var total = 0;
+    for (p, q2) in zip(xs, ys) {
+        total += p * q2;
+    }
+    println("{}", total);
+    for i, (p, q2) in zip(xs, ys[1..]) {
+        print("{}:{}+{} ", i, p, q2);
+    }
+    println("");
+    for (p, q2) in zip(&var xs, ys) {
+        p += q2;
+    }
+    println("{}", xs);
+    var names: Vec<String> = Vec.new();
+    names.push(String.from("ann"));
+    names.push(String.from("bob"));
+    var ages: Vec<i32> = [30, 40];
+    for (name, age) in zip(names, ages) {
+        print("{} {} ", name, age);
+    }
+    println("{}", names.len());
+    var nested: Vec<((i32, i32), N)> = Vec.new();
+    nested.push(((5, 6), N { id: 9 }));
+    for ((u, w), node) in nested {
+        println("{} {} {}", u, w, node.id);
+    }
+    println("end");
+}

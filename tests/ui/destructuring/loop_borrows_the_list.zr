@@ -1,0 +1,6 @@
+fn main() {
+    var pairs: Vec<(i32, i32)> = [(1, 2)];
+    for (p, q) in pairs {
+        pairs.push((p, q));
+    }
+}

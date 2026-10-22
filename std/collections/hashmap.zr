@@ -117,7 +117,7 @@ pub struct HashMap<K: Hash, V> {
     // Put `entry`, whose key no slot holds, in the first free slot of its
     // search.
     fn place(var self, entry: (K, V)) {
-        var bits = hash(entry.0 as u64);
+        var bits = hash(__zeru_hash_bits(entry.0));
         var mask = self.groups.len() / 2 - 1;
         var at = (bits >> 32) as usize & mask;
         var stride: usize = 0;
@@ -244,7 +244,7 @@ pub struct HashMap<K: Hash, V> {
         if self.groups.is_empty() {
             return None;
         }
-        var bits = hash(key as u64);
+        var bits = hash(__zeru_hash_bits(key));
         var top = (bits >> 57) as u32;
         var mask = self.groups.len() / 2 - 1;
         var at = (bits >> 32) as usize & mask;

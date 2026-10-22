@@ -11,8 +11,8 @@
 use std::collections::HashSet;
 
 use crate::ast::{
-    Expression, ExpressionKind as E, Pattern, PatternKind, Program, Statement, StatementKind as S,
-    TypeParameter, TypeSpec,
+    Expression, ExpressionKind as E, Names, Pattern, PatternKind, Program, Statement,
+    StatementKind as S, TypeParameter, TypeSpec,
 };
 use crate::errors::{Span, ZeruError};
 use crate::lexer::Lexer;
@@ -445,6 +445,16 @@ impl<'s> Printer<'s> {
                 let head = text(format!("{public}{keyword} {name}{ty} = "));
                 seq(vec![head, self.expr(value), text(";")])
             }
+            S::VarTuple {
+                names,
+                is_const,
+                value,
+            } => {
+                let keyword = if *is_const { "const" } else { "var" };
+                let names = names_text(&Names::Tuple(names.clone()));
+                let head = text(format!("{public}{keyword} {names} = "));
+                seq(vec![head, self.expr(value), text(";")])
+            }
             S::Return(None) => text("return;"),
             S::Return(Some(value)) => seq(vec![text("return "), self.expr(value), text(";")]),
             S::Break => text("break;"),
@@ -462,8 +472,8 @@ impl<'s> Printer<'s> {
                 body,
             } => seq(vec![
                 text(match index {
-                    Some(index) => format!("for {index}, {variable} in "),
-                    None => format!("for {variable} in "),
+                    Some(index) => format!("for {index}, {} in ", names_text(variable)),
+                    None => format!("for {} in ", names_text(variable)),
                 }),
                 self.expr(iterable),
                 text(" "),
@@ -803,6 +813,19 @@ fn return_text(ty: &TypeSpec) -> String {
     match ty {
         TypeSpec::Result(inner) if **inner == TypeSpec::Tuple(Vec::new()) => "!".into(),
         _ => ty_text(ty),
+    }
+}
+
+fn names_text(names: &Names) -> String {
+    match names {
+        Names::One(name, None) => name.clone(),
+        Names::One(name, Some(ty)) => format!("{name}: {}", ty_text(ty)),
+        Names::Skip => "_".to_string(),
+        Names::Tuple(names) => {
+            let parts: Vec<String> = names.iter().map(names_text).collect();
+            let comma = if parts.len() == 1 { "," } else { "" };
+            format!("({}{comma})", parts.join(", "))
+        }
     }
 }
 

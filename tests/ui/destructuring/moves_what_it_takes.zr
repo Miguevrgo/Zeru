@@ -1,0 +1,5 @@
+fn main() {
+    var v1: Vec<i32> = [1];
+    var (g, h) = (v1, 2);
+    println("{}", v1.len());
+}

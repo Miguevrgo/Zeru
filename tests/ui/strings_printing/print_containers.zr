@@ -1,0 +1,26 @@
+fn parse(s: str) i64! {
+    return s.parse_int();
+}
+
+fn make() Vec<str> {
+    return ["x", "y"];
+}
+
+fn main() {
+    var v: Vec<i32> = [1, 2, 3];
+    var empty: Vec<i32> = Vec.new();
+    var a: Array<f64, 2> = [1.5, 2.0];
+    var nested: Vec<Vec<i32>> = [[1], [2, 3]];
+    var t = (1, "two", (3.5, true));
+    var o: i32? = 5;
+    var n: i32? = None;
+    var names: Vec<String> = Vec.new();
+    names.push(String.from("ann"));
+    var opts: Vec<i32?> = [1, None];
+    println("{} {} {}", v, empty, a);
+    println("{}", "84283   63343".split(" "));
+    println("{} {} {}", nested, t, (7,));
+    println("{} {} {} {}", o, n, parse("12"), parse("x"));
+    println("{} {} {}", names, &v, opts);
+    println("{} {}", v[1..], make());
+}

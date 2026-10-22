@@ -1,0 +1,16 @@
+fn divide(a: i32, b: i32) (i32, i32) {
+    return (a / b, a % b);
+}
+
+fn main() {
+    var (a, b) = 5;
+    const (c, d) = (1, 2);
+    c = 3;
+    var (e: i64, f) = divide(1, 2);
+    var xs: Vec<i32> = [1];
+    for (x, y) in 0..3 {}
+    var m = 1;
+    (m, xs) = (2, 3);
+    for (p, q) in zip(xs) {}
+    var z = zip(xs, xs);
+}

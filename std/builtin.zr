@@ -568,6 +568,22 @@ fn __zeru_str_split(s: str, sep: str) Vec<str> {
     return parts;
 }
 
+// `s.split()`: the parts of `s` between runs of spaces, tabs and line
+// breaks, never an empty one.
+fn __zeru_str_split_blank(s: str) Vec<str> {
+    var parts: Vec<str> = Vec.new();
+    var start: usize = 0;
+    for i in 0..s.len() + 1 {
+        if i == s.len() || __zeru_is_space(s[i]) {
+            if i > start {
+                parts.push(s[start..i]);
+            }
+            start = i + 1;
+        }
+    }
+    return parts;
+}
+
 // `s.lines()`: the lines of `s` without their "\n" or "\r\n"; a closing
 // "\n" starts no empty line.
 fn __zeru_str_lines(s: str) Vec<str> {
@@ -932,6 +948,14 @@ fn __zeru_exchange<T>(v: &var Vec<T>, i: usize, j: usize) {
     var held = v[i];
     v[i] = v[j];
     v[j] = held;
+}
+
+// `v.reverse()`: the elements in the opposite order.
+fn __zeru_vec_reverse<T>(v: &var Vec<T>) {
+    var n = v.len();
+    for i in 0..n / 2 {
+        __zeru_vec_swap(v, i, n - 1 - i);
+    }
 }
 
 // `v.swap(i, j)`: exchange two elements. Their bytes trade places, so it

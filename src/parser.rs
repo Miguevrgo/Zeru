@@ -1,6 +1,6 @@
 use crate::{
     ast::{
-        AsmOperand, Expression, ExpressionKind, PRIMITIVES, Pattern, PatternKind, Program,
+        AsmOperand, Expression, ExpressionKind, Names, PRIMITIVES, Pattern, PatternKind, Program,
         Statement, StatementKind, TraitMethod, TypeParameter, TypeSpec,
     },
     errors::{Span, ZeruError},
@@ -352,6 +352,20 @@ impl Parser {
     fn parse_var_statement(&mut self, is_const: bool) -> Option<Statement> {
         let start = self.span();
         self.bump();
+        if self.at(&Token::LParen) {
+            let Names::Tuple(names) = self.parse_names(true)? else {
+                unreachable!("a '(' starts a tuple")
+            };
+            self.expect(&Token::Assign)?;
+            let value = self.parse_expression(Precedence::Lowest)?;
+            self.expect(&Token::Semicolon)?;
+            let kind = StatementKind::VarTuple {
+                names,
+                is_const,
+                value,
+            };
+            return Some(self.statement(kind, start));
+        }
         let name = self.identifier("a name")?;
         let type_annotation = match self.eat(&Token::Colon) {
             true => Some(self.parse_annotation()?),
@@ -596,11 +610,13 @@ impl Parser {
     fn parse_for_statement(&mut self) -> Option<Statement> {
         let start = self.span();
         self.bump();
-        let mut variable = self.identifier("a name")?;
+        let mut variable = self.parse_names(false)?;
         let mut index = None;
-        if self.eat(&Token::Comma) {
-            index = Some(variable);
-            variable = self.identifier("a name")?;
+        if let Names::One(name, None) = &variable
+            && self.eat(&Token::Comma)
+        {
+            index = Some(name.clone());
+            variable = self.parse_names(false)?;
         }
         self.expect(&Token::In)?;
 
@@ -623,6 +639,28 @@ impl Parser {
             body,
         };
         Some(self.statement(kind, start))
+    }
+
+    /// A name, `_`, or a parenthesized list of them, each of a `var`'s
+    /// with its type when `typed`.
+    fn parse_names(&mut self, typed: bool) -> Option<Names> {
+        if !self.eat(&Token::LParen) {
+            let name = self.identifier("a name")?;
+            if name == "_" {
+                return Some(Names::Skip);
+            }
+            let ty = match typed && self.eat(&Token::Colon) {
+                true => Some(self.parse_annotation()?),
+                false => None,
+            };
+            return Some(Names::One(name, ty));
+        }
+        let mut names = vec![self.parse_names(typed)?];
+        while self.eat(&Token::Comma) && !self.at(&Token::RParen) {
+            names.push(self.parse_names(typed)?);
+        }
+        self.expect(&Token::RParen)?;
+        Some(Names::Tuple(names))
     }
 
     fn parse_struct_statement(&mut self) -> Option<Statement> {

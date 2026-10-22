@@ -7,7 +7,7 @@ use crate::ast::StatementKind;
 use crate::ast::{Expression, ExpressionKind, TypeSpec};
 use crate::errors::Span;
 use crate::items::{DefId, ItemKind};
-use crate::tir::{Asm, BinOp, Builtin, Expr, ExprKind, Place, UnOp};
+use crate::tir::{Asm, BinOp, Builtin, Expr, ExprKind, Place, UnOp, Unpack};
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
@@ -232,7 +232,13 @@ impl FnCx<'_, '_> {
                 self.error("A range only goes in a 'for' loop", span);
                 self.error_expr(span)
             }
-            ExpressionKind::Tuple(elements) => self.tuple(elements, inner, span),
+            ExpressionKind::Tuple(elements) => {
+                let hints = match inner.map(|ty| self.cx.types.kind(ty).clone()) {
+                    Some(TyKind::Tuple(parts)) => parts.into_iter().map(Some).collect(),
+                    _ => Vec::new(),
+                };
+                self.tuple(elements, hints, span)
+            }
             ExpressionKind::BorrowRef(place) => {
                 let mutable = matches!(
                     expected.map(|t| self.cx.types.kind(t)),
@@ -563,25 +569,10 @@ impl FnCx<'_, '_> {
         value: &Expression,
         span: Span,
     ) -> Expr {
-        let revived = match &target.kind {
-            ExpressionKind::Identifier(name) => self.local(name),
-            _ => None,
-        };
-        let (place, target_ty) = match revived {
-            Some(local) => (Place::Local(local), self.local_ty(local)),
-            None => self.place(target),
-        };
-        if self.temporary(&place, target_ty, target) {
-            self.error("Cannot assign to a temporary value", target.span);
+        if let (ExpressionKind::Tuple(targets), Token::Assign) = (&target.kind, operator) {
+            return self.assign_tuple(targets, value, span);
         }
-        match revived {
-            Some(local) if !self.local_mutable(local) => {
-                let name = self.local_name(local).to_string();
-                self.error(format!("Cannot reassign constant variable '{name}'"), span);
-            }
-            Some(_) => {}
-            None => self.require_mutable(&place, target, span),
-        }
+        let (place, target_ty) = self.target(target, span);
         let checked = self.expr(value, Some(target_ty));
         let compound = operator.compound_base();
         let mut value = match self.coerce(checked, target_ty) {
@@ -621,6 +612,116 @@ impl FnCx<'_, '_> {
             },
         };
         self.mk(kind, Types::VOID, span)
+    }
+
+    /// The place an assignment writes, checked to be one it may write.
+    fn target(&mut self, target: &Expression, span: Span) -> (Place, Ty) {
+        let revived = match &target.kind {
+            ExpressionKind::Identifier(name) => self.local(name),
+            _ => None,
+        };
+        let (place, target_ty) = match revived {
+            Some(local) => (Place::Local(local), self.local_ty(local)),
+            None => self.place(target),
+        };
+        if self.temporary(&place, target_ty, target) {
+            self.error("Cannot assign to a temporary value", target.span);
+        }
+        match revived {
+            Some(local) if !self.local_mutable(local) => {
+                let name = self.local_name(local).to_string();
+                self.error(format!("Cannot reassign constant variable '{name}'"), span);
+            }
+            Some(_) => {}
+            None => self.require_mutable(&place, target, span),
+        }
+        (place, target_ty)
+    }
+
+    /// `(a, b) = value`: all of `value` is worked out first, then each part
+    /// is stored in its place in turn; `_` leaves a part out.
+    fn assign_tuple(&mut self, targets: &[Expression], value: &Expression, span: Span) -> Expr {
+        let mut stored = Vec::new();
+        let (target, hints) = self.stores(targets, &mut stored, span);
+        let mut value = match &value.kind {
+            ExpressionKind::Tuple(items) if items.len() == hints.len() => {
+                self.tuple(items, hints, value.span)
+            }
+            _ => {
+                let whole = hints.into_iter().collect::<Option<Vec<Ty>>>();
+                let whole = whole.map(|parts| self.cx.types.intern(TyKind::Tuple(parts)));
+                self.value(value, whole)
+            }
+        };
+        self.consume(&mut value);
+        self.check_stores(&target, value.ty, &mut stored.into_iter(), span);
+        let kind = ExprKind::Unpack {
+            target,
+            value: Box::new(value),
+        };
+        self.mk(kind, Types::VOID, span)
+    }
+
+    /// Where each of `targets` stores its part, with the part's type when
+    /// known; the type of each place stored to goes to `stored`, in order.
+    fn stores(
+        &mut self,
+        targets: &[Expression],
+        stored: &mut Vec<Ty>,
+        span: Span,
+    ) -> (Unpack, Vec<Option<Ty>>) {
+        let mut parts = Vec::new();
+        let mut hints = Vec::new();
+        for target in targets {
+            match &target.kind {
+                ExpressionKind::Identifier(name) if name == "_" => {
+                    parts.push(Unpack::Skip);
+                    hints.push(None);
+                }
+                ExpressionKind::Tuple(inner) => {
+                    let (part, inner) = self.stores(inner, stored, span);
+                    let whole = inner.into_iter().collect::<Option<Vec<Ty>>>();
+                    hints.push(whole.map(|parts| self.cx.types.intern(TyKind::Tuple(parts))));
+                    parts.push(part);
+                }
+                _ => {
+                    let (place, ty) = self.target(target, span);
+                    stored.push(ty);
+                    parts.push(Unpack::Store(place));
+                    hints.push(Some(ty));
+                }
+            }
+        }
+        (Unpack::Tuple(parts), hints)
+    }
+
+    /// Check that a value of type `ty` fits `target`, part by part.
+    fn check_stores(
+        &mut self,
+        target: &Unpack,
+        ty: Ty,
+        stored: &mut impl Iterator<Item = Ty>,
+        span: Span,
+    ) {
+        match target {
+            Unpack::Tuple(parts) => {
+                let tys = self.parts(parts.len(), ty, span);
+                for (part, ty) in parts.iter().zip(tys) {
+                    self.check_stores(part, ty, stored, span);
+                }
+            }
+            Unpack::Store(_) => {
+                let want = stored.next().expect("a type for each place stored to");
+                if want != ty && !self.cx.types.is_error(ty) && !self.cx.types.is_error(want) {
+                    let (want, got) = (self.ty(want), self.ty(ty));
+                    self.error(
+                        format!("Type mismatch in assignment. Expected {want}, got {got}"),
+                        span,
+                    );
+                }
+            }
+            Unpack::Skip | Unpack::Declare(_) => {}
+        }
     }
 
     /// Whether `place` is what a raw `*T` points at, which may hold no value
@@ -1127,10 +1228,16 @@ impl FnCx<'_, '_> {
         }
     }
 
-    fn tuple(&mut self, elements: &[Expression], expected: Option<Ty>, span: Span) -> Expr {
-        let wanted = match expected.map(|ty| self.cx.types.kind(ty).clone()) {
-            Some(TyKind::Tuple(parts)) => Some(parts),
-            _ => None,
+    /// A tuple literal, each element checked against its part of `hints`.
+    pub(super) fn tuple(
+        &mut self,
+        elements: &[Expression],
+        hints: Vec<Option<Ty>>,
+        span: Span,
+    ) -> Expr {
+        let wanted = match hints.is_empty() {
+            true => None,
+            false => Some(hints),
         };
         if let Some(wanted) = &wanted
             && wanted.len() != elements.len()
@@ -1150,7 +1257,9 @@ impl FnCx<'_, '_> {
         }
         let mut values = Vec::new();
         for (at, element) in elements.iter().enumerate() {
-            let hint = wanted.as_ref().and_then(|parts| parts.get(at).copied());
+            let hint = wanted
+                .as_ref()
+                .and_then(|parts| parts.get(at).copied().flatten());
             let mut value = self.value(element, hint);
             if let Some(hint) = hint {
                 value = match self.coerce(value, hint) {
@@ -1206,6 +1315,13 @@ impl Checker<'_> {
     /// Whether `operator` means something for operands of type `ty`; the
     /// bounds `Eq`, `Ord` and `Num` ask for `==`, `<` and `+`.
     pub(super) fn operator_applies(&mut self, operator: &Token, ty: Ty) -> bool {
+        if let (Token::Eq | Token::NotEq, TyKind::Tuple(parts)) =
+            (operator, self.types.kind(ty).clone())
+        {
+            return parts
+                .into_iter()
+                .all(|part| self.operator_applies(operator, part));
+        }
         let plain_enum = self.is_enum(ty).is_some_and(|def| !self.enum_has_data(def));
         let types = &self.types;
         let number = types.is_number(ty);

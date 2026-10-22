@@ -1,4 +1,0 @@
-fn main() {
-    var v: Vec<i32> = Vec.new();
-    println("{}", v);
-}

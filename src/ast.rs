@@ -52,6 +52,11 @@ pub enum StatementKind {
         value: Expression,
         type_annotation: Option<TypeSpec>,
     },
+    VarTuple {
+        names: Vec<Names>,
+        is_const: bool,
+        value: Expression,
+    },
     Return(Option<Expression>),
     Break,
     Continue,
@@ -61,7 +66,7 @@ pub enum StatementKind {
     },
     ForIn {
         index: Option<String>,
-        variable: String,
+        variable: Names,
         iterable: Expression,
         body: Box<Statement>,
     },
@@ -188,6 +193,16 @@ pub enum ExpressionKind {
         clobbers: Vec<String>,
         is_volatile: bool,
     },
+}
+
+/// What a `var`, `const` or `for` names: one name, `_` for a part left
+/// out, or a tuple taken apart, as in `(a, b)` or `((x, y), _)`. A name in
+/// a `var` tuple may carry its type.
+#[derive(Debug, Clone)]
+pub enum Names {
+    One(String, Option<TypeSpec>),
+    Skip,
+    Tuple(Vec<Names>),
 }
 
 /// What a `match` arm takes, with a grammar of its own.

@@ -1,0 +1,3 @@
+status: signal 6
+-- stderr
+panic at tests/ui/diagnostics/assert_message_prints_lists.zr:5:5: v is [1, 2, 3]

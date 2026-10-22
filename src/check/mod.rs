@@ -702,6 +702,17 @@ impl<'a> Checker<'a> {
 
     /// Report an argument that does not meet its parameter's bound, once per
     /// item and arguments, so the complaint lands on the use, not inside.
+    /// Whether `ty` can be a hash map key: an integer, a bool, an enum
+    /// without payloads, or a tuple of those.
+    pub(super) fn hashes(&mut self, ty: Ty) -> bool {
+        if let TyKind::Tuple(parts) = self.types.kind(ty).clone() {
+            return parts.into_iter().all(|part| self.hashes(part));
+        }
+        self.types.as_int(ty).is_some()
+            || ty == Types::BOOL
+            || self.is_enum(ty).is_some_and(|def| !self.enum_has_data(def))
+    }
+
     fn check_bounds(
         &mut self,
         def: DefId,
@@ -725,13 +736,7 @@ impl<'a> Checker<'a> {
                 "Eq" => self.operator_applies(&Token::Eq, arg),
                 "Ord" => self.operator_applies(&Token::Lt, arg),
                 "Num" => self.operator_applies(&Token::Plus, arg),
-                "Hash" => {
-                    self.types.as_int(arg).is_some()
-                        || arg == Types::BOOL
-                        || self
-                            .is_enum(arg)
-                            .is_some_and(|def| !self.enum_has_data(def))
-                }
+                "Hash" => self.hashes(arg),
                 _ => match self.items.lookup_trait(module, bound) {
                     Some(trait_def) => self.has_trait_methods(arg, trait_def),
                     None => continue,
@@ -882,6 +887,7 @@ impl<'a> Checker<'a> {
             heap: heap_ty,
             alloc: method(self, heap, "alloc")?,
             realloc: method(self, heap, "realloc")?,
+            str_eq: self.prelude_fn("__zeru_str_eq"),
         };
         self.drain();
         Some(runtime)

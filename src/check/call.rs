@@ -4,7 +4,9 @@
 use crate::ast::{Expression, ExpressionKind, TypeSpec, format_pieces};
 use crate::errors::Span;
 use crate::items::{DefId, ItemKind};
-use crate::tir::{Arm, Builtin, Expr, ExprKind, Payload, Place};
+use crate::tir::{
+    Arm, BinOp, Block, Builtin, Expr, ExprKind, Payload, Place, Stmt, StmtKind, Walk,
+};
 use crate::ty::{Ty, TyKind, Types};
 
 use super::Receiver;
@@ -30,11 +32,14 @@ const STR_METHODS: &[&str] = &[
 
 /// Vec methods written in the prelude, each `__zeru_vec_<name>` taking a
 /// reference to the Vec first.
-const VEC_STD_METHODS: &[&str] = &["sort", "swap", "contains", "sum", "min", "max", "push_str"];
+const VEC_STD_METHODS: &[&str] = &[
+    "sort", "swap", "reverse", "contains", "sum", "min", "max", "push_str",
+];
 
 /// The `Vec` methods that change it, so need a receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
     "sort",
+    "reverse",
     "push_str",
     "swap",
     "push",
@@ -102,6 +107,29 @@ impl FnCx<'_, '_> {
         }
         if name == "assert" {
             return self.assert(args, span);
+        }
+        if name == "zip"
+            && self.local(name).is_none()
+            && self.cx.items.lookup_value(module, name).is_none()
+        {
+            self.error(
+                "zip walks two sequences side by side in a for: for (a, b) in zip(xs, ys)",
+                span,
+            );
+            self.check_args_only(args);
+            return self.error_expr(span);
+        }
+        if name == crate::tir::HASH_BITS_FN && self.local(name).is_none() {
+            let [key] = args else {
+                self.error(format!("{name} takes one key"), span);
+                return self.error_expr(span);
+            };
+            let key = self.expr(key, None);
+            return self.mk(
+                ExprKind::Builtin(Builtin::HashBits, vec![key]),
+                Types::U64,
+                span,
+            );
         }
         if name == crate::tir::FLUSH_FN && self.local(name).is_none() {
             return self.mk(
@@ -413,6 +441,10 @@ impl FnCx<'_, '_> {
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
+        let name = match name {
+            "split" if args.is_empty() => "split_blank",
+            _ => name,
+        };
         let def = self.cx.prelude_def(&format!("__zeru_str_{name}"));
         self.call_def(def, Vec::new(), Some(text), args, expected, span)
     }
@@ -865,13 +897,244 @@ impl FnCx<'_, '_> {
         let Some((pieces, values)) = self.format(args, span) else {
             return self.error_expr(span);
         };
+        let (stderr, newline) = (name.starts_with('e'), name.ends_with("ln"));
+        self.print_values(stderr, newline, pieces, values, span)
+    }
+
+    /// Write `values` between `pieces`. Numbers, bools and text are written
+    /// as they are; a list, a tuple, an optional or a result part by part,
+    /// its text quoted.
+    fn print_values(
+        &mut self,
+        stderr: bool,
+        newline: bool,
+        pieces: Vec<Vec<u8>>,
+        values: Vec<Expr>,
+        span: Span,
+    ) -> Expr {
+        if values.iter().all(|value| self.plain_print(value.ty)) {
+            let kind = ExprKind::Print {
+                stderr,
+                newline,
+                pieces,
+                values,
+            };
+            return self.mk(kind, Types::VOID, span);
+        }
+        self.enter();
+        let mut stmts = Vec::new();
+        let mut pieces = pieces.into_iter();
+        for value in values {
+            let piece = pieces.next().unwrap_or_default();
+            if self.plain_print(value.ty) {
+                stmts.push(self.write(stderr, vec![piece, Vec::new()], vec![value], span));
+                continue;
+            }
+            stmts.push(self.write(stderr, vec![piece], Vec::new(), span));
+            let ty = value.ty;
+            let place = match value.kind {
+                ExprKind::Read(place) if stable(&place) => place,
+                ExprKind::Read(place) => {
+                    let address = self.address(place, ty, false, span);
+                    let held = self.declare("", address.ty, false, false);
+                    let pointer = self.mk(ExprKind::Read(Place::Local(held)), address.ty, span);
+                    stmts.push(Stmt {
+                        kind: StmtKind::Let(held, address),
+                        span,
+                    });
+                    Place::Deref(Box::new(pointer))
+                }
+                _ => {
+                    let held = self.declare("", ty, false, false);
+                    stmts.push(Stmt {
+                        kind: StmtKind::Let(held, value),
+                        span,
+                    });
+                    Place::Local(held)
+                }
+            };
+            self.show(place, ty, false, stderr, &mut stmts, span);
+        }
+        let last = pieces.next().unwrap_or_default();
         let kind = ExprKind::Print {
-            stderr: name.starts_with('e'),
-            newline: name.ends_with("ln"),
+            stderr,
+            newline,
+            pieces: vec![last],
+            values: Vec::new(),
+        };
+        stmts.push(Stmt {
+            kind: StmtKind::Expr(self.mk(kind, Types::VOID, span)),
+            span,
+        });
+        self.leave();
+        self.mk(ExprKind::Block(Block { stmts }), Types::VOID, span)
+    }
+
+    /// A statement writing `values` between `pieces`, with no line break.
+    fn write(&mut self, stderr: bool, pieces: Vec<Vec<u8>>, values: Vec<Expr>, span: Span) -> Stmt {
+        let kind = ExprKind::Print {
+            stderr,
+            newline: false,
             pieces,
             values,
         };
-        self.mk(kind, Types::VOID, span)
+        Stmt {
+            kind: StmtKind::Expr(self.mk(kind, Types::VOID, span)),
+            span,
+        }
+    }
+
+    /// Whether a value of `ty` is written by one `Print` as it is.
+    fn plain_print(&self, ty: Ty) -> bool {
+        let types = &self.cx.types;
+        types.is_number(ty) || ty == Types::BOOL || ty == Types::STR || types.is_error(ty)
+    }
+
+    /// Whether `print` can write a value of `ty`.
+    fn printable(&self, ty: Ty) -> bool {
+        match self.cx.types.kind(ty) {
+            _ if ty == Types::STRING || self.plain_print(ty) => true,
+            TyKind::Vec(part) | TyKind::Array(part, _) | TyKind::Slice(part) => {
+                self.printable(*part)
+            }
+            TyKind::Optional(part) | TyKind::Result(part, _) => self.printable(*part),
+            TyKind::Tuple(parts) => parts.iter().all(|&part| self.printable(part)),
+            _ => false,
+        }
+    }
+
+    /// Statements in `out` writing the value at `place`: lists as `[1, 2]`,
+    /// tuples as `(1, 2)`, an optional as its value or `None`, a result as
+    /// its value or `Err(code)`, and text in quotes when `quoted`.
+    fn show(
+        &mut self,
+        place: Place,
+        ty: Ty,
+        quoted: bool,
+        stderr: bool,
+        out: &mut Vec<Stmt>,
+        span: Span,
+    ) {
+        let text = |bytes: &[u8]| bytes.to_vec();
+        match self.cx.types.kind(ty).clone() {
+            _ if ty == Types::STRING || ty == Types::STR => {
+                let read = self.mk(ExprKind::Read(place), ty, span);
+                let value = match ty == Types::STRING {
+                    true => self.view(read),
+                    false => read,
+                };
+                let quote = if quoted { text(b"\"") } else { Vec::new() };
+                out.push(self.write(stderr, vec![quote.clone(), quote], vec![value], span));
+            }
+            TyKind::Vec(item) | TyKind::Array(item, _) | TyKind::Slice(item) => {
+                out.push(self.write(stderr, vec![text(b"[")], Vec::new(), span));
+                let index = self.declare("", Types::USIZE, false, false);
+                let view = self.cx.owns_heap(item);
+                let var = self.declare("", item, false, view);
+                let read = self.mk(ExprKind::Read(Place::Local(index)), Types::USIZE, span);
+                let zero = self.mk(ExprKind::Int(0), Types::USIZE, span);
+                let cond = self.mk(
+                    ExprKind::Binary(BinOp::Gt, Box::new(read), Box::new(zero)),
+                    Types::BOOL,
+                    span,
+                );
+                let comma = self.write(stderr, vec![text(b", ")], Vec::new(), span);
+                let mut stmts = vec![Stmt {
+                    kind: StmtKind::If {
+                        cond,
+                        then: Block { stmts: vec![comma] },
+                        otherwise: None,
+                    },
+                    span,
+                }];
+                self.show(Place::Local(var), item, true, stderr, &mut stmts, span);
+                out.push(Stmt {
+                    kind: StmtKind::ForEach {
+                        index: Some(index),
+                        walks: vec![Walk {
+                            seq: place,
+                            var,
+                            unpack: None,
+                        }],
+                        body: Block { stmts },
+                        within: span,
+                    },
+                    span,
+                });
+                out.push(self.write(stderr, vec![text(b"]")], Vec::new(), span));
+            }
+            TyKind::Tuple(parts) => {
+                out.push(self.write(stderr, vec![text(b"(")], Vec::new(), span));
+                for (at, &part) in parts.iter().enumerate() {
+                    if at > 0 {
+                        out.push(self.write(stderr, vec![text(b", ")], Vec::new(), span));
+                    }
+                    let field = Place::Field(Box::new(place.clone()), at as u32);
+                    self.show(field, part, true, stderr, out, span);
+                }
+                let close = if parts.len() == 1 {
+                    text(b",)")
+                } else {
+                    text(b")")
+                };
+                out.push(self.write(stderr, vec![close], Vec::new(), span));
+            }
+            TyKind::Optional(inner) | TyKind::Result(inner, _) => {
+                let optional = matches!(self.cx.types.kind(ty), TyKind::Optional(_));
+                let value = self.declare("", inner, false, true);
+                let mut stmts = Vec::new();
+                self.show(Place::Local(value), inner, quoted, stderr, &mut stmts, span);
+                let payload = match optional {
+                    true => Payload::SomeValue,
+                    false => Payload::OkValue,
+                };
+                let shown = self.mk(ExprKind::Block(Block { stmts }), Types::VOID, span);
+                let mut arms = vec![Arm {
+                    tags: vec![1],
+                    bindings: vec![(value, vec![payload])],
+                    body: shown,
+                    span,
+                }];
+                let (tags, bindings, written) = match optional {
+                    true => {
+                        let none = self.write(stderr, vec![text(b"None")], Vec::new(), span);
+                        (Vec::new(), Vec::new(), none)
+                    }
+                    false => {
+                        let code = self.declare("", Types::I32, false, true);
+                        let read = self.mk(ExprKind::Read(Place::Local(code)), Types::I32, span);
+                        let pieces = vec![text(b"Err("), text(b")")];
+                        let err = self.write(stderr, pieces, vec![read], span);
+                        (vec![0], vec![(code, vec![Payload::ErrValue])], err)
+                    }
+                };
+                let body = Block {
+                    stmts: vec![written],
+                };
+                arms.push(Arm {
+                    tags,
+                    bindings,
+                    body: self.mk(ExprKind::Block(body), Types::VOID, span),
+                    span,
+                });
+                let matched = self.mk(
+                    ExprKind::Match {
+                        scrutinee: place,
+                        arms,
+                    },
+                    Types::VOID,
+                    span,
+                );
+                out.push(Stmt {
+                    kind: StmtKind::Expr(matched),
+                    span,
+                });
+            }
+            _ => {
+                let read = self.mk(ExprKind::Read(place), ty, span);
+                out.push(self.write(stderr, vec![Vec::new(), Vec::new()], vec![read], span));
+            }
+        }
     }
 
     /// `assert(cond)`, or `assert(cond, "format", values..)` with a message
@@ -882,17 +1145,18 @@ impl FnCx<'_, '_> {
             return self.error_expr(span);
         };
         let cond = self.condition(cond, "assert takes a bool, got ");
-        let (pieces, values) = match message {
-            [] => (Vec::new(), Vec::new()),
+        let message = match message {
+            [] => None,
             _ => match self.format(message, span) {
-                Some(format) => format,
+                Some((pieces, values)) => Some(Box::new(
+                    self.print_values(true, true, pieces, values, span),
+                )),
                 None => return self.error_expr(span),
             },
         };
         let kind = ExprKind::Assert {
             cond: Box::new(cond),
-            pieces,
-            values,
+            message,
         };
         self.mk(kind, Types::VOID, span)
     }
@@ -941,15 +1205,10 @@ impl FnCx<'_, '_> {
                 _ if value.ty == Types::STRING => self.view(value),
                 _ => value,
             };
-            let types = &self.cx.types;
-            let printable = types.is_number(value.ty)
-                || value.ty == Types::BOOL
-                || value.ty == Types::STR
-                || types.is_error(value.ty);
-            if !printable {
+            if !self.printable(value.ty) {
                 let shown = self.ty(value.ty);
                 self.error(
-                    format!("Cannot print {shown}: print takes numbers, bools and str"),
+                    format!("Cannot print {shown}: print takes numbers, bools, text, and lists, tuples, optionals and results of them"),
                     value.span,
                 );
             }
@@ -970,5 +1229,17 @@ fn written_value(expr: &Expression) -> bool {
         ExpressionKind::ArrayRepeat { value, .. } => written_value(value),
         ExpressionKind::None => true,
         _ => is_number_literal(expr),
+    }
+}
+
+/// Whether reading `place` twice reads the same thing without evaluating
+/// anything again: a local, or fields and constant elements of one.
+fn stable(place: &Place) -> bool {
+    match place {
+        Place::Local(_) => true,
+        Place::Field(base, _) => stable(base),
+        Place::Index(base, index) => stable(base) && matches!(index.kind, ExprKind::Int(_)),
+        Place::Deref(pointer) => matches!(&pointer.kind, ExprKind::Read(place) if stable(place)),
+        Place::Temp(_) => false,
     }
 }

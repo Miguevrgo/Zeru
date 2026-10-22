@@ -34,6 +34,7 @@ pub struct Runtime {
     pub heap: Ty,
     pub alloc: FnId,
     pub realloc: FnId,
+    pub str_eq: FnId,
 }
 
 pub struct StructLayout {
@@ -103,12 +104,30 @@ pub enum StmtKind {
     },
     ForEach {
         index: Option<LocalId>,
-        var: LocalId,
-        seq: Place,
+        walks: Vec<Walk>,
         body: Block,
         within: Span,
     },
     Block(Block),
+}
+
+/// One sequence a `for` walks: `var` is each element in turn, and
+/// `unpack` names its parts when the loop takes a tuple apart.
+#[derive(Clone)]
+pub struct Walk {
+    pub seq: Place,
+    pub var: LocalId,
+    pub unpack: Option<Unpack>,
+}
+
+/// Where each part of a tuple goes: a new local, an existing place, nowhere,
+/// or the parts of a part that is a tuple itself.
+#[derive(Clone)]
+pub enum Unpack {
+    Declare(LocalId),
+    Store(Place),
+    Skip,
+    Tuple(Vec<Unpack>),
 }
 
 #[derive(Clone)]
@@ -178,8 +197,11 @@ pub enum ExprKind {
     },
     Assert {
         cond: Box<Expr>,
-        pieces: Vec<Vec<u8>>,
-        values: Vec<Expr>,
+        message: Option<Box<Expr>>,
+    },
+    Unpack {
+        target: Unpack,
+        value: Box<Expr>,
     },
     Asm(Box<Asm>),
 }
@@ -221,9 +243,13 @@ impl Expr {
             | ExprKind::VecLiteral(values)
             | ExprKind::Variant(_, values)
             | ExprKind::Print { values, .. } => values.iter_mut().for_each(f),
-            ExprKind::Assert { cond, values, .. } => {
+            ExprKind::Assert { cond, message } => {
                 f(cond);
-                values.iter_mut().for_each(f);
+                message.iter_mut().for_each(|message| f(message));
+            }
+            ExprKind::Unpack { target, value } => {
+                target.for_each_expr(f);
+                f(value);
             }
             ExprKind::Struct(fields) => fields.iter_mut().for_each(|(_, value)| f(value)),
             ExprKind::Assign { place, value, .. }
@@ -314,6 +340,9 @@ pub enum BinOp {
 /// program calls by name and code generation defines.
 pub const FLUSH_FN: &str = "__zeru_flush";
 
+/// The bits a hash map hashes for a key; the compiler computes them.
+pub const HASH_BITS_FN: &str = "__zeru_hash_bits";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Builtin {
     Len,
@@ -338,6 +367,7 @@ pub enum Builtin {
     Flush,
     CopyBytes,
     Slice,
+    HashBits,
 }
 
 /// One arm of a `match`; `span` is its pattern, where its bindings borrow
@@ -365,4 +395,15 @@ pub enum Place {
     Index(Box<Place>, Box<Expr>),
     Deref(Box<Expr>),
     Temp(Box<Expr>),
+}
+
+impl Unpack {
+    /// Call `f` on each expression inside the places the parts go to.
+    fn for_each_expr(&mut self, f: &mut impl FnMut(&mut Expr)) {
+        match self {
+            Unpack::Store(place) => place.for_each_expr(f),
+            Unpack::Tuple(parts) => parts.iter_mut().for_each(|part| part.for_each_expr(f)),
+            Unpack::Declare(_) | Unpack::Skip => {}
+        }
+    }
 }

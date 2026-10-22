@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Use of moved value 'v1'. Value was previously moved and is no longer valid
+   ╭─[ tests/ui/destructuring/moves_what_it_takes.zr:4:19 ]
+   │
+ 4 │     println("{}", v1.len());
+   │                   ────┬───
+   │                       ╰───── Use of moved value 'v1'. Value was previously moved and is no longer valid
+───╯
+[-] Error: aborting due to previous error

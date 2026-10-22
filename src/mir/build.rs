@@ -227,27 +227,28 @@ impl<'a> Builder<'a> {
 
     /// `assert`: when `cond` is false, write where it failed and its message,
     /// or else `cond` as written, to stderr and abort.
-    fn assert_holds(&mut self, cond: &Expr, pieces: &[Vec<u8>], values: &[Expr]) {
+    fn assert_holds(&mut self, cond: &Expr, message: Option<&Expr>) {
         let holds = self.as_operand(cond);
         let (fail, next) = (self.new_block(), self.new_block());
         self.switch(holds, vec![(1, next)], fail);
         self.current = Some(fail);
-        let mut pieces = pieces.to_vec();
-        if pieces.is_empty() {
-            let written = self.sources.text(cond.span);
-            pieces.push(format!("assertion failed: {written}").into_bytes());
+        let mut first = match self.sources.position(self.span) {
+            Some((file, line, column)) => format!("panic at {file}:{line}:{column}: "),
+            None => String::new(),
+        };
+        if message.is_none() {
+            first.push_str("assertion failed: ");
+            first.push_str(self.sources.text(cond.span));
         }
-        if let Some((file, line, column)) = self.sources.position(self.span) {
-            let at = format!("panic at {file}:{line}:{column}: ");
-            pieces[0].splice(0..0, at.into_bytes());
-        }
-        let values = values.iter().map(|value| self.as_operand(value)).collect();
         self.push(StatementKind::Print {
             stderr: true,
-            newline: true,
-            pieces,
-            values,
+            newline: message.is_none(),
+            pieces: vec![first.into_bytes()],
+            values: Vec::new(),
         });
+        if let Some(message) = message {
+            self.expr_into(None, message);
+        }
         self.terminate(TerminatorKind::Assert {
             cond: Operand::Constant(Constant {
                 value: ConstValue::Bool(false),
@@ -374,13 +375,12 @@ impl<'a> Builder<'a> {
             } => self.scope(|this| this.for_range(*var, start, end, body)),
             StmtKind::ForEach {
                 index,
-                var,
-                seq,
+                walks,
                 body,
                 within,
             } => self.scope(|this| {
                 this.span = *within;
-                this.for_each(*index, *var, seq, body)
+                this.for_each(*index, walks, body)
             }),
             StmtKind::Block(block) => self.block(block),
         }
@@ -456,24 +456,11 @@ impl<'a> Builder<'a> {
         );
     }
 
-    /// `for i, x in seq`: a reference walks from the first element to one
-    /// past the last, so the loop borrows every
-    /// element throughout, and `i`, when written, counts up beside it.
-    fn for_each(
-        &mut self,
-        index: Option<tir::LocalId>,
-        var: tir::LocalId,
-        seq: &tir::Place,
-        body: &tir::Block,
-    ) {
-        let seq = self.as_place(seq);
-        let elem = self
-            .types()
-            .elem(self.place_ty(&seq))
-            .expect("only an array, a Vec or a slice is walked");
-        let pointer = self.program.types.intern(TyKind::Ref(elem));
-        let len = self.temp(Types::USIZE);
-        self.assign(Place::local(len), Rvalue::Len(seq.clone()));
+    /// `for i, x in seq`, or `for (x, y) in zip(xs, ys)`: for each sequence
+    /// a reference walks from the first element on, so the loop borrows
+    /// every element throughout, and `i`, when written, counts up beside it,
+    /// until the shortest sequence ends.
+    fn for_each(&mut self, index: Option<tir::LocalId>, walks: &[tir::Walk], body: &tir::Block) {
         let count = match index {
             Some(index) => {
                 let index = self.declare(index);
@@ -483,21 +470,41 @@ impl<'a> Builder<'a> {
             None => self.temp(Types::USIZE),
         };
         self.assign(Place::local(count), Rvalue::Use(constant(0, Types::USIZE)));
-        let at = self.local(pointer, Some("for".to_string()));
-        let element = seq.project(Projection::Index(count));
-        self.assign(Place::local(at), Rvalue::AddressOf(element));
-        let current = Place::local(at).project(Projection::Deref);
+        let mut walking = Vec::new();
+        for walk in walks {
+            let seq = self.as_place(&walk.seq);
+            let elem = self
+                .types()
+                .elem(self.place_ty(&seq))
+                .expect("only an array, a Vec or a slice is walked");
+            let pointer = self.program.types.intern(TyKind::Ref(elem));
+            let len = self.temp(Types::USIZE);
+            self.assign(Place::local(len), Rvalue::Len(seq.clone()));
+            let at = self.local(pointer, Some("for".to_string()));
+            let element = seq.project(Projection::Index(count));
+            self.assign(Place::local(at), Rvalue::AddressOf(element));
+            walking.push((walk, len, at));
+        }
         self.looping(
             |this| {
-                let len = Operand::Copy(Place::local(len));
-                this.binary(BinOp::Lt, Operand::Copy(Place::local(count)), len)
+                let mut more: Option<Operand> = None;
+                for &(_, len, _) in &walking {
+                    let len = Operand::Copy(Place::local(len));
+                    let inside = this.binary(BinOp::Lt, Operand::Copy(Place::local(count)), len);
+                    more = Some(match more {
+                        Some(more) => this.binary(BinOp::BitAnd, more, inside),
+                        None => inside,
+                    });
+                }
+                more.expect("a for walks at least one sequence")
             },
-            |this| match this.function.locals[var.0 as usize].view {
-                true => this.views[var.0 as usize] = Some(current),
-                false => {
-                    let copy = this.declare(var);
-                    this.scopes.last_mut().unwrap().push((copy, false));
-                    this.assign(Place::local(copy), Rvalue::Use(Operand::Copy(current)));
+            |this| {
+                for &(walk, _, at) in &walking {
+                    let current = Place::local(at).project(Projection::Deref);
+                    let var = this.element(walk.var, current);
+                    if let Some(unpack) = &walk.unpack {
+                        this.view_parts(unpack, var);
+                    }
                 }
             },
             body,
@@ -508,10 +515,77 @@ impl<'a> Builder<'a> {
                     right: constant(1, Types::USIZE),
                     checked: false,
                 };
-                this.assign(Place::local(at), next(at, BinOp::PtrAdd));
+                for &(_, _, at) in &walking {
+                    this.assign(Place::local(at), next(at, BinOp::PtrAdd));
+                }
                 this.assign(Place::local(count), next(count, BinOp::AddWrap));
             },
         );
+    }
+
+    /// `local`, a loop's element or a part of it, made the value at `place`:
+    /// a view of it, or a copy; where the value now is.
+    fn element(&mut self, local: tir::LocalId, place: Place) -> Place {
+        if self.function.locals[local.0 as usize].view {
+            self.views[local.0 as usize] = Some(place.clone());
+            return place;
+        }
+        let copy = self.declare(local);
+        self.scopes.last_mut().unwrap().push((copy, false));
+        self.assign(Place::local(copy), Rvalue::Use(Operand::Copy(place)));
+        Place::local(copy)
+    }
+
+    /// The parts of the tuple at `place` given to the locals of `unpack`,
+    /// each a view or a copy as `element` makes it.
+    fn view_parts(&mut self, unpack: &tir::Unpack, place: Place) {
+        match unpack {
+            tir::Unpack::Declare(local) => {
+                self.element(*local, place);
+            }
+            tir::Unpack::Tuple(parts) => {
+                for (at, part) in parts.iter().enumerate() {
+                    self.view_parts(part, place.clone().project(Projection::Field(at as u32)));
+                }
+            }
+            tir::Unpack::Skip | tir::Unpack::Store(_) => {}
+        }
+    }
+
+    /// `target = value` for a tuple `value`, taken apart: each part goes
+    /// where `target` puts it, and a part it skips is dropped. The tuple is
+    /// held in a temporary nothing drops, so its parts change owner as they
+    /// are copied out.
+    fn unpack(&mut self, target: &tir::Unpack, value: &Expr) {
+        let held = self.temp(value.ty);
+        self.expr_into(Some(Place::local(held)), value);
+        self.unpack_into(target, Place::local(held));
+    }
+
+    fn unpack_into(&mut self, target: &tir::Unpack, from: Place) {
+        let owned = self.program.needs_drop(self.place_ty(&from));
+        let value = Operand::Copy(from.clone());
+        match target {
+            tir::Unpack::Tuple(parts) => {
+                for (at, part) in parts.iter().enumerate() {
+                    self.unpack_into(part, from.clone().project(Projection::Field(at as u32)));
+                }
+            }
+            tir::Unpack::Skip if owned => self.drop(from),
+            tir::Unpack::Skip => {}
+            tir::Unpack::Declare(local) => {
+                let mir = self.declare(*local);
+                self.assign(Place::local(mir), Rvalue::Use(value));
+                self.own(mir);
+            }
+            tir::Unpack::Store(place) => {
+                let target = self.as_place(place);
+                if owned {
+                    self.drop(target.clone());
+                }
+                self.assign(target, Rvalue::Use(value));
+            }
+        }
     }
 
     fn place_ty(&self, place: &Place) -> Ty {
@@ -597,6 +671,76 @@ impl<'a> Builder<'a> {
     }
 
     /// `op` applied to two values, unchecked, into a new local.
+    /// Whether the tuples at `left` and `right` are equal, part by part.
+    fn tuple_eq(&mut self, left: Place, right: Place, ty: Ty) -> Operand {
+        let TyKind::Tuple(parts) = self.types().kind(ty).clone() else {
+            unreachable!("only tuples are compared part by part")
+        };
+        let mut all = Operand::Constant(Constant {
+            value: ConstValue::Bool(true),
+            ty: Types::BOOL,
+        });
+        for (at, part) in parts.into_iter().enumerate() {
+            let field = Projection::Field(at as u32);
+            let (l, r) = (left.clone().project(field), right.clone().project(field));
+            let same = match self.types().kind(part) {
+                TyKind::Tuple(_) => self.tuple_eq(l, r, part),
+                _ if part == Types::STR => {
+                    let result = self.temp(Types::BOOL);
+                    let function = self.program.runtime.str_eq;
+                    self.then(|target| TerminatorKind::Call {
+                        function,
+                        args: vec![Operand::Copy(l), Operand::Copy(r)],
+                        dest: Some(Place::local(result)),
+                        target,
+                    });
+                    Operand::Move(Place::local(result))
+                }
+                _ => self.binary(BinOp::Eq, Operand::Copy(l), Operand::Copy(r)),
+            };
+            all = self.binary(BinOp::BitAnd, all, same);
+        }
+        all
+    }
+
+    /// The bits a hash map hashes for the key at `key`: the key as a `u64`,
+    /// or for a tuple the bits of its parts mixed in turn.
+    fn hash_bits(&mut self, key: Place, ty: Ty) -> Operand {
+        let TyKind::Tuple(parts) = self.types().kind(ty).clone() else {
+            let bits = self.temp(Types::U64);
+            let value = Operand::Copy(key);
+            let cast = Rvalue::Cast {
+                value,
+                to: Types::U64,
+                checked: false,
+            };
+            self.assign(Place::local(bits), cast);
+            return Operand::Move(Place::local(bits));
+        };
+        let mut bits = constant(0, Types::U64);
+        for (at, part) in parts.into_iter().enumerate() {
+            let part_bits = self.hash_bits(key.clone().project(Projection::Field(at as u32)), part);
+            let mixed = self.temp(Types::U64);
+            let spread = Rvalue::Binary {
+                op: BinOp::MulWrap,
+                left: bits,
+                right: constant(0x100000001b3, Types::U64),
+                checked: false,
+            };
+            self.assign(Place::local(mixed), spread);
+            let next = self.temp(Types::U64);
+            let joined = Rvalue::Binary {
+                op: BinOp::BitXor,
+                left: Operand::Move(Place::local(mixed)),
+                right: part_bits,
+                checked: false,
+            };
+            self.assign(Place::local(next), joined);
+            bits = Operand::Move(Place::local(next));
+        }
+        bits
+    }
+
     fn binary(&mut self, op: BinOp, left: Operand, right: Operand) -> Operand {
         let result = self.temp(Types::BOOL);
         self.assign(
@@ -694,6 +838,16 @@ impl<'a> Builder<'a> {
                     _ => Rvalue::Unary(*op, operand),
                 }
             }
+            ExprKind::Binary(op @ (BinOp::Eq | BinOp::Ne), left, right)
+                if matches!(self.types().kind(left.ty), TyKind::Tuple(_)) =>
+            {
+                let (l, r) = (self.as_temp(left), self.as_temp(right));
+                let same = self.tuple_eq(Place::local(l), Place::local(r), left.ty);
+                match op {
+                    BinOp::Eq => Rvalue::Use(same),
+                    _ => Rvalue::Unary(UnOp::Not, same),
+                }
+            }
             ExprKind::Binary(op, left, right) => Rvalue::Binary {
                 op: *op,
                 checked: self.checked(*op, left.ty),
@@ -765,16 +919,13 @@ impl<'a> Builder<'a> {
                     values,
                 });
             }
-            ExprKind::Assert {
-                cond,
-                pieces,
-                values,
-            } => {
+            ExprKind::Assert { cond, message } => {
                 if self.checks {
-                    self.assert_holds(cond, pieces, values);
+                    self.assert_holds(cond, message.as_deref());
                 }
                 return;
             }
+            ExprKind::Unpack { target, value } => return self.unpack(target, value),
             ExprKind::Asm(asm) => {
                 let inputs = asm
                     .inputs
@@ -1081,6 +1232,7 @@ impl<'a> Builder<'a> {
                         return self.push(StatementKind::VecShrinkToFit(held));
                     }
                     Builtin::Slice => self.slice(held, args),
+                    Builtin::HashBits => Rvalue::Use(self.hash_bits(held, args[0].ty)),
                     Builtin::Flush
                     | Builtin::CopyBytes
                     | Builtin::VecNew

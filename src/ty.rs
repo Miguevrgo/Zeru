@@ -114,6 +114,7 @@ impl Types {
     pub const F64: Ty = Ty(4);
     pub const I32: Ty = Ty(7);
     pub const U8: Ty = Ty(10);
+    pub const U64: Ty = Ty(13);
     pub const USIZE: Ty = Ty(14);
     pub const STR: Ty = Ty(15);
     pub const STRING: Ty = Ty(16);
