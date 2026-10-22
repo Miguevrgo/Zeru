@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: 'hashmap::HashMap' asks for K: Eq, which P does not satisfy
+Error: 'hashmap::HashMap' asks for K: Hash, which P does not satisfy
    ╭─[ tests/ui/diagnostics/generic_error_inside_std.zr:4:5 ]
    │
  4 │     var m: HashMap<P, i32> = HashMap.new();
    │     ───────────────────┬───────────────────
-   │                        ╰───────────────────── 'hashmap::HashMap' asks for K: Eq, which P does not satisfy
+   │                        ╰───────────────────── 'hashmap::HashMap' asks for K: Hash, which P does not satisfy
 ───╯
 [-] Error: aborting due to previous error

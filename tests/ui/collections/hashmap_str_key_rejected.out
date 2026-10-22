@@ -1,29 +1,10 @@
 status: compile error
 -- stderr
-Error: Cannot cast str to u64
-     ╭─[ std/collections/hashmap.zr:120:25 ]
-     │
- 120 │         var bits = hash(entry.0 as u64);
-     │                         ───────┬──────
-     │                                ╰──────── Cannot cast str to u64
-     │
-     ├─[ tests/ui/collections/hashmap_str_key_rejected.zr:3:32 ]
-     │
-   3 │     var m: HashMap<str, i64> = HashMap.new();
-     │                                ──────┬──────
-     │                                      ╰──────── in 'hashmap::HashMap::place<str, i64>', instantiated here
-─────╯
-Error: Cannot cast str to u64
-     ╭─[ std/collections/hashmap.zr:247:25 ]
-     │
- 247 │         var bits = hash(key as u64);
-     │                         ─────┬────
-     │                              ╰────── Cannot cast str to u64
-     │
-     ├─[ tests/ui/collections/hashmap_str_key_rejected.zr:3:32 ]
-     │
-   3 │     var m: HashMap<str, i64> = HashMap.new();
-     │                                ──────┬──────
-     │                                      ╰──────── in 'hashmap::HashMap::find<str, i64>', instantiated here
-─────╯
+Error: 'hashmap::HashMap' asks for K: Hash, which str does not satisfy
+   ╭─[ tests/ui/collections/hashmap_str_key_rejected.zr:3:5 ]
+   │
+ 3 │     var m: HashMap<str, i64> = HashMap.new();
+   │     ────────────────────┬────────────────────
+   │                         ╰────────────────────── 'hashmap::HashMap' asks for K: Hash, which str does not satisfy
+───╯
 [-] Error: aborting due to previous error

@@ -19,7 +19,7 @@ import std.collections.hashmap::{HashMap};
 // }
 // println("{} {}", seen.len(), seen.contains(9)); // 3 true
 // ```
-pub struct HashSet<K: Eq> {
+pub struct HashSet<K: Hash> {
     members: HashMap<K, bool>,
 
     // Returns an empty set.

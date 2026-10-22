@@ -545,7 +545,7 @@ impl<'a> Checker<'a> {
     /// declared.
     fn check_bound_names(&mut self, generics: &[TypeParameter], module: ModuleId, span: Span) {
         for bound in generics.iter().filter_map(|param| param.bound.as_ref()) {
-            if matches!(bound.as_str(), "Eq" | "Ord" | "Num") {
+            if matches!(bound.as_str(), "Eq" | "Ord" | "Num" | "Hash") {
                 continue;
             }
             match self.items.lookup_trait(module, bound) {
@@ -725,6 +725,11 @@ impl<'a> Checker<'a> {
                 "Eq" => self.operator_applies(&Token::Eq, arg),
                 "Ord" => self.operator_applies(&Token::Lt, arg),
                 "Num" => self.operator_applies(&Token::Plus, arg),
+                "Hash" => {
+                    self.types.as_int(arg).is_some()
+                        || arg == Types::BOOL
+                        || self.is_enum(arg).is_some_and(|def| !self.enum_has_data(def))
+                }
                 _ => match self.items.lookup_trait(module, bound) {
                     Some(trait_def) => self.has_trait_methods(arg, trait_def),
                     None => continue,

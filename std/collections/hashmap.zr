@@ -68,7 +68,7 @@ fn lowest(bits: u32) usize {
 // }
 // println("{}", stock.contains(1003)); // false
 // ```
-pub struct HashMap<K: Eq, V> {
+pub struct HashMap<K: Hash, V> {
     groups: Vec<u64>,
     slots: Vec<(K, V)?>,
     len: usize,

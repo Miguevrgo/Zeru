@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: 'hashmap::HashMap' asks for K: Eq, which Shape does not satisfy
+Error: 'hashmap::HashMap' asks for K: Hash, which Shape does not satisfy
    ╭─[ tests/ui/collections/hashmap_payload_enum_key_rejected.zr:4:5 ]
    │
  4 │     var m: HashMap<Shape, i64> = HashMap.new();
    │     ─────────────────────┬─────────────────────
-   │                          ╰─────────────────────── 'hashmap::HashMap' asks for K: Eq, which Shape does not satisfy
+   │                          ╰─────────────────────── 'hashmap::HashMap' asks for K: Hash, which Shape does not satisfy
 ───╯
 [-] Error: aborting due to previous error
