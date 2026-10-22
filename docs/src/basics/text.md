@@ -39,7 +39,8 @@ The methods:
 |---|---|
 | `len()` | the length in bytes |
 | `trim()` | the text without spaces, tabs and line breaks around it |
-| `split(sep)` | a `Vec<str>` of the parts between each `sep` |
+| `split()` | a `Vec<str>` of the words between runs of spaces, tabs and line breaks |
+| `split(sep)` | a `Vec<str>` of the parts between each `sep`, empty ones included |
 | `lines()` | a `Vec<str>` of the lines, without their line breaks |
 | `starts_with(t)`, `ends_with(t)` | whether the text begins or ends with `t` |
 | `parse_int()`, `parse_float()` | the number the text spells, or an error (`i64!`, `f64!`) |
@@ -52,6 +53,15 @@ var width = parts[1].parse_int().unwrap();
 println("{}", width * 2); // 160
 println("{}", "3.5".parse_float().unwrap() + 1.0); // 4.5
 println("{}", "1x".parse_int().is_err()); // true
+```
+
+`split()` with no separator is the one to read numbers or words separated
+by any amount of spaces. With a separator, each one counts, so two in a
+row leave an empty part between them:
+
+```zeru
+println("{}", "84283   63343".split()); // ["84283", "63343"]
+println("{}", "84283   63343".split(" ")); // ["84283", "", "", "63343"]
 ```
 
 The parts `split` and `lines` give are views into the original text; no

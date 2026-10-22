@@ -54,8 +54,8 @@ fn main() {
 ## Printing
 
 `print` and `println` take a format string, where each `{}` is replaced by
-the next value. Numbers, bools and text can be printed; `{{}}` writes the
-braces themselves.
+the next value. Numbers, bools and text can be printed, and so can lists,
+tuples and optionals of them; `{{}}` writes the braces themselves.
 
 ```zeru
 var name = "Ann";
@@ -63,6 +63,8 @@ var age = 30;
 println("{} is {} years old", name, age); // Ann is 30 years old
 println("pi is about {}", 3.14159); // pi is about 3.14159
 println("{{}} stays"); // {} stays
+var list: Vec<i32> = [1, 2, 3];
+println("{} and {}", list, (1, "one")); // [1, 2, 3] and (1, "one")
 ```
 
 `eprint` and `eprintln` write to the standard error instead.

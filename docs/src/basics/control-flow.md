@@ -85,6 +85,33 @@ for score in &var scores {
 println("{} {} {}", scores[0], scores[1], scores[2]); // 10 20 30
 ```
 
+A list of tuples can be taken apart as it is walked:
+
+```zeru
+var scores: Vec<(str, i32)> = [("ann", 7), ("bob", 9)];
+for (name, points) in scores {
+    print("{}:{} ", name, points);
+}
+println(""); // ann:7 bob:9
+```
+
+`zip` walks two lists side by side, stopping at the end of the shorter
+one. It copies and allocates nothing: each pair is read in place, as a
+single list would be.
+
+```zeru
+var prices: Vec<f64> = [1.5, 2.0, 4.0];
+var amounts: Array<i32, 3> = [2, 1, 3];
+var total = 0.0;
+for (price, amount) in zip(prices, amounts) {
+    total += price * amount as f64;
+}
+println("{}", total); // 17.0
+```
+
+`zip(&var a, b)` lets the loop change `a`, and `for i, (x, y) in zip(a, b)`
+counts too. `zip` exists only inside a `for`.
+
 `for` is the only way to walk a list, and the loop always ends: it cannot
 run past the last element.
 

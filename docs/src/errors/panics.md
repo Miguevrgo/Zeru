@@ -55,6 +55,8 @@ Its values are only computed when the assertion fails:
 assert(balance >= 0, "balance went negative: {}", balance);
 ```
 
+The message prints lists and tuples like `println` does.
+
 ```text
 panic at main.zr:7:5: balance went negative: -20
 ```

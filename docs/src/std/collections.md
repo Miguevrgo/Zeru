@@ -20,7 +20,8 @@ All of them also have `new()`, `len()`, `is_empty()` and `clear()`.
 
 ## HashMap and HashSet
 
-Keys must be integers, bools or enums without data (the `Hash` bound).
+Keys must be integers, bools, enums without data or tuples of those (the
+`Hash` bound).
 `get` returns a reference to the value, or `None`:
 
 ```zeru
@@ -46,6 +47,16 @@ println("{}", seen.len()); // 1
 ```
 
 `insert` on a set returns whether the key was new.
+
+A tuple of such values is a key too, as the position on a grid:
+
+```zeru
+import std.collections.hashmap::{HashMap};
+
+var grid: HashMap<(i32, i32), u8> = HashMap.new();
+grid.insert((2, 3), '#');
+println("{}", *grid.get((2, 3)).unwrap() == '#'); // true
+```
 
 ## VecDeque
 

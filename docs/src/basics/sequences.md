@@ -55,7 +55,7 @@ The methods:
 | `insert(i, x)`, `remove(i)` | add or take at index `i`, moving the rest |
 | `len()`, `is_empty()`, `capacity()` | sizes |
 | `get(i)` | a reference to element `i`, or `None` past the end |
-| `swap(i, j)`, `sort()` | reorder in place |
+| `swap(i, j)`, `sort()`, `reverse()` | reorder in place |
 | `contains(x)`, `sum()`, `min()`, `max()` | look at the values |
 | `clear()`, `reserve(n)`, `shrink_to_fit()` | manage the memory |
 | `copy()` | a second Vec with the same elements |
@@ -67,6 +67,15 @@ println("{} {} {}", v[0], v[1], v[2]); // 3 5 8
 println("{} {}", v.contains(8), v.sum()); // true 16
 println("{}", v.max().unwrap()); // 8
 println("{}", v.get(10).is_none()); // true
+```
+
+`println` writes a whole list, nested ones too, with any text inside in
+quotes:
+
+```zeru
+var grid: Vec<Vec<i32>> = [[1, 2], [3]];
+var words: Vec<str> = ["a", ""];
+println("{} {}", grid, words); // [[1, 2], [3]] ["a", ""]
 ```
 
 Unlike an array, a `Vec` owns memory on the heap, so assigning it moves it
@@ -118,6 +127,42 @@ var person = ("ann", 30, true);
 println("{} is {}", person.0, person.1); // ann is 30
 var point: (i32, i32) = (3, 4);
 println("{}", point.0 * point.1); // 12
+println("{}", point); // (3, 4)
 ```
 
-Tuples are most useful to return several values from a function.
+Tuples are most useful to return several values from a function, and are
+compared with `==` part by part.
+
+### Taking a tuple apart
+
+`var` and `const` can give each part of a tuple its own name. Types may be
+written after each name, and `_` leaves a part out:
+
+```zeru
+fn divide(a: i32, b: i32) (i32, i32) {
+    return (a / b, a % b);
+}
+
+fn main() {
+    var (quotient, remainder) = divide(17, 5);
+    println("{} {}", quotient, remainder); // 3 2
+    const (low: u8, high: u8) = (1, 200);
+    var (_, (x, y)) = ("origin", (0.5, 2.0));
+    println("{} {} {}", low + high, x, y); // 201 0.5 2.0
+}
+```
+
+The names are all `var` or all `const`. Values that own memory move into
+their new names.
+
+Assigning to a tuple of places sets them all at once. The whole right side
+is worked out first, so two values swap without a helper:
+
+```zeru
+var a = 1;
+var b = 2;
+(a, b) = (b, a);
+var v: Vec<i32> = [1, 2, 3];
+(v[0], v[2]) = (v[2], v[0]);
+println("{} {} {}", a, b, v); // 2 1 [3, 2, 1]
+```

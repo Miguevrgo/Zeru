@@ -38,10 +38,10 @@ compiler checks the promise at each call. Four bounds are built in:
 
 | Bound | Allows | Met by |
 |---|---|---|
-| `Eq` | `==` and `!=` | numbers, bools, `str`, enums without data |
+| `Eq` | `==` and `!=` | numbers, bools, `str`, enums without data, tuples of those |
 | `Ord` | `<`, `<=`, `>`, `>=` | numbers |
 | `Num` | arithmetic, and `as` from a number | numbers |
-| `Hash` | being a key of a `HashMap` or `HashSet` | integers, bools, enums without data |
+| `Hash` | being a key of a `HashMap` or `HashSet` | integers, bools, enums without data, tuples of those |
 
 ```zeru
 fn largest<T: Ord>(items: &Vec<T>) T {

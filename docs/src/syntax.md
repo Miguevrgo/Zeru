@@ -7,6 +7,8 @@ explains it.
 
 ```zeru,ignore
 var count = 0;                    // i32 unless a type is given
+var (q, r) = divide(7, 2);        // a tuple taken apart; (q: i32, _) works too
+(a, b) = (b, a);                  // assigned at once
 var ratio: f64 = 0.5;
 const LIMIT: i32 = 10;            // never changes; also at top level
 var input = "42";
@@ -37,6 +39,8 @@ for i in 0..10 { ... }            // 0 to 9
 for x in list { ... }             // each element
 for i, x in list { ... }          // with its index
 for x in &var list { x += 1; }    // change each element
+for (a, b) in pairs { ... }       // each tuple taken apart
+for (x, y) in zip(xs, ys) { ... } // two lists side by side
 var name = match day {
     Day::Sat | Day::Sun => "weekend",
     default => "weekday",
@@ -48,7 +52,7 @@ var name = match day {
 ```zeru,ignore
 var a: Array<i32, 3> = [1, 2, 3];   var zeros: Array<u8, 64> = [0; 64];
 var v: Vec<i32> = [1, 2];           var empty: Vec<str> = Vec.new();
-v.push(3);  v.pop();  v.len();  v[0];  v.get(9);  v.sort();  v.copy();
+v.push(3);  v.pop();  v.len();  v[0];  v.get(9);  v.sort();  v.reverse();  v.copy();
 var part = v[1..];                  // a slice, &[i32]
 var t = (1, true);  t.0;
 ```
@@ -57,9 +61,9 @@ var t = (1, true);  t.0;
 
 ```zeru,ignore
 var s: str = "hello";               s.len();  s[0];  s[1..3];
-s.split(",");  s.lines();  s.trim();  s.starts_with("he");  s.parse_int();
+s.split();  s.split(",");  s.lines();  s.trim();  s.starts_with("he");  s.parse_int();
 var owned = String.from("hi");      owned.push_str("!");  owned.push('?');
-println("{} and {}", 1, "two");     print(..);  eprintln(..);
+println("{} and {}", 1, "two");     println("{}", v);  // [1, 2]
 ```
 
 ## Structs, enums, traits ([more](structure/structs.md))
