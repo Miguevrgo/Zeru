@@ -23,16 +23,11 @@ fn main() {
     var after = cycles();
     println("the cycle counter moves on: {}", after > before);
 
-    var ip = net::ip4(127, 0, 0, 1);
-    var listener = net::TcpListener.bind(ip, 47614).unwrap();
-    var client = net::TcpStream.connect(ip, 47614).unwrap();
+    var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+    var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
     var server = listener.accept().unwrap();
-    var message = "ping";
-    client.write_all(message as *u8, message.len()).unwrap();
-    var reply: Array<u8, 4> = [0; 4];
-    var got = server.read(&reply[0], 4).unwrap();
-    println("server got {} bytes, the first one {}", got, reply[0]);
-    server.close();
-    client.close();
-    listener.close();
+    client.write("ping").unwrap();
+    var reply = String.new();
+    server.read(&var reply, 4).unwrap();
+    println("server got {}", reply);
 }

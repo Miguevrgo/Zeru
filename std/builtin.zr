@@ -45,6 +45,35 @@ fn sys_result(r: i64) i64! {
     return r;
 }
 
+// No file or directory by that name.
+pub const ENOENT: i32 = 2;
+// Not allowed: the permissions forbid it, or a port under 1024 without root.
+pub const EACCES: i32 = 13;
+// It exists already.
+pub const EEXIST: i32 = 17;
+// A part of the path is not a directory.
+pub const ENOTDIR: i32 = 20;
+// A directory, where a file was wanted.
+pub const EISDIR: i32 = 21;
+// A wrong argument, as an address that does not parse.
+pub const EINVAL: i32 = 22;
+// Writing to a pipe or connection the other end has closed.
+pub const EPIPE: i32 = 32;
+// The directory is not empty.
+pub const ENOTEMPTY: i32 = 39;
+// The address or port is taken by another socket.
+pub const EADDRINUSE: i32 = 98;
+// No network reaches the address.
+pub const ENETUNREACH: i32 = 101;
+// The other end dropped the connection.
+pub const ECONNRESET: i32 = 104;
+// The time given ran out, or the other end never answered.
+pub const ETIMEDOUT: i32 = 110;
+// Nothing listens at that address.
+pub const ECONNREFUSED: i32 = 111;
+// No route reaches that machine.
+pub const EHOSTUNREACH: i32 = 113;
+
 // End the process, after writing out what print left buffered. The OS
 // keeps only the low 8 bits of `code`.
 pub fn exit(code: i32) {

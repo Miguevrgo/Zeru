@@ -1,482 +1,988 @@
-// Zeru Standard Library - Network (Linux x86_64)
+// Zeru Standard Library - Networking (Linux x86_64)
+//
+// Addresses are text: "127.0.0.1:8080", "[::1]:8080", or a path for Unix
+// sockets. Port 0 lets the system pick a free one, which `local_addr` tells.
 
-// The IPv4 address family, the one every socket here uses.
-pub const AF_INET: i64 = 2;
-// The IPv6 address family; the sockets here are IPv4 only.
-pub const AF_INET6: i64 = 10;
-// A stream socket, as TCP uses.
-pub const SOCK_STREAM: i64 = 1;
-// A datagram socket, as UDP uses.
-pub const SOCK_DGRAM: i64 = 2;
-// `shutdown`: no more reading.
-pub const SHUT_RD: i64 = 0;
-// `shutdown`: no more writing; the peer reads the end of the stream.
-pub const SHUT_WR: i64 = 1;
-// `shutdown`: no more reading or writing.
-pub const SHUT_RDWR: i64 = 2;
-
+const SYS_POLL: i64 = 7;
 const SYS_SOCKET: i64 = 41;
 const SYS_CONNECT: i64 = 42;
 const SYS_ACCEPT: i64 = 43;
 const SYS_SENDTO: i64 = 44;
-const MSG_NOSIGNAL: i64 = 16384;
 const SYS_RECVFROM: i64 = 45;
-const SYS_SHUTDOWN: i64 = 48;
 const SYS_BIND: i64 = 49;
 const SYS_LISTEN: i64 = 50;
+const SYS_GETSOCKNAME: i64 = 51;
+const SYS_GETPEERNAME: i64 = 52;
 const SYS_SETSOCKOPT: i64 = 54;
+const SYS_GETSOCKOPT: i64 = 55;
+const SYS_FCNTL: i64 = 72;
+const SYS_UNLINK: i64 = 87;
+
+const AF_UNIX: u8 = 1;
+const AF_INET: u8 = 2;
+const AF_INET6: u8 = 10;
+const SOCK_STREAM: i64 = 1;
+const SOCK_DGRAM: i64 = 2;
 const SOL_SOCKET: i64 = 1;
 const SO_REUSEADDR: i64 = 2;
+const SO_ERROR: i64 = 4;
+const SO_BROADCAST: i64 = 6;
+const SO_RCVTIMEO: i64 = 20;
+const SO_SNDTIMEO: i64 = 21;
+const IPPROTO_TCP: i64 = 6;
+const TCP_NODELAY: i64 = 1;
+const MSG_PEEK: i64 = 2;
+const MSG_TRUNC: i64 = 32;
+const MSG_NOSIGNAL: i64 = 16384;
+const F_GETFL: i64 = 3;
+const F_SETFL: i64 = 4;
+const O_NONBLOCK: i64 = 2048;
+const POLLIN: i64 = 1;
+const POLLOUT: i64 = 4;
+const EAGAIN: i64 = 11;
+const EINPROGRESS: i64 = 115;
+const ENAMETOOLONG: i32 = 36;
 
-// Returns the IPv4 address `a.b.c.d` as one number, as `bind`, `connect`
-// and `send_to` take it.
-//
-// # Examples
-//
-// ```zeru
-// import std.net;
-//
-// var localhost = net::ip4(127, 0, 0, 1);
-// var any = net::ip4(0, 0, 0, 0);
-// println("{} {}", localhost, any); // 2130706433 0
-// ```
-pub fn ip4(a: u32, b: u32, c: u32, d: u32) u32 {
-    return (a << 24) | (b << 16) | (c << 8) | d;
+// Longest Unix socket path, its closing NUL included.
+const UNIX_PATH_MAX: usize = 108;
+
+// A socket address as the syscalls take it, `len` of its bytes used: a
+// sockaddr_in, sockaddr_in6 or sockaddr_un.
+struct Raw {
+    bytes: Array<u8, 112>,
+    len: u32,
 }
 
-// Returns `ip` and `port` laid out as the 16-byte `sockaddr_in` the socket
-// syscalls take.
-//
-// `bind`, `connect` and `send_to` build it themselves; it is only needed to
-// call those syscalls directly.
-//
-// # Examples
-//
-// ```zeru
-// import std.net;
-//
-// var addr = net::make_addr(net::ip4(127, 0, 0, 1), 8080);
-// println("{} {} {}", addr[2], addr[3], addr[4]); // 31 144 127
-// ```
-pub fn make_addr(ip: u32, port: u16) Array<u8, 16> {
-    var addr: Array<u8, 16> = [0; 16];
-    addr[0] = AF_INET as u8;
-    addr[1] = 0;
-    addr[2] = ((port >> 8) & 255) as u8;
-    addr[3] = (port & 255) as u8;
-    addr[4] = ((ip >> 24) & 255) as u8;
-    addr[5] = ((ip >> 16) & 255) as u8;
-    addr[6] = ((ip >> 8) & 255) as u8;
-    addr[7] = (ip & 255) as u8;
-    return addr;
+fn empty() Raw {
+    return Raw { bytes: [0; 112], len: 112 };
 }
 
-// Close the socket `fd` once, marking it closed with -1 so a later close
-// or drop does not close a number the system gave to another file.
-fn close_fd(fd: &var i64) i64! {
-    if *fd < 0 {
-        return Err(9);
+// The number `text` spells in `base`; EINVAL when it is empty, holds
+// anything else or is over `max`.
+fn number(text: str, base: u64, max: u64) u64! {
+    if text.len() == 0 {
+        return Err(EINVAL);
     }
-    var closed = sys_result(syscall1(SYS_CLOSE, *fd));
-    *fd = -1;
-    return closed;
+    var n: u64 = 0;
+    for byte in text {
+        var digit: u64 = 16;
+        if byte >= '0' && byte <= '9' {
+            digit = (byte - '0') as u64;
+        } else if byte >= 'a' && byte <= 'f' {
+            digit = (byte - 'a') as u64 + 10;
+        } else if byte >= 'A' && byte <= 'F' {
+            digit = (byte - 'A') as u64 + 10;
+        }
+        if digit >= base {
+            return Err(EINVAL);
+        }
+        n = n * base + digit;
+        if n > max {
+            return Err(EINVAL);
+        }
+    }
+    return n;
 }
 
-// A TCP socket waiting for connections on an IPv4 address and port.
+// The hex groups of an IPv6 address `text` holds between colons, none for
+// an empty `text`.
+fn groups(text: str, out: &var Vec<u64>) ! {
+    if text.len() == 0 {
+        return Ok();
+    }
+    var parts = text.split(":");
+    for part in parts {
+        out.push(number(part, 16, 65535)!);
+    }
+}
+
+// `text`, as "127.0.0.1:80" or "[::1]:80", as a socket address.
+fn ip_addr(text: str) Raw! {
+    var colon = text.len();
+    for i in 0..text.len() {
+        if text[i] == ':' {
+            colon = i;
+        }
+    }
+    if colon == text.len() {
+        return Err(EINVAL);
+    }
+    var host = text[..colon];
+    var port = number(text[colon + 1..], 10, 65535)!;
+    var raw = empty();
+    raw.bytes[2] = (port >> 8) as u8;
+    raw.bytes[3] = (port & 255) as u8;
+    if host.len() > 1 && host[0] == '[' && host[host.len() - 1] == ']' {
+        var halves = host[1..host.len() - 1].split("::");
+        if halves.len() > 2 {
+            return Err(EINVAL);
+        }
+        var head: Vec<u64> = Vec.new();
+        var tail: Vec<u64> = Vec.new();
+        groups(halves[0], &var head)!;
+        if halves.len() == 2 {
+            groups(halves[1], &var tail)!;
+        }
+        var count = head.len() + tail.len();
+        if (halves.len() == 2 && count > 7) || (halves.len() == 1 && count != 8) {
+            return Err(EINVAL);
+        }
+        while head.len() + tail.len() < 8 {
+            head.push(0);
+        }
+        for group in tail {
+            head.push(group);
+        }
+        raw.bytes[0] = AF_INET6;
+        raw.len = 28;
+        for i in 0..8 {
+            raw.bytes[8 + 2 * i] = (head[i] >> 8) as u8;
+            raw.bytes[9 + 2 * i] = (head[i] & 255) as u8;
+        }
+        return raw;
+    }
+    var parts = host.split(".");
+    if parts.len() != 4 {
+        return Err(EINVAL);
+    }
+    raw.bytes[0] = AF_INET;
+    raw.len = 16;
+    for i in 0..4 {
+        raw.bytes[4 + i] = number(parts[i], 10, 255)! as u8;
+    }
+    return raw;
+}
+
+// `path` as a Unix socket address: ENAMETOOLONG when it does not fit,
+// EINVAL when it holds a NUL.
+fn unix_addr(path: str) Raw! {
+    if path.len() >= UNIX_PATH_MAX {
+        return Err(ENAMETOOLONG);
+    }
+    var raw = empty();
+    raw.bytes[0] = AF_UNIX;
+    for i in 0..path.len() {
+        if path[i] == 0 {
+            return Err(EINVAL);
+        }
+        raw.bytes[2 + i] = path[i];
+    }
+    raw.len = (3 + path.len()) as u32;
+    return raw;
+}
+
+// `n` in `base` at the end of `out`, hex digits in lowercase.
+fn push_number(out: &var String, n: u64, base: u64) {
+    var digits: Array<u8, 20> = [0; 20];
+    var count: usize = 0;
+    var rest = n;
+    while true {
+        digits[count] = "0123456789abcdef"[(rest % base) as usize];
+        count += 1;
+        rest = rest / base;
+        if rest == 0 {
+            break;
+        }
+    }
+    while count > 0 {
+        count -= 1;
+        out.push(digits[count]);
+    }
+}
+
+// `raw` as text: "1.2.3.4:80", "[::1]:80" with the longest run of zero
+// groups left out, or the path of a Unix socket, empty for one without.
+fn addr_text(raw: &Raw) String {
+    var text = String.new();
+    if raw.bytes[0] == AF_UNIX {
+        for i in 2..raw.len as usize {
+            if raw.bytes[i] == 0 {
+                break;
+            }
+            text.push(raw.bytes[i]);
+        }
+        return text;
+    }
+    if raw.bytes[0] == AF_INET {
+        for i in 4..8 {
+            if i > 4 {
+                text.push('.');
+            }
+            push_number(&var text, raw.bytes[i] as u64, 10);
+        }
+    } else {
+        var group: Array<u64, 8> = [0; 8];
+        var skip = 8;
+        var skipped = 0;
+        var run = 0;
+        for i in 0..8 {
+            group[i] = ((raw.bytes[8 + 2 * i] as u64) << 8) | raw.bytes[9 + 2 * i] as u64;
+            run += 1;
+            if group[i] != 0 {
+                run = 0;
+            }
+            if run > skipped && run > 1 {
+                skipped = run;
+                skip = i + 1 - run;
+            }
+        }
+        text.push('[');
+        var i = 0;
+        while i < 8 {
+            if i == skip {
+                text.push_str("::");
+                i += skipped;
+                continue;
+            }
+            if i > 0 && i != skip + skipped {
+                text.push(':');
+            }
+            push_number(&var text, group[i], 16);
+            i += 1;
+        }
+        text.push(']');
+    }
+    text.push(':');
+    push_number(&var text, ((raw.bytes[2] as u64) << 8) | raw.bytes[3] as u64, 10);
+    return text;
+}
+
+// A socket syscall's result, with ETIMEDOUT for the EAGAIN a timeout gives.
+fn timed(r: i64) i64! {
+    if r == -EAGAIN {
+        return Err(ETIMEDOUT);
+    }
+    return sys_result(r);
+}
+
+// A socket of `kind` bound to `addr`, listening when it is a stream.
+fn bound(addr: &Raw, kind: i64) i64! {
+    var fd = sys_result(syscall3(SYS_SOCKET, addr.bytes[0] as i64, kind, 0))!;
+    var one: i32 = 1;
+    if kind == SOCK_STREAM {
+        syscall5(SYS_SETSOCKOPT, fd, SOL_SOCKET, SO_REUSEADDR, (&one) as i64, 4);
+    }
+    var r = syscall3(SYS_BIND, fd, (&addr.bytes[0]) as i64, addr.len as i64);
+    if r == 0 && kind == SOCK_STREAM {
+        r = syscall2(SYS_LISTEN, fd, 128);
+    }
+    if r < 0 {
+        syscall1(SYS_CLOSE, fd);
+    }
+    sys_result(r)!;
+    return fd;
+}
+
+// Waits up to `ms` milliseconds, or with none for as long as it takes, for
+// one of the `count` pollfd entries at `entries` to be ready; how many are.
+fn poll(entries: i64, count: usize, ms: u64?) i64 {
+    var timeout: i64 = -1;
+    if ms.is_some() {
+        timeout = 2147483647;
+        if ms.unwrap() < 2147483647 {
+            timeout = ms.unwrap() as i64;
+        }
+    }
+    return syscall3(SYS_POLL, entries, count as i64, timeout);
+}
+
+// A stream socket connected to `addr`, giving up after `ms` milliseconds
+// when there are some.
+fn dial(addr: &Raw, ms: u64?) i64! {
+    var fd = sys_result(syscall3(SYS_SOCKET, addr.bytes[0] as i64, SOCK_STREAM, 0))!;
+    var flags = syscall2(SYS_FCNTL, fd, F_GETFL);
+    if ms.is_some() {
+        syscall3(SYS_FCNTL, fd, F_SETFL, flags | O_NONBLOCK);
+    }
+    var r = syscall3(SYS_CONNECT, fd, (&addr.bytes[0]) as i64, addr.len as i64);
+    if r == -EINPROGRESS {
+        var entry: i64 = fd | (POLLOUT << 32);
+        r = poll((&var entry) as i64, 1, ms);
+        if r == 0 {
+            r = -(ETIMEDOUT as i64);
+        }
+        if r > 0 {
+            var error: i32 = 0;
+            var size: u32 = 4;
+            syscall5(
+                SYS_GETSOCKOPT,
+                fd,
+                SOL_SOCKET,
+                SO_ERROR,
+                (&var error) as i64,
+                (&var size) as i64,
+            );
+            r = -(error as i64);
+        }
+        syscall3(SYS_FCNTL, fd, F_SETFL, flags);
+    }
+    if r < 0 {
+        syscall1(SYS_CLOSE, fd);
+    }
+    sys_result(r)!;
+    return fd;
+}
+
+// The next connection waiting on the listening socket `fd`.
+fn accept(fd: i64) i64! {
+    return sys_result(syscall3(SYS_ACCEPT, fd, 0, 0));
+}
+
+// Up to `count` bytes from `fd` at the end of `buf`; how many came.
+fn receive(fd: i64, buf: &var String, count: usize, flags: i64) usize! {
+    var end = __zeru_room(buf, count);
+    var n = timed(syscall6(SYS_RECVFROM, fd, end as i64, count as i64, flags, 0, 0))! as usize;
+    __zeru_filled(buf, n);
+    return n;
+}
+
+// Sends all of `data` on the stream `fd`.
+fn send(fd: i64, data: str) ! {
+    var done: usize = 0;
+    while done < data.len() {
+        var left = (data.len() - done) as i64;
+        done += timed(
+            syscall6(SYS_SENDTO, fd, ((data as *u8) + done) as i64, left, MSG_NOSIGNAL, 0, 0),
+        )! as usize;
+    }
+}
+
+// Sends `data` as one datagram on `fd`, to `to` when it is not 0.
+fn send_datagram(fd: i64, data: str, to: &Raw) ! {
+    var addr: i64 = 0;
+    if to.len > 0 {
+        addr = (&to.bytes[0]) as i64;
+    }
+    timed(
+        syscall6(SYS_SENDTO, fd, (data as *u8) as i64, data.len() as i64, 0, addr, to.len as i64),
+    )!;
+}
+
+// The next datagram on `fd`, taken or, with MSG_PEEK in `flags`, left for
+// the next call.
+fn datagram(fd: i64, flags: i64) Datagram! {
+    var size = timed(syscall6(SYS_RECVFROM, fd, 0, 0, MSG_PEEK | MSG_TRUNC, 0, 0))! as usize;
+    var data = String.new();
+    var from = empty();
+    var end = __zeru_room(&var data, size);
+    timed(
+        syscall6(
+            SYS_RECVFROM,
+            fd,
+            end as i64,
+            size as i64,
+            flags,
+            (&var from.bytes[0]) as i64,
+            (&var from.len) as i64,
+        ),
+    )!;
+    __zeru_filled(&var data, size);
+    return Datagram { data: data, from: addr_text(&from) };
+}
+
+// Waits on reads and writes of `fd` for up to `ms` milliseconds, or with
+// none for as long as they take; EINVAL for 0.
+fn set_timeout(fd: i64, ms: u64?) ! {
+    var time: Array<i64, 2> = [0, 0];
+    if ms.is_some() {
+        if ms.unwrap() == 0 {
+            return Err(EINVAL);
+        }
+        time[0] = (ms.unwrap() / 1000) as i64;
+        time[1] = ((ms.unwrap() % 1000) * 1000) as i64;
+    }
+    sys_result(syscall5(SYS_SETSOCKOPT, fd, SOL_SOCKET, SO_RCVTIMEO, (&time[0]) as i64, 16))!;
+    sys_result(syscall5(SYS_SETSOCKOPT, fd, SOL_SOCKET, SO_SNDTIMEO, (&time[0]) as i64, 16))!;
+}
+
+// Turns the socket option `name` of `level` on or off.
+fn set_flag(fd: i64, level: i64, name: i64, on: bool) ! {
+    var value: i32 = 0;
+    if on {
+        value = 1;
+    }
+    sys_result(syscall5(SYS_SETSOCKOPT, fd, level, name, (&value) as i64, 4))!;
+}
+
+// The address `nr`, getsockname or getpeername, gives for `fd`.
+fn name(fd: i64, nr: i64) String! {
+    var raw = empty();
+    sys_result(syscall3(nr, fd, (&var raw.bytes[0]) as i64, (&var raw.len) as i64))!;
+    return addr_text(&raw);
+}
+
+// A socket as `wait` takes it, from the `handle` method of any socket.
+pub struct Handle {
+    fd: i64,
+}
+
+// Waits until one of `handles` has something to read and returns the
+// indexes of those that do.
+//
+// Something to read is data, a connection for a listener to `accept`, or
+// the other end closing. It gives up after `ms` milliseconds, returning
+// none, or with no `ms` waits as long as it takes. A program serves many
+// clients by passing all their handles, and the listener's, on each turn.
+//
+// # Examples
+//
+// ```zeru
+// import std.net;
+//
+// var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+// var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+// var server = listener.accept().unwrap();
+// var handles: Vec<net::Handle> = Vec.new();
+// handles.push(listener.handle());
+// handles.push(server.handle());
+// println("{}", net::wait(handles[..], 10).unwrap().len()); // 0
+// client.write("hi").unwrap();
+// var ready = net::wait(handles[..], None).unwrap();
+// println("{} {}", ready.len(), ready[0]); // 1 1
+// ```
+pub fn wait(handles: &[Handle], ms: u64?) Vec<usize>! {
+    var entries: Vec<i64> = Vec.new();
+    for handle in handles {
+        entries.push(handle.fd | (POLLIN << 32));
+    }
+    var first: i64 = 0;
+    if entries.len() > 0 {
+        first = (&var entries[0]) as i64;
+    }
+    sys_result(poll(first, entries.len(), ms))!;
+    var ready: Vec<usize> = Vec.new();
+    for i in 0..entries.len() {
+        if (entries[i] >> 48) != 0 {
+            ready.push(i);
+        }
+    }
+    return ready;
+}
+
+// A TCP socket waiting for connections.
 //
 // Make one with `bind`, then take each client with `accept`, which gives a
-// `TcpStream` to talk to it.
+// `TcpStream` to talk to it. It stops listening when it goes out of scope.
 //
 // # Examples
 //
 // ```zeru
 // import std.net;
 //
-// var ip = net::ip4(127, 0, 0, 1);
-// var listener = net::TcpListener.bind(ip, 47701).unwrap();
-// var client = net::TcpStream.connect(ip, 47701).unwrap();
+// var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+// var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
 // var server = listener.accept().unwrap();
-// var message = "ping";
-// client.write_all(message as *u8, message.len()).unwrap();
-// var buf: Array<u8, 4> = [0; 4];
-// println("{}", server.read_all(&buf[0], 4).unwrap()); // 4
-// client.close().unwrap();
-// server.close().unwrap();
-// listener.close().unwrap();
+// client.write("ping").unwrap();
+// var buf = String.new();
+// server.read(&var buf, 64).unwrap();
+// println("{}", buf); // ping
 // ```
 pub struct TcpListener {
     fd: i64,
 
-    // Starts listening for connections on `ip` and `port`.
+    // Starts listening for connections on `addr`.
     //
-    // `net::ip4(0, 0, 0, 0)` listens on every address of the machine,
-    // `net::ip4(127, 0, 0, 1)` only on this machine. The port may be reused
-    // right after a previous program on it ends, and up to 128 clients may wait
-    // for `accept`.
+    // "0.0.0.0:80" listens on every IPv4 address of the machine, "[::]:80"
+    // on every IPv6 one, "127.0.0.1:80" only for this machine. The port may
+    // be reused right after a previous program on it ends, and up to 128
+    // clients may wait for `accept`.
     //
     // # Errors
     //
-    // The errno: 98 (EADDRINUSE) when another socket has the port, 13 (EACCES)
-    // for a port under 1024 without root, 99 (EADDRNOTAVAIL) when `ip` is not
-    // one of the machine's.
+    // `EADDRINUSE` when another socket has the port, `EACCES` for a port
+    // under 1024 without root, `EINVAL` when `addr` does not parse.
     //
     // # Examples
     //
     // ```zeru
     // import std.net;
     //
-    // var ip = net::ip4(127, 0, 0, 1);
-    // var first = net::TcpListener.bind(ip, 47702).unwrap();
-    // println("{}", net::TcpListener.bind(ip, 47702).unwrap_err()); // 98
-    // first.close().unwrap();
+    // var first = net::TcpListener.bind("127.0.0.1:0").unwrap();
+    // var again = net::TcpListener.bind(first.local_addr().unwrap());
+    // println("{}", again.unwrap_err() == EADDRINUSE); // true
     // ```
-    pub fn bind(ip: u32, port: u16) TcpListener! {
-        var fd = sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_STREAM, 0))!;
-        var one: i32 = 1;
-        syscall5(SYS_SETSOCKOPT, fd, SOL_SOCKET, SO_REUSEADDR, (&one) as i64, 4);
-        var addr = make_addr(ip, port);
-        var r: i64 = syscall3(SYS_BIND, fd, (&addr[0]) as i64, 16);
-        if r < 0 {
-            syscall1(SYS_CLOSE, fd);
-            return Err((-r) as i32);
-        }
-        r = syscall2(SYS_LISTEN, fd, 128);
-        if r < 0 {
-            syscall1(SYS_CLOSE, fd);
-            return Err((-r) as i32);
-        }
-        return TcpListener { fd: fd };
+    pub fn bind(addr: str) TcpListener! {
+        var raw = ip_addr(addr)!;
+        return TcpListener { fd: bound(&raw, SOCK_STREAM)! };
     }
 
     // Waits for the next client to connect and returns the connection.
     //
-    // It blocks until one comes.
-    //
     // # Errors
     //
-    // The errno: 9 (EBADF) when the listener is closed, 4 (EINTR) when a
-    // signal interrupts the wait.
+    // The errno of a failed accept, as 4 (EINTR) when a signal interrupts
+    // the wait.
+    pub fn accept(self) TcpStream! {
+        return TcpStream { fd: accept(self.fd)! };
+    }
+
+    // The address it listens on, with the port the system picked for 0.
     //
     // # Examples
     //
     // ```zeru
     // import std.net;
     //
-    // var ip = net::ip4(127, 0, 0, 1);
-    // var listener = net::TcpListener.bind(ip, 47703).unwrap();
-    // var client = net::TcpStream.connect(ip, 47703).unwrap();
-    // var server = listener.accept().unwrap();
-    // println("connected"); // connected
-    // server.close().unwrap();
-    // client.close().unwrap();
-    // listener.close().unwrap();
+    // var listener = net::TcpListener.bind("[::1]:0").unwrap();
+    // println("{}", listener.local_addr().unwrap().starts_with("[::1]:")); // true
     // ```
-    pub fn accept(self) TcpStream! {
-        var fd = sys_result(syscall3(SYS_ACCEPT, self.fd, 0, 0))!;
-        return TcpStream { fd: fd };
+    pub fn local_addr(self) String! {
+        return name(self.fd, SYS_GETSOCKNAME);
     }
 
-    // Stops listening and frees the port, returning 0.
-    //
-    // It happens by itself when the listener goes out of scope; `close`
-    // gives the error, if any. Connections `accept` gave stay open.
-    //
-    // # Errors
-    //
-    // The errno: 9 (EBADF) when it was closed already.
-    pub fn close(var self) i64! {
-        return close_fd(&var self.fd);
+    // The listener for `wait`, ready when a client waits to be accepted.
+    pub fn handle(self) Handle {
+        return Handle { fd: self.fd };
     }
 
     fn drop(var self) {
-        close_fd(&var self.fd);
+        syscall1(SYS_CLOSE, self.fd);
     }
 }
 
 // A TCP connection, made with `connect` or given by `TcpListener.accept`.
 //
-// Bytes written at one end are read at the other in the same order. Close
-// it with `close` when done.
+// Bytes written at one end are read at the other in the same order. The
+// connection closes when it goes out of scope, and the other end then
+// reads the end of the stream.
 //
 // # Examples
 //
 // ```zeru
 // import std.net;
 //
-// var ip = net::ip4(127, 0, 0, 1);
-// var listener = net::TcpListener.bind(ip, 47704).unwrap();
-// var client = net::TcpStream.connect(ip, 47704).unwrap();
+// var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+// var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
 // var server = listener.accept().unwrap();
-// var request = "hello";
-// client.write_all(request as *u8, request.len()).unwrap();
-// client.shutdown(net::SHUT_WR).unwrap();
-// var buf: Array<u8, 64> = [0; 64];
-// println("{}", server.read_all(&buf[0], 64).unwrap()); // 5
-// client.close().unwrap();
-// server.close().unwrap();
-// listener.close().unwrap();
+// client.write("hello").unwrap();
+// var buf = String.new();
+// server.read(&var buf, 64).unwrap();
+// println("{}", buf); // hello
 // ```
 pub struct TcpStream {
     fd: i64,
 
-    // Connects to the server at `ip` and `port`.
+    // Connects to the server at `addr`.
     //
     // # Errors
     //
-    // The errno: 111 (ECONNREFUSED) when nothing listens there, 110
-    // (ETIMEDOUT) when the server does not answer, 101 (ENETUNREACH) when
-    // there is no route to it.
+    // `ECONNREFUSED` when nothing listens there, `ETIMEDOUT` when the
+    // server does not answer, `ENETUNREACH` when there is no route to it,
+    // `EINVAL` when `addr` does not parse.
     //
     // # Examples
     //
     // ```zeru
     // import std.net;
     //
-    // var refused = net::TcpStream.connect(net::ip4(127, 0, 0, 1), 47705);
-    // println("{}", refused.unwrap_err()); // 111
+    // var free = net::TcpListener.bind("127.0.0.1:0").unwrap().local_addr().unwrap();
+    // var refused = net::TcpStream.connect(free);
+    // println("{}", refused.unwrap_err() == ECONNREFUSED); // true
     // ```
-    pub fn connect(ip: u32, port: u16) TcpStream! {
-        var fd = sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_STREAM, 0))!;
-        var addr = make_addr(ip, port);
-        var r: i64 = syscall3(SYS_CONNECT, fd, (&addr[0]) as i64, 16);
-        if r < 0 {
-            syscall1(SYS_CLOSE, fd);
-            return Err((-r) as i32);
-        }
-        return TcpStream { fd: fd };
+    pub fn connect(addr: str) TcpStream! {
+        var raw = ip_addr(addr)!;
+        return TcpStream { fd: dial(&raw, None)! };
     }
 
-    // Reads up to `len` bytes into `buf` and returns how many came.
-    //
-    // It blocks until at least one byte comes, and may return fewer than
-    // `len` even when more are on the way; `read_all` waits for them all. 0
-    // means the other end has closed.
+    // Connects to the server at `addr`, giving up after `ms` milliseconds.
     //
     // # Errors
     //
-    // The errno: 104 (ECONNRESET) when the other end drops the connection, 9
-    // (EBADF) when it is closed.
+    // `ETIMEDOUT` when the time runs out, and those of `connect`.
     //
     // # Examples
     //
     // ```zeru
     // import std.net;
     //
-    // var ip = net::ip4(127, 0, 0, 1);
-    // var listener = net::TcpListener.bind(ip, 47706).unwrap();
-    // var client = net::TcpStream.connect(ip, 47706).unwrap();
+    // var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+    // var stream = net::TcpStream.connect_timeout(listener.local_addr().unwrap(), 1000);
+    // println("{}", stream.is_ok()); // true
+    // ```
+    pub fn connect_timeout(addr: str, ms: u64) TcpStream! {
+        var raw = ip_addr(addr)!;
+        return TcpStream { fd: dial(&raw, ms)! };
+    }
+
+    // Reads up to `count` bytes at the end of `buf` and returns how many
+    // came.
+    //
+    // It waits until at least one byte comes, and may return fewer than
+    // `count` even when more are on the way. 0 means the other end has
+    // closed.
+    //
+    // # Errors
+    //
+    // `ECONNRESET` when the other end drops the connection, `ETIMEDOUT`
+    // when the time `set_timeout` gives runs out.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.net;
+    //
+    // var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+    // {
+    //     var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+    //     client.write("hi").unwrap();
+    // }
     // var server = listener.accept().unwrap();
-    // var text = "hi";
-    // client.write(text as *u8, text.len()).unwrap();
-    // var buf: Array<u8, 16> = [0; 16];
-    // println("{}", server.read(&buf[0], 16).unwrap()); // 2
-    // client.close().unwrap();
-    // println("{}", server.read(&buf[0], 16).unwrap()); // 0
-    // server.close().unwrap();
-    // listener.close().unwrap();
+    // var buf = String.new();
+    // println("{}", server.read(&var buf, 64).unwrap()); // 2
+    // println("{}", server.read(&var buf, 64).unwrap()); // 0
     // ```
-    pub fn read(self, buf: *u8, len: usize) i64! {
-        return sys_result(syscall3(SYS_READ, self.fd, buf as i64, len as i64));
+    pub fn read(self, buf: &var String, count: usize) usize! {
+        return receive(self.fd, buf, count, 0);
     }
 
-    // Sends up to `len` bytes of `buf` and returns how many went.
-    //
-    // It may send fewer than `len`; `write_all` sends them all.
-    //
-    // # Errors
-    //
-    // The errno: 32 (EPIPE) when the other end has closed, 104 (ECONNRESET)
-    // when it dropped the connection.
-    pub fn write(self, buf: *u8, len: usize) i64! {
-        return sys_result(
-            syscall6(SYS_SENDTO, self.fd, buf as i64, len as i64, MSG_NOSIGNAL, 0, 0),
-        );
-    }
-
-    // Sends all `len` bytes of `buf`, returning `len`.
-    //
-    // It calls `write` until everything is sent.
-    //
-    // # Errors
-    //
-    // The errno of the first `write` that fails; some bytes may have gone
-    // before it.
+    // Reads like `read`, but leaves the bytes for the next `read`.
     //
     // # Examples
     //
     // ```zeru
     // import std.net;
     //
-    // var ip = net::ip4(127, 0, 0, 1);
-    // var listener = net::TcpListener.bind(ip, 47707).unwrap();
-    // var client = net::TcpStream.connect(ip, 47707).unwrap();
+    // var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+    // var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
     // var server = listener.accept().unwrap();
-    // var text = "the whole message";
-    // println("{}", client.write_all(text as *u8, text.len()).unwrap()); // 17
-    // client.close().unwrap();
-    // server.close().unwrap();
-    // listener.close().unwrap();
+    // client.write("abc").unwrap();
+    // var first = String.new();
+    // var second = String.new();
+    // server.peek(&var first, 64).unwrap();
+    // server.read(&var second, 64).unwrap();
+    // println("{} {}", first, second); // abc abc
     // ```
-    pub fn write_all(self, buf: *u8, len: usize) i64! {
-        var total: i64 = 0;
-        var remaining: usize = len;
-        while remaining > 0 {
-            var n = self.write(buf + total as usize, remaining)!;
-            total = total + n;
-            remaining = remaining - n as usize;
-        }
-        return total;
+    pub fn peek(self, buf: &var String, count: usize) usize! {
+        return receive(self.fd, buf, count, MSG_PEEK);
     }
 
-    // Reads into `buf` until `buf_size` bytes came or the other end closes,
-    // and returns how many came.
+    // Sends all of `data`.
     //
     // # Errors
     //
-    // The errno of the first `read` that fails; some bytes may be in `buf`
-    // before it.
+    // `EPIPE` when the other end has closed, `ECONNRESET` when it dropped
+    // the connection, `ETIMEDOUT` when the time `set_timeout` gives runs
+    // out. Part of `data` may have gone before.
+    pub fn write(self, data: str) ! {
+        send(self.fd, data)!;
+    }
+
+    // Makes `read`, `peek` and `write` give up after `ms` milliseconds with
+    // `ETIMEDOUT`, or with None wait as long as they take, as at first.
+    //
+    // # Errors
+    //
+    // `EINVAL` for 0 milliseconds.
     //
     // # Examples
     //
     // ```zeru
     // import std.net;
     //
-    // var ip = net::ip4(127, 0, 0, 1);
-    // var listener = net::TcpListener.bind(ip, 47708).unwrap();
-    // var client = net::TcpStream.connect(ip, 47708).unwrap();
-    // var server = listener.accept().unwrap();
-    // var text = "abc";
-    // client.write_all(text as *u8, text.len()).unwrap();
-    // client.close().unwrap();
-    // var buf: Array<u8, 64> = [0; 64];
-    // println("{}", server.read_all(&buf[0], 64).unwrap()); // 3
-    // server.close().unwrap();
-    // listener.close().unwrap();
+    // var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+    // var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+    // client.set_timeout(10).unwrap();
+    // var buf = String.new();
+    // println("{}", client.read(&var buf, 64).unwrap_err() == ETIMEDOUT); // true
     // ```
-    pub fn read_all(self, buf: *u8, buf_size: usize) i64! {
-        var total: i64 = 0;
-        var remaining: usize = buf_size;
-        while remaining > 0 {
-            var n = sys_result(
-                syscall3(SYS_READ, self.fd, (buf + total as usize) as i64, remaining as i64),
-            )!;
-            if n == 0 {
-                break;
-            }
-            total = total + n;
-            remaining = remaining - n as usize;
-        }
-        return total;
+    pub fn set_timeout(self, ms: u64?) ! {
+        set_timeout(self.fd, ms)!;
     }
 
-    // Ends reading, writing or both, returning 0, while the connection stays
-    // open until `close`.
-    //
-    // `how` is `SHUT_RD`, `SHUT_WR` or `SHUT_RDWR`. After `SHUT_WR` the other
-    // end reads 0, the end of the stream, but can still send a reply.
-    //
-    // # Errors
-    //
-    // The errno: 107 (ENOTCONN) when it is not connected.
-    pub fn shutdown(self, how: i64) i64! {
-        return sys_result(syscall2(SYS_SHUTDOWN, self.fd, how));
+    // Sends each `write` at once when `on`, instead of waiting a moment to
+    // join small writes into fewer packets.
+    pub fn set_nodelay(self, on: bool) ! {
+        set_flag(self.fd, IPPROTO_TCP, TCP_NODELAY, on)!;
     }
 
-    // Closes the connection, returning 0.
+    // The address of this end.
+    pub fn local_addr(self) String! {
+        return name(self.fd, SYS_GETSOCKNAME);
+    }
+
+    // The address of the other end.
     //
-    // It happens by itself when the stream goes out of scope; `close` gives
-    // the error, if any. The other end reads 0, the end of the stream.
+    // # Examples
     //
-    // # Errors
+    // ```zeru
+    // import std.net;
     //
-    // The errno: 9 (EBADF) when it was closed already.
-    pub fn close(var self) i64! {
-        return close_fd(&var self.fd);
+    // var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+    // var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+    // var server = listener.accept().unwrap();
+    // println("{}", server.peer_addr().unwrap() == client.local_addr().unwrap()); // true
+    // ```
+    pub fn peer_addr(self) String! {
+        return name(self.fd, SYS_GETPEERNAME);
+    }
+
+    // The connection for `wait`.
+    pub fn handle(self) Handle {
+        return Handle { fd: self.fd };
     }
 
     fn drop(var self) {
-        close_fd(&var self.fd);
+        syscall1(SYS_CLOSE, self.fd);
     }
 }
 
-// A UDP socket bound to an IPv4 address and port.
+// A UDP datagram and the address it came from.
+pub struct Datagram {
+    data: String,
+    from: String,
+}
+
+// A UDP socket, sending and taking datagrams one at a time.
 //
-// Each `send_to` sends one datagram, and each `recv` takes one. Datagrams
-// may be lost or come in a different order.
+// Datagrams may be lost or come in a different order. The socket closes
+// when it goes out of scope.
 //
 // # Examples
 //
 // ```zeru
 // import std.net;
 //
-// var ip = net::ip4(127, 0, 0, 1);
-// var a = net::UdpSocket.bind(ip, 47711).unwrap();
-// var b = net::UdpSocket.bind(ip, 47712).unwrap();
-// var text = "hey";
-// a.send_to(text as *u8, text.len(), ip, 47712).unwrap();
-// var buf: Array<u8, 16> = [0; 16];
-// println("{}", b.recv(&buf[0], 16).unwrap()); // 3
-// a.close().unwrap();
-// b.close().unwrap();
+// var a = net::UdpSocket.bind("127.0.0.1:0").unwrap();
+// var b = net::UdpSocket.bind("127.0.0.1:0").unwrap();
+// a.send_to(b.local_addr().unwrap(), "hey").unwrap();
+// var got = b.recv().unwrap();
+// println("{} {}", got.data, got.from == a.local_addr().unwrap()); // hey true
 // ```
 pub struct UdpSocket {
     fd: i64,
 
-    // Opens a UDP socket on `ip` and `port`.
+    // Opens a UDP socket on `addr`.
     //
     // # Errors
     //
-    // The errno: 98 (EADDRINUSE) when another socket has the port, 13 (EACCES)
-    // for a port under 1024 without root.
-    pub fn bind(ip: u32, port: u16) UdpSocket! {
-        var fd = sys_result(syscall3(SYS_SOCKET, AF_INET, SOCK_DGRAM, 0))!;
-        var addr = make_addr(ip, port);
-        var r: i64 = syscall3(SYS_BIND, fd, (&addr[0]) as i64, 16);
-        if r < 0 {
-            syscall1(SYS_CLOSE, fd);
-            return Err((-r) as i32);
-        }
-        return UdpSocket { fd: fd };
+    // `EADDRINUSE` when another socket has the port, `EACCES` for a port
+    // under 1024 without root, `EINVAL` when `addr` does not parse.
+    pub fn bind(addr: str) UdpSocket! {
+        var raw = ip_addr(addr)!;
+        return UdpSocket { fd: bound(&raw, SOCK_DGRAM)! };
     }
 
-    // Sends `len` bytes of `buf` as one datagram to `ip` and `port`, and
-    // returns how many went.
+    // Sends `data` as one datagram to `addr`.
     //
     // # Errors
     //
-    // The errno: 90 (EMSGSIZE) when `len` is too big for one datagram.
-    pub fn send_to(self, buf: *u8, len: usize, ip: u32, port: u16) i64! {
-        var addr = make_addr(ip, port);
-        return sys_result(
-            syscall6(SYS_SENDTO, self.fd, buf as i64, len as i64, 0, (&addr[0]) as i64, 16),
-        );
+    // 90 (EMSGSIZE) when `data` is too big for one datagram, `EINVAL` when
+    // `addr` does not parse.
+    pub fn send_to(self, addr: str, data: str) ! {
+        var raw = ip_addr(addr)!;
+        send_datagram(self.fd, data, &raw)!;
     }
 
-    // Waits for the next datagram, copies it to `buf` and returns its size.
+    // Sends to and takes datagrams only from `addr` from now on, so `send`
+    // needs no address.
     //
-    // A datagram longer than `len` is cut to `len` and the rest is lost.
+    // # Examples
     //
-    // # Errors
+    // ```zeru
+    // import std.net;
     //
-    // The errno: 9 (EBADF) when the socket is closed, 4 (EINTR) when a signal
-    // interrupts the wait.
-    pub fn recv(self, buf: *u8, len: usize) i64! {
-        return sys_result(syscall6(SYS_RECVFROM, self.fd, buf as i64, len as i64, 0, 0, 0));
+    // var a = net::UdpSocket.bind("127.0.0.1:0").unwrap();
+    // var b = net::UdpSocket.bind("127.0.0.1:0").unwrap();
+    // a.connect(b.local_addr().unwrap()).unwrap();
+    // a.send("one").unwrap();
+    // println("{}", b.recv().unwrap().data); // one
+    // ```
+    pub fn connect(self, addr: str) ! {
+        var raw = ip_addr(addr)!;
+        sys_result(syscall3(SYS_CONNECT, self.fd, (&raw.bytes[0]) as i64, raw.len as i64))!;
     }
 
-    // Closes the socket and frees its port, returning 0.
-    //
-    // It happens by itself when the socket goes out of scope; `close` gives
-    // the error, if any.
+    // Sends `data` as one datagram to the address `connect` gave.
     //
     // # Errors
     //
-    // The errno: 9 (EBADF) when it was closed already.
-    pub fn close(var self) i64! {
-        return close_fd(&var self.fd);
+    // 89 (EDESTADDRREQ) without `connect`, `ECONNREFUSED` when an earlier
+    // datagram found nothing listening there.
+    pub fn send(self, data: str) ! {
+        var nowhere = empty();
+        nowhere.len = 0;
+        send_datagram(self.fd, data, &nowhere)!;
+    }
+
+    // Waits for the next datagram and returns it.
+    //
+    // # Errors
+    //
+    // `ETIMEDOUT` when the time `set_timeout` gives runs out.
+    pub fn recv(self) Datagram! {
+        return datagram(self.fd, 0);
+    }
+
+    // Returns the next datagram like `recv`, but leaves it for the next
+    // `recv`.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.net;
+    //
+    // var a = net::UdpSocket.bind("127.0.0.1:0").unwrap();
+    // var b = net::UdpSocket.bind("127.0.0.1:0").unwrap();
+    // a.send_to(b.local_addr().unwrap(), "two").unwrap();
+    // println("{}", b.peek().unwrap().data); // two
+    // println("{}", b.recv().unwrap().data); // two
+    // ```
+    pub fn peek(self) Datagram! {
+        return datagram(self.fd, MSG_PEEK);
+    }
+
+    // Makes `recv`, `peek` and the sends give up after `ms` milliseconds
+    // with `ETIMEDOUT`, or with None wait as long as they take, as at first.
+    //
+    // # Errors
+    //
+    // `EINVAL` for 0 milliseconds.
+    pub fn set_timeout(self, ms: u64?) ! {
+        set_timeout(self.fd, ms)!;
+    }
+
+    // Lets `send_to` reach every machine of the network at once, with an
+    // address as "255.255.255.255:9".
+    pub fn set_broadcast(self, on: bool) ! {
+        set_flag(self.fd, SOL_SOCKET, SO_BROADCAST, on)!;
+    }
+
+    // The address of this socket.
+    pub fn local_addr(self) String! {
+        return name(self.fd, SYS_GETSOCKNAME);
+    }
+
+    // The address `connect` gave.
+    pub fn peer_addr(self) String! {
+        return name(self.fd, SYS_GETPEERNAME);
+    }
+
+    // The socket for `wait`, ready when a datagram comes.
+    pub fn handle(self) Handle {
+        return Handle { fd: self.fd };
     }
 
     fn drop(var self) {
-        close_fd(&var self.fd);
+        syscall1(SYS_CLOSE, self.fd);
+    }
+}
+
+// A Unix socket waiting for connections from programs on this machine,
+// named by a path.
+//
+// It creates the socket file at the path, and removes it when it goes out
+// of scope.
+//
+// # Examples
+//
+// ```zeru
+// import std.net;
+//
+// var listener = net::UnixListener.bind("app.sock").unwrap();
+// var client = net::UnixStream.connect("app.sock").unwrap();
+// var server = listener.accept().unwrap();
+// client.write("ping").unwrap();
+// var buf = String.new();
+// server.read(&var buf, 64).unwrap();
+// println("{}", buf); // ping
+// ```
+pub struct UnixListener {
+    fd: i64,
+    addr: Raw,
+
+    // Starts listening for connections at `path`.
+    //
+    // # Errors
+    //
+    // `EADDRINUSE` when the path exists, `ENOENT` when its directory does
+    // not, `ENAMETOOLONG` for a path of 108 bytes or more.
+    pub fn bind(path: str) UnixListener! {
+        var raw = unix_addr(path)!;
+        return UnixListener { fd: bound(&raw, SOCK_STREAM)!, addr: raw };
+    }
+
+    // Waits for the next client to connect and returns the connection.
+    pub fn accept(self) UnixStream! {
+        return UnixStream { fd: accept(self.fd)! };
+    }
+
+    // The path it listens on.
+    pub fn local_addr(self) String! {
+        return name(self.fd, SYS_GETSOCKNAME);
+    }
+
+    // The listener for `wait`, ready when a client waits to be accepted.
+    pub fn handle(self) Handle {
+        return Handle { fd: self.fd };
+    }
+
+    fn drop(var self) {
+        syscall1(SYS_CLOSE, self.fd);
+        syscall1(SYS_UNLINK, (&self.addr.bytes[2]) as i64);
+    }
+}
+
+// A connection to a Unix socket, made with `connect` or given by
+// `UnixListener.accept`.
+//
+// It reads and writes as a `TcpStream` does, and closes when it goes out
+// of scope.
+pub struct UnixStream {
+    fd: i64,
+
+    // Connects to the Unix socket at `path`.
+    //
+    // # Errors
+    //
+    // `ECONNREFUSED` when nothing listens there, `ENOENT` when the path does
+    // not exist.
+    pub fn connect(path: str) UnixStream! {
+        var raw = unix_addr(path)!;
+        return UnixStream { fd: dial(&raw, None)! };
+    }
+
+    // Reads up to `count` bytes at the end of `buf` and returns how many
+    // came, 0 when the other end has closed.
+    pub fn read(self, buf: &var String, count: usize) usize! {
+        return receive(self.fd, buf, count, 0);
+    }
+
+    // Reads like `read`, but leaves the bytes for the next `read`.
+    pub fn peek(self, buf: &var String, count: usize) usize! {
+        return receive(self.fd, buf, count, MSG_PEEK);
+    }
+
+    // Sends all of `data`.
+    //
+    // # Errors
+    //
+    // `EPIPE` when the other end has closed.
+    pub fn write(self, data: str) ! {
+        send(self.fd, data)!;
+    }
+
+    // Makes `read`, `peek` and `write` give up after `ms` milliseconds with
+    // `ETIMEDOUT`, or with None wait as long as they take.
+    pub fn set_timeout(self, ms: u64?) ! {
+        set_timeout(self.fd, ms)!;
+    }
+
+    // The path of this end, empty when it has none, as a client's.
+    pub fn local_addr(self) String! {
+        return name(self.fd, SYS_GETSOCKNAME);
+    }
+
+    // The path of the other end, empty when it has none.
+    pub fn peer_addr(self) String! {
+        return name(self.fd, SYS_GETPEERNAME);
+    }
+
+    // The connection for `wait`.
+    pub fn handle(self) Handle {
+        return Handle { fd: self.fd };
+    }
+
+    fn drop(var self) {
+        syscall1(SYS_CLOSE, self.fd);
     }
 }

@@ -1,15 +1,14 @@
 import std.net;
 
 fn main() {
-    var ip = net::ip4(127, 0, 0, 1);
-    var listener = net::TcpListener.bind(ip, 47911).unwrap();
-    var client = net::TcpStream.connect(ip, 47911).unwrap();
+    var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+    {
+        var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+    }
     var server = listener.accept().unwrap();
-    client.close().unwrap();
-    var buf: Array<u8, 1000> = [0; 1000];
     var failed = false;
     for i in 0..5 {
-        if server.write(&buf[0], 1000).is_err() {
+        if server.write("0123456789").is_err() {
             failed = true;
         }
     }
