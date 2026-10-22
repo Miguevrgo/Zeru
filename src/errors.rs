@@ -156,6 +156,11 @@ impl Sources {
         self.text.len()
     }
 
+    /// The source a span covers.
+    pub fn text(&self, span: Span) -> &str {
+        &self.text[span.start..span.end]
+    }
+
     /// The file, line and column a span starts at, found by binary search
     /// in each file's table of line starts.
     pub fn position(&self, span: Span) -> Option<(&str, u32, u32)> {

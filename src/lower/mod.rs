@@ -402,13 +402,14 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 target,
             } => {
                 let holds = self.operand(cond).imm().into_int_value();
-                let panic = self.panic_block(match panic {
-                    Panic::Null => "null pointer dereference",
-                    Panic::Bounds => "index out of bounds",
-                    Panic::UnwrapNone => "unwrap on None",
-                    Panic::Unwrap => "unwrap on Err",
-                    Panic::UnwrapErr => "unwrap_err on Ok",
-                });
+                let panic = match panic {
+                    Panic::Abort => self.abort_block(""),
+                    Panic::Null => self.panic_block("null pointer dereference"),
+                    Panic::Bounds => self.panic_block("index out of bounds"),
+                    Panic::UnwrapNone => self.panic_block("unwrap on None"),
+                    Panic::Unwrap => self.panic_block("unwrap on Err"),
+                    Panic::UnwrapErr => self.panic_block("unwrap_err on Ok"),
+                };
                 self.builder
                     .build_conditional_branch(holds, self.block_of(*target), panic)
                     .unwrap();

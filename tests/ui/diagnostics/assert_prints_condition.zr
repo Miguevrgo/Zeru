@@ -1,0 +1,7 @@
+//@ checked
+fn main() {
+    var v: Vec<i32> = [1, 2];
+    assert(v.len() == 2);
+    println("first holds");
+    assert(v.len() > 5);
+}

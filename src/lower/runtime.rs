@@ -112,6 +112,11 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             Some((file, line, column)) => format!("panic at {file}:{line}:{column}: {what}\n"),
             None => format!("panic: {what}\n"),
         };
+        self.abort_block(&message)
+    }
+
+    /// A block that writes `message` to stderr and aborts.
+    pub(super) fn abort_block(&mut self, message: &str) -> BasicBlock<'ctx> {
         let here = self.builder.get_insert_block().expect("inside a block");
         let panic_bb = self.append("panic");
         let panic = self.panic_fn();

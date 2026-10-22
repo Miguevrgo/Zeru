@@ -1,0 +1,5 @@
+status: signal 6
+-- stdout
+calls 1
+-- stderr
+panic at tests/ui/diagnostics/assert_prints_message.zr:12:5: x is 3, wanted 4

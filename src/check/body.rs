@@ -481,7 +481,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
         Some(Stmt { kind, span })
     }
 
-    fn condition(&mut self, condition: &Expression, message: &str) -> Expr {
+    pub(super) fn condition(&mut self, condition: &Expression, message: &str) -> Expr {
         let cond = self.expr(condition, Some(Types::BOOL));
         if cond.ty != Types::BOOL && !self.cx.types.is_error(cond.ty) {
             let shown = self.ty(cond.ty);

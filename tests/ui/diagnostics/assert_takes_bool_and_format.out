@@ -1,0 +1,31 @@
+status: compile error
+-- stderr
+Error: assert takes a bool, got i32
+   ╭─[ tests/ui/diagnostics/assert_takes_bool_and_format.zr:2:12 ]
+   │
+ 2 │     assert(1);
+   │            ┬
+   │            ╰── assert takes a bool, got i32
+───╯
+Error: assert takes a condition, then maybe a message
+   ╭─[ tests/ui/diagnostics/assert_takes_bool_and_format.zr:3:5 ]
+   │
+ 3 │     assert();
+   │     ────┬───
+   │         ╰───── assert takes a condition, then maybe a message
+───╯
+Error: The format must be a string literal, as in print("{}", x)
+   ╭─[ tests/ui/diagnostics/assert_takes_bool_and_format.zr:4:18 ]
+   │
+ 4 │     assert(true, 5);
+   │                  ┬
+   │                  ╰── The format must be a string literal, as in print("{}", x)
+───╯
+Error: The format has 2 '{}' but 1 value(s) follow it
+   ╭─[ tests/ui/diagnostics/assert_takes_bool_and_format.zr:5:5 ]
+   │
+ 5 │     assert(true, "{} {}", 1);
+   │     ────────────┬───────────
+   │                 ╰───────────── The format has 2 '{}' but 1 value(s) follow it
+───╯
+[-] Error: aborting due to previous error

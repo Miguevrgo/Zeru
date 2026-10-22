@@ -1,0 +1,5 @@
+status: signal 6
+-- stdout
+first holds
+-- stderr
+panic at tests/ui/diagnostics/assert_prints_condition.zr:6:5: assertion failed: v.len() > 5

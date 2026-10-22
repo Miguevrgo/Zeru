@@ -85,7 +85,7 @@ fn analyze(path: &Path, mode: SafetyMode) -> Result<(Sources, Analysis), Compile
     }
     let items = Items::collect(&modules);
     let analysis = Checker::new(&items).check().and_then(|mut program| {
-        let bodies = crate::mir::build(&mut program, mode)?;
+        let bodies = crate::mir::build(&mut program, &sources, mode)?;
         Ok((program, bodies))
     });
     Ok((sources, analysis))

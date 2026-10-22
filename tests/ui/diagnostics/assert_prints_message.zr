@@ -1,0 +1,13 @@
+//@ checked
+fn twice(n: &var i32) bool {
+    *n += 1;
+    return true;
+}
+
+fn main() {
+    var calls = 0;
+    assert(twice(&var calls), "not printed {}", calls);
+    println("calls {}", calls);
+    var x = 3;
+    assert(x == 4, "x is {}, wanted {}", x, 4);
+}

@@ -1,0 +1,6 @@
+fn main() {
+    assert(1);
+    assert();
+    assert(true, 5);
+    assert(true, "{} {}", 1);
+}

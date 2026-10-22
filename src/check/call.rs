@@ -100,6 +100,9 @@ impl FnCx<'_, '_> {
         if PRINTS.contains(&name) {
             return self.print(name, args, span);
         }
+        if name == "assert" {
+            return self.assert(args, span);
+        }
         if name == crate::tir::FLUSH_FN && self.local(name).is_none() {
             return self.mk(
                 ExprKind::Builtin(Builtin::Flush, Vec::new()),
@@ -859,9 +862,46 @@ impl FnCx<'_, '_> {
     /// `print("x is {}", x)`: a literal format with one `{}` per value, each
     /// a number, a bool or a `str`.
     fn print(&mut self, name: &str, args: &[Expression], span: Span) -> Expr {
+        let Some((pieces, values)) = self.format(args, span) else {
+            return self.error_expr(span);
+        };
+        let kind = ExprKind::Print {
+            stderr: name.starts_with('e'),
+            newline: name.ends_with("ln"),
+            pieces,
+            values,
+        };
+        self.mk(kind, Types::VOID, span)
+    }
+
+    /// `assert(cond)`, or `assert(cond, "format", values..)` with a message
+    /// to print when `cond` is false.
+    fn assert(&mut self, args: &[Expression], span: Span) -> Expr {
+        let Some((cond, message)) = args.split_first() else {
+            self.error("assert takes a condition, then maybe a message", span);
+            return self.error_expr(span);
+        };
+        let cond = self.condition(cond, "assert takes a bool, got ");
+        let (pieces, values) = match message {
+            [] => (Vec::new(), Vec::new()),
+            _ => match self.format(message, span) {
+                Some(format) => format,
+                None => return self.error_expr(span),
+            },
+        };
+        let kind = ExprKind::Assert {
+            cond: Box::new(cond),
+            pieces,
+            values,
+        };
+        self.mk(kind, Types::VOID, span)
+    }
+
+    /// A format string literal and the values for its `{}`, checked.
+    fn format(&mut self, args: &[Expression], span: Span) -> Option<(Vec<Vec<u8>>, Vec<Expr>)> {
         let Some((format, values)) = args.split_first() else {
             self.error("print takes a format string first", span);
-            return self.error_expr(span);
+            return None;
         };
         let ExpressionKind::StringLit(text) = &format.kind else {
             self.error(
@@ -869,7 +909,7 @@ impl FnCx<'_, '_> {
                 format.span,
             );
             self.check_args_only(values);
-            return self.error_expr(span);
+            return None;
         };
         let pieces = match format_pieces(text) {
             Err(message) => {
@@ -915,13 +955,7 @@ impl FnCx<'_, '_> {
             }
             checked.push(value);
         }
-        let kind = ExprKind::Print {
-            stderr: name.starts_with('e'),
-            newline: name.ends_with("ln"),
-            pieces,
-            values: checked,
-        };
-        self.mk(kind, Types::VOID, span)
+        Some((pieces, checked))
     }
 }
 

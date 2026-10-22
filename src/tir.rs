@@ -176,6 +176,11 @@ pub enum ExprKind {
         pieces: Vec<Vec<u8>>,
         values: Vec<Expr>,
     },
+    Assert {
+        cond: Box<Expr>,
+        pieces: Vec<Vec<u8>>,
+        values: Vec<Expr>,
+    },
     Asm(Box<Asm>),
 }
 
@@ -216,6 +221,10 @@ impl Expr {
             | ExprKind::VecLiteral(values)
             | ExprKind::Variant(_, values)
             | ExprKind::Print { values, .. } => values.iter_mut().for_each(f),
+            ExprKind::Assert { cond, values, .. } => {
+                f(cond);
+                values.iter_mut().for_each(f);
+            }
             ExprKind::Struct(fields) => fields.iter_mut().for_each(|(_, value)| f(value)),
             ExprKind::Assign { place, value, .. }
             | ExprKind::CompoundAssign { place, value, .. } => {

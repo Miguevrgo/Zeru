@@ -5,7 +5,7 @@
 
 use std::mem::replace;
 
-use crate::errors::{Span, ZeruError};
+use crate::errors::{Sources, Span, ZeruError};
 use crate::lower::SafetyMode;
 use crate::tir::{
     self, Arm, BinOp, Builtin, Expr, ExprKind, FnId, Payload, Program, Stmt, StmtKind, UnOp,
@@ -20,12 +20,16 @@ use super::{
 
 /// The MIR of every function of `program`, indexed by [`FnId`], or the
 /// errors the borrow checker found in it.
-pub fn build(program: &mut Program, mode: SafetyMode) -> Result<Vec<Body>, Vec<ZeruError>> {
+pub fn build(
+    program: &mut Program,
+    sources: &Sources,
+    mode: SafetyMode,
+) -> Result<Vec<Body>, Vec<ZeruError>> {
     let functions = std::mem::take(&mut program.functions);
     let mut errors: Vec<ZeruError> = Vec::new();
     let mut bodies = Vec::new();
     for function in &functions {
-        let mut body = Builder::new(program, function, mode.emit_safety_checks()).build();
+        let mut body = Builder::new(program, sources, function, mode.emit_safety_checks()).build();
         for error in super::borrowck::check(&body, program) {
             if !errors
                 .iter()
@@ -57,6 +61,7 @@ struct LoopScope {
 /// statements being built and whether each is dropped as they end.
 struct Builder<'a> {
     program: &'a mut Program,
+    sources: &'a Sources,
     function: &'a tir::Function,
     checks: bool,
     locals: Vec<LocalDecl>,
@@ -71,10 +76,16 @@ struct Builder<'a> {
 }
 
 impl<'a> Builder<'a> {
-    fn new(program: &'a mut Program, function: &'a tir::Function, checks: bool) -> Self {
+    fn new(
+        program: &'a mut Program,
+        sources: &'a Sources,
+        function: &'a tir::Function,
+        checks: bool,
+    ) -> Self {
         let count = function.locals.len();
         Self {
             program,
+            sources,
             function,
             checks,
             locals: vec![LocalDecl {
@@ -212,6 +223,40 @@ impl<'a> Builder<'a> {
             panic,
             target,
         });
+    }
+
+    /// `assert`: when `cond` is false, write where it failed and its message,
+    /// or else `cond` as written, to stderr and abort.
+    fn assert_holds(&mut self, cond: &Expr, pieces: &[Vec<u8>], values: &[Expr]) {
+        let holds = self.as_operand(cond);
+        let (fail, next) = (self.new_block(), self.new_block());
+        self.switch(holds, vec![(1, next)], fail);
+        self.current = Some(fail);
+        let mut pieces = pieces.to_vec();
+        if pieces.is_empty() {
+            let written = self.sources.text(cond.span);
+            pieces.push(format!("assertion failed: {written}").into_bytes());
+        }
+        if let Some((file, line, column)) = self.sources.position(self.span) {
+            let at = format!("panic at {file}:{line}:{column}: ");
+            pieces[0].splice(0..0, at.into_bytes());
+        }
+        let values = values.iter().map(|value| self.as_operand(value)).collect();
+        self.push(StatementKind::Print {
+            stderr: true,
+            newline: true,
+            pieces,
+            values,
+        });
+        self.terminate(TerminatorKind::Assert {
+            cond: Operand::Constant(Constant {
+                value: ConstValue::Bool(false),
+                ty: Types::BOOL,
+            }),
+            panic: Panic::Abort,
+            target: next,
+        });
+        self.current = Some(next);
     }
 
     fn switch(&mut self, discr: Operand, targets: Vec<(i128, BlockId)>, otherwise: BlockId) {
@@ -719,6 +764,16 @@ impl<'a> Builder<'a> {
                     pieces: pieces.clone(),
                     values,
                 });
+            }
+            ExprKind::Assert {
+                cond,
+                pieces,
+                values,
+            } => {
+                if self.checks {
+                    self.assert_holds(cond, pieces, values);
+                }
+                return;
             }
             ExprKind::Asm(asm) => {
                 let inputs = asm

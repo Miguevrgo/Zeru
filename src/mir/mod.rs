@@ -112,6 +112,7 @@ pub enum TerminatorKind {
 /// Why a check panics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panic {
+    Abort,
     Null,
     Bounds,
     UnwrapNone,
