@@ -148,9 +148,7 @@ fn main() {
 
     var inner = bodies[1].pos.sub(bodies[0].pos);
     var radius = sqrt(inner.dot(inner));
-    if worst > 0.0001 || l_drift > 0.000000001 || radius < 9.9 || radius > 10.1
-        || relative(bodies[1].pos.x, -8.48049578121427) > 0.000000001 {
-        exit(1);
-    }
+    assert(worst <= 0.0001 && l_drift <= 0.000000001 && radius >= 9.9 && radius <= 10.1);
+    assert(relative(bodies[1].pos.x, -8.48049578121427) <= 0.000000001);
     exit(0);
 }

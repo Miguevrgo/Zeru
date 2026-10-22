@@ -25,46 +25,30 @@ fn take_vec(list: Vec<i64>) usize {
 fn main() {
     var n: i32 = 42;
     var first: i32 = n;
-    if first != 42 || n != 42 {
-        exit(1);
-    }
+    assert(first == 42 && n == 42);
 
     var point = Point { x: 10, y: 20 };
     var copied = point;
     copied.x = 11;
-    if consume(point) != 10 || consume(point) != 10 || copied.x != 11 {
-        exit(2);
-    }
+    assert(consume(point) == 10 && consume(point) == 10 && copied.x == 11);
 
     var cells: Array<i32, 3> = [4, 5, 6];
     var twin = cells;
     twin[0] = 0;
-    if cells[0] != 4 {
-        exit(3);
-    }
+    assert(cells[0] == 4);
 
     var kept = Point { x: 7, y: 8 };
-    if peek(&kept) != 7 || kept.y != 8 {
-        exit(4);
-    }
+    assert(peek(&kept) == 7 && kept.y == 8);
 
     var list: Vec<i64> = [1, 2];
-    if take_vec(list.copy()) != 2 {
-        exit(5);
-    }
-    if list.len() != 2 {
-        exit(6);
-    }
+    assert(take_vec(list.copy()) == 2);
+    assert(list.len() == 2);
 
     var holder = Holder { cells: [7, 8, 9] };
     var carried = holder;
-    if carried.cells[2] != 9 {
-        exit(7);
-    }
+    assert(carried.cells[2] == 9);
     holder = Holder { cells: [1] };
-    if holder.cells[0] != 1 {
-        exit(8);
-    }
+    assert(holder.cells[0] == 1);
 
     var once: Vec<i64> = [3];
     var taken: usize = 0;
@@ -72,9 +56,7 @@ fn main() {
         taken = take_vec(once);
         break;
     }
-    if taken != 1 {
-        exit(9);
-    }
+    assert(taken == 1);
 
     println("move semantics: all tests passed");
     exit(0);

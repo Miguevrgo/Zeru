@@ -166,16 +166,10 @@ fn eval(text: str) i64! {
 }
 
 fn main() {
-    if eval("2 * (3 + 4) - 5").unwrap() != 9 {
-        exit(1);
-    }
-    if eval("100 / 7 / 2").unwrap() != 7 {
-        exit(2);
-    }
+    assert(eval("2 * (3 + 4) - 5").unwrap() == 9);
+    assert(eval("100 / 7 / 2").unwrap() == 7);
     var bad = eval("1 / 0");
-    if !bad.is_err() {
-        exit(3);
-    }
+    assert(bad.is_err());
     println("calc: {}", eval("1 + 2 * 3").unwrap());
     exit(0);
 }

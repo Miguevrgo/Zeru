@@ -53,9 +53,7 @@ fn main() {
     var third = Node { value: 3, next: 0 as *Node };
     var second = Node { value: 2, next: &third };
     var first = Node { value: 1, next: &second };
-    if sum_list(&first, 3) != 6 {
-        exit(1);
-    }
+    assert(sum_list(&first, 3) == 6);
 
     var values: Array<i32, 6> = [5, 2, 9, 1, 7, 3];
     var pass: usize = 0;
@@ -71,17 +69,11 @@ fn main() {
         }
         pass += 1;
     }
-    if values[0] != 1 {
-        exit(10);
-    }
-    if values[5] != 9 {
-        exit(11);
-    }
+    assert(values[0] == 1);
+    assert(values[5] == 9);
     var check: usize = 0;
     while check + 1 < 6 {
-        if values[check] > values[check + 1] {
-            exit(12);
-        }
+        assert(values[check] <= values[check + 1]);
         check += 1;
     }
 
@@ -89,37 +81,19 @@ fn main() {
     records.push(Big { a: 1, b: 2, c: 3 });
     records.push(Big { a: 4, b: 5, c: 6 });
     records.push(Big { a: 7, b: 8, c: 9 });
-    if records.len() != 3 {
-        exit(20);
-    }
-    if records.get(0).unwrap().a != 1 {
-        exit(21);
-    }
-    if records.get(0).unwrap().c != 3 {
-        exit(22);
-    }
-    if records.get(2).unwrap().a != 7 {
-        exit(23);
-    }
-    if records.get(2).unwrap().c != 9 {
-        exit(24);
-    }
+    assert(records.len() == 3);
+    assert(records.get(0).unwrap().a == 1);
+    assert(records.get(0).unwrap().c == 3);
+    assert(records.get(2).unwrap().a == 7);
+    assert(records.get(2).unwrap().c == 9);
 
     var good: i32! = digits_value([49, 50, 51]);
-    if !good.is_ok() {
-        exit(30);
-    }
-    if good.unwrap() != 123 {
-        exit(31);
-    }
+    assert(good.is_ok());
+    assert(good.unwrap() == 123);
 
     var bad: i32! = digits_value([49, 65, 51]);
-    if !bad.is_err() {
-        exit(32);
-    }
-    if bad.unwrap_err() != 1 {
-        exit(33);
-    }
+    assert(bad.is_err());
+    assert(bad.unwrap_err() == 1);
 
     println("programs: all tests passed");
     exit(0);

@@ -73,63 +73,35 @@ fn value_of(buf: *u8, length: usize) u64 {
 
 fn main() {
     var text: Array<u8, 8> = ['a', 'b', 'c', 0, 0, 0, 0, 0];
-    if length(&text[0], 8) != 3 {
-        exit(1);
-    }
+    assert(length(&text[0], 8) == 3);
 
     reverse(&text[0], 3);
-    if text[0] != 'c' {
-        exit(2);
-    }
-    if text[2] != 'a' {
-        exit(3);
-    }
-    if text[3] != 0 {
-        exit(4);
-    }
+    assert(text[0] == 'c');
+    assert(text[2] == 'a');
+    assert(text[3] == 0);
 
     reverse(&text[0], 3);
-    if text[0] != 'a' {
-        exit(5);
-    }
+    assert(text[0] == 'a');
 
-    if count_byte(&text[0], 8, 0) != 5 {
-        exit(6);
-    }
-    if count_byte(&text[0], 8, 'a') != 1 {
-        exit(7);
-    }
+    assert(count_byte(&text[0], 8, 0) == 5);
+    assert(count_byte(&text[0], 8, 'a') == 1);
 
     var same: Array<u8, 3> = ['a', 'b', 'c'];
-    if !equal(&text[0], &same[0], 3) {
-        exit(8);
-    }
+    assert(equal(&text[0], &same[0], 3));
     same[1] = 0;
-    if equal(&text[0], &same[0], 3) {
-        exit(9);
-    }
+    assert(!equal(&text[0], &same[0], 3));
 
     upper(&text[0], 3);
-    if text[0] != 'A' {
-        exit(10);
-    }
-    if text[2] != 'C' {
-        exit(11);
-    }
+    assert(text[0] == 'A');
+    assert(text[2] == 'C');
 
     var digits: Array<u8, 3> = [1, 2, 3];
-    if value_of(&digits[0], 3) != 66051 {
-        exit(12);
-    }
+    assert(value_of(&digits[0], 3) == 66051);
 
     var single: Array<u8, 1> = [7];
     reverse(&single[0], 1);
-    if single[0] != 7 {
-        exit(13);
-    }
-    if length(&single[0], 0) != 0 {
-        exit(14);
-    }
+    assert(single[0] == 7);
+    assert(length(&single[0], 0) == 0);
 
     println("bytes: all tests passed");
     exit(0);

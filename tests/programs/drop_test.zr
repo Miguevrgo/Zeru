@@ -213,9 +213,7 @@ fn main() {
     match listed() {
         Some(v) => {
             expect(drops, 39, 30);
-            if v[2] != 3 {
-                exit(31);
-            }
+            assert(v[2] == 3);
         }
         None => {}
     }

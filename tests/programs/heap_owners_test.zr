@@ -117,16 +117,12 @@ fn main() {
     }
     println("");
     for i in 1..ordered.len() {
-        if ordered[i - 1] > ordered[i] {
-            exit(1);
-        }
+        assert(ordered[i - 1] <= ordered[i]);
     }
     var fs = sorted(floats);
     println("floats: {} {} {} .. {}", fs[0], fs[1], fs[2], fs[5]);
-    if ordered.len() != 20 || ordered[0] != 0 || ordered[19] != 950 || fs[0] != -7.25
-        || fs[5] != 3.75 {
-        exit(2);
-    }
+    assert(ordered.len() == 20 && ordered[0] == 0 && ordered[19] == 950);
+    assert(fs[0] == -7.25 && fs[5] == 3.75);
 
     var drops: i32 = 0;
     {
@@ -138,9 +134,7 @@ fn main() {
 
         var taken = shelves.remove(1);
         println("weigh b: {}", weigh(taken));
-        if drops != 1 {
-            exit(3);
-        }
+        assert(drops == 1);
 
         var moved = shelves.pop().unwrap();
         shelves.push(shelf("d", 2, &drops));
@@ -148,14 +142,10 @@ fn main() {
         println("c weighs {}, a's weights copied: {}", moved.total(), copy_of_a_weights.len());
 
         shelves[0] = shelf("e", 1, &drops);
-        if drops != 2 {
-            exit(4);
-        }
+        assert(drops == 2);
         println("end of scope, drops {}", drops);
     }
     println("all dropped: {}", drops);
-    if drops != 5 {
-        exit(5);
-    }
+    assert(drops == 5);
     exit(0);
 }

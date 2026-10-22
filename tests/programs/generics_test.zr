@@ -89,123 +89,65 @@ fn make() Pair<i64> {
 
 fn main() {
     var p = Pair { first: 1, second: 2 };
-    if p.first != 1 {
-        exit(1);
-    }
-    if p.same() {
-        exit(2);
-    }
+    assert(p.first == 1);
+    assert(!p.same());
 
     var q = p.swap();
-    if q.first != 2 {
-        exit(3);
-    }
-    if q.second != 1 {
-        exit(4);
-    }
+    assert(q.first == 2);
+    assert(q.second == 1);
 
     var wide: Pair<i64> = Pair { first: 100, second: 200 };
-    if wide.swap().first != 200 {
-        exit(5);
-    }
-    if largest(wide.first, wide.second) != 200 {
-        exit(6);
-    }
+    assert(wide.swap().first == 200);
+    assert(largest(wide.first, wide.second) == 200);
 
     var narrow = Pair { first: 7, second: 7 };
-    if !narrow.same() {
-        exit(7);
-    }
-    if wide.same() {
-        exit(8);
-    }
+    assert(narrow.same());
+    assert(!wide.same());
 
     var made = make();
-    if made.second != 20 {
-        exit(9);
-    }
+    assert(made.second == 20);
 
     var c = Counter { value: 0, step: 5 };
     c.bump();
     c.bump();
-    if c.value != 10 {
-        exit(10);
-    }
+    assert(c.value == 10);
 
     var stepped: Counter<i64> = Counter { value: 1, step: 9 };
     stepped.bump();
-    if stepped.value != 10 {
-        exit(11);
-    }
+    assert(stepped.value == 10);
 
     var fractional = Counter { value: 0.5, step: 0.25 };
     fractional.bump();
-    if fractional.value != 0.75 {
-        exit(12);
-    }
+    assert(fractional.value == 0.75);
 
     var holder: Holder<i64> = Holder { items: Vec.new(), fallback: -1 };
     holder.items.push(3);
     holder.items.push(4);
-    if holder.take(1) != 4 {
-        exit(13);
-    }
-    if holder.take(99) != -1 {
-        exit(14);
-    }
+    assert(holder.take(1) == 4);
+    assert(holder.take(99) == -1);
 
-    if identity(42) != 42 {
-        exit(17);
-    }
-    if identity(3.14) != 3.14 {
-        exit(18);
-    }
-    if !identity(true) {
-        exit(19);
-    }
-    if identity(Square { side: 4 }).area() != 16 {
-        exit(20);
-    }
-    if first(10, 3.14) != 10 {
-        exit(21);
-    }
-    if second(true, 2.5) != 2.5 {
-        exit(22);
-    }
+    assert(identity(42) == 42);
+    assert(identity(3.14) == 3.14);
+    assert(identity(true));
+    assert(identity(Square { side: 4 }).area() == 16);
+    assert(first(10, 3.14) == 10);
+    assert(second(true, 2.5) == 2.5);
 
     var big: u32 = 3000000000;
     var small: u32 = 1;
-    if largest(big, small) != big {
-        exit(23);
-    }
+    assert(largest(big, small) == big);
     var wide: i64 = 5000000000;
-    if largest(wide, 7) != wide {
-        exit(24);
-    }
-    if largest(7, wide) != wide {
-        exit(25);
-    }
-    if head(made) != 10 {
-        exit(26);
-    }
-    if !made.with(true).1 {
-        exit(27);
-    }
-    if made.with(2.5).1 != 2.5 {
-        exit(28);
-    }
+    assert(largest(wide, 7) == wide);
+    assert(largest(7, wide) == wide);
+    assert(head(made) == 10);
+    assert(made.with(true).1);
+    assert(made.with(2.5).1 == 2.5);
     var kept = Kept { pair: make() };
-    if !kept.pair.with(true).1 {
-        exit(29);
-    }
+    assert(kept.pair.with(true).1);
 
     var wrapped = Wrap { inner: Square { side: 3 } };
-    if wrapped.inner.area() != 9 {
-        exit(15);
-    }
-    if wrapped.doubled() != 18 {
-        exit(16);
-    }
+    assert(wrapped.inner.area() == 9);
+    assert(wrapped.doubled() == 18);
 
     println("generics: all tests passed");
     exit(0);

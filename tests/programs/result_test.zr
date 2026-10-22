@@ -76,76 +76,35 @@ fn always_ok() i64! {
 
 fn main() {
     var r1: i32! = divide(10, 2);
-    if !r1.is_ok() {
-        exit(1);
-    }
-    if r1.is_err() {
-        exit(2);
-    }
+    assert(r1.is_ok());
+    assert(r1.is_ok());
     var val: i32 = r1.unwrap();
-    if val != 5 {
-        exit(3);
-    }
+    assert(val == 5);
 
     var r2: i32! = divide(10, 0);
-    if r2.is_ok() {
-        exit(4);
-    }
-    if !r2.is_err() {
-        exit(5);
-    }
+    assert(r2.is_err());
+    assert(r2.is_err());
     var code: i32 = r2.unwrap_err();
-    if code != 1 {
-        exit(6);
-    }
+    assert(code == 1);
 
     var r3: i64! = always_ok();
-    if !r3.is_ok() {
-        exit(7);
-    }
-    if r3.unwrap() != 100 {
-        exit(8);
-    }
+    assert(r3.is_ok());
+    assert(r3.unwrap() == 100);
 
     var r4: i64! = always_fail();
-    if !r4.is_err() {
-        exit(9);
-    }
-    if r4.unwrap_err() != 42 {
-        exit(10);
-    }
+    assert(r4.is_err());
+    assert(r4.unwrap_err() == 42);
 
     var r5: i32! = divide(20, 4);
-    if r5.is_ok() {
-        var v: i32 = r5.unwrap();
-        if v != 5 {
-            exit(11);
-        }
-    } else {
-        exit(12);
-    }
+    assert(r5.unwrap() == 5);
 
-    if number("123").unwrap() != 123 {
-        exit(20);
-    }
-    if number("1x").unwrap_err() != NOT_DIGIT {
-        exit(21);
-    }
-    if number("").unwrap_err() != EMPTY {
-        exit(22);
-    }
-    if number("9z").is_ok() || number("42").unwrap() != 42 {
-        exit(23);
-    }
-    if first_doubled(Vec.new()).is_some() || first_doubled([3]).unwrap() != 6 {
-        exit(24);
-    }
-    if name(0).is_some() || name(1).is_none() {
-        exit(25);
-    }
-    if pair().unwrap().1 != 2 || sign(None) != 0 {
-        exit(26);
-    }
+    assert(number("123").unwrap() == 123);
+    assert(number("1x").unwrap_err() == NOT_DIGIT);
+    assert(number("").unwrap_err() == EMPTY);
+    assert(number("9z").is_err() && number("42").unwrap() == 42);
+    assert(first_doubled(Vec.new()).is_none() && first_doubled([3]).unwrap() == 6);
+    assert(name(0).is_none() && name(1).is_some());
+    assert(pair().unwrap().1 == 2 && sign(None) == 0);
 
     println("result: all tests passed");
     exit(0);

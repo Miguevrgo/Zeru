@@ -137,8 +137,6 @@ fn main() {
         && substr(TEXT, top.start, top.len) == "the"
         && entries[1].count == 10
         && long.len == 11;
-    if !ok {
-        exit(1);
-    }
+    assert(ok);
     exit(0);
 }

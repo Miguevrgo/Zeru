@@ -4,53 +4,27 @@ fn main() {
     var path = "build/test_fs.txt";
 
     var wr = fs::write_file(path, "Hello from Zeru!");
-    if wr.is_err() {
-        exit(1);
-    }
-    if !fs::exists(path) {
-        exit(2);
-    }
+    assert(wr.is_ok());
+    assert(fs::exists(path));
     var meta = fs::metadata(path);
-    if meta.is_err() {
-        exit(3);
-    }
-    if meta.unwrap().size != 16 {
-        exit(4);
-    }
+    assert(meta.is_ok());
+    assert(meta.unwrap().size == 16);
 
     var rd = fs::read_file(path);
-    if rd.is_err() {
-        exit(5);
-    }
+    assert(rd.is_ok());
     var text = rd.unwrap();
-    if text.len() != 16 {
-        exit(6);
-    }
-    if text[0] != 'H' {
-        exit(7);
-    }
+    assert(text.len() == 16);
+    assert(text[0] == 'H');
 
     var path2 = "build/test_fs2.txt";
     var file = fs::File.create(path2);
-    if file.is_err() {
-        exit(8);
-    }
+    assert(file.is_ok());
     var out = file.unwrap();
-    if out.write("test").is_err() {
-        exit(9);
-    }
-    if fs::read_file(path2).unwrap() != "test" {
-        exit(10);
-    }
-    if fs::remove_file(path).is_err() {
-        exit(11);
-    }
-    if fs::remove_file(path2).is_err() {
-        exit(12);
-    }
-    if fs::exists(path) {
-        exit(13);
-    }
+    assert(out.write("test").is_ok());
+    assert(fs::read_file(path2).unwrap() == "test");
+    assert(fs::remove_file(path).is_ok());
+    assert(fs::remove_file(path2).is_ok());
+    assert(!fs::exists(path));
 
     println("fs: all tests passed");
 }

@@ -284,9 +284,6 @@ fn main() {
         }
     }
 
-    if failures != 0 {
-        println("{} failures", failures);
-        exit(1);
-    }
+    assert(failures == 0, "{} failures", failures);
     exit(0);
 }

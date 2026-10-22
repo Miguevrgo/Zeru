@@ -172,15 +172,14 @@ fn main() {
         if gen == 4 || gen == 29 {
             world.show();
         }
-        if world.count(Cell::Sand) != sand || world.count(Cell::Water) != water {
-            println("matter was lost at turn {}", world.turn);
-            exit(1);
-        }
+        assert(
+            world.count(Cell::Sand) == sand && world.count(Cell::Water) == water,
+            "matter was lost at turn {}",
+            world.turn,
+        );
     }
     var sum = world.checksum();
     println("sand {} water {} checksum {}", sand, water, sum);
-    if sand != 12 || water != 6 || sum != 2612796742563035595 {
-        exit(2);
-    }
+    assert(sand == 12 && water == 6 && sum == 2612796742563035595);
     exit(0);
 }

@@ -150,58 +150,32 @@ fn text_of(bytes: Array<u8, 16>, length: usize) Vec<u8> {
 fn main() {
     var source: Array<u8, 16> = [50, 43, 51, 42, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     var tokens = scan(text_of(source, 5));
-    if tokens.len() != 6 {
-        exit(1);
-    }
-    if tokens[0].kind != TokenKind::Number {
-        exit(2);
-    }
-    if tokens[0].value != 2 {
-        exit(3);
-    }
-    if tokens[1].kind != TokenKind::Plus {
-        exit(4);
-    }
-    if tokens[5].kind != TokenKind::End {
-        exit(5);
-    }
+    assert(tokens.len() == 6);
+    assert(tokens[0].kind == TokenKind::Number);
+    assert(tokens[0].value == 2);
+    assert(tokens[1].kind == TokenKind::Plus);
+    assert(tokens[5].kind == TokenKind::End);
 
     var result = evaluate(tokens);
-    if !result.is_ok() {
-        exit(6);
-    }
-    if result.unwrap() != 14 {
-        exit(7);
-    }
+    assert(result.is_ok());
+    assert(result.unwrap() == 14);
 
     var second: Array<u8, 16> = [49, 48, 32, 45, 32, 51, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     var spaced = evaluate(scan(text_of(second, 6)));
-    if !spaced.is_ok() {
-        exit(8);
-    }
-    if spaced.unwrap() != 7 {
-        exit(9);
-    }
+    assert(spaced.is_ok());
+    assert(spaced.unwrap() == 7);
 
     var third: Array<u8, 16> = [55, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     var alone = evaluate(scan(text_of(third, 1)));
-    if alone.unwrap() != 7 {
-        exit(10);
-    }
+    assert(alone.unwrap() == 7);
 
     var broken: Array<u8, 16> = [50, 42, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     var failed = evaluate(scan(text_of(broken, 2)));
-    if !failed.is_err() {
-        exit(11);
-    }
-    if failed.unwrap_err() != 3 {
-        exit(12);
-    }
+    assert(failed.is_err());
+    assert(failed.unwrap_err() == 3);
 
     var junk: Array<u8, 16> = [37, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    if scan(text_of(junk, 1)).len() != 0 {
-        exit(13);
-    }
+    assert(scan(text_of(junk, 1)).len() == 0);
 
     println("tokenizer: all tests passed");
     exit(0);

@@ -13,201 +13,99 @@ enum Tone {
 }
 
 fn main() {
-    if math::abs(-4) != 4 {
-        exit(1);
-    }
-    if math::min(3, 5) != 3 {
-        exit(2);
-    }
-    if math::max(3, 5) != 5 {
-        exit(3);
-    }
-    if math::clamp(9, 0, 5) != 5 {
-        exit(4);
-    }
-    if math::clamp(-1, 0, 5) != 0 {
-        exit(5);
-    }
-    if math::pow(2, 10) != 1024 {
-        exit(6);
-    }
-    if !math::is_power_of_two(64) {
-        exit(7);
-    }
-    if math::is_power_of_two(63) {
-        exit(8);
-    }
-    if math::div_euclid(-7, 2) != -4 {
-        exit(9);
-    }
-    if math::mod_euclid(-7, 2) != 1 {
-        exit(10);
-    }
+    assert(math::abs(-4) == 4);
+    assert(math::min(3, 5) == 3);
+    assert(math::max(3, 5) == 5);
+    assert(math::clamp(9, 0, 5) == 5);
+    assert(math::clamp(-1, 0, 5) == 0);
+    assert(math::pow(2, 10) == 1024);
+    assert(math::is_power_of_two(64));
+    assert(!math::is_power_of_two(63));
+    assert(math::div_euclid(-7, 2) == -4);
+    assert(math::mod_euclid(-7, 2) == 1);
     var top: u64 = 18446744073709551615;
-    if math::min(top, 1) != 1 {
-        exit(11);
-    }
-    if math::max(top, 1) != top {
-        exit(12);
-    }
+    assert(math::min(top, 1) == 1);
+    assert(math::max(top, 1) == top);
 
     var map: HashMap<i64, i64> = HashMap.new();
-    if !map.is_empty() {
-        exit(20);
-    }
+    assert(map.is_empty());
     map.insert(1, 100);
     map.insert(2, 200);
-    if map.len() != 2 {
-        exit(23);
-    }
-    if *map.get(1).unwrap() != 100 {
-        exit(24);
-    }
-    if map.get(9).is_some() {
-        exit(25);
-    }
-    if !map.contains(2) {
-        exit(26);
-    }
+    assert(map.len() == 2);
+    assert(*map.get(1).unwrap() == 100);
+    assert(map.get(9).is_none());
+    assert(map.contains(2));
 
     map.insert(1, 111);
-    if *map.get(1).unwrap() != 111 {
-        exit(28);
-    }
-    if map.len() != 2 {
-        exit(29);
-    }
+    assert(*map.get(1).unwrap() == 111);
+    assert(map.len() == 2);
 
-    if !map.remove(1) {
-        exit(30);
-    }
-    if map.get(1).is_some() {
-        exit(31);
-    }
-    if map.remove(1) {
-        exit(32);
-    }
+    assert(map.remove(1));
+    assert(map.get(1).is_none());
+    assert(!map.remove(1));
     map.clear();
-    if !map.is_empty() {
-        exit(33);
-    }
+    assert(map.is_empty());
 
     var key: i64 = -2500;
     while key < 2500 {
         map.insert(key, key * 3);
         key += 1;
     }
-    if map.len() != 5000 {
-        exit(35);
-    }
-    if *map.get(1234).unwrap() != 3702 || *map.get(-7).unwrap() != -21 {
-        exit(36);
-    }
+    assert(map.len() == 5000);
+    assert(*map.get(1234).unwrap() == 3702 && *map.get(-7).unwrap() == -21);
 
     key = -2500;
     while key < 2500 {
         map.remove(key);
         key += 2;
     }
-    if map.len() != 2500 || map.contains(0) || *map.get(1).unwrap() != 3 {
-        exit(37);
-    }
+    assert(map.len() == 2500 && !map.contains(0) && *map.get(1).unwrap() == 3);
     map.insert(1, 4);
-    if map.len() != 2500 {
-        exit(38);
-    }
+    assert(map.len() == 2500);
 
     var lists: HashMap<Tone, Vec<i64>> = HashMap.new();
     lists.insert(Tone::Low, [1, 2]);
     lists.insert(Tone::High, [3]);
     lists.insert(Tone::Low, [4, 5, 6]);
-    if lists.len() != 2 || !lists.contains(Tone::High) {
-        exit(39);
-    }
-    if lists.get(Tone::Low).unwrap().len() != 3 {
-        exit(34);
-    }
+    assert(lists.len() == 2 && lists.contains(Tone::High));
+    assert(lists.get(Tone::Low).unwrap().len() == 3);
 
     var seen: HashSet<i64> = HashSet.new();
-    if !seen.insert(5) {
-        exit(40);
-    }
+    assert(seen.insert(5));
     seen.insert(5);
-    if seen.len() != 1 {
-        exit(41);
-    }
-    if !seen.contains(5) {
-        exit(42);
-    }
-    if seen.contains(6) {
-        exit(43);
-    }
-    if !seen.remove(5) {
-        exit(44);
-    }
-    if !seen.is_empty() {
-        exit(45);
-    }
+    assert(seen.len() == 1);
+    assert(seen.contains(5));
+    assert(!seen.contains(6));
+    assert(seen.remove(5));
+    assert(seen.is_empty());
 
     var heap: BinaryHeap<i64> = BinaryHeap.new();
-    if heap.peek().is_some() {
-        exit(50);
-    }
+    assert(heap.peek().is_none());
     heap.push(3);
     heap.push(9);
     heap.push(1);
     heap.push(7);
-    if heap.len() != 4 {
-        exit(51);
-    }
-    if *heap.peek().unwrap() != 9 {
-        exit(52);
-    }
-    if heap.pop().unwrap() != 9 {
-        exit(53);
-    }
-    if heap.pop().unwrap() != 7 {
-        exit(54);
-    }
-    if heap.pop().unwrap() != 3 {
-        exit(55);
-    }
-    if heap.pop().unwrap() != 1 {
-        exit(56);
-    }
-    if heap.pop().is_some() {
-        exit(57);
-    }
+    assert(heap.len() == 4);
+    assert(*heap.peek().unwrap() == 9);
+    assert(heap.pop().unwrap() == 9);
+    assert(heap.pop().unwrap() == 7);
+    assert(heap.pop().unwrap() == 3);
+    assert(heap.pop().unwrap() == 1);
+    assert(heap.pop().is_none());
 
     var queue: VecDeque<i64> = VecDeque.new();
     queue.push_back(2);
     queue.push_back(3);
     queue.push_front(1);
-    if queue.len() != 3 {
-        exit(60);
-    }
-    if *queue.front().unwrap() != 1 {
-        exit(61);
-    }
-    if *queue.back().unwrap() != 3 {
-        exit(62);
-    }
-    if *queue.at(1).unwrap() != 2 {
-        exit(63);
-    }
-    if queue.pop_front().unwrap() != 1 {
-        exit(64);
-    }
-    if queue.pop_back().unwrap() != 3 {
-        exit(65);
-    }
-    if queue.len() != 1 {
-        exit(66);
-    }
+    assert(queue.len() == 3);
+    assert(*queue.front().unwrap() == 1);
+    assert(*queue.back().unwrap() == 3);
+    assert(*queue.at(1).unwrap() == 2);
+    assert(queue.pop_front().unwrap() == 1);
+    assert(queue.pop_back().unwrap() == 3);
+    assert(queue.len() == 1);
     queue.clear();
-    if queue.pop_front().is_some() {
-        exit(67);
-    }
+    assert(queue.pop_front().is_none());
 
     println("std: all tests passed");
     exit(0);

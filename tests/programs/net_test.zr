@@ -3,35 +3,23 @@ import std.net;
 fn main() {
     var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
     var addr = listener.local_addr().unwrap();
-    if net::TcpListener.bind(addr).unwrap_err() != EADDRINUSE {
-        exit(1);
-    }
-    if net::TcpListener.bind("127.0.0.1").unwrap_err() != EINVAL {
-        exit(2);
-    }
-    if net::TcpListener.bind("[1::2::3]:0").unwrap_err() != EINVAL {
-        exit(3);
-    }
+    assert(net::TcpListener.bind(addr).unwrap_err() == EADDRINUSE);
+    assert(net::TcpListener.bind("127.0.0.1").unwrap_err() == EINVAL);
+    assert(net::TcpListener.bind("[1::2::3]:0").unwrap_err() == EINVAL);
 
     var client = net::TcpStream.connect(addr).unwrap();
     var server = listener.accept().unwrap();
-    if server.peer_addr().unwrap() != client.local_addr().unwrap() {
-        exit(4);
-    }
+    assert(server.peer_addr().unwrap() == client.local_addr().unwrap());
     client.write("ping").unwrap();
     var buf = String.new();
     server.read(&var buf, 64).unwrap();
-    if buf != "ping" {
-        exit(5);
-    }
+    assert(buf == "ping");
 
     var a = net::UdpSocket.bind("[::1]:0").unwrap();
     var b = net::UdpSocket.bind("[::1]:0").unwrap();
     a.send_to(b.local_addr().unwrap(), "pong").unwrap();
     var got = b.recv().unwrap();
-    if got.data != "pong" || got.from != a.local_addr().unwrap() {
-        exit(6);
-    }
+    assert(got.data == "pong" && got.from == a.local_addr().unwrap());
 
     println("net: all tests passed");
 }

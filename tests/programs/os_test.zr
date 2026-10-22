@@ -2,22 +2,12 @@ import std.fs;
 import std.os;
 
 fn main() {
-    if os::pid() == 0 || os::parent_pid() == 0 {
-        exit(1);
-    }
-    if os::time() < 1000000000 {
-        exit(2);
-    }
+    assert(os::pid() != 0 && os::parent_pid() != 0);
+    assert(os::time() >= 1000000000);
     var clock = os::Clock.now();
     os::sleep(1);
-    if clock.elapsed() < 1000000 {
-        exit(3);
-    }
-    if !fs::current_dir().unwrap().starts_with("/") {
-        exit(4);
-    }
-    if os::run("true", []).unwrap() != 0 {
-        exit(5);
-    }
+    assert(clock.elapsed() >= 1000000);
+    assert(fs::current_dir().unwrap().starts_with("/"));
+    assert(os::run("true", []).unwrap() == 0);
     println("os: all tests passed");
 }

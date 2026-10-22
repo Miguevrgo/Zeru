@@ -99,14 +99,9 @@ fn main() {
 
     var first = squares(1, 12);
     var written = fs::write_file(path, as_str(&first[0], first.len()));
-    if written.is_err() {
-        eprintln("cannot write the file: error {}", written.unwrap_err());
-        exit(1);
-    }
+    assert(written.is_ok(), "cannot write the file: error {}", written.unwrap_err());
     var more = squares(99, 101);
-    if append(path, more).unwrap() != 61 {
-        exit(2);
-    }
+    assert(append(path, more).unwrap() == 61);
 
     var text = fs::read_file(path).unwrap();
     var c = count(text);
@@ -114,15 +109,11 @@ fn main() {
     var lines = text.lines();
     println("last line: {}", lines[lines.len() - 1]);
 
-    if fs::remove_file(path).is_err() || fs::exists(path) {
-        exit(3);
-    }
+    assert(fs::remove_file(path).is_ok() && !fs::exists(path));
     var gone = fs::read_file(path);
     println("after unlink: error {}", gone.unwrap_err());
 
-    if c.lines != 15 || c.words != 60 || c.bytes != 256 || c.longest != 20
-        || gone.unwrap_err() != NOT_FOUND {
-        exit(4);
-    }
+    assert(c.lines == 15 && c.words == 60 && c.bytes == 256 && c.longest == 20);
+    assert(gone.unwrap_err() == NOT_FOUND);
     exit(0);
 }

@@ -70,8 +70,6 @@ fn main() {
         grid = grid.step();
     }
     grid.print();
-    if grid.alive() != 5 {
-        exit(1);
-    }
+    assert(grid.alive() == 5);
     exit(0);
 }
