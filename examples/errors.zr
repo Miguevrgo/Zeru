@@ -29,13 +29,13 @@ fn number(text: str, key: str) i64! {
     if parsed.is_err() {
         return Err(NOT_A_NUMBER);
     }
-    return Ok(parsed.unwrap());
+    return parsed.unwrap();
 }
 
 fn area(text: str) i64! {
     var width = number(text, "width")!;
     var height = number(text, "height")!;
-    return Ok(width * height);
+    return width * height;
 }
 
 fn require(text: str, key: str) ! {
@@ -67,7 +67,7 @@ fn check(text: str) i32! {
         }
         settings += 1;
     }
-    return Ok(settings);
+    return settings;
 }
 
 fn main() {

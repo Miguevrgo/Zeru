@@ -44,7 +44,7 @@ fn tokenize(text: str) Vec<Token>! {
         at += 1;
     }
     tokens.push(Token::End);
-    return Ok(tokens);
+    return tokens;
 }
 
 struct Parser {
@@ -77,11 +77,11 @@ struct Parser {
                     value -= self.product()!;
                 }
                 default => {
-                    return Ok(value);
+                    return value;
                 }
             }
         }
-        return Ok(value);
+        return value;
     }
 
     fn product(var self) i64! {
@@ -101,26 +101,26 @@ struct Parser {
                     value /= divisor;
                 }
                 default => {
-                    return Ok(value);
+                    return value;
                 }
             }
         }
-        return Ok(value);
+        return value;
     }
 
     fn unary(var self) i64! {
         match self.next() {
             Token::Number(value) => {
-                return Ok(value);
+                return value;
             }
             Token::Minus => {
-                return Ok(-self.unary()!);
+                return -self.unary()!;
             }
             Token::Open => {
                 var value = self.sum()!;
                 match self.next() {
                     Token::Close => {
-                        return Ok(value);
+                        return value;
                     }
                     default => {
                         return Err(UNEXPECTED);
@@ -140,7 +140,7 @@ fn evaluate(text: str) i64! {
     if parser.at != parser.tokens.len() - 1 {
         return Err(UNEXPECTED);
     }
-    return Ok(value);
+    return value;
 }
 
 fn show(text: str) {

@@ -145,7 +145,7 @@ pub struct TcpListener {
             syscall1(SYS_CLOSE, fd);
             return Err((-r) as i32);
         }
-        return Ok(TcpListener { fd: fd });
+        return TcpListener { fd: fd };
     }
 
     // Waits for the next client to connect and returns the connection.
@@ -173,7 +173,7 @@ pub struct TcpListener {
     // ```
     pub fn accept(self) TcpStream! {
         var fd = sys_result(syscall3(SYS_ACCEPT, self.fd, 0, 0))!;
-        return Ok(TcpStream { fd: fd });
+        return TcpStream { fd: fd };
     }
 
     // Stops listening and frees the port, returning 0.
@@ -243,7 +243,7 @@ pub struct TcpStream {
             syscall1(SYS_CLOSE, fd);
             return Err((-r) as i32);
         }
-        return Ok(TcpStream { fd: fd });
+        return TcpStream { fd: fd };
     }
 
     // Reads up to `len` bytes into `buf` and returns how many came.
@@ -325,7 +325,7 @@ pub struct TcpStream {
             total = total + n;
             remaining = remaining - n as usize;
         }
-        return Ok(total);
+        return total;
     }
 
     // Reads into `buf` until `buf_size` bytes came or the other end closes,
@@ -366,7 +366,7 @@ pub struct TcpStream {
             total = total + n;
             remaining = remaining - n as usize;
         }
-        return Ok(total);
+        return total;
     }
 
     // Ends reading, writing or both, returning 0, while the connection stays
@@ -436,7 +436,7 @@ pub struct UdpSocket {
             syscall1(SYS_CLOSE, fd);
             return Err((-r) as i32);
         }
-        return Ok(UdpSocket { fd: fd });
+        return UdpSocket { fd: fd };
     }
 
     // Sends `len` bytes of `buf` as one datagram to `ip` and `port`, and

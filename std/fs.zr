@@ -58,7 +58,7 @@ fn c_path(path: str, buf: *u8) i64! {
     }
     __zeru_copy_bytes(buf, path as *u8, path.len());
     *(buf + path.len()) = 0;
-    return Ok(buf as i64);
+    return buf as i64;
 }
 
 // A syscall that takes one path and returns 0 on success.
@@ -146,7 +146,7 @@ fn stat_path(nr: i64, path: str) Metadata! {
     var p = c_path(path, &buf[0])!;
     var stat: Array<i64, 18> = [0; 18];
     sys_result(syscall2(nr, p, (&stat[0]) as i64))!;
-    return Ok(metadata_of(stat));
+    return metadata_of(stat);
 }
 
 fn open_path(path: str, flags: i64, mode: i64) i64! {
@@ -210,7 +210,7 @@ pub fn read_file(path: str) String! {
             break;
         }
     }
-    return Ok(text);
+    return text;
 }
 
 // Writes `data` to the file at `path`, creating it or replacing what it
@@ -298,7 +298,7 @@ pub struct File {
     // ```
     pub fn open(path: str) File! {
         var fd = open_path(path, O_RDONLY, 0)!;
-        return Ok(File { fd: fd, buffer: Vec.new(), start: 0 });
+        return File { fd: fd, buffer: Vec.new(), start: 0 };
     }
 
     // Opens the file at `path` for writing, creating it or emptying what it
@@ -312,7 +312,7 @@ pub struct File {
     // (EACCES) without permission, 21 (EISDIR) when `path` is a directory.
     pub fn create(path: str) File! {
         var fd = open_path(path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)!;
-        return Ok(File { fd: fd, buffer: Vec.new(), start: 0 });
+        return File { fd: fd, buffer: Vec.new(), start: 0 };
     }
 
     // Creates a file at `path` for writing, failing when one is there.
@@ -336,7 +336,7 @@ pub struct File {
     // ```
     pub fn create_new(path: str) File! {
         var fd = open_path(path, O_WRONLY | O_CREAT | O_EXCL, 0o644)!;
-        return Ok(File { fd: fd, buffer: Vec.new(), start: 0 });
+        return File { fd: fd, buffer: Vec.new(), start: 0 };
     }
 
     // Opens the file at `path` to write at its end, creating it when
@@ -361,7 +361,7 @@ pub struct File {
     // ```
     pub fn append(path: str) File! {
         var fd = open_path(path, O_WRONLY | O_CREAT | O_APPEND, 0o644)!;
-        return Ok(File { fd: fd, buffer: Vec.new(), start: 0 });
+        return File { fd: fd, buffer: Vec.new(), start: 0 };
     }
 
     // Reads up to `count` bytes, adds them at the end of `buf` and returns
@@ -398,11 +398,11 @@ pub struct File {
             __zeru_copy_bytes(end, &self.buffer[self.start], n);
             self.start += n;
             __zeru_filled(buf, n);
-            return Ok(n);
+            return n;
         }
         var n = sys_result(syscall3(SYS_READ, self.fd, end as i64, count as i64))! as usize;
         __zeru_filled(buf, n);
-        return Ok(n);
+        return n;
     }
 
     // Reads the next line, without its "\n" or "\r\n", or None at the end
@@ -439,7 +439,7 @@ pub struct File {
                 if self.buffer[at] == '\n' {
                     var line = self.take(at, true);
                     self.start = at + 1;
-                    return Ok(line);
+                    return line;
                 }
                 at += 1;
             }
@@ -459,14 +459,14 @@ pub struct File {
             __zeru_filled(&var self.buffer, n);
             if n == 0 {
                 if self.buffer.len() == 0 {
-                    return Ok(None);
+                    return None;
                 }
                 var last = self.take(self.buffer.len(), false);
                 self.start = self.buffer.len();
-                return Ok(last);
+                return last;
             }
         }
-        return Ok(None);
+        return None;
     }
 
     // The buffered bytes from `start` up to `end`, without the "\r" of a
@@ -892,7 +892,7 @@ pub fn read_dir(path: str) Vec<Entry>! {
             entries.push(Entry { name: String.from(text), kind: kind });
         }
     }
-    return Ok(entries);
+    return entries;
 }
 
 // Creates a directory at `path`.
@@ -981,7 +981,7 @@ pub fn read_link(path: str) String! {
     var p = c_path(path, &buf[0])!;
     var text: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var len = sys_result(syscall3(SYS_READLINK, p, (&text[0]) as i64, PATH_MAX as i64))!;
-    return Ok(String.from(text[..len as usize]));
+    return String.from(text[..len as usize]);
 }
 
 // Creates `path` as a second name for the file `target`, in the order of
@@ -1050,7 +1050,7 @@ pub fn real_path(path: str) String! {
     var len = sys_result(
         syscall3(SYS_READLINK, (&link[0]) as i64, (&text[0]) as i64, PATH_MAX as i64),
     )!;
-    return Ok(String.from(text[..len as usize]));
+    return String.from(text[..len as usize]);
 }
 
 // Returns the working directory, which relative paths start from.
@@ -1069,7 +1069,7 @@ pub fn real_path(path: str) String! {
 pub fn current_dir() String! {
     var text: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var len = sys_result(syscall2(SYS_GETCWD, (&text[0]) as i64, PATH_MAX as i64))!;
-    return Ok(String.from(text[..len as usize - 1]));
+    return String.from(text[..len as usize - 1]);
 }
 
 // Makes `path` the working directory, which relative paths start from.

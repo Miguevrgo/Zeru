@@ -39,7 +39,7 @@ fn maybe_small(yes: bool) Small? {
 
 fn wrapped(yes: bool) Small! {
     if yes {
-        return Ok(Small { n: 4 });
+        return Small { n: 4 };
     }
     return Err(9);
 }

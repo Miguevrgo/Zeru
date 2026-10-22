@@ -728,7 +728,9 @@ impl<'a> Checker<'a> {
                 "Hash" => {
                     self.types.as_int(arg).is_some()
                         || arg == Types::BOOL
-                        || self.is_enum(arg).is_some_and(|def| !self.enum_has_data(def))
+                        || self
+                            .is_enum(arg)
+                            .is_some_and(|def| !self.enum_has_data(def))
                 }
                 _ => match self.items.lookup_trait(module, bound) {
                     Some(trait_def) => self.has_trait_methods(arg, trait_def),

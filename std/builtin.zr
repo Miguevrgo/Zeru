@@ -42,7 +42,7 @@ fn sys_result(r: i64) i64! {
     if r < 0 {
         return Err((-r) as i32);
     }
-    return Ok(r);
+    return r;
 }
 
 // End the process, after writing out what print left buffered. The OS
@@ -616,9 +616,9 @@ fn __zeru_str_parse_int(s: str) i64! {
     }
     if negative {
         var zero: u64 = 0;
-        return Ok((zero -% value) as i64);
+        return (zero -% value) as i64;
     }
-    return Ok(value as i64);
+    return value as i64;
 }
 
 // `s.parse_float()`: the number `s` spells, as `-12.5` or `3e-4`, rounded
@@ -684,7 +684,7 @@ fn __zeru_str_parse_float(s: str) f64! {
     if negative {
         value = -value;
     }
-    return Ok(value);
+    return value;
 }
 
 const POW10: Array<f64, 23> = [

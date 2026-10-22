@@ -169,12 +169,12 @@ fn port(text: str) u16! {
     if text.len() == 0 {
         return Err(1);
     }
-    return Ok(8080);
+    return 8080;
 }
 
 fn checked_port(text: str) u16! {
     var chosen = port(text)!; // An error returns from here
-    return Ok(chosen);
+    return chosen;
 }
 
 fn doubled_positive(x: i32) i32? {

@@ -41,21 +41,21 @@ struct Scanner {
         self.skip_spaces();
         var seen = self.peek();
         if seen.is_none() {
-            return Ok(Token { kind: TokenKind::End, value: 0 });
+            return Token { kind: TokenKind::End, value: 0 };
         }
 
         var c: u8 = seen.unwrap();
         if c == 43 {
             self.advance();
-            return Ok(Token { kind: TokenKind::Plus, value: 0 });
+            return Token { kind: TokenKind::Plus, value: 0 };
         }
         if c == 45 {
             self.advance();
-            return Ok(Token { kind: TokenKind::Minus, value: 0 });
+            return Token { kind: TokenKind::Minus, value: 0 };
         }
         if c == 42 {
             self.advance();
-            return Ok(Token { kind: TokenKind::Star, value: 0 });
+            return Token { kind: TokenKind::Star, value: 0 };
         }
         if c < 48 || c > 57 {
             return Err(1);
@@ -68,7 +68,7 @@ struct Scanner {
             self.advance();
             digit = self.peek();
         }
-        return Ok(Token { kind: TokenKind::Number, value: value });
+        return Token { kind: TokenKind::Number, value: value };
     }
 }
 
@@ -105,7 +105,7 @@ fn evaluate(tokens: Vec<Token>) i64! {
             } else {
                 total -= pending;
             }
-            return Ok(total);
+            return total;
         }
 
         if token.kind == TokenKind::Number {

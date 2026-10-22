@@ -2,7 +2,7 @@ import std.fs;
 
 fn sys_result(r: i64) i64! {
     println("the root's sys_result");
-    return Ok(r);
+    return r;
 }
 
 fn main() {

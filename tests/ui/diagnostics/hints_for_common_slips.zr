@@ -1,5 +1,5 @@
 fn f(n: i32) i32! {
-    return Ok(n);
+    return n;
 }
 fn main() {
     var a = f(1) + 1;

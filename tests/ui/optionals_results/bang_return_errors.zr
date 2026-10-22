@@ -2,7 +2,7 @@ fn a() ! {
     return;
 }
 fn b() ! {
-    return Ok(1);
+    return 1;
 }
 fn c() i32! {
     return Ok();

@@ -33,27 +33,27 @@ struct Lexer {
         }
         var c = self.peek();
         if c == 0 {
-            return Ok(Token::End);
+            return Token::End;
         }
         self.at += 1;
         match c {
             '+' => {
-                return Ok(Token::Op(c));
+                return Token::Op(c);
             }
             '-' => {
-                return Ok(Token::Op(c));
+                return Token::Op(c);
             }
             '*' => {
-                return Ok(Token::Op(c));
+                return Token::Op(c);
             }
             '/' => {
-                return Ok(Token::Op(c));
+                return Token::Op(c);
             }
             '(' => {
-                return Ok(Token::Open);
+                return Token::Open;
             }
             ')' => {
-                return Ok(Token::Close);
+                return Token::Close;
             }
             default => {}
         }
@@ -67,7 +67,7 @@ struct Lexer {
             self.at += 1;
             d = self.peek();
         }
-        return Ok(Token::Num(value));
+        return Token::Num(value);
     }
 }
 
@@ -77,7 +77,7 @@ struct Parser {
 
     fn advance(var self) i64! {
         self.current = self.lexer.next()!;
-        return Ok(0);
+        return 0;
     }
 
     fn expr(var self) i64! {
@@ -87,7 +87,7 @@ struct Parser {
             match current {
                 Token::Op(op) => {
                     if op != '+' && op != '-' {
-                        return Ok(left);
+                        return left;
                     }
                     self.advance()!;
                     var right = self.term()!;
@@ -97,11 +97,11 @@ struct Parser {
                     };
                 }
                 default => {
-                    return Ok(left);
+                    return left;
                 }
             }
         }
-        return Ok(left);
+        return left;
     }
 
     fn term(var self) i64! {
@@ -111,7 +111,7 @@ struct Parser {
             match current {
                 Token::Op(op) => {
                     if op != '*' && op != '/' {
-                        return Ok(left);
+                        return left;
                     }
                     self.advance()!;
                     var right = self.atom()!;
@@ -124,11 +124,11 @@ struct Parser {
                     };
                 }
                 default => {
-                    return Ok(left);
+                    return left;
                 }
             }
         }
-        return Ok(left);
+        return left;
     }
 
     fn atom(var self) i64! {
@@ -136,7 +136,7 @@ struct Parser {
         match current {
             Token::Num(n) => {
                 self.advance()!;
-                return Ok(n);
+                return n;
             }
             Token::Open => {
                 self.advance()!;
@@ -150,7 +150,7 @@ struct Parser {
                         return Err(UNCLOSED);
                     }
                 }
-                return Ok(inner);
+                return inner;
             }
             default => {
                 return Err(BAD_CHAR);

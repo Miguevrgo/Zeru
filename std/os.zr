@@ -331,7 +331,7 @@ pub fn read_stdin() String! {
     var input = stdin();
     var text = String.new();
     while input.read(&var text, 65536)! > 0 {}
-    return Ok(text);
+    return text;
 }
 
 // `text` and a closing NUL, as a syscall takes it.
@@ -346,7 +346,7 @@ fn c_string(text: str) String {
 fn locate(program: str) String! {
     for byte in program {
         if byte == '/' {
-            return Ok(String.from(program));
+            return String.from(program);
         }
     }
     var path = env("PATH");
@@ -360,7 +360,7 @@ fn locate(program: str) String! {
         full.push_str(program);
         var c = c_string(full);
         if syscall2(SYS_ACCESS, (&c[0]) as i64, 1) == 0 {
-            return Ok(full);
+            return full;
         }
     }
     return Err(2);
@@ -431,7 +431,7 @@ fn spawn(path: str, args: Vec<str>, out: i32, err: i32) i64! {
         wait(pid)!;
         return Err(failed as i32);
     }
-    return Ok(pid);
+    return pid;
 }
 
 // Wait for the process `pid` to end; its exit code, or 128 and the signal
@@ -446,9 +446,9 @@ fn wait(pid: i64) i32! {
         }
     }
     if status & 127 == 0 {
-        return Ok((status >> 8) & 255);
+        return (status >> 8) & 255;
     }
-    return Ok(128 + (status & 127));
+    return 128 + (status & 127);
 }
 
 // Runs `program` with `args`, waits for it to end and returns its exit code.
@@ -540,7 +540,7 @@ pub fn output(program: str, args: Vec<str>) Output! {
         polls[3] = 1;
     }
     result.code = wait(pid)!;
-    return Ok(result);
+    return result;
 }
 
 // Sends `signal`, as `SIGTERM`, to the process `pid`.

@@ -87,7 +87,7 @@ fn count(text: str) Counts {
 
 fn append(path: str, var data: Vec<u8>) usize! {
     fs::append_file(path, as_str(&data[0], data.len()))!;
-    return Ok(data.len());
+    return data.len();
 }
 
 fn main() {

@@ -7,19 +7,19 @@ Error: A ! function returns early with 'return Ok();'
    │     ───┬───
    │        ╰───── A ! function returns early with 'return Ok();'
 ───╯
-Error: Invalid return type. Function expects !, returning i32!
+Error: Invalid return type. Function expects !, returning i32
    ╭─[ tests/ui/optionals_results/bang_return_errors.zr:5:5 ]
    │
- 5 │     return Ok(1);
-   │     ──────┬──────
-   │           ╰──────── Invalid return type. Function expects !, returning i32!
+ 5 │     return 1;
+   │     ────┬────
+   │         ╰────── Invalid return type. Function expects !, returning i32
 ───╯
-Error: Ok() takes exactly one argument
+Error: Ok() is the success of a ! function, which has no value to give
    ╭─[ tests/ui/optionals_results/bang_return_errors.zr:8:12 ]
    │
  8 │     return Ok();
    │            ──┬─
-   │              ╰─── Ok() takes exactly one argument
+   │              ╰─── Ok() is the success of a ! function, which has no value to give
 ───╯
 Error: Type mismatch for variable 'r'. Annotated as i32 but got !
     ╭─[ tests/ui/optionals_results/bang_return_errors.zr:11:5 ]

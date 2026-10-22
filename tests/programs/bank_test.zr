@@ -46,7 +46,7 @@ struct Account {
         }
         self.balance += amount;
         self.history.push(amount);
-        return Ok(0);
+        return 0;
     }
 }
 
@@ -69,7 +69,7 @@ fn balance(accounts: &Vec<Account>, id: u32) i64? {
 fn need(accounts: &var Vec<Account>, id: u32) (&var Account)! {
     for acc in accounts {
         if acc.id == id {
-            return Ok(&var acc);
+            return &var acc;
         }
     }
     return Err(NO_ACCOUNT);
@@ -139,7 +139,7 @@ fn run(accounts: &var Vec<Account>, cmd: Command) i32! {
             acc.state = State::Closed;
         }
     }
-    return Ok(0);
+    return 0;
 }
 
 fn state_name(s: State) str {

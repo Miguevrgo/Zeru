@@ -162,6 +162,11 @@ impl FnCx<'_, '_> {
             }
             ExpressionKind::None => match expected.map(|ty| (ty, self.cx.types.kind(ty))) {
                 Some((ty, TyKind::Optional(_))) => self.mk(ExprKind::None, ty, span),
+                Some((_, &TyKind::Result(ok, _)))
+                    if matches!(self.cx.types.kind(ok), TyKind::Optional(_)) =>
+                {
+                    self.mk(ExprKind::None, ok, span)
+                }
                 Some((ty, _)) if self.cx.types.is_error(ty) => self.error_expr(span),
                 Some((ty, _)) if !self.cx.types.contains_var(ty) => {
                     let shown = self.ty(ty);

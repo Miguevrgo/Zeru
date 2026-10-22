@@ -55,7 +55,7 @@ struct Machine {
     fn pop(var self) i64! {
         match self.stack.pop() {
             Some(v) => {
-                return Ok(v);
+                return v;
             }
             None => {
                 return Err(UNDERFLOW);
@@ -67,7 +67,7 @@ struct Machine {
     fn pair(var self) (i64, i64)! {
         var b = self.pop()!;
         var a = self.pop()!;
-        return Ok((a, b));
+        return (a, b);
     }
 
     // Run `code` to its Halt; the number of steps taken.
@@ -128,7 +128,7 @@ struct Machine {
                     self.out.push(self.pop()!);
                 }
                 Op::Halt => {
-                    return Ok(steps);
+                    return steps;
                 }
             }
         }

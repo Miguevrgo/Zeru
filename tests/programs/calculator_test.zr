@@ -59,7 +59,7 @@ fn tokenize(text: str) Vec<Tok>! {
         }
     }
     out.push(Tok::End);
-    return Ok(out);
+    return out;
 }
 
 // The machine state: tokens, a cursor and 26 single-letter variables.
@@ -88,7 +88,7 @@ struct Calc {
                         self.at += 2;
                         var value = self.expr()!;
                         self.vars[(name - 'a') as usize] = value;
-                        return Ok(value);
+                        return value;
                     }
                     default => {}
                 }
@@ -116,7 +116,7 @@ struct Calc {
                 default => left - right,
             };
         }
-        return Ok(left);
+        return left;
     }
 
     fn term(var self) i64! {
@@ -141,7 +141,7 @@ struct Calc {
                 default => left % right,
             };
         }
-        return Ok(left);
+        return left;
     }
 
     // `^` binds right to left: 2^3^2 is 2^9.
@@ -149,7 +149,7 @@ struct Calc {
         var base = self.unary()!;
         var c = self.op();
         if c.is_none() || c.unwrap() != '^' {
-            return Ok(base);
+            return base;
         }
         self.at += 1;
         var exp = self.power()!;
@@ -160,14 +160,14 @@ struct Calc {
         for k in 0..exp {
             result *= base;
         }
-        return Ok(result);
+        return result;
     }
 
     fn unary(var self) i64! {
         var c = self.op();
         if c.is_some() && c.unwrap() == '-' {
             self.at += 1;
-            return Ok(-self.unary()!);
+            return -self.unary()!;
         }
         return self.atom();
     }
@@ -177,21 +177,21 @@ struct Calc {
         self.at += 1;
         match t {
             Tok::Num(n) => {
-                return Ok(n);
+                return n;
             }
             Tok::Var(name) => {
                 var slot = self.vars[(name - 'a') as usize];
                 if slot.is_none() {
                     return Err(UNSET);
                 }
-                return Ok(slot.unwrap());
+                return slot.unwrap();
             }
             Tok::Open => {
                 var inner = self.expr()!;
                 match self.peek() {
                     Tok::Close => {
                         self.at += 1;
-                        return Ok(inner);
+                        return inner;
                     }
                     default => {
                         return Err(UNCLOSED);
@@ -211,7 +211,7 @@ struct Calc {
         var value = self.statement()!;
         match self.peek() {
             Tok::End => {
-                return Ok(value);
+                return value;
             }
             default => {
                 return Err(UNEXPECTED);

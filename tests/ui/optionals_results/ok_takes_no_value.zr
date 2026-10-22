@@ -1,0 +1,9 @@
+fn half(n: i32) i32! {
+    return Ok(n / 2);
+}
+fn nothing() i32 {
+    return Ok();
+}
+fn main() {
+    var r: i32! = Ok(1);
+}

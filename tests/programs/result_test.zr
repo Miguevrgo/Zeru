@@ -9,7 +9,7 @@ fn digit(c: u8) i32! {
     if c < '0' || c > '9' {
         return Err(NOT_DIGIT);
     }
-    return Ok((c - '0') as i32);
+    return (c - '0') as i32;
 }
 
 // `!` hands an error back to the caller as it is.
@@ -21,7 +21,7 @@ fn number(text: str) i32! {
     for i in 0..text.len() {
         total = total * 10 + digit(text[i])!;
     }
-    return Ok(total);
+    return total;
 }
 
 fn first(items: Vec<i64>) i64? {
@@ -40,7 +40,7 @@ fn divide(a: i32, b: i32) i32! {
     if b == 0 {
         return Err(1);
     }
-    return Ok(a / b);
+    return a / b;
 }
 
 fn name(n: i32) str? {
@@ -71,7 +71,7 @@ fn always_fail() i64! {
 
 fn always_ok() i64! {
     var v: i64 = 100;
-    return Ok(v);
+    return v;
 }
 
 fn main() {

@@ -640,33 +640,21 @@ impl FnCx<'_, '_> {
         self.mk(ExprKind::Variant(index as u32, values), ty, span)
     }
 
+    /// `Ok()`, the success of a `!` function, which has no value to give; a
+    /// value goes into a `T!` by itself.
     fn ok(&mut self, args: &[Expression], expected: Option<Ty>, span: Span) -> Expr {
         if let (Some(ret), []) = (expected, args)
             && self.cx.types.is_unit_result(ret)
         {
             return self.unit_ok(ret, span);
         }
-        let [arg] = args else {
-            self.error("Ok() takes exactly one argument", span);
-            self.check_args_only(args);
-            return self.error_expr(span);
+        let message = match args {
+            [] => "Ok() is the success of a ! function, which has no value to give",
+            _ => "Write the value itself, not Ok(..): it becomes a T! wherever one is wanted",
         };
-        let (hint, err) = match expected.map(|ty| self.cx.types.kind(ty).clone()) {
-            Some(TyKind::Result(ok, err)) => (Some(ok), err),
-            _ => (None, Types::I32),
-        };
-        let value = self.value(arg, hint);
-        let mut value = match hint {
-            Some(hint) => match self.coerce(value, hint) {
-                Ok(value) | Err(value) => value,
-            },
-            None => value,
-        };
-        self.consume(&mut value);
-        let ty = self
-            .cx
-            .intern_or_error(TyKind::Result(value.ty, err), &[value.ty, err]);
-        self.mk(ExprKind::Ok(Box::new(value)), ty, span)
+        self.error(message, span);
+        self.check_args_only(args);
+        self.error_expr(span)
     }
 
     fn err(&mut self, args: &[Expression], expected: Option<Ty>, span: Span) -> Expr {

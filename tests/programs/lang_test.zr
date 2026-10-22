@@ -61,7 +61,7 @@ fn divide(a: i32, b: i32) i32! {
     if b == 0 {
         return Err(1);
     }
-    return Ok(a / b);
+    return a / b;
 }
 
 fn bump(p: *i32) bool {

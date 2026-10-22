@@ -32,7 +32,7 @@ fn parse_digit(c: u8) i32! {
     if c > 57 {
         return Err(1);
     }
-    return Ok(c as i32 - 48);
+    return c as i32 - 48;
 }
 
 fn digits_value(text: Array<u8, 3>) i32! {
@@ -46,7 +46,7 @@ fn digits_value(text: Array<u8, 3>) i32! {
         total = total * 10 + digit.unwrap();
         i += 1;
     }
-    return Ok(total);
+    return total;
 }
 
 fn main() {

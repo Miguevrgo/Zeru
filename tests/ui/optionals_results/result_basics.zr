@@ -1,6 +1,6 @@
 fn half(n: i32) i32! {
     if n % 2 != 0 { return Err(n); }
-    return Ok(n / 2);
+    return n / 2;
 }
 fn main() {
     var a = half(8);
