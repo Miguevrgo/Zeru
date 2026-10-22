@@ -219,5 +219,4 @@ fn main() {
     println("errors: {} {} {}", underflow.unwrap_err(), by_zero.unwrap_err(), forever.unwrap_err());
     assert(underflow.unwrap_err() == UNDERFLOW && by_zero.unwrap_err() == DIV_ZERO);
     assert(forever.unwrap_err() == TOO_LONG);
-    exit(0);
 }

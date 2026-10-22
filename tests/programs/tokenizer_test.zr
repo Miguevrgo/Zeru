@@ -178,5 +178,4 @@ fn main() {
     assert(scan(text_of(junk, 1)).len() == 0);
 
     println("tokenizer: all tests passed");
-    exit(0);
 }

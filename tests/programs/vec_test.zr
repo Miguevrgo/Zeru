@@ -87,5 +87,4 @@ fn main() {
     assert(twin[0][0] == 9 && twin[1].len() == 2);
 
     println("Vec tests passed!");
-    exit(0);
 }

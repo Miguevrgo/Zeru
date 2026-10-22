@@ -285,5 +285,4 @@ fn main() {
     }
 
     assert(failures == 0, "{} failures", failures);
-    exit(0);
 }

@@ -138,5 +138,4 @@ fn main() {
         && entries[1].count == 10
         && long.len == 11;
     assert(ok);
-    exit(0);
 }

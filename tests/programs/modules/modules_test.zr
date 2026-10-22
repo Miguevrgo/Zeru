@@ -21,5 +21,4 @@ fn main() {
     assert(stock::started() == 2);
 
     println("modules: all tests passed");
-    exit(0);
 }

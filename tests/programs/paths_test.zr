@@ -255,5 +255,4 @@ fn main() {
 
     var ok = cost == 13 && steps == 11 && path.len() == 14 && sorted[0] == -20 && sorted[6] == 90;
     assert(ok);
-    exit(0);
 }

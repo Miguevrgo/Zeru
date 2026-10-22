@@ -71,5 +71,4 @@ fn main() {
     }
     grid.print();
     assert(grid.alive() == 5);
-    exit(0);
 }

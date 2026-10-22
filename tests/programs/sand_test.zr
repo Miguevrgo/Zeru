@@ -181,5 +181,4 @@ fn main() {
     var sum = world.checksum();
     println("sand {} water {} checksum {}", sand, water, sum);
     assert(sand == 12 && water == 6 && sum == 2612796742563035595);
-    exit(0);
 }

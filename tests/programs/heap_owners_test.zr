@@ -147,5 +147,4 @@ fn main() {
     }
     println("all dropped: {}", drops);
     assert(drops == 5);
-    exit(0);
 }

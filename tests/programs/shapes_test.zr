@@ -129,5 +129,4 @@ fn main() {
     assert(drawing.total_area() == 38);
 
     println("shapes: all tests passed");
-    exit(0);
 }

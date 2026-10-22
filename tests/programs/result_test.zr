@@ -107,5 +107,4 @@ fn main() {
     assert(pair().unwrap().1 == 2 && sign(None) == 0);
 
     println("result: all tests passed");
-    exit(0);
 }

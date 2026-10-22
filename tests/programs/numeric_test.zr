@@ -136,5 +136,4 @@ fn main() {
     assert(counted == LIMIT);
 
     println("numeric: all tests passed");
-    exit(0);
 }

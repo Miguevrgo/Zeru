@@ -115,5 +115,4 @@ fn main() {
 
     assert(c.lines == 15 && c.words == 60 && c.bytes == 256 && c.longest == 20);
     assert(gone.unwrap_err() == NOT_FOUND);
-    exit(0);
 }

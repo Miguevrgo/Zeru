@@ -108,5 +108,4 @@ fn main() {
     assert(queue.pop_front().is_none());
 
     println("std: all tests passed");
-    exit(0);
 }

@@ -232,5 +232,4 @@ fn main() {
         && moved == 420
         && accounts[0].history.len() == 4;
     assert(ok);
-    exit(0);
 }

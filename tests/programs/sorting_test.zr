@@ -95,5 +95,4 @@ fn main() {
     assert(list.len() == 4);
 
     println("sorting: all tests passed");
-    exit(0);
 }

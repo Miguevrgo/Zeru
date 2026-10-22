@@ -171,5 +171,4 @@ fn main() {
     var bad = eval("1 / 0");
     assert(bad.is_err());
     println("calc: {}", eval("1 + 2 * 3").unwrap());
-    exit(0);
 }

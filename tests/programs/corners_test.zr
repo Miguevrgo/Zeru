@@ -142,5 +142,4 @@ fn main() {
     assert(g.v[0] == 7 && g.v.len() == 100001);
 
     println("corners: all tests passed");
-    exit(0);
 }

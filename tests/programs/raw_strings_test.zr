@@ -55,5 +55,4 @@ second`;
     println("{}", raw);
     println("{}", json);
     println("raw strings: all tests passed");
-    exit(0);
 }

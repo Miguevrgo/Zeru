@@ -383,5 +383,4 @@ fn main() {
     assert(area(Figure::Empty) == 0.0 && band(10) == 1 && band(11) == 2 && band(3) == 0);
 
     println("lang: all tests passed");
-    exit(0);
 }

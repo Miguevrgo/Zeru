@@ -96,5 +96,4 @@ fn main() {
     assert(bad.unwrap_err() == 1);
 
     println("programs: all tests passed");
-    exit(0);
 }
