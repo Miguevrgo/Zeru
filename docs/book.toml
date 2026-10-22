@@ -3,3 +3,7 @@ authors = ["Miguevrgo"]
 language = "en"
 src = "src"
 title = "The Zeru Programming Language"
+
+[output.html]
+additional-js = ["zeru.js"]
+git-repository-url = "https://github.com/Miguevrgo/Zeru"

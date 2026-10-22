@@ -45,7 +45,7 @@ I would also like to note that **Zeru is not "The next language"** to reign over
 
 ## 📖 Documentation
 
-For detailed information on the language design, installation, syntax, and features, please read the **[Zeru Book](https://github.com/Miguevrgo/Zeru/tree/main/docs)**. You can build it locally by navigating to the `docs/` directory and running:
+The **[Zeru Book](https://github.com/Miguevrgo/Zeru/tree/main/docs)** is a guide to the language: installing it, a first program, the language topic by topic, the standard library, build modes, example programs and the reasons behind the design. You can build it locally by navigating to the `docs/` directory and running:
 
 ```bash
 mdbook serve --open

@@ -126,7 +126,7 @@ bool local raised as the value arrives and lowered as it leaves.
 `mir/borrowck.rs` checks references and moves on the MIR of each function. Zeru
 is single threaded, so a live reference forbids only what can invalidate the
 memory it points into, never aliasing or plain writes
-(`docs/src/design/memory.md`, section 2).
+(`docs/src/memory/references.md`).
 
 - **Loans.** `&place` and `&var place` take a loan; so do `get`, a `match`
   binding and a `for` loop, which the MIR writes as taking an address. A raw
