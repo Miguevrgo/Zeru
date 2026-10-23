@@ -56,6 +56,9 @@ The methods:
 | `len()`, `is_empty()`, `capacity()` | sizes |
 | `get(i)` | a reference to element `i`, or `None` past the end |
 | `swap(i, j)`, `sort()`, `reverse()` | reorder in place |
+| `rotate_left(n)`, `rotate_right(n)` | move every element `n` places, wrapping around |
+| `dedup()` | drop each element equal to the one before it |
+| `chunks(n)` | views of the elements `n` at a time |
 | `contains(x)`, `sum()`, `min()`, `max()` | look at the values |
 | `clear()`, `reserve(n)`, `shrink_to_fit()` | manage the memory |
 | `copy()` | a second Vec with the same elements |

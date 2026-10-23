@@ -888,6 +888,7 @@ impl<'a> Checker<'a> {
             alloc: method(self, heap, "alloc")?,
             realloc: method(self, heap, "realloc")?,
             str_eq: self.prelude_fn("__zeru_str_eq"),
+            string_eq: self.prelude_fn("__zeru_string_eq"),
         };
         self.drain();
         Some(runtime)

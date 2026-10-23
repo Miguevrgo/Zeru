@@ -33,13 +33,27 @@ const STR_METHODS: &[&str] = &[
 /// Vec methods written in the prelude, each `__zeru_vec_<name>` taking a
 /// reference to the Vec first.
 const VEC_STD_METHODS: &[&str] = &[
-    "sort", "swap", "reverse", "contains", "sum", "min", "max", "push_str",
+    "sort",
+    "swap",
+    "reverse",
+    "rotate_left",
+    "rotate_right",
+    "dedup",
+    "chunks",
+    "contains",
+    "sum",
+    "min",
+    "max",
+    "push_str",
 ];
 
 /// The `Vec` methods that change it, so need a receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
     "sort",
     "reverse",
+    "rotate_left",
+    "rotate_right",
+    "dedup",
     "push_str",
     "swap",
     "push",

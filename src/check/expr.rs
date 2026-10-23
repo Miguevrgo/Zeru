@@ -1336,6 +1336,7 @@ impl Checker<'_> {
             Token::Eq | Token::NotEq => {
                 number
                     || ty == Types::STR
+                    || ty == Types::STRING
                     || matches!(kind, TyKind::Bool | TyKind::Ptr(_))
                     || plain_enum
             }

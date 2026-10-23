@@ -952,10 +952,70 @@ fn __zeru_exchange<T>(v: &var Vec<T>, i: usize, j: usize) {
 
 // `v.reverse()`: the elements in the opposite order.
 fn __zeru_vec_reverse<T>(v: &var Vec<T>) {
-    var n = v.len();
-    for i in 0..n / 2 {
-        __zeru_vec_swap(v, i, n - 1 - i);
+    __zeru_flip(v, 0, v.len());
+}
+
+// The elements of `v` from `low` up to `high` in the opposite order.
+fn __zeru_flip<T>(v: &var Vec<T>, low: usize, high: usize) {
+    for i in 0..(high - low) / 2 {
+        __zeru_vec_swap(v, low + i, high - 1 - i);
     }
+}
+
+// `v.rotate_left(n)`: every element `n` places to the left, those that fall
+// off the start coming back at the end.
+fn __zeru_vec_rotate_left<T>(v: &var Vec<T>, n: usize) {
+    if v.len() == 0 {
+        return;
+    }
+    var at = n % v.len();
+    __zeru_flip(v, 0, at);
+    __zeru_flip(v, at, v.len());
+    __zeru_flip(v, 0, v.len());
+}
+
+// `v.rotate_right(n)`: every element `n` places to the right, those that
+// fall off the end coming back at the start.
+fn __zeru_vec_rotate_right<T>(v: &var Vec<T>, n: usize) {
+    if v.len() == 0 {
+        return;
+    }
+    __zeru_vec_rotate_left(v, v.len() - n % v.len());
+}
+
+// `v.dedup()`: each run of equal elements next to each other cut down to
+// its first; the others are dropped.
+fn __zeru_vec_dedup<T: Eq>(v: &var Vec<T>) {
+    if v.len() == 0 {
+        return;
+    }
+    var kept: usize = 0;
+    for i in 1..v.len() {
+        if v[i] != v[kept] {
+            kept += 1;
+            __zeru_vec_swap(v, kept, i);
+        }
+    }
+    while v.len() > kept + 1 {
+        v.pop();
+    }
+}
+
+// `v.chunks(n)`: views of `v`'s elements `n` at a time, the last one
+// shorter when they do not divide evenly.
+fn __zeru_vec_chunks<T>(v: &Vec<T>, n: usize) Vec<&[T]> {
+    assert(n > 0, "chunks takes a size above 0");
+    var parts: Vec<&[T]> = Vec.new();
+    var start: usize = 0;
+    while start < v.len() {
+        var end = start + n;
+        if end > v.len() {
+            end = v.len();
+        }
+        parts.push(v[start..end]);
+        start = end;
+    }
+    return parts;
 }
 
 // `v.swap(i, j)`: exchange two elements. Their bytes trade places, so it
@@ -1008,6 +1068,11 @@ fn __zeru_room<T>(v: &var Vec<T>, count: usize) *u8 {
 fn __zeru_filled<T>(v: &var Vec<T>, count: usize) {
     var header = v as *usize;
     *(header + 1) += count;
+}
+
+// Whether two Strings hold the same text, for `==` on tuples holding them.
+fn __zeru_string_eq(a: &String, b: &String) bool {
+    return *a == *b;
 }
 
 // `v.contains(value)`: whether an element equals `value`.

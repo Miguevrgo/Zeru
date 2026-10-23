@@ -35,6 +35,7 @@ pub struct Runtime {
     pub alloc: FnId,
     pub realloc: FnId,
     pub str_eq: FnId,
+    pub string_eq: FnId,
 }
 
 pub struct StructLayout {

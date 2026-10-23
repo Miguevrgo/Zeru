@@ -685,12 +685,26 @@ impl<'a> Builder<'a> {
             let (l, r) = (left.clone().project(field), right.clone().project(field));
             let same = match self.types().kind(part) {
                 TyKind::Tuple(_) => self.tuple_eq(l, r, part),
-                _ if part == Types::STR => {
+                _ if part == Types::STR || part == Types::STRING => {
+                    let (function, args) = match part == Types::STR {
+                        true => (
+                            self.program.runtime.str_eq,
+                            [Operand::Copy(l), Operand::Copy(r)],
+                        ),
+                        false => {
+                            let pointer = self.program.types.intern(TyKind::Ref(part));
+                            let [a, b] = [l, r].map(|place| {
+                                let held = self.temp(pointer);
+                                self.assign(Place::local(held), Rvalue::AddressOf(place));
+                                Operand::Move(Place::local(held))
+                            });
+                            (self.program.runtime.string_eq, [a, b])
+                        }
+                    };
                     let result = self.temp(Types::BOOL);
-                    let function = self.program.runtime.str_eq;
                     self.then(|target| TerminatorKind::Call {
                         function,
-                        args: vec![Operand::Copy(l), Operand::Copy(r)],
+                        args: args.to_vec(),
                         dest: Some(Place::local(result)),
                         target,
                     });
