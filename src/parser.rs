@@ -352,24 +352,23 @@ impl Parser {
     fn parse_var_statement(&mut self, is_const: bool) -> Option<Statement> {
         let start = self.span();
         self.bump();
-        if self.at(&Token::LParen) {
-            let Names::Tuple(names) = self.parse_names(true)? else {
-                unreachable!("a '(' starts a tuple")
-            };
-            self.expect(&Token::Assign)?;
-            let value = self.parse_expression(Precedence::Lowest)?;
-            self.expect(&Token::Semicolon)?;
-            let kind = StatementKind::VarTuple {
-                names,
-                is_const,
-                value,
-            };
-            return Some(self.statement(kind, start));
-        }
-        let name = self.identifier("a name")?;
-        let type_annotation = match self.eat(&Token::Colon) {
-            true => Some(self.parse_annotation()?),
-            false => None,
+        let (name, type_annotation) = match self.parse_names(true)? {
+            Names::Tuple(names) => {
+                self.expect(&Token::Assign)?;
+                let value = self.parse_expression(Precedence::Lowest)?;
+                self.expect(&Token::Semicolon)?;
+                let kind = StatementKind::VarTuple {
+                    names,
+                    is_const,
+                    value,
+                };
+                return Some(self.statement(kind, start));
+            }
+            Names::One(name, ty) => (name, ty),
+            Names::Skip => {
+                return self
+                    .error_here("A variable needs a name; '_' only leaves out a part of a tuple");
+            }
         };
         self.expect(&Token::Assign)?;
         let value = self.parse_expression(Precedence::Lowest)?;
@@ -642,7 +641,8 @@ impl Parser {
     }
 
     /// A name, `_`, or a parenthesized list of them, each of a `var`'s
-    /// with its type when `typed`.
+    /// with its type when `typed`. Parentheses around one name only group
+    /// it; `(a,)` is a tuple of one.
     fn parse_names(&mut self, typed: bool) -> Option<Names> {
         if !self.eat(&Token::LParen) {
             let name = self.identifier("a name")?;
@@ -656,10 +656,18 @@ impl Parser {
             return Some(Names::One(name, ty));
         }
         let mut names = vec![self.parse_names(typed)?];
-        while self.eat(&Token::Comma) && !self.at(&Token::RParen) {
+        let mut comma = false;
+        while self.eat(&Token::Comma) {
+            comma = true;
+            if self.at(&Token::RParen) {
+                break;
+            }
             names.push(self.parse_names(typed)?);
         }
         self.expect(&Token::RParen)?;
+        if names.len() == 1 && !comma {
+            return names.pop();
+        }
         Some(Names::Tuple(names))
     }
 

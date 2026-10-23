@@ -297,10 +297,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             TyKind::Result(inner, _) => (inner, ExprKind::Ok),
             _ => return Err(value),
         };
-        if !self.fits(inner, value.ty, false) {
-            return Err(value);
-        }
-        value.ty = self.resolve(inner);
+        let value = self.coerce(value, inner)?;
         let span = value.span;
         Ok(Expr {
             kind: wrap(Box::new(value)),
@@ -418,6 +415,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 is_const,
                 value,
             } => {
+                self.named_once(names, span);
                 let hints: Vec<Option<Ty>> =
                     names.iter().map(|names| self.names_type(names)).collect();
                 let mut value = match &value.kind {
@@ -586,6 +584,9 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 body,
             };
         }
+        if let Names::Tuple(names) = variable {
+            self.named_once(names, iterable.span);
+        }
         let sequences = match (&iterable.kind, variable) {
             (
                 ExpressionKind::Call {
@@ -691,6 +692,28 @@ impl<'c, 'a> FnCx<'c, 'a> {
         (seq.0, item, writable)
     }
 
+    /// Report a name `names` gives twice, which would hide the first.
+    fn named_once(&mut self, names: &[Names], span: Span) {
+        fn collect<'n>(names: &'n [Names], seen: &mut Vec<&'n str>) -> Option<&'n str> {
+            for names in names {
+                match names {
+                    Names::One(name, _) if seen.contains(&name.as_str()) => return Some(name),
+                    Names::One(name, _) => seen.push(name),
+                    Names::Tuple(inner) => {
+                        if let Some(twice) = collect(inner, seen) {
+                            return Some(twice);
+                        }
+                    }
+                    Names::Skip => {}
+                }
+            }
+            None
+        }
+        if let Some(name) = collect(names, &mut Vec::new()) {
+            self.error(format!("'{name}' is named twice"), span);
+        }
+    }
+
     /// The type `names` declare when each name has one written.
     fn names_type(&mut self, names: &Names) -> Option<Ty> {
         match names {
@@ -765,8 +788,9 @@ impl<'c, 'a> FnCx<'c, 'a> {
             TyKind::Error => vec![Types::ERROR; count],
             _ => {
                 let shown = self.ty(ty);
+                let names = if count == 1 { "name" } else { "names" };
                 self.error(
-                    format!("Cannot take {shown} apart into {count} names"),
+                    format!("Cannot take {shown} apart into {count} {names}"),
                     span,
                 );
                 vec![Types::ERROR; count]

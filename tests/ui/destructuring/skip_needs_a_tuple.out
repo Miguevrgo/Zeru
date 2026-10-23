@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: A variable needs a name; '_' only leaves out a part of a tuple
+   ╭─[ tests/ui/destructuring/skip_needs_a_tuple.zr:2:13 ]
+   │
+ 2 │     var (_) = 5;
+   │             ┬
+   │             ╰── A variable needs a name; '_' only leaves out a part of a tuple
+───╯
+[-] Error: aborting due to previous error

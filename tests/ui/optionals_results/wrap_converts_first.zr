@@ -1,0 +1,22 @@
+fn find(pairs: &Vec<(String, i32)>, wanted: i32) str? {
+    for (name, value) in pairs {
+        if value == wanted {
+            return name;
+        }
+    }
+    return None;
+}
+
+fn whole(values: &Vec<i32>) &[i32]? {
+    if values.len() == 0 {
+        return None;
+    }
+    return values;
+}
+
+fn main() {
+    var pairs: Vec<(String, i32)> = Vec.new();
+    pairs.push((String.from("a"), 1));
+    var list: Vec<i32> = [1, 2];
+    println("{} {} {}", find(&pairs, 1), find(&pairs, 9), whole(&list));
+}

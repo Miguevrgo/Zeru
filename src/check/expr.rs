@@ -116,7 +116,8 @@ impl FnCx<'_, '_> {
         let expected = expected.map(|ty| self.resolve(ty));
         let errors = self.cx.errors.len();
         let expr = self.expr_inner(e, expected);
-        if self.cx.errors.len() == errors {
+        let named = matches!(e.kind, ExpressionKind::Identifier(_));
+        if self.cx.errors.len() == errors && !named {
             self.check_constant(&expr);
         }
         expr
@@ -227,7 +228,11 @@ impl FnCx<'_, '_> {
             ExpressionKind::Cast { left, target } => self.cast(left, target, span),
             ExpressionKind::ArrayLiteral(elements) => self.array_literal(elements, inner, span),
             ExpressionKind::ArrayRepeat { value, count } => {
+                let errors = self.cx.errors.len();
                 let count = self.value(count, Some(Types::USIZE));
+                if self.cx.errors.len() > errors {
+                    return self.error_expr(span);
+                }
                 let Some(count) = self.cx.length(&count) else {
                     return self.error_expr(span);
                 };
@@ -605,8 +610,16 @@ impl FnCx<'_, '_> {
         value: &Expression,
         span: Span,
     ) -> Expr {
-        if let (ExpressionKind::Tuple(targets), Token::Assign) = (&target.kind, operator) {
-            return self.assign_tuple(targets, value, span);
+        if let ExpressionKind::Tuple(targets) = &target.kind {
+            if *operator == Token::Assign {
+                return self.assign_tuple(targets, value, span);
+            }
+            self.error(
+                format!("Only '=' sets several places at once, not '{operator}'"),
+                span,
+            );
+            self.expr(value, None);
+            return self.error_expr(span);
         }
         let (place, target_ty) = self.target(target, span);
         let checked = self.expr(value, Some(target_ty));

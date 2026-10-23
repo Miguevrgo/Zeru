@@ -1,0 +1,31 @@
+status: compile error
+-- stderr
+Error: 'a' is named twice
+   ╭─[ tests/ui/destructuring/named_twice.zr:2:5 ]
+   │
+ 2 │     var (a, a) = (1, 2);
+   │     ──────────┬─────────
+   │               ╰─────────── 'a' is named twice
+───╯
+Error: 'c' is named twice
+   ╭─[ tests/ui/destructuring/named_twice.zr:3:5 ]
+   │
+ 3 │     var ((b, c), (d, c)) = ((1, 2), (3, 4));
+   │     ────────────────────┬───────────────────
+   │                         ╰───────────────────── 'c' is named twice
+───╯
+Error: 'i' is named twice
+   ╭─[ tests/ui/destructuring/named_twice.zr:4:19 ]
+   │
+ 4 │     for (i, i) in zip([1], [2]) {}
+   │                   ──────┬──────
+   │                         ╰──────── 'i' is named twice
+───╯
+Error: Only '=' sets several places at once, not '+='
+   ╭─[ tests/ui/destructuring/named_twice.zr:6:5 ]
+   │
+ 6 │     (x, y) += (1, 1);
+   │     ────────┬───────
+   │             ╰───────── Only '=' sets several places at once, not '+='
+───╯
+[-] Error: aborting due to previous error

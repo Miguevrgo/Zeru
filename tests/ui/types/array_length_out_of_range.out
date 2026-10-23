@@ -28,13 +28,6 @@ Error: An array length goes from 0 to 4294967295, not 4294967298
    │                                  ──┬─
    │                                    ╰─── An array length goes from 0 to 4294967295, not 4294967298
 ───╯
-Error: An array length must be a constant integer
-   ╭─[ tests/ui/types/array_length_out_of_range.zr:7:17 ]
-   │
- 7 │     var d = [0; -1];
-   │                 ─┬
-   │                  ╰── An array length must be a constant integer
-───╯
 Error: Literal -1 does not fit in usize
    ╭─[ tests/ui/types/array_length_out_of_range.zr:7:17 ]
    │

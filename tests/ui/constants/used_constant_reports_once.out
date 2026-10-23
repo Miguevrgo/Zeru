@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Constant 2147483648 does not fit in i32
+   ╭─[ tests/ui/constants/used_constant_reports_once.zr:1:16 ]
+   │
+ 1 │ const X: i32 = 2147483647 + 1;
+   │                ───────┬──────
+   │                       ╰──────── Constant 2147483648 does not fit in i32
+───╯
+[-] Error: aborting due to previous error
