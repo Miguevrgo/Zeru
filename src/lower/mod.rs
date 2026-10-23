@@ -123,7 +123,8 @@ pub fn lower<'ctx>(
     lower.finish_debug();
 }
 
-/// The machine compiling, which the program is built for.
+/// The target the program is built for: Linux on x86-64-v2, with SSE4.2
+/// and POPCNT, which every x86-64 processor since about 2009 has.
 pub fn host_machine(mode: SafetyMode) -> TargetMachine {
     Target::initialize_native(&InitializationConfig::default()).expect("a native target");
     let triple = TargetMachine::get_default_triple();
@@ -132,7 +133,7 @@ pub fn host_machine(mode: SafetyMode) -> TargetMachine {
         .and_then(|target| {
             target.create_target_machine(
                 &triple,
-                "generic",
+                "x86-64-v2",
                 "",
                 mode.opt_level(),
                 RelocMode::PIC,

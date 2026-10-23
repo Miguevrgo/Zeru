@@ -96,3 +96,7 @@ your back, and `len()` is always the size in memory.
 A Zeru program is one static executable. The standard library talks to
 the Linux kernel directly, with no C library, so the program runs on any
 Linux x86-64 machine without installing anything, and starts at once.
+
+Programs are built for x86-64-v2: the instructions every x86-64 processor
+has had since about 2009, such as SSE4.2 and POPCNT, which loops and
+bit counting use. Only processors older than that cannot run them.

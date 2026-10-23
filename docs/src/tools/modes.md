@@ -55,4 +55,5 @@ before it becomes machine code, in `build/`. `zeru clean` removes the
 folder.
 
 Every executable is static: it uses no C library and no shared library,
-and runs on any Linux x86-64 machine as it is.
+and runs on any Linux x86-64 machine as it is. It is built for
+x86-64-v2, the instruction set of every x86-64 processor since about 2009.
