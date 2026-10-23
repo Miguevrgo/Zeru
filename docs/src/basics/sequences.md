@@ -99,6 +99,15 @@ var tail = v[2..];
 println("{} {} {}", middle.len(), middle[0], tail[1]); // 2 20 40
 ```
 
+A slice has the `Vec` methods that only read: `len`, `contains`, `sum`,
+`min`, `max`, `windows` and `chunks`. `a[..]` gives an array them too:
+
+```zeru
+var v: Vec<i32> = [9, 4, 7, 1];
+var fixed: Array<i32, 3> = [2, 5, 3];
+println("{} {}", v[1..].sum(), fixed[..].max().unwrap()); // 12 5
+```
+
 `&[T]` is the type of a slice. A function that takes one works with arrays
 and Vecs alike:
 

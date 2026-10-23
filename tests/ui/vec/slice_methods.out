@@ -1,0 +1,8 @@
+status: exit 0
+-- stdout
+13 1 9 true
+[[5, 1]] [[1, 9], [3]]
+18 false
+18 true [[5, 1, 9], [1, 9, 3]]
+None 0
+true

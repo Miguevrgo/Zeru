@@ -1004,7 +1004,7 @@ fn __zeru_vec_dedup<T: Eq>(v: &var Vec<T>) {
 // `v.windows(n)`: a view of every run of `n` elements next to each other,
 // each starting one element after the one before; none when `v` is
 // shorter than `n`.
-fn __zeru_vec_windows<T>(v: &Vec<T>, n: usize) Vec<&[T]> {
+fn __zeru_vec_windows<T>(v: &[T], n: usize) Vec<&[T]> {
     assert(n > 0, "windows takes a size above 0");
     var parts: Vec<&[T]> = Vec.new();
     var start: usize = 0;
@@ -1017,7 +1017,7 @@ fn __zeru_vec_windows<T>(v: &Vec<T>, n: usize) Vec<&[T]> {
 
 // `v.chunks(n)`: views of `v`'s elements `n` at a time, the last one
 // shorter when they do not divide evenly.
-fn __zeru_vec_chunks<T>(v: &Vec<T>, n: usize) Vec<&[T]> {
+fn __zeru_vec_chunks<T>(v: &[T], n: usize) Vec<&[T]> {
     assert(n > 0, "chunks takes a size above 0");
     var parts: Vec<&[T]> = Vec.new();
     var start: usize = 0;
@@ -1090,7 +1090,7 @@ fn __zeru_string_eq(a: &String, b: &String) bool {
 }
 
 // `v.contains(value)`: whether an element equals `value`.
-fn __zeru_vec_contains<T: Eq>(v: &Vec<T>, value: T) bool {
+fn __zeru_vec_contains<T: Eq>(v: &[T], value: T) bool {
     for x in v {
         if x == value {
             return true;
@@ -1100,7 +1100,7 @@ fn __zeru_vec_contains<T: Eq>(v: &Vec<T>, value: T) bool {
 }
 
 // `v.sum()`: the elements added up; 0 when there are none.
-fn __zeru_vec_sum<T: Num>(v: &Vec<T>) T {
+fn __zeru_vec_sum<T: Num>(v: &[T]) T {
     var total = 0 as T;
     for x in v {
         total += x;
@@ -1109,8 +1109,8 @@ fn __zeru_vec_sum<T: Num>(v: &Vec<T>) T {
 }
 
 // `v.min()`: the smallest element; None when there are none.
-fn __zeru_vec_min<T: Ord>(v: &Vec<T>) T? {
-    if v.is_empty() {
+fn __zeru_vec_min<T: Ord>(v: &[T]) T? {
+    if v.len() == 0 {
         return None;
     }
     var best = v[0];
@@ -1123,8 +1123,8 @@ fn __zeru_vec_min<T: Ord>(v: &Vec<T>) T? {
 }
 
 // `v.max()`: the largest element; None when there are none.
-fn __zeru_vec_max<T: Ord>(v: &Vec<T>) T? {
-    if v.is_empty() {
+fn __zeru_vec_max<T: Ord>(v: &[T]) T? {
+    if v.len() == 0 {
         return None;
     }
     var best = v[0];

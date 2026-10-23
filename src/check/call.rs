@@ -48,6 +48,10 @@ const VEC_STD_METHODS: &[&str] = &[
     "push_str",
 ];
 
+/// The prelude's methods that only read the elements: slices have them, and
+/// a Vec reaches them through a slice of all of it.
+const SLICE_METHODS: &[&str] = &["contains", "sum", "min", "max", "windows", "chunks"];
+
 /// The `Vec` methods that change it, so need a receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
     "sort",
@@ -318,6 +322,15 @@ impl FnCx<'_, '_> {
                     return self.error_expr(span);
                 }
                 if VEC_STD_METHODS.contains(&name) {
+                    let receiver = match SLICE_METHODS.contains(&name) {
+                        true => {
+                            let from = self.mk(ExprKind::Int(0), Types::USIZE, span);
+                            let slice = self.cx.types.intern(TyKind::Slice(elem));
+                            let all = ExprKind::Builtin(Builtin::Slice, vec![receiver, from]);
+                            self.mk(all, slice, object.span)
+                        }
+                        false => receiver,
+                    };
                     let def = self.cx.prelude_def(&format!("__zeru_vec_{name}"));
                     return self.call_def(def, vec![elem], Some(receiver), args, expected, span);
                 }
@@ -335,6 +348,14 @@ impl FnCx<'_, '_> {
                 if ty == Types::STR && STR_METHODS.contains(&name) {
                     let text = self.mk(ExprKind::Read(place), ty, object.span);
                     return self.str_method(text, name, args, expected, span);
+                }
+                if let TyKind::Slice(elem) = *self.cx.types.kind(ty)
+                    && ty != Types::STR
+                    && SLICE_METHODS.contains(&name)
+                {
+                    let slice = self.mk(ExprKind::Read(place), ty, object.span);
+                    let def = self.cx.prelude_def(&format!("__zeru_vec_{name}"));
+                    return self.call_def(def, vec![elem], Some(slice), args, expected, span);
                 }
                 let shown = self.ty(ty);
                 self.error(format!("{shown} has no method '{name}'"), span);
