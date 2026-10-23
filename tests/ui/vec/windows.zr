@@ -1,0 +1,13 @@
+fn main() {
+    var depths: Vec<i32> = [199, 200, 208, 210, 200];
+    println("{}", depths.windows(3));
+    var rising = 0;
+    for pair in depths.windows(2) {
+        if pair[1] > pair[0] {
+            rising += 1;
+        }
+    }
+    println("{}", rising);
+    var short: Vec<i32> = [1];
+    println("{} {}", short.windows(2), short.windows(1));
+}

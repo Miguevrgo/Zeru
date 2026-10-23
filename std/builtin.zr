@@ -1001,6 +1001,20 @@ fn __zeru_vec_dedup<T: Eq>(v: &var Vec<T>) {
     }
 }
 
+// `v.windows(n)`: a view of every run of `n` elements next to each other,
+// each starting one element after the one before; none when `v` is
+// shorter than `n`.
+fn __zeru_vec_windows<T>(v: &Vec<T>, n: usize) Vec<&[T]> {
+    assert(n > 0, "windows takes a size above 0");
+    var parts: Vec<&[T]> = Vec.new();
+    var start: usize = 0;
+    while start + n <= v.len() {
+        parts.push(v[start..start + n]);
+        start += 1;
+    }
+    return parts;
+}
+
 // `v.chunks(n)`: views of `v`'s elements `n` at a time, the last one
 // shorter when they do not divide evenly.
 fn __zeru_vec_chunks<T>(v: &Vec<T>, n: usize) Vec<&[T]> {

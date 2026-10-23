@@ -59,6 +59,7 @@ The methods:
 | `rotate_left(n)`, `rotate_right(n)` | move every element `n` places, wrapping around |
 | `dedup()` | drop each element equal to the one before it |
 | `chunks(n)` | views of the elements `n` at a time |
+| `windows(n)` | views of every run of `n` elements next to each other |
 | `contains(x)`, `sum()`, `min()`, `max()` | look at the values |
 | `clear()`, `reserve(n)`, `shrink_to_fit()` | manage the memory |
 | `copy()` | a second Vec with the same elements |

@@ -40,6 +40,7 @@ const VEC_STD_METHODS: &[&str] = &[
     "rotate_right",
     "dedup",
     "chunks",
+    "windows",
     "contains",
     "sum",
     "min",
