@@ -186,6 +186,11 @@ impl FnCx<'_, '_> {
             ExpressionKind::Get { .. }
             | ExpressionKind::Index { .. }
             | ExpressionKind::Dereference(_) => {
+                if let ExpressionKind::Get { object, name } = &e.kind
+                    && let Some(limit) = self.limit(object, name, span)
+                {
+                    return limit;
+                }
                 let (place, ty) = self.place(e);
                 if self.cx.types.is_error(ty) {
                     return self.error_expr(span);
@@ -412,6 +417,37 @@ impl FnCx<'_, '_> {
                 self.error_expr(span)
             }
         }
+    }
+
+    /// `i32.MAX` or `f64.MIN`: the largest or the lowest value of a number
+    /// type, the most negative for a float.
+    fn limit(&mut self, object: &Expression, name: &str, span: Span) -> Option<Expr> {
+        let ExpressionKind::Identifier(type_name) = &object.kind else {
+            return None;
+        };
+        if !matches!(name, "MAX" | "MIN" | "max" | "min") || self.local(type_name).is_some() {
+            return None;
+        }
+        let ty = self.cx.types.primitive(type_name)?;
+        if !self.cx.types.is_number(ty) {
+            return None;
+        }
+        if matches!(name, "max" | "min") {
+            let upper = name.to_uppercase();
+            self.error(
+                format!("A number type's limits are in capitals: {type_name}.{upper}"),
+                span,
+            );
+            return Some(self.error_expr(span));
+        }
+        let max = name == "MAX";
+        let kind = match self.cx.types.kind(ty) {
+            TyKind::Int(int) => ExprKind::Int(if max { int.max() } else { int.min() }),
+            TyKind::F32 => ExprKind::Float(if max { f32::MAX } else { f32::MIN }.into()),
+            TyKind::F64 => ExprKind::Float(if max { f64::MAX } else { f64::MIN }),
+            _ => return None,
+        };
+        Some(self.mk(kind, ty, span))
     }
 
     /// Where `e` lives: a local, a field, an element, what a pointer points

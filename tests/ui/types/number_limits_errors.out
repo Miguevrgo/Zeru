@@ -1,0 +1,24 @@
+status: compile error
+-- stderr
+Error: A number type's limits are in capitals: i32.MAX
+   ╭─[ tests/ui/types/number_limits_errors.zr:2:13 ]
+   │
+ 2 │     var a = i32.max;
+   │             ───┬───
+   │                ╰───── A number type's limits are in capitals: i32.MAX
+───╯
+Error: Undeclared variable 'bool'
+   ╭─[ tests/ui/types/number_limits_errors.zr:3:13 ]
+   │
+ 3 │     var b = bool.MAX;
+   │             ──┬─
+   │               ╰─── Undeclared variable 'bool'
+───╯
+Error: Type mismatch for variable 'c'. Annotated as u8 but got i32
+   ╭─[ tests/ui/types/number_limits_errors.zr:4:5 ]
+   │
+ 4 │     var c: u8 = i32.MAX;
+   │     ──────────┬─────────
+   │               ╰─────────── Type mismatch for variable 'c'. Annotated as u8 but got i32
+───╯
+[-] Error: aborting due to previous error

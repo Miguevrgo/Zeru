@@ -17,6 +17,7 @@ var input = input.parse_int();    // a new variable hiding the old one
 i8 i16 i32 i64 u8 u16 u32 u64 usize f32 f64 bool str
 1_000  0xff  0b101  0o17  2.5e-3  'a'  "text"  `raw\text`
 x as i64                          // the only way to change a number's type
+i32.MAX  i64.MIN  f64.MAX         // each number type's limits
 a +% b   a -% b   a *% b          // wrapping arithmetic
 ```
 

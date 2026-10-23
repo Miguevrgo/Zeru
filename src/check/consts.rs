@@ -218,6 +218,10 @@ fn is_constant(expr: &Expression) -> bool {
         ExpressionKind::ArrayLiteral(items) | ExpressionKind::Tuple(items) => {
             items.iter().all(is_constant)
         }
+        ExpressionKind::Get { object, name } => {
+            matches!(object.kind, ExpressionKind::Identifier(_))
+                && matches!(name.as_str(), "MAX" | "MIN")
+        }
         _ => false,
     }
 }

@@ -1,0 +1,24 @@
+const BIG: i64 = i64.MAX;
+
+fn main() {
+    println("{} {}", i8.MIN, i8.MAX);
+    println("{} {}", i64.MIN, BIG);
+    println("{} {} {}", u8.MAX, u64.MAX, usize.MAX);
+    println("{} {}", f64.MAX > 1e300, f64.MIN < -1e300);
+    println("{}", f32.MAX > 3e38);
+    var values: Vec<i32> = [7, -3, 12];
+    var lowest = i32.MAX;
+    for v in values {
+        if v < lowest {
+            lowest = v;
+        }
+    }
+    println("{}", lowest);
+    var x: u8 = 255;
+    match x {
+        u8.MAX => println("full"),
+        default => println("not full"),
+    }
+    var i32 = 5;
+    println("{}", i32);
+}

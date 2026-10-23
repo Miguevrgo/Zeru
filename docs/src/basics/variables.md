@@ -55,6 +55,21 @@ var f = 2.5e-3; // exponent
 println("{} {}", d, e); // 1000000 275
 ```
 
+Each number type knows its smallest and largest value, handy to start a
+search for the lowest or highest:
+
+```zeru
+var lowest = i32.MAX;
+for x in [7, -3, 12] {
+    if x < lowest {
+        lowest = x;
+    }
+}
+println("{} {} {}", lowest, u8.MAX, i8.MIN); // -3 255 -128
+```
+
+For `f32` and `f64`, `MIN` is the most negative value.
+
 ### No silent conversions
 
 Zeru never converts one number type into another on its own. Adding an

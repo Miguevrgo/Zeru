@@ -1,0 +1,5 @@
+fn main() {
+    var a = i32.max;
+    var b = bool.MAX;
+    var c: u8 = i32.MAX;
+}
