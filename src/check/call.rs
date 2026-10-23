@@ -1033,7 +1033,10 @@ impl FnCx<'_, '_> {
             TyKind::Vec(part) | TyKind::Array(part, _) | TyKind::Slice(part) => {
                 self.printable(*part)
             }
-            TyKind::Optional(part) | TyKind::Result(part, _) => self.printable(*part),
+            TyKind::Optional(part)
+            | TyKind::Result(part, _)
+            | TyKind::Ref(part)
+            | TyKind::RefMut(part) => self.printable(*part),
             TyKind::Tuple(parts) => parts.iter().all(|&part| self.printable(part)),
             _ => false,
         }
@@ -1053,6 +1056,10 @@ impl FnCx<'_, '_> {
     ) {
         let text = |bytes: &[u8]| bytes.to_vec();
         match self.cx.types.kind(ty).clone() {
+            TyKind::Ref(inner) | TyKind::RefMut(inner) => {
+                let pointer = self.mk(ExprKind::Read(place), ty, span);
+                self.show(Place::Deref(Box::new(pointer)), inner, quoted, stderr, out, span);
+            }
             _ if ty == Types::STRING || ty == Types::STR => {
                 let read = self.mk(ExprKind::Read(place), ty, span);
                 let value = match ty == Types::STRING {
