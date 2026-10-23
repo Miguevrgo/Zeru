@@ -1,0 +1,36 @@
+fn total(values: &[i32]) i32 {
+    var sum = 0;
+    for x in values {
+        sum += x;
+    }
+    return sum;
+}
+fn largest<T: Ord>(values: &[T]) T {
+    var best = values[0];
+    for x in values {
+        if x > best {
+            best = x;
+        }
+    }
+    return best;
+}
+fn first(values: &[i32]) &i32 {
+    return &values[0];
+}
+fn main() {
+    var list: Vec<i32> = [1, 2, 3];
+    var fixed: Array<i32, 2> = [10, 20];
+    println("{} {} {}", total(&list), total(&fixed), total(list[1..]));
+    var r = &list;
+    println("{}", total(r));
+    var m = &var list;
+    println("{}", total(m));
+    var s: &[i32] = &list;
+    println("{}", s.len());
+    println("{}", largest(&list));
+    var f = first(&list);
+    println("{}", *f);
+    var text = String.from("abc");
+    var view: str = &text;
+    println("{}", view);
+}

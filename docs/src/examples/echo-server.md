@@ -26,7 +26,7 @@ fn main() {
         for client in clients {
             handles.push(client.handle());
         }
-        var ready = net::wait(handles[..], None).unwrap();
+        var ready = net::wait(&handles, None).unwrap();
         var closed: Vec<usize> = Vec.new();
         for index in ready {
             if index == 0 {

@@ -1,0 +1,6 @@
+fn main() {
+    var list: Vec<i32> = [1, 2];
+    var s: &[i32] = &list;
+    list.push(3);
+    println("{}", s.len());
+}

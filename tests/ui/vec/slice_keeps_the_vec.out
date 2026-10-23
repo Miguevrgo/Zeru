@@ -1,0 +1,20 @@
+status: compile error
+-- stderr
+Error: Cannot change 'list' while 's' still refers into it
+   ╭─[ tests/ui/vec/slice_keeps_the_vec.zr:4:5 ]
+   │
+ 4 │     list.push(3);
+   │     ──────┬─────
+   │           ╰─────── Cannot change 'list' while 's' still refers into it
+   │
+   ├─[ tests/ui/vec/slice_keeps_the_vec.zr:4:5 ]
+   │
+ 3 │     var s: &[i32] = &list;
+   │                     ──┬──
+   │                       ╰──── borrowed here
+   │
+ 5 │     println("{}", s.len());
+   │                   ───┬───
+   │                      ╰───── used later here
+───╯
+[-] Error: aborting due to previous error

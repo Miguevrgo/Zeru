@@ -109,7 +109,7 @@ println("{} {}", v[1..].sum(), fixed[..].max().unwrap()); // 12 5
 ```
 
 `&[T]` is the type of a slice. A function that takes one works with arrays
-and Vecs alike:
+and Vecs alike: `&v` lends all of a Vec or an array as a slice.
 
 ```zeru
 fn total(values: &[i32]) i32 {
@@ -123,7 +123,8 @@ fn total(values: &[i32]) i32 {
 fn main() {
     var list: Vec<i32> = [1, 2, 3];
     var fixed: Array<i32, 2> = [10, 20];
-    println("{} {}", total(list[..]), total(fixed[..])); // 6 30
+    println("{} {}", total(&list), total(&fixed)); // 6 30
+    println("{}", total(list[1..])); // 5
 }
 ```
 

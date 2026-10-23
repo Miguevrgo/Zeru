@@ -82,7 +82,7 @@ handles.push(listener.handle());
 for client in clients {
     handles.push(client.handle());
 }
-var ready = net::wait(handles[..], None).unwrap();
+var ready = net::wait(&handles, None).unwrap();
 ```
 
 Index 0 ready means a new connection waits to be accepted; any other means

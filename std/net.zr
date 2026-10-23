@@ -435,9 +435,9 @@ pub struct Handle {
 // var handles: Vec<net::Handle> = Vec.new();
 // handles.push(listener.handle());
 // handles.push(server.handle());
-// println("{}", net::wait(handles[..], 10).unwrap().len()); // 0
+// println("{}", net::wait(&handles, 10).unwrap().len()); // 0
 // client.write("hi").unwrap();
-// var ready = net::wait(handles[..], None).unwrap();
+// var ready = net::wait(&handles, None).unwrap();
 // println("{} {}", ready.len(), ready[0]); // 1 1
 // ```
 pub fn wait(handles: &[Handle], ms: u64?) Vec<usize>! {

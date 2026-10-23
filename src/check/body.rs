@@ -272,6 +272,21 @@ impl<'c, 'a> FnCx<'c, 'a> {
         if value.ty == Types::STRING && target == Types::STR {
             return Ok(self.view(value));
         }
+        if let TyKind::Slice(wanted) = *types.kind(target)
+            && let TyKind::Ref(held) | TyKind::RefMut(held) = *types.kind(value.ty)
+            && let TyKind::Vec(elem) | TyKind::Array(elem, _) = *types.kind(held)
+            && self.fits(wanted, elem, false)
+        {
+            let (span, ty) = (value.span, value.ty);
+            let address = match value.kind {
+                ExprKind::AddressOf(_) => value,
+                _ => self.mk(ExprKind::AddressOf(Place::Deref(Box::new(value))), ty, span),
+            };
+            let from = self.mk(ExprKind::Int(0), Types::USIZE, span);
+            let all = ExprKind::Builtin(tir::Builtin::Slice, vec![address, from]);
+            let target = self.resolve(target);
+            return Ok(self.mk(all, target, span));
+        }
         if self.fits(target, value.ty, false) {
             value.ty = self.resolve(target);
             return Ok(value);
