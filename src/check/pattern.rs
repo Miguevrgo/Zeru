@@ -186,12 +186,12 @@ impl FnCx<'_, '_> {
         let mut covered = Vec::new();
         let mut has_default = false;
         let mut shapes = Vec::new();
-        for arm in arms {
+        for (at, arm) in arms.iter().enumerate() {
             let pattern = &arm.pattern;
             let guarded = arm.guard.is_some();
             if matches!(pattern.kind, PatternKind::Default) {
-                if has_default {
-                    self.error("A match has one 'default' arm", pattern.span);
+                if at + 1 < arms.len() {
+                    self.error("'default' goes last, after every other arm", pattern.span);
                 }
                 if guarded {
                     self.error(

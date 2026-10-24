@@ -152,7 +152,7 @@ run past the last element.
 
 `match` picks a branch by value. It is mostly used with enums and is shown
 on the [Enums and Match](../structure/enums.md) page, but it works on
-numbers too, where `default` catches everything else:
+numbers too, where `default`, the last arm, catches everything else:
 
 ```zeru
 var day = 6;

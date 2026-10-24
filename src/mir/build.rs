@@ -1189,17 +1189,20 @@ impl<'a> Builder<'a> {
             .collect();
             entries.push((body, start, take, locals, alternatives));
         }
-        let mut next = vec![unmatched; arms.len()];
+        let tests: Vec<BlockId> = match chained {
+            true => arms
+                .iter()
+                .map(|_| self.new_block())
+                .chain([unmatched])
+                .collect(),
+            false => Vec::new(),
+        };
         if chained {
-            let order = tir::tried(arms);
-            let tests: Vec<BlockId> = order.iter().map(|_| self.new_block()).collect();
             self.goto(tests[0]);
             let read = Operand::Copy(Place::local(tag));
-            for (k, &at) in order.iter().enumerate() {
-                let fail = tests.get(k + 1).copied().unwrap_or(unmatched);
-                next[at] = fail;
-                self.current = Some(tests[k]);
-                for &(tags, entry) in &entries[at].4 {
+            for (at, (_, _, _, _, alternatives)) in entries.iter().enumerate() {
+                self.current = Some(tests[at]);
+                for &(tags, entry) in alternatives {
                     let Some((low, high)) = tags else {
                         self.goto(entry);
                         break;
@@ -1217,7 +1220,7 @@ impl<'a> Builder<'a> {
                     self.switch(inside, vec![(0, next)], entry);
                     self.current = Some(next);
                 }
-                self.goto(fail);
+                self.goto(tests[at + 1]);
             }
         } else {
             let mut targets = Vec::new();
@@ -1277,7 +1280,7 @@ impl<'a> Builder<'a> {
             if let Some(guard) = &arm.guard {
                 self.current = Some(start);
                 let holds = self.condition(guard);
-                self.switch(holds, vec![(0, next[at_arm])], body);
+                self.switch(holds, vec![(0, tests[at_arm + 1])], body);
             }
             self.span = outer;
             self.current = Some(body);

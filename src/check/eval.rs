@@ -684,7 +684,7 @@ impl Eval<'_, '_> {
             Value::Optional(inner) => i128::from(inner.is_some()),
             _ => unreachable!("a matched value has a tag"),
         };
-        for arm in tir::tried(arms).into_iter().map(|at| &arms[at]) {
+        for arm in arms {
             let alternative = match arm.tags.is_empty() {
                 true => Some(0),
                 false => arm

@@ -21,19 +21,19 @@ Error: The range 9..=1 takes no value
    │                       ──┬──
    │                         ╰──── The range 9..=1 takes no value
 ───╯
+Error: 'default' goes last, after every other arm
+   ╭─[ tests/ui/match/range_and_guard_errors.zr:8:40 ]
+   │
+ 8 │     var d = match n { x if x > 1 => 1, default if n > 2 => 2, default => 3 };
+   │                                        ───┬───
+   │                                           ╰───── 'default' goes last, after every other arm
+───╯
 Error: 'default' takes every other value, with no 'if'; bind a name to test it, as in x if x > 3
    ╭─[ tests/ui/match/range_and_guard_errors.zr:8:40 ]
    │
  8 │     var d = match n { x if x > 1 => 1, default if n > 2 => 2, default => 3 };
    │                                        ───┬───
    │                                           ╰───── 'default' takes every other value, with no 'if'; bind a name to test it, as in x if x > 3
-───╯
-Error: A match has one 'default' arm
-   ╭─[ tests/ui/match/range_and_guard_errors.zr:8:63 ]
-   │
- 8 │     var d = match n { x if x > 1 => 1, default if n > 2 => 2, default => 3 };
-   │                                                               ───┬───
-   │                                                                  ╰───── A match has one 'default' arm
 ───╯
 Error: A match on i32 needs a 'default' arm
    ╭─[ tests/ui/match/range_and_guard_errors.zr:9:13 ]
