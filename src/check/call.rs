@@ -54,6 +54,10 @@ const VEC_STD_METHODS: &[&str] = &[
 /// a Vec reaches them through a slice of all of it.
 const SLICE_METHODS: &[&str] = &["contains", "sum", "min", "max", "windows", "chunks"];
 
+/// The prelude's methods that move the elements around: a `&var [T]` has
+/// them, and a Vec reaches them through one of all of it.
+const SLICE_MUT_METHODS: &[&str] = &["sort", "swap", "reverse", "rotate_left", "rotate_right"];
+
 /// The `Vec` methods that change it, so need a receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
     "sort",
@@ -330,19 +334,50 @@ impl FnCx<'_, '_> {
                     return self.error_expr(span);
                 }
                 if VEC_STD_METHODS.contains(&name) {
-                    let receiver = match SLICE_METHODS.contains(&name) {
-                        true => {
+                    let whole = match (SLICE_METHODS.contains(&name), mutable) {
+                        (true, _) => Some(TyKind::Slice(elem)),
+                        (false, true) if SLICE_MUT_METHODS.contains(&name) => {
+                            Some(TyKind::SliceMut(elem))
+                        }
+                        _ => None,
+                    };
+                    let receiver = match whole {
+                        Some(kind) => {
                             let from = self.mk(ExprKind::Int(0), Types::USIZE, span);
-                            let slice = self.cx.types.intern(TyKind::Slice(elem));
+                            let slice = self.cx.types.intern(kind);
                             let all = ExprKind::Builtin(Builtin::Slice, vec![receiver, from]);
                             self.mk(all, slice, object.span)
                         }
-                        false => receiver,
+                        None => receiver,
                     };
                     let def = self.cx.prelude_def(&format!("__zeru_vec_{name}"));
                     return self.call_def(def, vec![elem], Some(receiver), args, expected, span);
                 }
                 self.vec_method(name, elem, receiver, args, span)
+            }
+            TyKind::SliceMut(elem) => {
+                let slice = self.mk(ExprKind::Read(place), ty, object.span);
+                if name == "len" && args.is_empty() {
+                    return self.mk(
+                        ExprKind::Builtin(Builtin::Len, vec![slice]),
+                        Types::USIZE,
+                        span,
+                    );
+                }
+                if !SLICE_METHODS.contains(&name) && !SLICE_MUT_METHODS.contains(&name) {
+                    let shown = self.ty(ty);
+                    self.error(format!("{shown} has no method '{name}'"), span);
+                    return self.error_expr(span);
+                }
+                let slice = match SLICE_METHODS.contains(&name) {
+                    true => Expr {
+                        ty: self.cx.types.intern(TyKind::Slice(elem)),
+                        ..slice
+                    },
+                    false => slice,
+                };
+                let def = self.cx.prelude_def(&format!("__zeru_vec_{name}"));
+                self.call_def(def, vec![elem], Some(slice), args, expected, span)
             }
             TyKind::Slice(_) => {
                 if name == "len" && args.is_empty() {
@@ -1038,9 +1073,10 @@ impl FnCx<'_, '_> {
     fn printable(&self, ty: Ty) -> bool {
         match self.cx.types.kind(ty) {
             _ if ty == Types::STRING || self.plain_print(ty) => true,
-            TyKind::Vec(part) | TyKind::Array(part, _) | TyKind::Slice(part) => {
-                self.printable(*part)
-            }
+            TyKind::Vec(part)
+            | TyKind::Array(part, _)
+            | TyKind::Slice(part)
+            | TyKind::SliceMut(part) => self.printable(*part),
             TyKind::Optional(part)
             | TyKind::Result(part, _)
             | TyKind::Ref(part)
@@ -1084,7 +1120,10 @@ impl FnCx<'_, '_> {
                 let quote = if quoted { text(b"\"") } else { Vec::new() };
                 out.push(self.write(stderr, vec![quote.clone(), quote], vec![value], span));
             }
-            TyKind::Vec(item) | TyKind::Array(item, _) | TyKind::Slice(item) => {
+            TyKind::Vec(item)
+            | TyKind::Array(item, _)
+            | TyKind::Slice(item)
+            | TyKind::SliceMut(item) => {
                 out.push(self.write(stderr, vec![text(b"[")], Vec::new(), span));
                 let index = self.declare("", Types::USIZE, false, false);
                 let view = self.cx.owns_heap(item);

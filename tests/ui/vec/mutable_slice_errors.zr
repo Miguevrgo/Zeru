@@ -1,0 +1,14 @@
+fn change(xs: &var [i32]) { xs[0] = 1; }
+fn main() {
+    var v: Vec<i32> = Vec[1, 2, 3];
+    var ro = v[0..2];
+    ro[0] = 3;
+    change(&var ro[..]);
+    change(&v);
+    change(v[0..1]);
+    var text = "abc";
+    var bytes = &var text[0..1];
+    var q: Vec<i32> = Vec[1];
+    var s = &var q[..];
+    s.push(3);
+}

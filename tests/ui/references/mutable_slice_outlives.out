@@ -1,0 +1,27 @@
+status: compile error
+-- stderr
+Error: Cannot return a reference into 'v', which ends with this function
+   ╭─[ tests/ui/references/mutable_slice_outlives.zr:3:12 ]
+   │
+ 3 │     return &var v[..];
+   │            ─────┬────
+   │                 ╰────── Cannot return a reference into 'v', which ends with this function
+───╯
+Error: Cannot move 'v' while 's' still refers into it
+    ╭─[ tests/ui/references/mutable_slice_outlives.zr:9:10 ]
+    │
+  9 │     take(v);
+    │          ┬
+    │          ╰── Cannot move 'v' while 's' still refers into it
+    │
+    ├─[ tests/ui/references/mutable_slice_outlives.zr:9:10 ]
+    │
+  8 │     var s = &var v[0..2];
+    │             ──────┬─────
+    │                   ╰─────── borrowed here
+    │
+ 10 │     s[1] = 0;
+    │     ────┬───
+    │         ╰───── used later here
+────╯
+[-] Error: aborting due to previous error

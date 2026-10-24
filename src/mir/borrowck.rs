@@ -353,13 +353,25 @@ impl<'a> Cx<'a> {
     fn uses(&self, place: &Place, role: Role) -> bool {
         match role {
             Role::Dead => false,
-            Role::Write => place.projection.contains(&Projection::Deref),
+            Role::Write => self.through_pointer(place),
             Role::Drop => {
                 !place.projection.is_empty()
                     || self.has(self.body.locals[place.local.0 as usize].ty, Part::Drop)
             }
             _ => true,
         }
+    }
+
+    /// Whether `place` is reached through a pointer its local holds: a
+    /// reference followed, or an element of a slice.
+    fn through_pointer(&self, place: &Place) -> bool {
+        let mut ty = self.body.locals[place.local.0 as usize].ty;
+        let mut variant = None;
+        place.projection.iter().any(|&projection| {
+            let step = self.step(ty, projection, variant.is_some());
+            ty = self.program.project_ty(ty, projection, &mut variant);
+            step == Step::Deref
+        })
     }
 
     /// Whether `role` on `place` gives its whole local a new value or ends it.
@@ -503,7 +515,7 @@ impl<'a> Cx<'a> {
                 Step::Variant(at)
             }
             (Projection::Field(at), _) => Step::Field(at),
-            (Projection::Index(_), TyKind::Slice(_)) => Step::Deref,
+            (Projection::Index(_), TyKind::Slice(_) | TyKind::SliceMut(_)) => Step::Deref,
             (Projection::Index(_), kind) => Step::Index {
                 heap: matches!(kind, TyKind::Vec(_)),
             },

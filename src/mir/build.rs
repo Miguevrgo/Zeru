@@ -1344,7 +1344,12 @@ impl<'a> Builder<'a> {
                     Builtin::VecShrinkToFit => {
                         return self.push(StatementKind::VecShrinkToFit(held));
                     }
-                    Builtin::Slice => self.slice(held, args),
+                    Builtin::Slice => {
+                        let mutable = dest.as_ref().is_some_and(|dest| {
+                            matches!(self.types().kind(self.place_ty(dest)), TyKind::SliceMut(_))
+                        });
+                        self.slice(held, args, mutable)
+                    }
                     Builtin::HashBits => Rvalue::Use(self.hash_bits(held, args[0].ty)),
                     Builtin::Replace => {
                         let new = operand(self, 1);
@@ -1366,8 +1371,9 @@ impl<'a> Builder<'a> {
     }
 
     /// The elements of `held` from `args[1]` up to `args[2]`, or to its end
-    /// when there is none, checked to lie within it.
-    fn slice(&mut self, held: Place, args: &[Expr]) -> Rvalue {
+    /// when there is none, checked to lie within it; `mutable` for a slice
+    /// that writes them.
+    fn slice(&mut self, held: Place, args: &[Expr], mutable: bool) -> Rvalue {
         let len = self.temp(Types::USIZE);
         self.assign(Place::local(len), Rvalue::Len(held.clone()));
         let from = self.as_temp(&args[1]);
@@ -1390,10 +1396,11 @@ impl<'a> Builder<'a> {
             self.assert(inside, Panic::Bounds);
         }
         let first = held.project(Projection::Index(from));
-        let pointer = self
-            .program
-            .types
-            .intern(TyKind::Ref(self.place_ty(&first)));
+        let elem = self.place_ty(&first);
+        let pointer = match mutable {
+            true => self.program.types.intern(TyKind::RefMut(elem)),
+            false => self.program.types.intern(TyKind::Ref(elem)),
+        };
         let data = self.temp(pointer);
         self.assign(Place::local(data), Rvalue::AddressOf(first));
         let count = self.temp(Types::USIZE);

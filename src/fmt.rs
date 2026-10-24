@@ -872,6 +872,7 @@ fn ty_text(ty: &TypeSpec) -> String {
         TypeSpec::Result(inner) => format!("{}!", suffixed(inner)),
         TypeSpec::Slice(inner) if **inner == TypeSpec::Named("u8".into()) => "str".into(),
         TypeSpec::Slice(inner) => format!("&[{}]", ty_text(inner)),
+        TypeSpec::SliceMut(inner) => format!("&var [{}]", ty_text(inner)),
         TypeSpec::Ref(inner) => match ty_text(inner) {
             inner if inner.starts_with('&') => format!("& {inner}"),
             inner => format!("&{inner}"),

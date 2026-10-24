@@ -57,6 +57,7 @@ var v = Vec[1, 2];                  var empty: Vec<str> = Vec.new();
 var grid = Vec[Vec[0; width]; height];   // n known as it runs
 v.push(3);  v.pop();  v.len();  v[0];  v.get(9);  v.sort();  v.reverse();  v.copy();
 var part = v[1..];                  // a slice, &[i32]
+var front = &var v[..2];  front.sort();   // a slice that writes, &var [i32]
 var t = (1, true);  t.0;
 ```
 

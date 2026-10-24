@@ -71,15 +71,19 @@ impl FnCx<'_, '_> {
         match (types.kind(target).clone(), types.kind(actual).clone()) {
             (TyKind::Infer(var), _) => self.bind(var, actual),
             (_, TyKind::Infer(var)) => self.bind(var, target),
-            (TyKind::Ptr(t), TyKind::Ptr(a)) | (TyKind::RefMut(t), TyKind::RefMut(a)) => {
-                self.fits(t, a, true)
-            }
+            (TyKind::Ptr(t), TyKind::Ptr(a))
+            | (TyKind::RefMut(t), TyKind::RefMut(a))
+            | (TyKind::SliceMut(t), TyKind::SliceMut(a)) => self.fits(t, a, true),
             (TyKind::Ptr(t), TyKind::RefMut(a)) if !exact => self.fits(t, a, true),
             (TyKind::Ref(t), TyKind::Ref(a))
             | (TyKind::Optional(t), TyKind::Optional(a))
             | (TyKind::Vec(t), TyKind::Vec(a))
             | (TyKind::Slice(t), TyKind::Slice(a)) => self.fits(t, a, exact),
-            (TyKind::Ref(t), TyKind::RefMut(a)) if !exact => self.fits(t, a, false),
+            (TyKind::Ref(t), TyKind::RefMut(a)) | (TyKind::Slice(t), TyKind::SliceMut(a))
+                if !exact =>
+            {
+                self.fits(t, a, false)
+            }
             (TyKind::Array(t, n), TyKind::Array(a, m)) => n == m && self.fits(t, a, exact),
             (TyKind::Result(t, te), TyKind::Result(a, ae)) => {
                 self.fits(t, a, exact) && self.fits(te, ae, exact)

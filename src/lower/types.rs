@@ -70,7 +70,7 @@ impl<'ctx> Lower<'_, 'ctx> {
                     )
                     .into()
             }
-            TyKind::Slice(_) => context
+            TyKind::Slice(_) | TyKind::SliceMut(_) => context
                 .struct_type(&[self.ptr_type().into(), self.usize_type().into()], false)
                 .into(),
             TyKind::Optional(inner) => {

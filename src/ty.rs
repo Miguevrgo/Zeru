@@ -91,6 +91,7 @@ pub enum TyKind {
     Array(Ty, u64),
     Vec(Ty),
     Slice(Ty),
+    SliceMut(Ty),
     Ptr(Ty),
     Ref(Ty),
     RefMut(Ty),
@@ -203,7 +204,10 @@ impl Types {
     /// The element type of an array, a Vec or a slice.
     pub fn elem(&self, ty: Ty) -> Option<Ty> {
         match self.kind(ty) {
-            TyKind::Array(elem, _) | TyKind::Vec(elem) | TyKind::Slice(elem) => Some(*elem),
+            TyKind::Array(elem, _)
+            | TyKind::Vec(elem)
+            | TyKind::Slice(elem)
+            | TyKind::SliceMut(elem) => Some(*elem),
             _ => None,
         }
     }
@@ -232,6 +236,7 @@ impl Types {
             TyKind::Array(inner, _)
             | TyKind::Vec(inner)
             | TyKind::Slice(inner)
+            | TyKind::SliceMut(inner)
             | TyKind::Ptr(inner)
             | TyKind::Ref(inner)
             | TyKind::RefMut(inner)
@@ -302,6 +307,7 @@ impl Types {
             TyKind::Array(inner, len) => TyKind::Array(self.replace(inner, leaf), len),
             TyKind::Vec(inner) => TyKind::Vec(self.replace(inner, leaf)),
             TyKind::Slice(inner) => TyKind::Slice(self.replace(inner, leaf)),
+            TyKind::SliceMut(inner) => TyKind::SliceMut(self.replace(inner, leaf)),
             TyKind::Ptr(inner) => TyKind::Ptr(self.replace(inner, leaf)),
             TyKind::Ref(inner) => TyKind::Ref(self.replace(inner, leaf)),
             TyKind::RefMut(inner) => TyKind::RefMut(self.replace(inner, leaf)),
@@ -351,6 +357,7 @@ impl Types {
             TyKind::Vec(inner) => format!("Vec<{}>", self.show(*inner)),
             TyKind::Slice(inner) if *inner == Self::U8 => "str".into(),
             TyKind::Slice(inner) => format!("&[{}]", self.show(*inner)),
+            TyKind::SliceMut(inner) => format!("&var [{}]", self.show(*inner)),
             TyKind::Ptr(inner) => format!("*{}", self.show(*inner)),
             TyKind::Ref(inner) => format!("&{}", self.show(*inner)),
             TyKind::RefMut(inner) => format!("&var {}", self.show(*inner)),

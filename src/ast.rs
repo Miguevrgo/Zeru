@@ -28,6 +28,7 @@ pub enum TypeSpec {
     Optional(Box<TypeSpec>),
     Result(Box<TypeSpec>),
     Slice(Box<TypeSpec>),
+    SliceMut(Box<TypeSpec>),
     Ref(Box<TypeSpec>),
     RefMut(Box<TypeSpec>),
 }

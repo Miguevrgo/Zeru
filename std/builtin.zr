@@ -885,7 +885,7 @@ fn __zeru_order(a: u64, ten: i64, b: u64, two: i64) i32 {
 // `v.sort()`: `v` in ascending order, by introsort: quicksort around a
 // median of three, insertion sort for short runs, and heapsort for a run
 // that keeps splitting badly, so it never takes more than n log n steps.
-fn __zeru_vec_sort<T: Ord>(v: &var Vec<T>) {
+fn __zeru_vec_sort<T: Ord>(v: &var [T]) {
     var depth: usize = 0;
     var n = v.len();
     while n > 1 {
@@ -898,7 +898,7 @@ fn __zeru_vec_sort<T: Ord>(v: &var Vec<T>) {
 // Sort `v[low..high]`, falling back on heapsort once `depth` splits are
 // spent. Elements only trade places and are compared where they are, so
 // those that own memory sort too.
-fn __zeru_quick<T: Ord>(v: &var Vec<T>, low: usize, high: usize, depth: usize) {
+fn __zeru_quick<T: Ord>(v: &var [T], low: usize, high: usize, depth: usize) {
     var lo = low;
     var hi = high;
     var left = depth;
@@ -954,7 +954,7 @@ fn __zeru_quick<T: Ord>(v: &var Vec<T>, low: usize, high: usize, depth: usize) {
 }
 
 // Heapsort `v[low..high]`.
-fn __zeru_heap<T: Ord>(v: &var Vec<T>, low: usize, high: usize) {
+fn __zeru_heap<T: Ord>(v: &var [T], low: usize, high: usize) {
     var count = high - low;
     var start = count / 2;
     while start > 0 {
@@ -971,7 +971,7 @@ fn __zeru_heap<T: Ord>(v: &var Vec<T>, low: usize, high: usize) {
 
 // Sink element `root` below the larger of its children, in the heap of
 // `end` elements that starts at `v[base]`.
-fn __zeru_sift<T: Ord>(v: &var Vec<T>, base: usize, root: usize, end: usize) {
+fn __zeru_sift<T: Ord>(v: &var [T], base: usize, root: usize, end: usize) {
     var at = root;
     while 2 * at + 1 < end {
         var child = 2 * at + 1;
@@ -987,12 +987,12 @@ fn __zeru_sift<T: Ord>(v: &var Vec<T>, base: usize, root: usize, end: usize) {
 }
 
 // `v.reverse()`: the elements in the opposite order.
-fn __zeru_vec_reverse<T>(v: &var Vec<T>) {
+fn __zeru_vec_reverse<T>(v: &var [T]) {
     __zeru_flip(v, 0, v.len());
 }
 
 // The elements of `v` from `low` up to `high` in the opposite order.
-fn __zeru_flip<T>(v: &var Vec<T>, low: usize, high: usize) {
+fn __zeru_flip<T>(v: &var [T], low: usize, high: usize) {
     for i in 0..(high - low) / 2 {
         __zeru_vec_swap(v, low + i, high - 1 - i);
     }
@@ -1000,7 +1000,7 @@ fn __zeru_flip<T>(v: &var Vec<T>, low: usize, high: usize) {
 
 // `v.rotate_left(n)`: every element `n` places to the left, those that fall
 // off the start coming back at the end.
-fn __zeru_vec_rotate_left<T>(v: &var Vec<T>, n: usize) {
+fn __zeru_vec_rotate_left<T>(v: &var [T], n: usize) {
     if v.len() == 0 {
         return;
     }
@@ -1012,7 +1012,7 @@ fn __zeru_vec_rotate_left<T>(v: &var Vec<T>, n: usize) {
 
 // `v.rotate_right(n)`: every element `n` places to the right, those that
 // fall off the end coming back at the start.
-fn __zeru_vec_rotate_right<T>(v: &var Vec<T>, n: usize) {
+fn __zeru_vec_rotate_right<T>(v: &var [T], n: usize) {
     if v.len() == 0 {
         return;
     }
@@ -1070,7 +1070,7 @@ fn __zeru_vec_chunks<T>(v: &[T], n: usize) Vec<&[T]> {
 
 // `v.swap(i, j)`: exchange two elements. Their bytes trade places, so it
 // works for elements that own memory, which cannot be copied out.
-fn __zeru_vec_swap<T>(v: &var Vec<T>, i: usize, j: usize) {
+fn __zeru_vec_swap<T>(v: &var [T], i: usize, j: usize) {
     var a = (&v[i]) as *u8;
     var b = (&v[j]) as *u8;
     if i == j {

@@ -274,8 +274,9 @@ impl<'c, 'a> FnCx<'c, 'a> {
         if value.ty == Types::STRING && target == Types::STR {
             return Ok(self.view(value));
         }
-        if let TyKind::Slice(wanted) = *types.kind(target)
-            && let TyKind::Ref(held) | TyKind::RefMut(held) = *types.kind(value.ty)
+        if let (TyKind::Slice(wanted), TyKind::Ref(held) | TyKind::RefMut(held))
+        | (TyKind::SliceMut(wanted), TyKind::RefMut(held)) =
+            (types.kind(target).clone(), types.kind(value.ty).clone())
             && let TyKind::Vec(elem) | TyKind::Array(elem, _) = *types.kind(held)
             && self.fits(wanted, elem, false)
         {
@@ -347,17 +348,15 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     );
                 }
             }
-            Place::Index(base, _)
-                if self
-                    .place_ty(base)
-                    .is_some_and(|ty| matches!(self.cx.types.kind(ty), TyKind::Slice(_))) =>
-            {
-                self.error(
+            Place::Index(base, _) => match self.place_ty(base).map(|ty| self.cx.types.kind(ty)) {
+                Some(TyKind::Slice(_)) => self.error(
                     "Cannot write through a slice, which may point at read-only memory",
                     span,
-                );
-            }
-            Place::Field(base, _) | Place::Index(base, _) => self.require_var_root(base, span),
+                ),
+                Some(TyKind::SliceMut(_)) => {}
+                _ => self.require_var_root(base, span),
+            },
+            Place::Field(base, _) => self.require_var_root(base, span),
             Place::Deref(pointer) => {
                 if matches!(self.cx.types.kind(pointer.ty), TyKind::Ref(_)) {
                     self.error("Cannot write through a '&' reference", span);
@@ -725,11 +724,14 @@ impl<'c, 'a> FnCx<'c, 'a> {
             _ => (iterable, false),
         };
         let (place, ty) = self.place(inner);
-        let through_var = matches!(self.cx.types.kind(ty), TyKind::RefMut(_));
+        let through_var = matches!(
+            self.cx.types.kind(ty),
+            TyKind::RefMut(_) | TyKind::SliceMut(_)
+        );
         let seq = self.through_ref(place, ty, inner.span);
         if through_var && std::ptr::eq(inner, iterable) {
             writable = true;
-        } else if writable {
+        } else if writable && !through_var {
             self.require_mutable(&seq.0, inner, iterable.span);
             if self.temporary(&seq.0, seq.1, inner) {
                 self.error(
@@ -751,6 +753,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
         let item = match self.cx.types.kind(seq_ty) {
             TyKind::Array(elem, _) | TyKind::Vec(elem) => *elem,
             TyKind::Slice(elem) if !writable => *elem,
+            TyKind::SliceMut(elem) => *elem,
             TyKind::Error => Types::ERROR,
             _ => {
                 let shown = if writable {

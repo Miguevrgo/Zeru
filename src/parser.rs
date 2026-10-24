@@ -441,18 +441,24 @@ impl Parser {
         Some(TypeSpec::Tuple(parts))
     }
 
-    /// `&[T]` is a slice, `&var T` a mutable reference, `&T` a shared one.
+    /// `&[T]` is a slice and `&var [T]` one that writes, `&var T` a
+    /// mutable reference, `&T` a shared one.
     fn parse_reference_type(&mut self) -> Option<TypeSpec> {
         self.bump();
+        let mutable = self.eat(&Token::Var);
         if self.eat(&Token::LBracket) {
-            let elem_type = self.parse_type()?;
+            let elem_type = Box::new(self.parse_type()?);
             self.expect(&Token::RBracket)?;
-            return Some(TypeSpec::Slice(Box::new(elem_type)));
+            return Some(match mutable {
+                true => TypeSpec::SliceMut(elem_type),
+                false => TypeSpec::Slice(elem_type),
+            });
         }
-        if self.eat(&Token::Var) {
-            return Some(TypeSpec::RefMut(Box::new(self.parse_type()?)));
-        }
-        Some(TypeSpec::Ref(Box::new(self.parse_type()?)))
+        let inner = Box::new(self.parse_type()?);
+        Some(match mutable {
+            true => TypeSpec::RefMut(inner),
+            false => TypeSpec::Ref(inner),
+        })
     }
 
     fn parse_named_type(&mut self) -> Option<TypeSpec> {

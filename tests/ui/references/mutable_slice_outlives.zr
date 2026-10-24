@@ -1,0 +1,11 @@
+fn leak() &var [i32] {
+    var v: Vec<i32> = Vec[1, 2, 3];
+    return &var v[..];
+}
+fn take(v: Vec<i32>) {}
+fn main() {
+    var v: Vec<i32> = Vec[1, 2, 3];
+    var s = &var v[0..2];
+    take(v);
+    s[1] = 0;
+}

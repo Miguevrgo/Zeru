@@ -69,6 +69,7 @@ impl Checker<'_> {
             TypeSpec::Pointer(inner) => self.wrap(inner, scope, span, TyKind::Ptr),
             TypeSpec::Optional(inner) => self.wrap(inner, scope, span, TyKind::Optional),
             TypeSpec::Slice(inner) => self.wrap(inner, scope, span, TyKind::Slice),
+            TypeSpec::SliceMut(inner) => self.wrap(inner, scope, span, TyKind::SliceMut),
             TypeSpec::Ref(inner) => self.wrap(inner, scope, span, TyKind::Ref),
             TypeSpec::RefMut(inner) => self.wrap(inner, scope, span, TyKind::RefMut),
             TypeSpec::Result(ok) => self.wrap(ok, scope, span, |ok| TyKind::Result(ok, Types::I32)),

@@ -138,6 +138,31 @@ fn main() {
 While a slice is in use, the compiler does not let its `Vec` grow or be
 freed, since that could move the elements it points at.
 
+### Slices that write
+
+A slice reads its elements. `&var v[a..b]` makes one that may also change
+them, of type `&var [T]`, from a `var` array or Vec; `&var v` lends all of
+one. Besides the methods that read, it has those that move elements around
+without changing how many there are: `sort`, `swap`, `reverse`,
+`rotate_left` and `rotate_right`.
+
+```zeru
+fn clear(values: &var [i32]) {
+    for x in values {
+        x = 0;
+    }
+}
+
+fn main() {
+    var v: Vec<i32> = Vec[5, 1, 4, 2, 3];
+    var front = &var v[..3];
+    front.sort();
+    println("{}", v); // [1, 4, 5, 2, 3]
+    clear(&var v[3..]);
+    println("{}", v); // [1, 4, 5, 0, 0]
+}
+```
+
 ## Tuples
 
 A tuple groups a fixed number of values that can have different types.

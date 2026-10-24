@@ -1,0 +1,60 @@
+fn fill(xs: &var [i32], value: i32) {
+    for i in 0..xs.len() {
+        xs[i] = value;
+    }
+}
+
+fn double(xs: &var [i32]) {
+    for x in xs {
+        x *= 2;
+    }
+}
+
+fn quicksort(xs: &var [i64]) {
+    if xs.len() < 2 {
+        return;
+    }
+    var pivot = xs[xs.len() - 1];
+    var store: usize = 0;
+    for i in 0..xs.len() - 1 {
+        if xs[i] < pivot {
+            xs.swap(i, store);
+            store += 1;
+        }
+    }
+    xs.swap(store, xs.len() - 1);
+    quicksort(&var xs[..store]);
+    quicksort(&var xs[store + 1..]);
+}
+
+fn total(xs: &[i32]) i32 {
+    return xs.sum();
+}
+
+fn main() {
+    var v: Vec<i32> = Vec[1, 2, 3, 4, 5, 6];
+    fill(&var v[1..3], 9);
+    println("{}", v);
+    double(&var v);
+    println("{} {}", v, total(&v));
+    var a: Array<i32, 4> = [4, 3, 2, 1];
+    double(&var a);
+    println("{}", a);
+    var part = &var a[1..];
+    part.sort();
+    part[0] += 100;
+    println("{} {} {}", a, part.len(), part.contains(102));
+    var w: Vec<i64> = Vec[5, -2, 9, 0, 3, 3, 8, -7];
+    quicksort(&var w);
+    println("{}", w);
+    var names: Vec<String> = Vec[String.from("c"), String.from("a"), String.from("b")];
+    var middle = &var names[0..2];
+    middle.reverse();
+    middle.sort();
+    println("{} {}", middle, names);
+    var r = &var v[..];
+    r.rotate_left(2);
+    println("{} {}", v, v.max().unwrap());
+    var ro: &[i32] = &var v[0..2];
+    println("{}", ro);
+}

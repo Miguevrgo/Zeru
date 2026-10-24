@@ -703,6 +703,7 @@ impl<'a> Checker<'a> {
             TyKind::Array(inner, _)
             | TyKind::Vec(inner)
             | TyKind::Slice(inner)
+            | TyKind::SliceMut(inner)
             | TyKind::Optional(inner)
             | TyKind::Ptr(inner)
             | TyKind::Ref(inner)

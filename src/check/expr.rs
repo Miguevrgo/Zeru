@@ -66,16 +66,31 @@ impl FnCx<'_, '_> {
 
     /// `left[start..end]`: the elements of an array, Vec or slice, or the
     /// bytes of a str or String, from `start`, 0 if not written, up to `end`,
-    /// the length if not written, sharing their memory.
+    /// the length if not written, sharing their memory. A `mutable` one,
+    /// `&var left[..]`, may write them.
     fn slice(
         &mut self,
         left: &Expression,
         start: &Option<Box<Expression>>,
         end: &Option<Box<Expression>>,
+        mutable: bool,
         span: Span,
     ) -> Expr {
         let (place, ty) = self.place(left);
         let (place, ty) = self.through_ref(place, ty, left.span);
+        if mutable {
+            match self.cx.types.kind(ty) {
+                TyKind::SliceMut(_) => {}
+                TyKind::Slice(_) => self.error(
+                    "Cannot write through a slice, which may point at read-only memory",
+                    span,
+                ),
+                _ => self.require_mutable(&place, left, span),
+            }
+            if self.temporary(&place, ty, left) {
+                self.error("Cannot create reference to a temporary value", span);
+            }
+        }
         let elem = match self.cx.types.elem(ty) {
             Some(elem) => elem,
             None if self.cx.types.is_error(ty) => return self.error_expr(span),
@@ -95,11 +110,14 @@ impl FnCx<'_, '_> {
             Some(start) => bound(self, start),
             None => self.mk(ExprKind::Int(0), Types::USIZE, span),
         };
-        let mut args = vec![self.address(place, ty, false, left.span), from];
+        let mut args = vec![self.address(place, ty, mutable, left.span), from];
         if let Some(end) = end {
             args.push(bound(self, end));
         }
-        let slice = self.cx.types.intern(TyKind::Slice(elem));
+        let slice = match mutable {
+            true => self.cx.types.intern(TyKind::SliceMut(elem)),
+            false => self.cx.types.intern(TyKind::Slice(elem)),
+        };
         self.mk(ExprKind::Builtin(Builtin::Slice, args), slice, span)
     }
 
@@ -183,7 +201,7 @@ impl FnCx<'_, '_> {
                 }
             },
             ExpressionKind::Identifier(name) => self.identifier(name, span),
-            ExpressionKind::Slice { left, start, end } => self.slice(left, start, end, span),
+            ExpressionKind::Slice { left, start, end } => self.slice(left, start, end, false, span),
             ExpressionKind::Get { .. }
             | ExpressionKind::Index { .. }
             | ExpressionKind::Dereference(_) => {
@@ -273,7 +291,12 @@ impl FnCx<'_, '_> {
                 );
                 self.borrow(place, mutable, span)
             }
-            ExpressionKind::BorrowRefMut(place) => self.borrow(place, true, span),
+            ExpressionKind::BorrowRefMut(inner) => match &inner.kind {
+                ExpressionKind::Slice { left, start, end } => {
+                    self.slice(left, start, end, true, span)
+                }
+                _ => self.borrow(inner, true, span),
+            },
             ExpressionKind::InlineAsm {
                 template,
                 outputs,
@@ -654,7 +677,7 @@ impl FnCx<'_, '_> {
                 }
                 elem
             }
-            TyKind::Vec(elem) | TyKind::Slice(elem) => elem,
+            TyKind::Vec(elem) | TyKind::Slice(elem) | TyKind::SliceMut(elem) => elem,
             TyKind::Error => Types::ERROR,
             TyKind::Ptr(pointee) if matches!(self.cx.types.kind(pointee), TyKind::Array(..)) => {
                 let shown = self.ty(base_ty);
@@ -1172,7 +1195,7 @@ impl FnCx<'_, '_> {
             )
         };
         let is_ptr = |ty| matches!(types.kind(ty), TyKind::Ptr(_));
-        let is_slice = |ty| matches!(types.kind(ty), TyKind::Slice(_));
+        let is_slice = |ty| matches!(types.kind(ty), TyKind::Slice(_) | TyKind::SliceMut(_));
         (number(from) || self.cx.is_enum(from).is_some()) && number(to)
             || from == Types::BOOL && int(to)
             || address(from) && (int(to) || is_ptr(to))

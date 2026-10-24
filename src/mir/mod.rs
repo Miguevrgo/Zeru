@@ -338,7 +338,10 @@ impl Program {
             ) => *inner,
             (
                 Projection::Index(_),
-                TyKind::Array(elem, _) | TyKind::Vec(elem) | TyKind::Slice(elem),
+                TyKind::Array(elem, _)
+                | TyKind::Vec(elem)
+                | TyKind::Slice(elem)
+                | TyKind::SliceMut(elem),
             ) => *elem,
             (Projection::Downcast(at), _) => {
                 *variant = Some(at);
@@ -366,7 +369,10 @@ impl Program {
                 .is_some_and(|e| e.variants.iter().any(|v| !v.is_empty()))
         };
         let found = match (part, kind) {
-            (Part::Ref, TyKind::Ref(_) | TyKind::RefMut(_) | TyKind::Slice(_)) => true,
+            (
+                Part::Ref,
+                TyKind::Ref(_) | TyKind::RefMut(_) | TyKind::Slice(_) | TyKind::SliceMut(_),
+            ) => true,
             (Part::Owning, TyKind::Vec(_)) => true,
             (Part::Owning | Part::Variant, TyKind::Optional(_) | TyKind::Result(..)) => true,
             (Part::Owning | Part::Variant, _) => payloads(),
@@ -412,8 +418,12 @@ impl Program {
             seen.push(ty);
             match self.types.kind(ty) {
                 TyKind::Ref(_) | TyKind::RefMut(_) => return true,
-                TyKind::Slice(elem) if self.stores(owner, *elem, &mut Vec::new()) => return true,
-                TyKind::Slice(_) => {}
+                TyKind::Slice(elem) | TyKind::SliceMut(elem)
+                    if self.stores(owner, *elem, &mut Vec::new()) =>
+                {
+                    return true;
+                }
+                TyKind::Slice(_) | TyKind::SliceMut(_) => {}
                 _ => stack.extend(self.parts(ty)),
             }
         }
