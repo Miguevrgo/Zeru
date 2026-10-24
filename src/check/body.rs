@@ -184,9 +184,11 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// Decide, once its arm is checked, whether `binding` views the
     /// `scrutinee` or holds a copy: a copy of a value that owns no memory
     /// and is never borrowed reads the same, and lets the arm change the
-    /// scrutinee.
+    /// scrutinee. A temporary scrutinee is gone after the `match`, so its
+    /// bindings take their values out of it.
     pub(super) fn settle_binding(&mut self, binding: LocalId, scrutinee: &Place) {
-        let view = self.borrowed[binding.0 as usize] || self.cx.owns_heap(self.local_ty(binding));
+        let view = !matches!(scrutinee, Place::Temp(_))
+            && (self.borrowed[binding.0 as usize] || self.cx.owns_heap(self.local_ty(binding)));
         self.locals[binding.0 as usize].view = view;
         if view {
             self.note_borrow(scrutinee);

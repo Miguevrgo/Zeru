@@ -1,0 +1,12 @@
+status: exit 0
+-- stdout
+40
+true
+got 2
+drop 2
+drop 0
+one 0
+true false
+end
+drop 3
+drop 1

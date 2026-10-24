@@ -1,0 +1,22 @@
+status: exit 0
+-- stdout
+closed
+take 10
+drop 10
+drop 21
+pair 20
+drop 20
+take 30
+drop 30
+a 20
+drop 20
+popped y
+take 40
+drop 40
+drop 50
+gone 50 kept 2
+first 10
+drop 10
+end
+drop 30
+drop 21

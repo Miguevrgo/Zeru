@@ -210,25 +210,26 @@ pub struct HashMap<K: Hash, V> {
         return self.find(key).is_some();
     }
 
-    // Removes the entry under `key` and returns whether there was one.
+    // Removes the entry under `key` and returns its value, or None when
+    // there was none.
     //
     // # Examples
     //
     // ```zeru
     // import std.collections.hashmap::{HashMap};
     //
-    // var open: HashMap<i32, bool> = HashMap.new();
-    // open.insert(5, true);
-    // println("{}", open.remove(5)); // true
-    // println("{}", open.remove(5)); // false
+    // var ages: HashMap<i32, i32> = HashMap.new();
+    // ages.insert(5, 40);
+    // println("{}", ages.remove(5)); // 40
+    // println("{}", ages.remove(5).is_none()); // true
     // ```
     //
     // A removed slot goes back to never used only when its group still has
     // one, since then no search ever went past that group.
-    pub fn remove(var self, key: K) bool {
+    pub fn remove(var self, key: K) V? {
         var found = self.find(key);
         if found.is_none() {
-            return false;
+            return None;
         }
         var slot = found.unwrap();
         var index = self.slots[slot] as usize;
@@ -244,8 +245,8 @@ pub struct HashMap<K: Hash, V> {
             self.slots[moved] = index as u32;
             self.entries.swap(index, last);
         }
-        self.entries.pop();
-        return true;
+        var (_, value) = self.entries.pop().unwrap();
+        return value;
     }
 
     // Removes every entry.

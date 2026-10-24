@@ -328,7 +328,7 @@ impl<'a> Cx<'a> {
                     | Rvalue::Capacity(place)
                     | Rvalue::Discriminant(place)
                     | Rvalue::VecGet(place, _) => out.push((place.clone(), Role::Read)),
-                    Rvalue::VecPop(place) | Rvalue::VecRemove(place, _) => {
+                    Rvalue::VecPop(place) | Rvalue::VecRemove(place, _) | Rvalue::Take(place) => {
                         out.push((place.clone(), Role::Realloc))
                     }
                     _ => {}
@@ -603,9 +603,10 @@ impl<'a> Cx<'a> {
                 }
                 carried
             }
-            Rvalue::DeepCopy(place) | Rvalue::VecPop(place) | Rvalue::VecRemove(place, _) => {
-                self.carried(place, facts)
-            }
+            Rvalue::DeepCopy(place)
+            | Rvalue::VecPop(place)
+            | Rvalue::VecRemove(place, _)
+            | Rvalue::Take(place) => self.carried(place, facts),
             Rvalue::Binary {
                 op: BinOp::PtrAdd | BinOp::PtrSub,
                 left,

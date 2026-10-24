@@ -1,0 +1,38 @@
+status: compile error
+-- stderr
+Error: replace takes a &var to the place it changes, got &i32
+   ╭─[ tests/ui/references/replace_wrong_arguments.zr:5:13 ]
+   │
+ 5 │     replace(&a, 2);
+   │             ─┬
+   │              ╰── replace takes a &var to the place it changes, got &i32
+───╯
+Error: replace takes a &var to the place it changes, got i32
+   ╭─[ tests/ui/references/replace_wrong_arguments.zr:6:13 ]
+   │
+ 6 │     replace(a, 2);
+   │             ┬
+   │             ╰── replace takes a &var to the place it changes, got i32
+───╯
+Error: replace puts i32 in the place, got bool
+   ╭─[ tests/ui/references/replace_wrong_arguments.zr:7:21 ]
+   │
+ 7 │     replace(&var a, true);
+   │                     ──┬─
+   │                       ╰─── replace puts i32 in the place, got bool
+───╯
+Error: Cannot modify 'c', which is not declared 'var'
+   ╭─[ tests/ui/references/replace_wrong_arguments.zr:8:13 ]
+   │
+ 8 │     replace(&var c, 3);
+   │             ───┬──
+   │                ╰──── Cannot modify 'c', which is not declared 'var'
+───╯
+Error: replace takes a &var to a place and the value to put there
+   ╭─[ tests/ui/references/replace_wrong_arguments.zr:9:5 ]
+   │
+ 9 │     replace(&var a);
+   │     ───────┬───────
+   │            ╰───────── replace takes a &var to a place and the value to put there
+───╯
+[-] Error: aborting due to previous error

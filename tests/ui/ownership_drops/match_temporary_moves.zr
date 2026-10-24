@@ -1,0 +1,82 @@
+import std.collections.hashmap::{HashMap};
+
+struct D {
+    id: i32,
+    fn drop(var self) { println("drop {}", self.id); }
+}
+
+enum State {
+    Open(D),
+    Pair(D, D),
+    Closed,
+}
+
+fn take(d: D) {
+    println("take {}", d.id);
+}
+
+fn make(n: i32) State {
+    if n == 0 {
+        return State::Closed;
+    }
+    if n == 1 {
+        return State::Open(D { id: 10 });
+    }
+    return State::Pair(D { id: 20 }, D { id: 21 });
+}
+
+fn maybe(keep: bool) D? {
+    if keep {
+        return D { id: 30 };
+    }
+    return None;
+}
+
+fn main() {
+    for n in 0..3 {
+        match make(n) {
+            State::Open(d) => take(d),
+            State::Pair(a, _) => {
+                println("pair {}", a.id);
+            }
+            State::Closed => println("closed"),
+        }
+    }
+    match maybe(true) {
+        Some(d) => take(d),
+        None => {}
+    }
+    var kept: Vec<D> = Vec.new();
+    match maybe(true) {
+        Some(d) => kept.push(d),
+        None => {}
+    }
+    match make(2) {
+        State::Pair(a, b) => {
+            kept.push(b);
+            println("a {}", a.id);
+        }
+        default => {}
+    }
+    var v: Vec<String> = Vec[String.from("x"), String.from("y")];
+    match v.pop() {
+        Some(s) => println("popped {}", s),
+        None => {}
+    }
+    var s = State::Open(D { id: 40 });
+    match replace(&var s, State::Closed) {
+        State::Open(d) => take(d),
+        default => {}
+    }
+    var w: Vec<D> = Vec[D { id: 50 }];
+    var gone = match w.pop() {
+        Some(d) => d.id,
+        None => 0,
+    };
+    println("gone {} kept {}", gone, kept.len());
+    match make(1) {
+        State::Open(d) | State::Pair(d, _) => println("first {}", d.id),
+        State::Closed => {}
+    }
+    println("end");
+}

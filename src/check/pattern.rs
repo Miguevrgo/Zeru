@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use crate::ast::{Expression, ExpressionKind, Pattern, PatternKind};
 use crate::errors::Span;
 use crate::items::ItemKind;
-use crate::tir::{Arm, Expr, ExprKind, Payload};
+use crate::tir::{Arm, Expr, ExprKind, Payload, Place};
 use crate::ty::{Ty, TyKind, Types};
 
 use super::body::FnCx;
@@ -57,13 +57,14 @@ impl FnCx<'_, '_> {
         let mut arm_ty: Option<Ty> = wraps;
         let mut mismatched = false;
         let mut checked = Vec::new();
+        let temporary = matches!(scrutinee, Place::Temp(_));
         for ((pattern, body), shape) in arms.iter().zip(patterns) {
             self.diverges = before;
             self.enter();
             let bindings: Vec<_> = shape
                 .binds
                 .into_iter()
-                .map(|(name, ty, payloads)| (self.declare(&name, ty, false, true), payloads))
+                .map(|(name, ty, payloads)| (self.declare(&name, ty, false, !temporary), payloads))
                 .collect();
             let wanted = arm_ty.or(expected);
             let mut result = self.expr(body, wanted);

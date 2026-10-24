@@ -1,0 +1,41 @@
+struct D {
+    id: i32,
+    fn drop(var self) { println("drop {}", self.id); }
+}
+
+enum State {
+    Open(D),
+    Closed,
+}
+
+struct Holder {
+    name: String,
+    item: D,
+}
+
+fn swap_in(slot: &var D, id: i32) D {
+    return replace(slot, D { id: id });
+}
+
+fn main() {
+    var a = D { id: 1 };
+    var old = replace(&var a, D { id: 2 });
+    println("old {} now {}", old.id, a.id);
+    var h = Holder { name: String.from("box"), item: D { id: 3 } };
+    var was = replace(&var h.item, D { id: 4 });
+    println("{} {} {}", h.name, was.id, h.item.id);
+    var v: Vec<D> = Vec[D { id: 5 }, D { id: 6 }];
+    var out = replace(&var v[1], D { id: 7 });
+    println("{} {} {}", out.id, v[0].id, v[1].id);
+    var t = State::Open(D { id: 8 });
+    replace(&var a, D { id: 9 });
+    var got = swap_in(&var a, 10);
+    println("got {} a {}", got.id, a.id);
+    var n = 3;
+    var m = replace(&var n, 4);
+    println("{} {}", m, n);
+    var text = String.from("hi");
+    var before = replace(&var text, String.from("bye"));
+    println("{} {}", before, text);
+    println("end");
+}

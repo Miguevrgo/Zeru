@@ -1087,10 +1087,13 @@ impl<'a> Builder<'a> {
 
     /// `match`: a switch on the tag. Each binding is a copy of plain data or
     /// else a reference into the scrutinee, which each alternative of its arm
-    /// sets as it enters.
+    /// sets as it enters. A temporary scrutinee that owns memory gives its
+    /// bindings their values instead: an alternative that binds one takes the
+    /// whole value, copies out the bound parts and drops the others.
     fn match_expr(&mut self, dest: Option<Place>, scrutinee: &tir::Place, arms: &[Arm]) {
         let place = self.as_place(scrutinee);
         let subject = self.place_ty(&place);
+        let take = matches!(scrutinee, tir::Place::Temp(_)) && self.program.needs_drop(subject);
         let tag_ty = match self.types().kind(subject) {
             TyKind::Optional(_) | TyKind::Result(..) => Types::BOOL,
             TyKind::Adt(..) => Types::I32,
@@ -1107,7 +1110,7 @@ impl<'a> Builder<'a> {
             let locals: Vec<(Local, bool)> = arm
                 .bindings
                 .iter()
-                .map(|(local, _)| self.binding(*local))
+                .map(|(local, _)| self.binding(*local, take))
                 .collect();
             let alternatives: Vec<BlockId> = arm
                 .tags
@@ -1143,8 +1146,29 @@ impl<'a> Builder<'a> {
                 .filter(|(_, e)| *e != body)
             {
                 self.current = Some(entry);
+                let owned = |this: &Self, (binding, copy): (Local, bool)| {
+                    copy && this.program.needs_drop(this.locals[binding.0 as usize].ty)
+                };
+                let mut from = place.clone();
+                if locals.iter().any(|&local| owned(self, local)) {
+                    let taken = self.temp(subject);
+                    self.assign(
+                        Place::local(taken),
+                        Rvalue::Use(Operand::Move(place.clone())),
+                    );
+                    from = Place::local(taken);
+                    let bound: Vec<Payload> = arm.bindings.iter().map(|(_, p)| p[at]).collect();
+                    for part in self.payloads(subject, arm.tags[at]) {
+                        let reached = payload(&from, part);
+                        if !bound.contains(&part)
+                            && self.program.needs_drop(self.place_ty(&reached))
+                        {
+                            self.drop(reached);
+                        }
+                    }
+                }
                 for ((_, payloads), &(binding, copy)) in arm.bindings.iter().zip(&locals) {
-                    let reached = payload(&place, payloads[at]);
+                    let reached = payload(&from, payloads[at]);
                     let value = match copy {
                         true => Rvalue::Use(Operand::Copy(reached)),
                         false => Rvalue::AddressOf(reached),
@@ -1155,7 +1179,14 @@ impl<'a> Builder<'a> {
             }
             self.span = outer;
             self.current = Some(body);
-            self.expr_into(dest.clone(), &arm.body);
+            self.scope(|this| {
+                for &(local, copy) in &locals {
+                    if copy {
+                        this.own(local);
+                    }
+                }
+                this.expr_into(dest.clone(), &arm.body);
+            });
             self.goto(merge);
         }
         self.current = Some(merge);
@@ -1163,21 +1194,37 @@ impl<'a> Builder<'a> {
 
     /// The local a `match` binding is, named as it, and whether it holds a
     /// copy: one the checker did not make a view and that refers to
-    /// nothing. Otherwise it is a reference the binding reads its value
-    /// through.
-    fn binding(&mut self, local: tir::LocalId) -> (Local, bool) {
+    /// nothing, or with `take`, one that owns what it holds. Otherwise it is
+    /// a reference the binding reads its value through.
+    fn binding(&mut self, local: tir::LocalId, take: bool) -> (Local, bool) {
         let decl = &self.function.locals[local.0 as usize];
         let name = Some(decl.name.clone()).filter(|name| !name.is_empty());
-        if !decl.view && !self.program.reaches(decl.ty, Part::Ref, &mut Vec::new()) {
+        let owned = take && self.program.needs_drop(decl.ty);
+        if !decl.view && (owned || !self.program.reaches(decl.ty, Part::Ref, &mut Vec::new())) {
             let copy = self.local(decl.ty, name);
             self.map[local.0 as usize] = Some(copy);
-            self.own(copy);
             return (copy, true);
         }
         let pointer = self.program.types.intern(TyKind::Ref(decl.ty));
         let mir = self.local(pointer, name);
         self.views[local.0 as usize] = Some(Place::local(mir).project(Projection::Deref));
         (mir, false)
+    }
+
+    /// Where the parts of a value of `ty` with tag `tag` lie.
+    fn payloads(&self, ty: Ty, tag: i128) -> Vec<Payload> {
+        match self.types().kind(ty) {
+            TyKind::Optional(_) if tag == 1 => vec![Payload::SomeValue],
+            TyKind::Result(..) if tag == 1 => vec![Payload::OkValue],
+            TyKind::Result(..) => vec![Payload::ErrValue],
+            TyKind::Adt(..) => (0..self.program.enums[&ty].variants[tag as usize].len())
+                .map(|field| Payload::Variant {
+                    variant: tag as u32,
+                    field: field as u32,
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
     }
 
     /// `value?` or `value!`: the payload, or else the None or the error
@@ -1294,6 +1341,13 @@ impl<'a> Builder<'a> {
                     }
                     Builtin::Slice => self.slice(held, args),
                     Builtin::HashBits => Rvalue::Use(self.hash_bits(held, args[0].ty)),
+                    Builtin::Replace => {
+                        let new = operand(self, 1);
+                        let old = self.temp(self.place_ty(&held));
+                        self.assign(Place::local(old), Rvalue::Take(held.clone()));
+                        self.assign(held, Rvalue::Use(new));
+                        Rvalue::Use(Operand::Move(Place::local(old)))
+                    }
                     Builtin::Flush
                     | Builtin::CopyBytes
                     | Builtin::VecNew

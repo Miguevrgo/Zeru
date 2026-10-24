@@ -200,6 +200,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 return self.build_into(rvalue, address, ty);
             }
             Rvalue::Use(operand) => self.operand(operand),
+            Rvalue::Take(place) => self.read(place),
             Rvalue::AddressOf(place) => Val::Imm(self.place(place).into()),
             Rvalue::Binary {
                 op,

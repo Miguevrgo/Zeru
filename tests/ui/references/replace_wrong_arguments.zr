@@ -1,0 +1,10 @@
+fn main() {
+    var a = 1;
+    const c = 2;
+    var v: Vec<i32> = Vec[1];
+    replace(&a, 2);
+    replace(a, 2);
+    replace(&var a, true);
+    replace(&var c, 3);
+    replace(&var a);
+}

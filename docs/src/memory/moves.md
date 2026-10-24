@@ -72,6 +72,46 @@ list = Vec[2, 3];
 println("{} {}", taken.len(), list.len()); // 1 2
 ```
 
+## Taking a value out
+
+An owner inside a field, an element or another variable's payload cannot
+simply be moved out, since what holds it would be left with nothing.
+`replace` puts a new value in its place and gives back the old one:
+
+```zeru
+struct Job {
+    name: String,
+    log: Vec<str>,
+}
+
+fn main() {
+    var job = Job { name: String.from("build"), log: Vec["start", "done"] };
+    var finished = replace(&var job.log, Vec.new());
+    println("{} {} {}", job.name, finished.len(), job.log.len()); // build 2 0
+}
+```
+
+A `match` on a value that has no variable of its own, as one a function
+just returned, moves the parts it names into its bindings. On a variable,
+its bindings only borrow, so `replace` takes the value out first:
+
+```zeru
+enum Door {
+    Open(String),
+    Closed,
+}
+
+fn main() {
+    var door = Door::Open(String.from("Ada"));
+    var guests: Vec<String> = Vec.new();
+    match replace(&var door, Door::Closed) {
+        Door::Open(guest) => guests.push(guest),
+        Door::Closed => {}
+    }
+    println("{} {}", guests[0], guests.len()); // Ada 1
+}
+```
+
 ## Copying on purpose
 
 When you really need two independent copies, `copy()` makes one:

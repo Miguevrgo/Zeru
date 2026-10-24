@@ -1,0 +1,10 @@
+fn take(v: Vec<i32>) {}
+
+fn main() {
+    var w: Vec<i32> = Vec[1, 2, 3];
+    var r = &w[0];
+    var x = replace(&var w, Vec[3]);
+    take(x);
+    var junk: Vec<i32> = Vec[99, 98, 97];
+    println("{} {}", *r, junk.len());
+}

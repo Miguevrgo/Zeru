@@ -1,0 +1,19 @@
+status: exit 0
+-- stdout
+old 1 now 2
+box 3 4
+6 5 7
+drop 2
+got 9 a 10
+3 4
+hi bye
+end
+drop 9
+drop 8
+drop 6
+drop 5
+drop 7
+drop 3
+drop 4
+drop 1
+drop 10

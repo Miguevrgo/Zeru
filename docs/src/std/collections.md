@@ -33,8 +33,22 @@ stock.insert(202, 0);
 stock.insert(101, 7);
 println("{} {}", stock.len(), *stock.get(101).unwrap()); // 2 7
 println("{}", stock.get(303).is_none()); // true
-stock.remove(202);
+println("{}", stock.remove(202)); // 0
 println("{}", stock.contains(202)); // false
+```
+
+`remove` gives back the value it takes out, as a `V?`, so a value that owns
+memory leaves the map whole:
+
+```zeru
+import std.collections.hashmap::{HashMap};
+
+var names: HashMap<i32, String> = HashMap.new();
+names.insert(1, String.from("Ada"));
+match names.remove(1) {
+    Some(name) => println("bye {}", name), // bye Ada
+    None => println("nobody"),
+}
 ```
 
 ```zeru

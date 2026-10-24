@@ -35,7 +35,7 @@ fn largest<T: Ord>(a: T, b: T) T { ... }        // generic, with a bound
 
 ```zeru,ignore
 if x > 0 { ... } else if x == 0 { ... } else { ... }
-var sign = if x < 0 { -1 } else { 1 };   // one expression per branch
+var sign = if x < 0 { -1 } else { 1 };   // one expression, or a block that returns
 while running { ... break; ... continue; ... }
 for i in 0..10 { ... }            // 0 to 9
 for x in list { ... }             // each element
@@ -110,6 +110,7 @@ pub fn shared() { ... }              // usable from other files
 ```zeru,ignore
 var b = a;              // copies plain data, moves a Vec, String or owner
 var c = a.copy();       // an explicit copy of what a owns
+var old = replace(&var p.name, String.new());   // take a value out, leave another
 fn read(v: &Vec<i32>)       read(&v);         // borrow to read
 fn change(v: &var Vec<i32>) change(&var v);   // borrow to change
 *r = 5;                 // write through a reference

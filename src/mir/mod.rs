@@ -181,6 +181,9 @@ pub enum Rvalue {
     VecRemove(Place, Operand),
     VecPop(Place),
     VecGet(Place, Operand),
+    /// The value at a place about to get a new one, which owns it from now
+    /// on: what pointed into the memory it owns no longer may.
+    Take(Place),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -259,7 +262,8 @@ impl Rvalue {
             | Rvalue::Len(_)
             | Rvalue::Capacity(_)
             | Rvalue::Discriminant(_)
-            | Rvalue::VecPop(_) => Vec::new(),
+            | Rvalue::VecPop(_)
+            | Rvalue::Take(_) => Vec::new(),
         }
     }
 }

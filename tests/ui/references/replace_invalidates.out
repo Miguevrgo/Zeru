@@ -1,0 +1,20 @@
+status: compile error
+-- stderr
+Error: Cannot change 'w' while 'r' still refers into it
+   ╭─[ tests/ui/references/replace_invalidates.zr:6:13 ]
+   │
+ 6 │     var x = replace(&var w, Vec[3]);
+   │             ───────────┬───────────
+   │                        ╰───────────── Cannot change 'w' while 'r' still refers into it
+   │
+   ├─[ tests/ui/references/replace_invalidates.zr:6:13 ]
+   │
+ 5 │     var r = &w[0];
+   │             ──┬──
+   │               ╰──── borrowed here
+   │
+ 9 │     println("{} {}", *r, junk.len());
+   │                       ┬
+   │                       ╰── used later here
+───╯
+[-] Error: aborting due to previous error

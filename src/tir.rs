@@ -369,6 +369,7 @@ pub enum Builtin {
     CopyBytes,
     Slice,
     HashBits,
+    Replace,
 }
 
 /// One arm of a `match`; `span` is its pattern, where its bindings borrow

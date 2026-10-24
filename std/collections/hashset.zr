@@ -64,7 +64,7 @@ pub struct HashSet<K: Hash> {
     // println("{}", ids.remove(42)); // false
     // ```
     pub fn remove(var self, key: K) bool {
-        return self.members.remove(key);
+        return self.members.remove(key).is_some();
     }
 
     // Removes every member.

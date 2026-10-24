@@ -201,6 +201,12 @@ impl FnCx<'_, '_> {
                 _ => {}
             }
         }
+        if name == "replace"
+            && self.local(name).is_none()
+            && self.cx.items.lookup_value(module, name).is_none()
+        {
+            return self.replace(args, span);
+        }
         match name {
             "Ok" => return self.ok(args, expected, span),
             "Err" => return self.err(args, expected, span),
@@ -1187,6 +1193,50 @@ impl FnCx<'_, '_> {
                 out.push(self.write(stderr, vec![Vec::new(), Vec::new()], vec![read], span));
             }
         }
+    }
+
+    /// `replace(&var place, value)`: `value` put in `place`, and what was
+    /// there before given back.
+    fn replace(&mut self, args: &[Expression], span: Span) -> Expr {
+        let [place, value] = args else {
+            self.error(
+                "replace takes a &var to a place and the value to put there",
+                span,
+            );
+            self.check_args_only(args);
+            return self.error_expr(span);
+        };
+        let target = self.expr(place, None);
+        let pointer = self.resolve(target.ty);
+        let TyKind::RefMut(ty) = *self.cx.types.kind(pointer) else {
+            if !self.cx.types.is_error(pointer) {
+                let got = self.ty(pointer);
+                self.error(
+                    format!("replace takes a &var to the place it changes, got {got}"),
+                    place.span,
+                );
+            }
+            self.expr(value, None);
+            return self.error_expr(span);
+        };
+        let new = self.expr(value, Some(ty));
+        let mut new = self.coerce_or(new, ty, value.span, |want, got| {
+            format!("replace puts {want} in the place, got {got}")
+        });
+        self.consume(&mut new);
+        let address = match target.kind {
+            ExprKind::AddressOf(_) => target,
+            _ => self.mk(
+                ExprKind::AddressOf(Place::Deref(Box::new(target))),
+                pointer,
+                place.span,
+            ),
+        };
+        self.mk(
+            ExprKind::Builtin(Builtin::Replace, vec![address, new]),
+            ty,
+            span,
+        )
     }
 
     /// `assert(cond)`, or `assert(cond, "format", values..)` with a message
