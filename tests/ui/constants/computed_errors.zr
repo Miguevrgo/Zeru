@@ -29,7 +29,7 @@ fn selfish() i32 {
     return LOOP + 1;
 }
 fn text() String {
-    return String.from("x");
+    return String.new();
 }
 const A = heap();
 const B = noisy();

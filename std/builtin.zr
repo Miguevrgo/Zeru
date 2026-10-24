@@ -406,7 +406,7 @@ struct ZeruBig {
         }
     }
 
-    fn add(var self, other: ZeruBig) {
+    fn add(var self, other: &ZeruBig) {
         var carry: u64 = 0;
         var at: usize = 0;
         while at < self.len || at < other.len || carry > 0 {
@@ -457,12 +457,13 @@ struct ZeruBig {
         }
         var half = self.div_small(2) == 1;
         if half && (below || self.len > 0 && self.limbs[0] % 2 == 1) {
-            self.add(__zeru_big(1));
+            var one = __zeru_big(1);
+            self.add(&one);
         }
     }
 
     // Subtract `other`, which is no greater.
-    fn sub(var self, other: ZeruBig) {
+    fn sub(var self, other: &ZeruBig) {
         var borrow: u64 = 0;
         var at: usize = 0;
         while at < self.len {
@@ -485,7 +486,7 @@ struct ZeruBig {
     }
 
     // -1, 0 or 1 as self is below, equal to or above `other`.
-    fn cmp(self, other: ZeruBig) i32 {
+    fn cmp(self, other: &ZeruBig) i32 {
         if self.len != other.len {
             if self.len < other.len {
                 return -1;
@@ -518,7 +519,7 @@ fn __zeru_big(value: u64) ZeruBig {
 }
 
 // Whether `low` is at or under `high`, or strictly under unless `inclusive`.
-fn __zeru_under(low: ZeruBig, high: ZeruBig, inclusive: bool) bool {
+fn __zeru_under(low: &ZeruBig, high: &ZeruBig, inclusive: bool) bool {
     var order = low.cmp(high);
     return order < 0 || inclusive && order == 0;
 }
@@ -574,8 +575,8 @@ fn __zeru_shortest(value: f64, mantissa: u64, exponent: i64, hidden: u64, lowest
     }
     while true {
         var high = r;
-        high.add(plus);
-        if __zeru_under(high, s, !even) {
+        high.add(&plus);
+        if __zeru_under(&high, &s, !even) {
             break;
         }
         s.mul_small(10);
@@ -583,9 +584,9 @@ fn __zeru_shortest(value: f64, mantissa: u64, exponent: i64, hidden: u64, lowest
     }
     while true {
         var high = r;
-        high.add(plus);
+        high.add(&plus);
         high.mul_small(10);
-        if !__zeru_under(high, s, !even) {
+        if !__zeru_under(&high, &s, !even) {
             break;
         }
         r.mul_small(10);
@@ -600,18 +601,18 @@ fn __zeru_shortest(value: f64, mantissa: u64, exponent: i64, hidden: u64, lowest
         plus.mul_small(10);
         minus.mul_small(10);
         var digit: u8 = 0;
-        while !__zeru_under(r, s, false) {
-            r.sub(s);
+        while !__zeru_under(&r, &s, false) {
+            r.sub(&s);
             digit += 1;
         }
         var high = r;
-        high.add(plus);
-        var low_reached = __zeru_under(r, minus, even);
-        var high_reached = !__zeru_under(high, s, !even);
+        high.add(&plus);
+        var low_reached = __zeru_under(&r, &minus, even);
+        var high_reached = !__zeru_under(&high, &s, !even);
         if low_reached && high_reached {
             var twice = r;
             twice.mul_small(2);
-            var order = twice.cmp(s);
+            var order = twice.cmp(&s);
             if order > 0 || order == 0 && digit % 2 == 1 {
                 digit += 1;
             }
@@ -1077,7 +1078,7 @@ fn __zeru_order(a: u64, ten: i64, b: u64, two: i64) i32 {
     } else {
         left.mul_pow2(0 - two);
     }
-    return left.cmp(right);
+    return left.cmp(&right);
 }
 
 // `v.sort()`: `v` in ascending order, by introsort: quicksort around a

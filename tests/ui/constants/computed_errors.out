@@ -1,18 +1,5 @@
 status: compile error
 -- stderr
-Error: Computing a constant while compiling cannot use the heap or a slice
-      ╭─[ std/builtin.zr:1309:13 ]
-      │
- 1309 │     var s = String.new();
-      │             ──────┬─────
-      │                   ╰─────── Computing a constant while compiling cannot use the heap or a slice
-      │
-      ├─[ tests/ui/constants/computed_errors.zr:41:1 ]
-      │
-   41 │ const H = text();
-      │ ────────┬────────
-      │         ╰────────── while computing 'H'
-──────╯
 Error: Computing a constant while compiling cannot make a Vec: it lives on the heap
     ╭─[ tests/ui/constants/computed_errors.zr:2:23 ]
     │
@@ -87,5 +74,16 @@ Error: 'LOOP' is defined in terms of itself
  29 │     return LOOP + 1;
     │            ──┬─
     │              ╰─── 'LOOP' is defined in terms of itself
+────╯
+Error: Computing a constant while compiling cannot use the heap or a slice
+    ╭─[ tests/ui/constants/computed_errors.zr:32:12 ]
+    │
+ 32 │     return String.new();
+    │            ──────┬─────
+    │                  ╰─────── Computing a constant while compiling cannot use the heap or a slice
+    │
+ 41 │ const H = text();
+    │ ────────┬────────
+    │         ╰────────── while computing 'H'
 ────╯
 [-] Error: aborting due to previous error

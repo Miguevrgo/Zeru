@@ -1,0 +1,121 @@
+enum Shape {
+    Circle(f64),
+    Rect(f64, f64),
+    Dot,
+}
+
+struct Acc {
+    total: i64,
+    count: i32,
+    hist: Array<i32, 4>,
+
+    fn add(var self, x: i64) {
+        self.total += x;
+        self.count += 1;
+        self.hist[(x % 4) as usize] += 1;
+    }
+
+    fn mean(self) f64 {
+        return self.total as f64 / self.count as f64;
+    }
+}
+
+fn area(s: Shape) f64 {
+    return match s {
+        Shape::Circle(r) => 3.0 * r * r,
+        Shape::Rect(w, h) if w == h => w * w,
+        Shape::Rect(w, h) => w * h + 0.5,
+        Shape::Dot => 0.0,
+    };
+}
+
+fn shapes() f64 {
+    var list: Array<Shape, 4> = [Shape::Circle(2.0), Shape::Rect(3.0, 3.0), Shape::Rect(2.0, 5.0), Shape::Dot];
+    var sum = 0.0;
+    for s in list {
+        sum += area(s);
+    }
+    return sum;
+}
+
+fn stats() (i64, i32, f64, Array<i32, 4>) {
+    var a = Acc { total: 0, count: 0, hist: [0; 4] };
+    for i in 1..=37 {
+        a.add((i * i % 11) as i64);
+    }
+    return (a.total, a.count, a.mean(), a.hist);
+}
+
+fn vowels(s: str) i32 {
+    var n = 0;
+    for b in s {
+        n += match b {
+            'a' | 'e' | 'i' | 'o' | 'u' => 1,
+            default => 0,
+        };
+    }
+    return n;
+}
+
+fn find(xs: &Array<i32, 6>, want: i32) usize? {
+    for i, x in xs {
+        if x == want {
+            return i;
+        }
+    }
+    return None;
+}
+
+fn finds() (usize, bool)? {
+    var xs: Array<i32, 6> = [5, 8, 13, 21, 34, 55];
+    var at = find(&xs, 21)?;
+    return (at, find(&xs, 4).is_none());
+}
+
+fn wrapper() (usize, bool)? {
+    return finds();
+}
+
+fn swapped() Array<i32, 3> {
+    var a: Array<i32, 3> = [1, 2, 3];
+    var b = replace(&var a[0], 9);
+    a[2] = b;
+    var t = (a[1], a[2]);
+    (a[1], a[2]) = (t.1, t.0);
+    return a;
+}
+
+fn primes() Array<bool, 50> {
+    var sieve: Array<bool, 50> = [true; 50];
+    sieve[0] = false;
+    sieve[1] = false;
+    var i: usize = 2;
+    while i * i < 50 {
+        if sieve[i] {
+            var j = i * i;
+            while j < 50 {
+                sieve[j] = false;
+                j += i;
+            }
+        }
+        i += 1;
+    }
+    return sieve;
+}
+
+const SH: f64 = shapes();
+const ST: (i64, i32, f64, Array<i32, 4>) = stats();
+const VO: i32 = vowels("compile time evaluation");
+const FI: (usize, bool)? = wrapper();
+const SW: Array<i32, 3> = swapped();
+const PR: Array<bool, 50> = primes();
+
+fn main() {
+    println("{} {}", SH, shapes());
+    println("{} {}", ST, stats());
+    println("{} {}", VO, vowels("compile time evaluation"));
+    println("{} {}", FI, wrapper());
+    println("{} {}", SW, swapped());
+    println("{}", PR);
+    println("{}", primes());
+}

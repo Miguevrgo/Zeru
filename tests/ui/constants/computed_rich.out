@@ -1,0 +1,9 @@
+status: exit 0
+-- stdout
+31.5 31.5
+(151, 37, 4.081081081081081, [10, 21, 0, 6]) (151, 37, 4.081081081081081, [10, 21, 0, 6])
+11 11
+(3, true) (3, true)
+[9, 1, 2] [9, 1, 2]
+[false, false, true, true, false, true, false, true, false, false, false, true, false, true, false, false, false, true, false, true, false, false, false, true, false, false, false, false, false, true, false, true, false, false, false, false, false, true, false, false, false, true, false, true, false, false, false, true, false, false]
+[false, false, true, true, false, true, false, true, false, false, false, true, false, true, false, false, false, true, false, true, false, false, false, true, false, false, false, false, false, true, false, true, false, false, false, false, false, true, false, false, false, true, false, true, false, false, false, true, false, false]
