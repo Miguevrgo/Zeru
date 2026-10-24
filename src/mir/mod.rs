@@ -153,6 +153,9 @@ pub enum ConstValue {
     Float(f64),
     Bool(bool),
     Str(Vec<u8>),
+    /// The parts of an array, a tuple or a struct, numbers and bools all the
+    /// way down.
+    Parts(Vec<ConstValue>),
 }
 
 pub enum Rvalue {

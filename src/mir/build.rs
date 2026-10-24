@@ -838,16 +838,41 @@ impl<'a> Builder<'a> {
 
     fn constant(&self, expr: &Expr) -> Option<Constant> {
         let value = match &expr.kind {
-            ExprKind::Int(value) => ConstValue::Int(*value),
-            ExprKind::Float(value) => ConstValue::Float(*value),
-            ExprKind::Bool(value) => ConstValue::Bool(*value),
             ExprKind::Str(bytes) => ConstValue::Str(bytes.clone()),
-            ExprKind::Variant(index, _) if self.is_plain_enum(expr.ty) => {
-                ConstValue::Int(i128::from(*index))
-            }
-            _ => return None,
+            _ => self.plain_constant(expr)?,
         };
         Some(Constant { value, ty: expr.ty })
+    }
+
+    /// The value of `expr` when it is a number, a bool, or a non-empty
+    /// array, tuple or struct of them written out, with no `drop` to run.
+    fn plain_constant(&self, expr: &Expr) -> Option<ConstValue> {
+        if self.program.needs_drop(expr.ty) {
+            return None;
+        }
+        let parts = |values: Vec<&Expr>| {
+            values
+                .into_iter()
+                .map(|value| self.plain_constant(value))
+                .collect::<Option<Vec<_>>>()
+                .filter(|parts| !parts.is_empty())
+                .map(ConstValue::Parts)
+        };
+        match &expr.kind {
+            ExprKind::Int(value) => Some(ConstValue::Int(*value)),
+            ExprKind::Float(value) => Some(ConstValue::Float(*value)),
+            ExprKind::Bool(value) => Some(ConstValue::Bool(*value)),
+            ExprKind::Variant(index, _) if self.is_plain_enum(expr.ty) => {
+                Some(ConstValue::Int(i128::from(*index)))
+            }
+            ExprKind::Array(values) | ExprKind::Tuple(values) => parts(values.iter().collect()),
+            ExprKind::Struct(fields) => {
+                let mut fields: Vec<_> = fields.iter().collect();
+                fields.sort_by_key(|(at, _)| *at);
+                parts(fields.into_iter().map(|(_, value)| value).collect())
+            }
+            _ => None,
+        }
     }
 
     fn is_plain_enum(&self, ty: Ty) -> bool {

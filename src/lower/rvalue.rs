@@ -2,6 +2,7 @@
 
 use inkwell::{
     FloatPredicate, IntPredicate,
+    module::Linkage,
     types::BasicTypeEnum,
     values::{BasicValueEnum, IntValue, PointerValue},
 };
@@ -75,16 +76,50 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         }
     }
 
+    /// A constant: a scalar as it is, text and parts in memory, the parts
+    /// read from a global, which lets a value nothing writes stay there.
     fn constant(&mut self, constant: &Constant) -> Val<'ctx> {
-        let llvm = match &constant.value {
+        match &constant.value {
             ConstValue::Str(_) => {
                 let slot = self.alloca(constant.ty, "str");
                 self.build_str(constant, slot);
-                return Val::Mem(slot);
+                Val::Mem(slot)
             }
-            _ => self.llvm_ty(constant.ty),
-        };
-        Val::Imm(match (&constant.value, llvm) {
+            ConstValue::Parts(_) => {
+                let value = self.const_value(&constant.value, constant.ty);
+                let global = self.module.add_global(value.get_type(), None, "parts");
+                global.set_initializer(&value);
+                global.set_constant(true);
+                global.set_linkage(Linkage::Private);
+                global.set_unnamed_addr(true);
+                Val::Mem(global.as_pointer_value())
+            }
+            _ => Val::Imm(self.const_value(&constant.value, constant.ty)),
+        }
+    }
+
+    /// The LLVM constant for `value`, of type `ty`.
+    fn const_value(&mut self, value: &ConstValue, ty: Ty) -> BasicValueEnum<'ctx> {
+        let llvm = self.llvm_ty(ty);
+        match (value, llvm) {
+            (ConstValue::Parts(parts), _) => {
+                let tys = match self.types().kind(ty).clone() {
+                    TyKind::Array(elem, len) => vec![elem; len as usize],
+                    TyKind::Tuple(parts) => parts,
+                    _ => self.program.structs[&ty].fields.clone(),
+                };
+                let values: Vec<BasicValueEnum> = parts
+                    .iter()
+                    .zip(tys)
+                    .map(|(part, ty)| self.const_value(part, ty))
+                    .collect();
+                match llvm {
+                    BasicTypeEnum::ArrayType(array) => {
+                        const_array(array.get_element_type(), &values)
+                    }
+                    _ => llvm.into_struct_type().const_named_struct(&values).into(),
+                }
+            }
             (ConstValue::Int(_), BasicTypeEnum::PointerType(t)) => t.const_null().into(),
             (ConstValue::Int(value), BasicTypeEnum::FloatType(t)) => {
                 t.const_float(*value as f64).into()
@@ -96,8 +131,8 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 .bool_type()
                 .const_int(u64::from(*value), false)
                 .into(),
-            _ => unreachable!("handled above"),
-        })
+            (ConstValue::Str(_), _) => unreachable!("text is built in memory"),
+        }
     }
 
     fn build_str(&mut self, constant: &Constant, dst: PointerValue<'ctx>) {
@@ -626,4 +661,30 @@ fn scalar_leaves<'ctx>(
         path.pop();
         fits
     })
+}
+
+/// The LLVM array of `values`, each of type `elem`.
+fn const_array<'ctx>(
+    elem: BasicTypeEnum<'ctx>,
+    values: &[BasicValueEnum<'ctx>],
+) -> BasicValueEnum<'ctx> {
+    match elem {
+        BasicTypeEnum::IntType(t) => {
+            let values: Vec<_> = values.iter().map(|v| v.into_int_value()).collect();
+            t.const_array(&values).into()
+        }
+        BasicTypeEnum::FloatType(t) => {
+            let values: Vec<_> = values.iter().map(|v| v.into_float_value()).collect();
+            t.const_array(&values).into()
+        }
+        BasicTypeEnum::StructType(t) => {
+            let values: Vec<_> = values.iter().map(|v| v.into_struct_value()).collect();
+            t.const_array(&values).into()
+        }
+        BasicTypeEnum::ArrayType(t) => {
+            let values: Vec<_> = values.iter().map(|v| v.into_array_value()).collect();
+            t.const_array(&values).into()
+        }
+        _ => unreachable!("a constant array holds numbers, bools and parts of them"),
+    }
 }
