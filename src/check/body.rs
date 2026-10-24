@@ -725,7 +725,11 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// map or a set, by the list of their entries.
     fn sequence(&mut self, iterable: &Expression) -> (Place, Ty, bool, Walked) {
         let (inner, mut writable) = match &iterable.kind {
-            ExpressionKind::BorrowRefMut(inner) => (inner.as_ref(), true),
+            ExpressionKind::BorrowRefMut(inner)
+                if !matches!(inner.kind, ExpressionKind::Slice { .. }) =>
+            {
+                (inner.as_ref(), true)
+            }
             ExpressionKind::BorrowRef(inner) => (inner.as_ref(), false),
             _ => (iterable, false),
         };
