@@ -1,7 +1,7 @@
-struct Point { x: i32 }
+struct Point { x: Vec<i32> }
 fn main() {
-    var p = Point { x: 1 };
-    var q = Point { x: 1 };
+    var p = Point { x: Vec[1] };
+    var q = Point { x: Vec[1] };
     var a = true + true;
     var b = 1 && 2;
     var c = p == q;

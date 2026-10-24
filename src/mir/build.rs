@@ -670,13 +670,20 @@ impl<'a> Builder<'a> {
         at
     }
 
-    /// `op` applied to two values, unchecked, into a new local.
-    /// How the tuples at `left` and `right` order, -1, 0 or 1: the first part
-    /// that differs decides.
+    /// The parts of a tuple or a struct, which compare and hash in order.
+    fn parts_of(&self, ty: Ty) -> Option<Vec<Ty>> {
+        match self.types().kind(ty) {
+            TyKind::Tuple(parts) => Some(parts.clone()),
+            _ => self.program.structs.get(&ty).map(|s| s.fields.clone()),
+        }
+    }
+
+    /// How the tuples or structs at `left` and `right` order, -1, 0 or 1:
+    /// the first part that differs decides.
     fn tuple_order(&mut self, left: Place, right: Place, ty: Ty) -> Operand {
-        let TyKind::Tuple(parts) = self.types().kind(ty).clone() else {
-            unreachable!("only tuples are compared part by part")
-        };
+        let parts = self
+            .parts_of(ty)
+            .expect("only tuples and structs are compared part by part");
         let mut order = constant(0, Types::I32);
         for (at, part) in parts.into_iter().enumerate() {
             let field = Projection::Field(at as u32);
@@ -692,7 +699,7 @@ impl<'a> Builder<'a> {
 
     /// How the parts at `l` and `r`, of type `ty`, order: -1, 0 or 1.
     fn part_order(&mut self, l: Place, r: Place, ty: Ty) -> Operand {
-        if matches!(self.types().kind(ty), TyKind::Tuple(_)) {
+        if self.parts_of(ty).is_some() {
             return self.tuple_order(l, r, ty);
         }
         if ty == Types::STR || ty == Types::STRING {
@@ -756,9 +763,9 @@ impl<'a> Builder<'a> {
     }
 
     /// The bits a hash map hashes for the key at `key`: the key as a `u64`,
-    /// or for a tuple the bits of its parts mixed in turn.
+    /// or for a tuple or struct the bits of its parts mixed in turn.
     fn hash_bits(&mut self, key: Place, ty: Ty) -> Operand {
-        let TyKind::Tuple(parts) = self.types().kind(ty).clone() else {
+        let Some(parts) = self.parts_of(ty) else {
             let bits = self.temp(Types::U64);
             let value = Operand::Copy(key);
             let cast = Rvalue::Cast {
@@ -890,9 +897,7 @@ impl<'a> Builder<'a> {
                     _ => Rvalue::Unary(*op, operand),
                 }
             }
-            ExprKind::Binary(op, left, right)
-                if matches!(self.types().kind(left.ty), TyKind::Tuple(_)) =>
-            {
+            ExprKind::Binary(op, left, right) if self.parts_of(left.ty).is_some() => {
                 let (l, r) = (self.as_temp(left), self.as_temp(right));
                 let order = self.tuple_order(Place::local(l), Place::local(r), left.ty);
                 Rvalue::Binary {

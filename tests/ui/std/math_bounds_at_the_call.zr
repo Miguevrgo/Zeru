@@ -1,8 +1,8 @@
 import std.math;
 struct P {
-    x: i32,
+    x: Vec<i32>,
 }
 fn main() {
-    println("{}", math::max(P { x: 1 }, P { x: 2 }).x);
+    println("{}", math::max(P { x: Vec[1] }, P { x: Vec[2] }).x.len());
     println("{}", math::abs("x"));
 }

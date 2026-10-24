@@ -1,0 +1,11 @@
+status: exit 0
+-- stdout
+false true true false
+Ada 20
+Ada 36
+Zoe 30
+2 true
+four-five
+5
+true true
+true 3

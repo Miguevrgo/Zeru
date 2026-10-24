@@ -3,9 +3,9 @@ status: compile error
 Error: 'math::max' asks for T: Ord, which P does not satisfy
    ╭─[ tests/ui/std/math_bounds_at_the_call.zr:6:19 ]
    │
- 6 │     println("{}", math::max(P { x: 1 }, P { x: 2 }).x);
-   │                   ────────────────┬────────────────
-   │                                   ╰────────────────── 'math::max' asks for T: Ord, which P does not satisfy
+ 6 │     println("{}", math::max(P { x: Vec[1] }, P { x: Vec[2] }).x.len());
+   │                   ─────────────────────┬─────────────────────
+   │                                        ╰─────────────────────── 'math::max' asks for T: Ord, which P does not satisfy
 ───╯
 Error: 'math::abs' asks for T: Num, which str does not satisfy
    ╭─[ tests/ui/std/math_bounds_at_the_call.zr:7:19 ]

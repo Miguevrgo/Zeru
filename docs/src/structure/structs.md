@@ -108,6 +108,28 @@ them, is plain data too and is copied on assignment. A struct holding a
 `Vec`, a `String` or anything else that owns memory is moved instead; the
 [Memory](../memory/README.md) chapter explains the difference.
 
+## Comparing structs
+
+Structs compare field by field, in the order the fields are written, like
+tuples: `==` when every field is equal, and `<` by the first field that
+differs. A struct whose fields all compare can be sorted, and one whose
+fields are all integers, bools or enums without data can be a hash map
+key:
+
+```zeru
+struct Version {
+    major: i32,
+    minor: i32,
+}
+
+fn main() {
+    var versions: Vec<Version> = Vec[Version { major: 2, minor: 0 }, Version { major: 1, minor: 4 }];
+    versions.sort();
+    println("{}.{}", versions[0].major, versions[0].minor); // 1.4
+    println("{}", versions[0] == Version { major: 1, minor: 4 }); // true
+}
+```
+
 ## Visibility
 
 Fields are always visible to the code using the struct. Methods and the

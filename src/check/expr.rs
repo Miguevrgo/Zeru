@@ -1537,10 +1537,8 @@ impl Checker<'_> {
     /// Whether `operator` means something for operands of type `ty`; the
     /// bounds `Eq`, `Ord` and `Num` ask for `==`, `<` and `+`.
     pub(super) fn operator_applies(&mut self, operator: &Token, ty: Ty) -> bool {
-        if let (
-            Token::Eq | Token::NotEq | Token::Lt | Token::Gt | Token::Leq | Token::Geq,
-            TyKind::Tuple(parts),
-        ) = (operator, self.types.kind(ty).clone())
+        if let Token::Eq | Token::NotEq | Token::Lt | Token::Gt | Token::Leq | Token::Geq = operator
+            && let Some(parts) = self.parts_of(ty)
         {
             return parts
                 .into_iter()

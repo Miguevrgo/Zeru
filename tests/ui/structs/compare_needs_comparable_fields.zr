@@ -1,0 +1,16 @@
+import std.collections.hashmap::{HashMap};
+
+struct Bag {
+    items: Vec<i32>,
+}
+
+struct Spot {
+    x: f64,
+}
+
+fn main() {
+    var a = Bag { items: Vec[1] };
+    var b = Bag { items: Vec[1] };
+    println("{}", a == b);
+    var m: HashMap<Spot, i32> = HashMap.new();
+}

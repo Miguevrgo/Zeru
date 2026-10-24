@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: Operator '==' cannot be applied to Bag
+    ╭─[ tests/ui/structs/compare_needs_comparable_fields.zr:14:19 ]
+    │
+ 14 │     println("{}", a == b);
+    │                   ───┬──
+    │                      ╰──── Operator '==' cannot be applied to Bag
+────╯
+Error: 'hashmap::HashMap' asks for K: Hash, which Spot does not satisfy
+    ╭─[ tests/ui/structs/compare_needs_comparable_fields.zr:15:5 ]
+    │
+ 15 │     var m: HashMap<Spot, i32> = HashMap.new();
+    │     ─────────────────────┬────────────────────
+    │                          ╰────────────────────── 'hashmap::HashMap' asks for K: Hash, which Spot does not satisfy
+────╯
+[-] Error: aborting due to previous error

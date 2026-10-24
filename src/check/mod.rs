@@ -556,6 +556,17 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// The parts a tuple or struct compares and hashes by, in order.
+    pub(crate) fn parts_of(&mut self, ty: Ty) -> Option<Vec<Ty>> {
+        match self.types.kind(ty).clone() {
+            TyKind::Tuple(parts) => Some(parts),
+            _ if self.is_struct(ty).is_some() => {
+                Some(self.fields_of(ty).into_iter().map(|(_, ty)| ty).collect())
+            }
+            _ => None,
+        }
+    }
+
     /// The fields of a struct at the given type arguments.
     pub(crate) fn fields_of(&mut self, ty: Ty) -> Vec<(String, Ty)> {
         let TyKind::Adt(def, args) = self.types.kind(ty).clone() else {
@@ -703,9 +714,9 @@ impl<'a> Checker<'a> {
     /// Report an argument that does not meet its parameter's bound, once per
     /// item and arguments, so the complaint lands on the use, not inside.
     /// Whether `ty` can be a hash map key: an integer, a bool, an enum
-    /// without payloads, or a tuple of those.
+    /// without payloads, or a tuple or struct of those.
     pub(super) fn hashes(&mut self, ty: Ty) -> bool {
-        if let TyKind::Tuple(parts) = self.types.kind(ty).clone() {
+        if let Some(parts) = self.parts_of(ty) {
             return parts.into_iter().all(|part| self.hashes(part));
         }
         self.types.as_int(ty).is_some()

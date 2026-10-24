@@ -1,0 +1,58 @@
+import std.collections.hashmap::{HashMap};
+import std.collections.hashset::{HashSet};
+import std.collections.binary_heap::{BinaryHeap};
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Person {
+    name: String,
+    age: u8,
+}
+
+struct Pair<T> {
+    a: T,
+    b: T,
+}
+
+enum Color { Red, Green }
+
+struct Tagged {
+    color: Color,
+    at: Point,
+    weight: f64,
+}
+
+fn main() {
+    var p = Point { x: 1, y: 2 };
+    var q = Point { x: 1, y: 3 };
+    println("{} {} {} {}", p == q, p != q, p < q, q <= p);
+    var people: Vec<Person> = Vec[
+        Person { name: String.from("Zoe"), age: 30 },
+        Person { name: String.from("Ada"), age: 36 },
+        Person { name: String.from("Ada"), age: 20 },
+    ];
+    people.sort();
+    for who in people {
+        println("{} {}", who.name, who.age);
+    }
+    var seen: HashSet<Point> = HashSet.new();
+    seen.insert(p);
+    seen.insert(Point { x: 1, y: 2 });
+    seen.insert(q);
+    println("{} {}", seen.len(), seen.contains(Point { x: 1, y: 3 }));
+    var grid: HashMap<Pair<i64>, str> = HashMap.new();
+    grid.insert(Pair { a: 4, b: 5 }, "four-five");
+    println("{}", *grid.get(Pair { a: 4, b: 5 }).unwrap());
+    var heap: BinaryHeap<Point> = BinaryHeap.new();
+    heap.push(Point { x: 0, y: 9 });
+    heap.push(Point { x: 5, y: 1 });
+    println("{}", heap.pop().unwrap().x);
+    var t1 = Tagged { color: Color::Red, at: p, weight: 1.5 };
+    var t2 = Tagged { color: Color::Green, at: p, weight: 0.5 };
+    println("{} {}", t1 < t2, t1 == t1);
+    var vs: Vec<Point> = Vec[q, p];
+    println("{} {}", vs.contains(p), vs.max().unwrap().y);
+}

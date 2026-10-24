@@ -20,8 +20,8 @@ All of them also have `new()`, `len()`, `is_empty()` and `clear()`.
 
 ## HashMap and HashSet
 
-Keys must be integers, bools, enums without data or tuples of those (the
-`Hash` bound).
+Keys must be integers, bools, enums without data, or tuples and structs of
+those (the `Hash` bound).
 `get` returns a reference to the value, or `None`:
 
 ```zeru

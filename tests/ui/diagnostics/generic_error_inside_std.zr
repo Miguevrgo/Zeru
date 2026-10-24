@@ -1,5 +1,5 @@
 import std.collections.hashmap::{HashMap};
-struct P { x: i32 }
+struct P { x: f64 }
 fn main() {
     var m: HashMap<P, i32> = HashMap.new();
 }
