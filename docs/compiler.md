@@ -47,7 +47,10 @@ error it reports carries a note pointing at the call that asked for it.
 `check/body.rs` checks one instance in a function context (`FnCx`). Locals are
 numbered `LocalId`s. Expressions are in `expr.rs`, calls and built-in methods
 in `call.rs`, `match` in `pattern.rs`, and constant evaluation, at the width of
-each integer type, in `consts.rs`.
+each integer type, in `consts.rs`. A global constant that calls functions is
+run by `eval.rs`, an interpreter over the typed IR of plain data, which
+checks the instances it reaches on the spot and gives the value back as
+literals.
 
 The checker decides what each expression means, and nothing about where
 values go afterwards:
