@@ -5,6 +5,6 @@ fn next(n: &var i32) i32 {
 fn main() {
     var n = 0;
     var a = [next(&var n); 3];
-    var v: Vec<i32> = [next(&var n); 2];
+    var v: Vec<i32> = Vec[next(&var n); 2];
     println("{} {} {} {} {} {}", a[0], a[1], a[2], v[0], v[1], n);
 }

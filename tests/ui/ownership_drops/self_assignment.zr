@@ -1,10 +1,10 @@
-struct H { v: Vec<i64>, fn refill(var self) Vec<i64> { return [7, 8]; } }
+struct H { v: Vec<i64>, fn refill(var self) Vec<i64> { return Vec[7, 8]; } }
 fn main() {
-    var v: Vec<i64> = [1, 2];
+    var v: Vec<i64> = Vec[1, 2];
     v = v;
-    var h = H { v: [1] };
+    var h = H { v: Vec[1] };
     h.v = h.refill();
-    var w: Vec<i64> = [5, 6];
+    var w: Vec<i64> = Vec[5, 6];
     w[0] = w.pop().unwrap();
     println("{} {} {} {}", v.len(), h.v[1], w.len(), w[0]);
 }

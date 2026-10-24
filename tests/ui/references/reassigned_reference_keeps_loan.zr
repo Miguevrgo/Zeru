@@ -1,6 +1,6 @@
 fn pick(a: &i64, b: &i64) &i64 { return a; }
 fn main() {
-    var v: Vec<i64> = [5];
+    var v: Vec<i64> = Vec[5];
     var y: i64 = 1;
     var r = v.get(0).unwrap();
     r = pick(r, &y);

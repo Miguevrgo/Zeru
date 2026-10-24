@@ -6,9 +6,9 @@ written:
 
 ```zeru
 fn main() {
-    var outer: Vec<i32> = [1, 2];
+    var outer: Vec<i32> = Vec[1, 2];
     {
-        var inner: Vec<i32> = [3, 4];
+        var inner: Vec<i32> = Vec[3, 4];
         println("{}", inner.len()); // 2
     }
     println("{}", outer.len()); // 2

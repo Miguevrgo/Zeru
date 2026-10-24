@@ -353,7 +353,7 @@ fn main() {
         backwards += i;
     }
     assert(counted == 10 && backwards == -6);
-    var scaled: Vec<i64> = [1, 2, 3];
+    var scaled: Vec<i64> = Vec[1, 2, 3];
     for x in &var scaled {
         x *= 10;
     }

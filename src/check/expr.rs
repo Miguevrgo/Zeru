@@ -7,7 +7,7 @@ use crate::ast::StatementKind;
 use crate::ast::{Expression, ExpressionKind, TypeSpec};
 use crate::errors::Span;
 use crate::items::{DefId, ItemKind};
-use crate::tir::{Asm, BinOp, Builtin, Expr, ExprKind, Place, UnOp, Unpack};
+use crate::tir::{Arm, Asm, BinOp, Builtin, Expr, ExprKind, Place, UnOp, Unpack};
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
@@ -225,8 +225,25 @@ impl FnCx<'_, '_> {
                 self.struct_literal(name, fields, inner, span)
             }
             ExpressionKind::Match { value, arms } => self.match_expr(value, arms, expected, span),
+            ExpressionKind::If {
+                condition,
+                then,
+                otherwise,
+            } => self.if_expr(condition, then, otherwise, expected, span),
             ExpressionKind::Cast { left, target } => self.cast(left, target, span),
+            ExpressionKind::ArrayLiteral(elements) if self.vec_hint(inner).is_some() => {
+                self.error("[..] is an array; a Vec is written Vec[..]", span);
+                self.vec_literal(elements, inner, span)
+            }
+            ExpressionKind::ArrayRepeat { value, count } if self.vec_hint(inner).is_some() => {
+                self.error("[x; n] is an array; a Vec is written Vec[x; n]", span);
+                self.vec_repeat(value, count, inner, span)
+            }
             ExpressionKind::ArrayLiteral(elements) => self.array_literal(elements, inner, span),
+            ExpressionKind::VecLiteral(elements) => self.vec_literal(elements, inner, span),
+            ExpressionKind::VecRepeat { value, count } => {
+                self.vec_repeat(value, count, inner, span)
+            }
             ExpressionKind::ArrayRepeat { value, count } => {
                 let errors = self.cx.errors.len();
                 let count = self.value(count, Some(Types::USIZE));
@@ -453,6 +470,60 @@ impl FnCx<'_, '_> {
             _ => return None,
         };
         Some(self.mk(kind, ty, span))
+    }
+
+    /// `if c { a } else { b }` giving a value, checked as a `match` on the
+    /// condition; both branches give one type, or the `T?` or `T!` wanted.
+    fn if_expr(
+        &mut self,
+        condition: &Expression,
+        then: &Expression,
+        otherwise: &Expression,
+        expected: Option<Ty>,
+        span: Span,
+    ) -> Expr {
+        let cond = self.condition(condition, "If condition must be boolean, got ");
+        let wraps = expected.filter(|&ty| {
+            matches!(
+                self.cx.types.kind(ty),
+                TyKind::Optional(_) | TyKind::Result(..)
+            )
+        });
+        let mut first = self.expr(then, expected);
+        let target = wraps.unwrap_or(first.ty);
+        first = self.coerce(first, target).unwrap_or_else(|first| first);
+        let second = self.expr(otherwise, Some(target));
+        let mut second = match self.coerce(second, target) {
+            Ok(second) => second,
+            Err(second) => {
+                if !self.cx.types.is_error(second.ty) && !self.cx.types.is_error(target) {
+                    let (want, got) = (self.ty(target), self.ty(second.ty));
+                    self.error(
+                        format!("Both branches of the if must give {want}; this one gives {got}"),
+                        otherwise.span,
+                    );
+                }
+                second
+            }
+        };
+        self.consume(&mut first);
+        self.consume(&mut second);
+        let arms = vec![
+            Arm {
+                tags: vec![1],
+                bindings: Vec::new(),
+                body: first,
+                span: then.span,
+            },
+            Arm {
+                tags: Vec::new(),
+                bindings: Vec::new(),
+                body: second,
+                span: otherwise.span,
+            },
+        ];
+        let scrutinee = Place::Temp(Box::new(cond));
+        self.mk(ExprKind::Match { scrutinee, arms }, target, span)
     }
 
     /// Where `e` lives: a local, a field, an element, what a pointer points
@@ -1186,14 +1257,79 @@ impl FnCx<'_, '_> {
         (!self.cx.types.is_error(ty)).then_some(ty)
     }
 
-    /// An array literal, or with a `Vec<T>` expected, a Vec filled with it.
-    fn array_literal(&mut self, elements: &[Expression], expected: Option<Ty>, span: Span) -> Expr {
-        let (hint, into_vec) = self.element_hint(expected);
-        let Some((first, rest)) = elements.split_first() else {
-            return match expected {
-                Some(ty) if hint.is_some() && into_vec => {
+    /// `Vec[a, b]`: a Vec holding these elements.
+    fn vec_literal(&mut self, elements: &[Expression], expected: Option<Ty>, span: Span) -> Expr {
+        let hint = self.vec_hint(expected);
+        if elements.is_empty() {
+            return match hint {
+                Some(elem) => {
+                    let ty = self.cx.intern_or_error(TyKind::Vec(elem), &[elem]);
                     self.mk(ExprKind::VecLiteral(Vec::new()), ty, span)
                 }
+                None => {
+                    self.error("Cannot tell the type of Vec[] here; annotate it", span);
+                    self.error_expr(span)
+                }
+            };
+        }
+        let count = elements.len() as u64;
+        let wanted = hint.map(|elem| self.cx.types.intern(TyKind::Array(elem, count)));
+        let array = self.array_literal(elements, wanted, span);
+        let ExprKind::Array(values) = array.kind else {
+            return array;
+        };
+        let elem = values[0].ty;
+        let ty = self.cx.intern_or_error(TyKind::Vec(elem), &[elem]);
+        self.mk(ExprKind::VecLiteral(values), ty, span)
+    }
+
+    /// `Vec[x; n]`: a Vec of `n` copies of `x`, `n` known as it runs. A value
+    /// that owns memory is copied into each place, as `.copy()` would.
+    fn vec_repeat(
+        &mut self,
+        value: &Expression,
+        count: &Expression,
+        expected: Option<Ty>,
+        span: Span,
+    ) -> Expr {
+        let hint = self.vec_hint(expected);
+        let count = self.value(count, Some(Types::USIZE));
+        let count = self.coerce_or(count, Types::USIZE, span, |want, got| {
+            format!("Vec[x; n] takes n as {want}, not {got}")
+        });
+        let mut element = self.value(value, hint);
+        if let Some(hint) = hint {
+            element = self.coerce_or(element, hint, value.span, |want, got| {
+                format!("Vec element type mismatch. Expected {want}, got {got}")
+            });
+        }
+        let elem = element.ty;
+        if self.cx.owns_heap(elem) {
+            self.copies_drop(elem, value.span);
+        } else {
+            self.consume(&mut element);
+        }
+        let ty = self.cx.intern_or_error(TyKind::Vec(elem), &[elem]);
+        self.mk(
+            ExprKind::VecRepeat(Box::new(element), Box::new(count)),
+            ty,
+            span,
+        )
+    }
+
+    /// The element type an expected `Vec<T>` asks for.
+    fn vec_hint(&self, expected: Option<Ty>) -> Option<Ty> {
+        match expected.map(|ty| self.cx.types.kind(ty)) {
+            Some(TyKind::Vec(elem)) => Some(*elem),
+            _ => None,
+        }
+    }
+
+    /// An array literal.
+    fn array_literal(&mut self, elements: &[Expression], expected: Option<Ty>, span: Span) -> Expr {
+        let hint = self.element_hint(expected);
+        let Some((first, rest)) = elements.split_first() else {
+            return match expected {
                 Some(ty) if hint.is_some() => {
                     let elem = hint.unwrap();
                     let ty = if let TyKind::Array(_, 0) = self.cx.types.kind(ty) {
@@ -1237,10 +1373,6 @@ impl FnCx<'_, '_> {
             self.consume(&mut value);
             values.push(value);
         }
-        if into_vec {
-            let ty = self.cx.intern_or_error(TyKind::Vec(elem), &[elem]);
-            return self.mk(ExprKind::VecLiteral(values), ty, span);
-        }
         let ty = self
             .cx
             .intern_or_error(TyKind::Array(elem, values.len() as u64), &[elem]);
@@ -1254,7 +1386,7 @@ impl FnCx<'_, '_> {
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
-        let (hint, into_vec) = self.element_hint(expected);
+        let hint = self.element_hint(expected);
         let mut element = self.value(value, hint);
         if let Some(hint) = hint {
             element = self.coerce_or(element, hint, value.span, |want, got| {
@@ -1270,21 +1402,15 @@ impl FnCx<'_, '_> {
                 value.span,
             );
         }
-        if into_vec {
-            let ty = self.cx.intern_or_error(TyKind::Vec(elem), &[elem]);
-            return self.mk(ExprKind::VecRepeat(Box::new(element), count), ty, span);
-        }
         let ty = self.cx.intern_or_error(TyKind::Array(elem, count), &[elem]);
         self.mk(ExprKind::ArrayRepeat(Box::new(element), count), ty, span)
     }
 
-    /// The element type an expected array or Vec asks for, and whether a
-    /// literal builds a Vec.
-    fn element_hint(&self, expected: Option<Ty>) -> (Option<Ty>, bool) {
+    /// The element type an expected array asks for.
+    fn element_hint(&self, expected: Option<Ty>) -> Option<Ty> {
         match expected.map(|ty| self.cx.types.kind(ty)) {
-            Some(TyKind::Array(elem, _)) => (Some(*elem), false),
-            Some(TyKind::Vec(elem)) => (Some(*elem), true),
-            _ => (None, false),
+            Some(TyKind::Array(elem, _)) => Some(*elem),
+            _ => None,
         }
     }
 

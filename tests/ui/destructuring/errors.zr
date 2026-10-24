@@ -7,7 +7,7 @@ fn main() {
     const (c, d) = (1, 2);
     c = 3;
     var (e: i64, f) = divide(1, 2);
-    var xs: Vec<i32> = [1];
+    var xs: Vec<i32> = Vec[1];
     for (x, y) in 0..3 {}
     var m = 1;
     (m, xs) = (2, 3);

@@ -592,6 +592,24 @@ fn __zeru_str_split(s: str, sep: str) Vec<str> {
     return parts;
 }
 
+// `s.find(t)`: where `t` first starts in `s`, or None.
+fn __zeru_str_find(s: str, t: str) usize? {
+    if t.len() > s.len() {
+        return None;
+    }
+    for at in 0..s.len() - t.len() + 1 {
+        if s[at..at + t.len()] == t {
+            return at;
+        }
+    }
+    return None;
+}
+
+// `s.contains(t)`: whether `t` appears in `s`.
+fn __zeru_str_contains(s: str, t: str) bool {
+    return __zeru_str_find(s, t).is_some();
+}
+
 // `s.split()`: the parts of `s` between runs of spaces, tabs and line
 // breaks, never an empty one.
 fn __zeru_str_split_blank(s: str) Vec<str> {

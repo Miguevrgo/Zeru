@@ -55,8 +55,8 @@ fn largest<T: Ord>(items: &Vec<T>) T {
 }
 
 fn main() {
-    var ints: Vec<i64> = [3, 9, 4];
-    var floats: Vec<f64> = [2.5, 0.5];
+    var ints: Vec<i64> = Vec[3, 9, 4];
+    var floats: Vec<f64> = Vec[2.5, 0.5];
     println("{} {}", largest(&ints), largest(&floats)); // 9 2.5
 }
 ```

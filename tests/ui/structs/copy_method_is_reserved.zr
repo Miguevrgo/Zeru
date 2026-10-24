@@ -1,8 +1,8 @@
 struct Holder {
     items: Vec<i64>,
-    fn copy(self) Holder { return Holder { items: [42] }; }
+    fn copy(self) Holder { return Holder { items: Vec[42] }; }
 }
 fn main() {
-    var h = Holder { items: [1, 2, 3] };
+    var h = Holder { items: Vec[1, 2, 3] };
     println("{}", h.copy().items[0]);
 }

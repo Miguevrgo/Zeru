@@ -29,13 +29,13 @@ fn main() {
     b += 1;
     println("{} {}", a, b);
 
-    var first: Vec<str> = ["ann", "bob"];
+    var first: Vec<str> = Vec["ann", "bob"];
     var second = first;
     var third = second.copy();
     add_name(&var third, "cid");
     println("{} {}", count(&second), count(&third));
 
-    var scores: Vec<i64> = [1, 2, 3];
+    var scores: Vec<i64> = Vec[1, 2, 3];
     for score in &var scores {
         score *= 10;
     }

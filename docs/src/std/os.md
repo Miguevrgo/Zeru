@@ -63,7 +63,7 @@ The program is looked up in `PATH` unless the name has a `/`.
 ```zeru
 import std.os;
 
-var args: Vec<str> = ["hello"];
+var args: Vec<str> = Vec["hello"];
 var result = os::output("echo", args).unwrap();
 println("{} {}", result.code, result.stdout.trim()); // 0 hello
 ```

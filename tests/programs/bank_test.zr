@@ -157,7 +157,7 @@ fn main() {
             Account { id: id as u32, balance: 0, state: State::Open, history: Vec.new() },
         );
     }
-    var script: Vec<Command> = [
+    var script: Vec<Command> = Vec[
         Command::Deposit(1, 500),
         Command::Deposit(2, 120),
         Command::Withdraw(1, 75),

@@ -2,7 +2,7 @@ fn double(v: &var Vec<i64>) {
     for x in v { x *= 2; }
 }
 fn main() {
-    var v: Vec<i64> = [1, 2, 3];
+    var v: Vec<i64> = Vec[1, 2, 3];
     double(&var v);
     println("{} {} {}", v[0], v[1], v[2]);
 }

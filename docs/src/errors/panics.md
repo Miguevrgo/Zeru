@@ -9,7 +9,7 @@ out anything still waiting to be printed, and ends the process with the
 
 ```zeru,ignore
 fn main() {
-    var list: Vec<i32> = [1, 2, 3];
+    var list: Vec<i32> = Vec[1, 2, 3];
     var i: usize = 5;
     println("{}", list[i]);
 }

@@ -1,6 +1,6 @@
 fn main() {
-    var a: Vec<i64> = [1, 2];
-    var z: Vec<u8> = [0; 9];
-    var e: Vec<i32> = [];
+    var a: Vec<i64> = Vec[1, 2];
+    var z: Vec<u8> = Vec[0; 9];
+    var e: Vec<i32> = Vec[];
     println("{} {} {}", a.len(), z.len(), e.len());
 }

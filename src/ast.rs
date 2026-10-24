@@ -147,6 +147,11 @@ pub enum ExpressionKind {
         name: String,
     },
     ArrayLiteral(Vec<Expression>),
+    VecLiteral(Vec<Expression>),
+    VecRepeat {
+        value: Box<Expression>,
+        count: Box<Expression>,
+    },
     Range {
         start: Box<Expression>,
         end: Box<Expression>,
@@ -176,6 +181,11 @@ pub enum ExpressionKind {
     Match {
         value: Box<Expression>,
         arms: Vec<(Pattern, Expression)>,
+    },
+    If {
+        condition: Box<Expression>,
+        then: Box<Expression>,
+        otherwise: Box<Expression>,
     },
     BorrowRef(Box<Expression>),
     BorrowRefMut(Box<Expression>),

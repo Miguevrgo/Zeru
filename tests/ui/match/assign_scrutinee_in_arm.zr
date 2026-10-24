@@ -4,8 +4,8 @@ fn main() {
         Some(v) => { o = None; }
         None => { }
     }
-    var w: Vec<i64>? = [1, 2];
-    match w { Some(x) => { println("{}", x.len()); w = None; } None => { w = [1]; } }
+    var w: Vec<i64>? = Vec[1, 2];
+    match w { Some(x) => { println("{}", x.len()); w = None; } None => { w = Vec[1]; } }
     println("{}", w.is_none());
     var n: i64? = 4;
     match n { Some(k) => { n = k + 1; println("{}", n.unwrap()); } None => {} }

@@ -4,14 +4,14 @@ struct Bag {
 }
 fn set(dst: &var (&i64)?, src: &i64) { *dst = src; }
 fn main() {
-    var v: Vec<i64> = [1];
+    var v: Vec<i64> = Vec[1];
     var slot: (&i64)? = None;
     set(&var slot, &v[0]);
     v.push(2);
     match slot { Some(r) => { println("{}", *r); } None => {} }
 
-    var bag = Bag { items: [] };
-    var w: Vec<i64> = [1];
+    var bag = Bag { items: Vec[] };
+    var w: Vec<i64> = Vec[1];
     bag.add(&w[0]);
     w.push(2);
     println("{}", *bag.items[0]);

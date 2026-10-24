@@ -18,7 +18,7 @@ fn first(values: &[i32]) &i32 {
     return &values[0];
 }
 fn main() {
-    var list: Vec<i32> = [1, 2, 3];
+    var list: Vec<i32> = Vec[1, 2, 3];
     var fixed: Array<i32, 2> = [10, 20];
     println("{} {} {}", total(&list), total(&fixed), total(list[1..]));
     var r = &list;

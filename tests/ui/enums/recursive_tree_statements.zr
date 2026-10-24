@@ -8,6 +8,6 @@ fn sum(t: Tree) i64 {
     return s;
 }
 fn main() {
-    var t = Tree::Node([Tree::Leaf(1), Tree::Node([Tree::Leaf(2), Tree::Leaf(3)])]);
+    var t = Tree::Node(Vec[Tree::Leaf(1), Tree::Node(Vec[Tree::Leaf(2), Tree::Leaf(3)])]);
     println("{}", sum(t));
 }

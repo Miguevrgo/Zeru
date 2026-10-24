@@ -9,7 +9,7 @@ fn main() {
     *hp -= 1;
     *mana += 1;
     println("{} {}", p.hp, p.mana);
-    var v: Vec<i64> = [1, 2, 3];
+    var v: Vec<i64> = Vec[1, 2, 3];
     var first = &v[0];
     v[2] = 9;
     println("{} {}", *first, v[2]);

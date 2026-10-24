@@ -13,7 +13,7 @@ fn main() {
     }
     var word = String.from("zeru lang");
     println("[{}] [{}] [{}] [{}]", word[0..4], word[5..], word[..], word[9..]);
-    var v: Vec<i64> = [1, 2, 3, 4, 5];
+    var v: Vec<i64> = Vec[1, 2, 3, 4, 5];
     var mid = v[1..4];
     println("{} {} {}", mid.len(), mid[0], total(v[2..]));
     var a: Array<i32, 4> = [10, 20, 30, 40];

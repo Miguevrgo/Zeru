@@ -176,7 +176,7 @@ pub enum Rvalue {
     Discriminant(Place),
     Aggregate(Aggregate, Vec<Operand>),
     Repeat(Operand, u64),
-    VecRepeat(Operand, u64),
+    VecRepeat(Operand, Operand),
     VecNew(Option<Operand>),
     VecRemove(Place, Operand),
     VecPop(Place),
@@ -247,10 +247,11 @@ impl Rvalue {
             | Rvalue::Unary(_, value)
             | Rvalue::Cast { value, .. }
             | Rvalue::Repeat(value, _)
-            | Rvalue::VecRepeat(value, _)
             | Rvalue::VecRemove(_, value)
             | Rvalue::VecGet(_, value) => vec![value],
-            Rvalue::Binary { left, right, .. } => vec![left, right],
+            Rvalue::Binary { left, right, .. } | Rvalue::VecRepeat(left, right) => {
+                vec![left, right]
+            }
             Rvalue::Aggregate(_, values) => values.iter().collect(),
             Rvalue::VecNew(capacity) => capacity.iter().collect(),
             Rvalue::AddressOf(_)

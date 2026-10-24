@@ -6,7 +6,7 @@ fn main() {
     println("{} {} {}", u8.MAX, u64.MAX, usize.MAX);
     println("{} {}", f64.MAX > 1e300, f64.MIN < -1e300);
     println("{}", f32.MAX > 3e38);
-    var values: Vec<i32> = [7, -3, 12];
+    var values: Vec<i32> = Vec[7, -3, 12];
     var lowest = i32.MAX;
     for v in values {
         if v < lowest {

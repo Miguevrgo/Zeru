@@ -234,7 +234,7 @@ fn main() {
     var vec_copy = items.copy(); // Deep copy
     items.clear(); // Remove all elements
 
-    var listed: Vec<i64> = [1, 2, 3]; // From an array literal
+    var listed: Vec<i64> = Vec[1, 2, 3]; // From an array literal
     listed.insert(0, 0); // Shift the rest up
     var second = listed.remove(1); // Shift the rest down
     listed.reserve(16); // Room for 16 more

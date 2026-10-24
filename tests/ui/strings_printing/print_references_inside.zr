@@ -1,6 +1,6 @@
 import std.collections.hashmap::{HashMap};
 fn main() {
-    var v: Vec<i32> = [4, 5];
+    var v: Vec<i32> = Vec[4, 5];
     println("{} {}", v.get(1), v.get(9));
     var m: HashMap<i32, str> = HashMap.new();
     m.insert(1, "one");

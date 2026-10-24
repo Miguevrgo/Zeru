@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: An if that gives a value needs an else
+   ╭─[ tests/ui/control_flow/if_value_needs_else.zr:2:26 ]
+   │
+ 2 │     var x = if true { 1 };
+   │                          ┬
+   │                          ╰── An if that gives a value needs an else
+───╯
+[-] Error: aborting due to previous error

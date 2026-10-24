@@ -9,7 +9,7 @@ fn main() {
     grid[1][2] = 60;
     println("{} {} {}", grid[0][1], grid[1][2], zeros[7]);
 
-    var v: Vec<i64> = [5, 3, 8];
+    var v: Vec<i64> = Vec[5, 3, 8];
     v.push(1);
     v.insert(0, 9);
     var last = v.pop();
@@ -23,7 +23,7 @@ fn main() {
     v.clear();
     println("{}", v.is_empty());
 
-    var names: Vec<str> = ["ann", "bob"];
+    var names: Vec<str> = Vec["ann", "bob"];
     println("{} {}", names.get(1).is_some(), names.get(5).is_none());
 
     var ages: HashMap<i64, i32> = HashMap.new();

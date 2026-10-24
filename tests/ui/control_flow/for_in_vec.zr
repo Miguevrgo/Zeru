@@ -1,5 +1,5 @@
 fn main() {
-    var v: Vec<i64> = [5, 6, 7];
+    var v: Vec<i64> = Vec[5, 6, 7];
     for x in &var v { x += 1; }
     var s: i64 = 0;
     for x in v { s += x; }

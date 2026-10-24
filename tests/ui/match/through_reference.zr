@@ -6,7 +6,7 @@ fn size(p: &Packet) i64 {
     }
 }
 fn main() {
-    var ps: Vec<Packet> = [Packet::Int(4), Packet::List([1, 2, 3])];
+    var ps: Vec<Packet> = Vec[Packet::Int(4), Packet::List(Vec[1, 2, 3])];
     for p in &ps { print("{} ", size(&p)); }
     println("{}", size(ps.get(1).unwrap()));
 }

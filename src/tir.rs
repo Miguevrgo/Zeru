@@ -165,7 +165,7 @@ pub enum ExprKind {
     Array(Vec<Expr>),
     ArrayRepeat(Box<Expr>, u64),
     VecLiteral(Vec<Expr>),
-    VecRepeat(Box<Expr>, u64),
+    VecRepeat(Box<Expr>, Box<Expr>),
     Variant(u32, Vec<Expr>),
     Some(Box<Expr>),
     None,
@@ -226,12 +226,12 @@ impl Expr {
             ExprKind::Unary(_, value)
             | ExprKind::Cast(value)
             | ExprKind::ArrayRepeat(value, _)
-            | ExprKind::VecRepeat(value, _)
             | ExprKind::Some(value)
             | ExprKind::Ok(value)
             | ExprKind::Err(value)
             | ExprKind::Try(value) => f(value),
             ExprKind::Binary(_, left, right)
+            | ExprKind::VecRepeat(left, right)
             | ExprKind::And(left, right)
             | ExprKind::Or(left, right) => {
                 f(left);

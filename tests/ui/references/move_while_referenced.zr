@@ -1,6 +1,6 @@
 fn take(v: Vec<i64>) {}
 fn main() {
-    var v: Vec<i64> = [1, 2];
+    var v: Vec<i64> = Vec[1, 2];
     var r = v.get(0);
     take(v);
     println("{}", r.is_some());

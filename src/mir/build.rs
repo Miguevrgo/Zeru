@@ -939,7 +939,14 @@ impl<'a> Builder<'a> {
             ExprKind::Err(value) => self.aggregate(Aggregate::Err, std::slice::from_ref(value)),
             ExprKind::None => Rvalue::Aggregate(Aggregate::None, Vec::new()),
             ExprKind::ArrayRepeat(value, count) => Rvalue::Repeat(self.as_operand(value), *count),
-            ExprKind::VecRepeat(value, count) => Rvalue::VecRepeat(self.as_operand(value), *count),
+            ExprKind::VecRepeat(value, count) => {
+                let count = self.as_operand(count);
+                let value = match self.program.needs_drop(value.ty) {
+                    true => Operand::Copy(Place::local(self.as_temp(value))),
+                    false => self.as_operand(value),
+                };
+                Rvalue::VecRepeat(value, count)
+            }
             ExprKind::Assign {
                 place,
                 value,

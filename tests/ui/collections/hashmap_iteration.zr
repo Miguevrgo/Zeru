@@ -1,0 +1,29 @@
+import std.collections.hashmap::{HashMap};
+import std.collections.hashset::{HashSet};
+
+fn main() {
+    var counts: HashMap<i32, i32> = HashMap.new();
+    for n in [4, 2, 4, 7, 4, 2] {
+        *counts.get_or_insert(n, 0) += 1;
+    }
+    for (n, times) in counts {
+        print("{}x{} ", n, times);
+    }
+    println("");
+    for (_, times) in &var counts {
+        times *= 10;
+    }
+    counts.remove(4);
+    for (n, times) in counts {
+        print("{}x{} ", n, times);
+    }
+    println("");
+    var seen: HashSet<i32> = HashSet.new();
+    for n in [3, 1, 3, 2] {
+        seen.insert(n);
+    }
+    for n in seen {
+        print("{} ", n);
+    }
+    println("");
+}

@@ -2,27 +2,27 @@ fn pick(v: &var Vec<Vec<i64>>) &var Vec<i64> { return &var v[0]; }
 fn head(v: &Vec<i64>) &i64 { return &v[0]; }
 fn store(dst: &var (&var i64)?, src: &var Vec<i64>) { *dst = &var src[0]; }
 fn owner_changes() {
-    var v: Vec<Vec<i64>> = [[1]];
+    var v: Vec<Vec<i64>> = Vec[Vec[1]];
     var s = pick(&var v);
-    v.push([2]);
+    v.push(Vec[2]);
     s.push(3);
 }
 fn through_call() {
-    var v: Vec<Vec<i64>> = [[1]];
+    var v: Vec<Vec<i64>> = Vec[Vec[1]];
     var s = pick(&var v);
     var e = head(s);
-    *s = [2, 3];
+    *s = Vec[2, 3];
     println("{}", *e);
 }
 fn through_index() {
-    var v: Vec<Vec<i64>> = [[1]];
+    var v: Vec<Vec<i64>> = Vec[Vec[1]];
     var s = pick(&var v);
     var e = &s[0];
     s.push(4);
     println("{}", *e);
 }
 fn stored_by_call() {
-    var v: Vec<Vec<i64>> = [[1]];
+    var v: Vec<Vec<i64>> = Vec[Vec[1]];
     var s = pick(&var v);
     var slot: (&var i64)? = None;
     store(&var slot, s);

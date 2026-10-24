@@ -7,7 +7,7 @@ struct Growing {
     }
 }
 fn main() {
-    var g = Growing { v: [1] };
+    var g = Growing { v: Vec[1] };
     g.v[0] = g.grow();
     println("{} {}", g.v[0], g.v.len());
 }

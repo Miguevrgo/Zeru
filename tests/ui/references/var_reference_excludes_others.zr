@@ -1,7 +1,7 @@
 fn drain(a: &var Vec<i64>, b: &Vec<i64>) {}
 fn pair(a: (&i64)?, b: i64?) {}
 fn main() {
-    var v: Vec<i64> = [1, 2, 3];
+    var v: Vec<i64> = Vec[1, 2, 3];
     drain(&var v, &v);
     pair(v.get(0), v.pop());
     var r = &var v;

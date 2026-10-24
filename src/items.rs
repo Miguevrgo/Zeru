@@ -258,6 +258,11 @@ impl<'a> Items<'a> {
         &self.items[def.0 as usize]
     }
 
+    /// Whether `def` is declared in the standard library.
+    pub fn is_std(&self, def: DefId) -> bool {
+        self.modules[self.item(def).module.0 as usize].std
+    }
+
     /// The name of `def` as a program calls it: the prelude's functions
     /// behind the methods of `str`, `Vec` and `String` by those methods.
     pub fn shown(&self, def: DefId) -> String {

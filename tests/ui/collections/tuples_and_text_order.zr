@@ -12,10 +12,10 @@ fn main() {
     println("{} {}", "zeru" >= "zeru", ("b", 1) < ("a", 2));
     var s = String.from("pear");
     println("{} {}", s < String.from("plum"), s > "apple");
-    var pairs: Vec<(i32, str)> = [(3, "c"), (1, "z"), (1, "a"), (2, "b")];
+    var pairs: Vec<(i32, str)> = Vec[(3, "c"), (1, "z"), (1, "a"), (2, "b")];
     pairs.sort();
     println("{}", pairs);
-    var words: Vec<str> = ["pear", "apple", "fig", "apples"];
+    var words: Vec<str> = Vec["pear", "apple", "fig", "apples"];
     words.sort();
     println("{} {} {}", words, words.min(), words.max());
     var heap: BinaryHeap<(i64, i32)> = BinaryHeap.new();
@@ -38,7 +38,7 @@ fn main() {
     names.push((String.from("al"), 2));
     names.sort();
     println("{} {}", names, (String.from("x"), 1) == (String.from("x"), 1));
-    var neg: Vec<(i32, i32)> = [(0, -1), (-5, 3), (0, -9)];
+    var neg: Vec<(i32, i32)> = Vec[(0, -1), (-5, 3), (0, -9)];
     neg.sort();
     println("{}", neg);
 }

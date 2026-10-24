@@ -1,0 +1,10 @@
+import std.collections.hashmap::{HashMap};
+
+fn main() {
+    var m: HashMap<i32, i32> = HashMap.new();
+    m.insert(1, 2);
+    for entry in &var m { }
+    for (k, v) in &var m {
+        k += 1;
+    }
+}

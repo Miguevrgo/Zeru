@@ -64,9 +64,9 @@ fn main() {
     assert(map.len() == 2500);
 
     var lists: HashMap<Tone, Vec<i64>> = HashMap.new();
-    lists.insert(Tone::Low, [1, 2]);
-    lists.insert(Tone::High, [3]);
-    lists.insert(Tone::Low, [4, 5, 6]);
+    lists.insert(Tone::Low, Vec[1, 2]);
+    lists.insert(Tone::High, Vec[3]);
+    lists.insert(Tone::Low, Vec[4, 5, 6]);
     assert(lists.len() == 2 && lists.contains(Tone::High));
     assert(lists.get(Tone::Low).unwrap().len() == 3);
 

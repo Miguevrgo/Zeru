@@ -49,8 +49,11 @@ fn lowest(bits: u32) usize {
 
 // A map from keys to values, growing on the heap as entries come.
 //
-// Keys are integers, bools or enums; each key holds one value. Looking up,
-// adding and removing a key take O(1) time on average.
+// Keys are integers, bools, enums without data or tuples of those; each key
+// holds one value. Looking up, adding and removing a key take O(1) time on
+// average. `for (key, value) in map` walks the entries in the order they
+// went in, until a removal moves the last one into the gap it leaves;
+// `for (key, value) in &var map` can change the values.
 //
 // # Examples
 //
@@ -67,11 +70,16 @@ fn lowest(bits: u32) usize {
 //     None => println("unknown item"),
 // }
 // println("{}", stock.contains(1003)); // false
+// var total = 0;
+// for (_, count) in stock {
+//     total += count;
+// }
+// println("{}", total); // 4
 // ```
 pub struct HashMap<K: Hash, V> {
     groups: Vec<u64>,
-    slots: Vec<(K, V)?>,
-    len: usize,
+    slots: Vec<u32>,
+    entries: Vec<(K, V)>,
     room: usize,
 
     // Returns an empty map.
@@ -87,7 +95,7 @@ pub struct HashMap<K: Hash, V> {
     // println("{}", ages.is_empty()); // true
     // ```
     pub fn new() HashMap<K, V> {
-        return HashMap { groups: Vec.new(), slots: Vec.new(), len: 0, room: 0 };
+        return HashMap { groups: Vec.new(), slots: Vec.new(), entries: Vec.new(), room: 0 };
     }
 
     // Stores `value` under `key`, replacing the value already there.
@@ -105,19 +113,48 @@ pub struct HashMap<K: Hash, V> {
     pub fn insert(var self, key: K, value: V) {
         var found = self.find(key);
         if found.is_some() {
-            self.slots[found.unwrap()] = (key, value);
+            self.entries[self.slots[found.unwrap()] as usize] = (key, value);
             return;
         }
+        self.add((key, value));
+    }
+
+    // Returns a reference to the value under `key`, first storing `value`
+    // there when the key has none, so the value can change in place.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.collections.hashmap::{HashMap};
+    //
+    // var counts: HashMap<i32, i32> = HashMap.new();
+    // for n in [3, 1, 3] {
+    //     *counts.get_or_insert(n, 0) += 1;
+    // }
+    // println("{} {}", *counts.get(3).unwrap(), *counts.get(1).unwrap()); // 2 1
+    // ```
+    pub fn get_or_insert(var self, key: K, value: V) &var V {
+        var found = self.find(key);
+        if found.is_none() {
+            self.add((key, value));
+            return &var self.entries[self.entries.len() - 1].1;
+        }
+        return &var self.entries[self.slots[found.unwrap()] as usize].1;
+    }
+
+    // Add `entry`, whose key the map does not hold.
+    fn add(var self, entry: (K, V)) {
         if self.room == 0 {
             self.grow();
         }
-        self.place((key, value));
+        self.entries.push(entry);
+        self.place(self.entries.len() - 1);
     }
 
-    // Put `entry`, whose key no slot holds, in the first free slot of its
-    // search.
-    fn place(var self, entry: (K, V)) {
-        var bits = hash(__zeru_hash_bits(entry.0));
+    // Put the index of entry `index`, whose key no slot holds, in the first
+    // free slot of its search.
+    fn place(var self, index: usize) {
+        var bits = hash(__zeru_hash_bits(self.entries[index].0));
         var mask = self.groups.len() / 2 - 1;
         var at = (bits >> 32) as usize & mask;
         var stride: usize = 0;
@@ -132,8 +169,7 @@ pub struct HashMap<K: Hash, V> {
             self.room -= 1;
         }
         self.set_control(slot, bits >> 57);
-        self.slots[slot] = entry;
-        self.len += 1;
+        self.slots[slot] = index as u32;
     }
 
     // Returns a reference to the value under `key`, or None when there is none.
@@ -156,10 +192,7 @@ pub struct HashMap<K: Hash, V> {
         if found.is_none() {
             return None;
         }
-        match self.slots[found.unwrap()] {
-            Some(entry) => { return &entry.1; }
-            None => { return None; }
-        }
+        return &self.entries[self.slots[found.unwrap()] as usize].1;
     }
 
     // Returns whether there is a value under `key`.
@@ -198,14 +231,20 @@ pub struct HashMap<K: Hash, V> {
             return false;
         }
         var slot = found.unwrap();
-        self.slots[slot] = None;
-        self.len -= 1;
+        var index = self.slots[slot] as usize;
         if self.scan(slot / 16, 0).1 != 0 {
             self.set_control(slot, EMPTY);
             self.room += 1;
         } else {
             self.set_control(slot, DELETED);
         }
+        var last = self.entries.len() - 1;
+        if index != last {
+            var moved = self.find(self.entries[last].0).unwrap();
+            self.slots[moved] = index as u32;
+            self.entries.swap(index, last);
+        }
+        self.entries.pop();
         return true;
     }
 
@@ -224,18 +263,18 @@ pub struct HashMap<K: Hash, V> {
     pub fn clear(var self) {
         self.groups.clear();
         self.slots.clear();
-        self.len = 0;
+        self.entries.clear();
         self.room = 0;
     }
 
     // Returns how many entries the map holds.
     pub fn len(self) usize {
-        return self.len;
+        return self.entries.len();
     }
 
     // Returns whether the map holds no entries.
     pub fn is_empty(self) bool {
-        return self.len == 0;
+        return self.entries.is_empty();
     }
 
     // The slot holding `key`: groups are searched in a triangular sequence
@@ -254,13 +293,8 @@ pub struct HashMap<K: Hash, V> {
             var hits = found.0;
             while hits != 0 {
                 var slot = at * 16 + lowest(hits);
-                match self.slots[slot] {
-                    Some(entry) => {
-                        if entry.0 == key {
-                            return slot;
-                        }
-                    }
-                    None => { }
+                if self.entries[self.slots[slot] as usize].0 == key {
+                    return slot;
                 }
                 hits = hits & (hits - 1);
             }
@@ -294,30 +328,23 @@ pub struct HashMap<K: Hash, V> {
     // otherwise, or one to start; seven slots in eight may be taken.
     fn grow(var self) {
         var count: usize = self.groups.len() / 2;
-        if self.len * 2 >= count * 16 {
+        if self.entries.len() * 2 >= count * 16 {
             count *= 2;
         }
         if count == 0 {
             count = 1;
         }
-        var bigger: HashMap<K, V> = HashMap {
-            groups: Vec.with_capacity(count * 2),
-            slots: Vec.with_capacity(count * 16),
-            len: 0,
-            room: count * 14
-        };
-        for at in 0..count * 2 {
-            bigger.groups.push(18446744073709551615);
+        self.groups.clear();
+        for _ in 0..count * 2 {
+            self.groups.push(18446744073709551615);
         }
-        for at in 0..count * 16 {
-            bigger.slots.push(None);
+        self.slots.clear();
+        for _ in 0..count * 16 {
+            self.slots.push(0);
         }
-        while !self.slots.is_empty() {
-            var entry = self.slots.pop().unwrap();
-            if entry.is_some() {
-                bigger.place(entry.unwrap());
-            }
+        self.room = count * 14;
+        for index in 0..self.entries.len() {
+            self.place(index);
         }
-        self = bigger;
     }
 }

@@ -1,7 +1,7 @@
-fn grow(vs: &var Vec<Vec<i64>>) usize { for i in 0..100 { vs.push([1]); } return 1; }
-fn grow_more(vs: &var Vec<Vec<i64>>) i64 { for i in 0..100 { vs.push([1]); } return 9; }
+fn grow(vs: &var Vec<Vec<i64>>) usize { for i in 0..100 { vs.push(Vec[1]); } return 1; }
+fn grow_more(vs: &var Vec<Vec<i64>>) i64 { for i in 0..100 { vs.push(Vec[1]); } return 9; }
 fn main() {
-    var vs: Vec<Vec<i64>> = [[5, 6]];
+    var vs: Vec<Vec<i64>> = Vec[Vec[5, 6]];
     var x = vs[0][grow(&var vs)];
     vs[0].push(grow_more(&var vs));
     println("{} {} {} {}", x, vs[0].len(), vs[0][2], vs.len());

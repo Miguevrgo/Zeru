@@ -1,12 +1,12 @@
 fn main() {
-    var v: Vec<i64> = [5, -2, 9, 0, 3, 3, -7];
+    var v: Vec<i64> = Vec[5, -2, 9, 0, 3, 3, -7];
     println("{} {} {} {}", v.sum(), v.min().unwrap(), v.max().unwrap(), v.contains(9));
     v.sort();
     for x in v { print("{} ", x); }
     println("");
     v.swap(0, 6);
     println("{} {}", v[0], v[6]);
-    var f: Vec<f64> = [2.5, 1.5];
+    var f: Vec<f64> = Vec[2.5, 1.5];
     f.sort();
     println("{} {}", f[0], f.sum());
     var e: Vec<i32> = Vec.new();

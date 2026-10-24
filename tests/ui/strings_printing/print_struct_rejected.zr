@@ -3,6 +3,6 @@ struct P {
 }
 
 fn main() {
-    var points: Vec<P> = [P { x: 1 }];
+    var points: Vec<P> = Vec[P { x: 1 }];
     println("{}", points);
 }

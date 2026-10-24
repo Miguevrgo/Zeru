@@ -16,7 +16,7 @@ fn main() {
     var start = os::Clock.now();
     os::sleep(5);
     println("pid {} slept at least 5 ms: {}", os::pid() > 0, start.elapsed() >= 5_000_000);
-    var listing = os::output("echo", ["from", "a", "child"]).unwrap();
+    var listing = os::output("echo", Vec["from", "a", "child"]).unwrap();
     println("{} {}", listing.stdout.trim(), os::random_range(1, 6) <= 6);
 
     var before = cycles();

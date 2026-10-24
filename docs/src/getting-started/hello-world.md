@@ -63,7 +63,7 @@ var age = 30;
 println("{} is {} years old", name, age); // Ann is 30 years old
 println("pi is about {}", 3.14159); // pi is about 3.14159
 println("{{}} stays"); // {} stays
-var list: Vec<i32> = [1, 2, 3];
+var list: Vec<i32> = Vec[1, 2, 3];
 println("{} and {}", list, (1, "one")); // [1, 2, 3] and (1, "one")
 ```
 

@@ -35,16 +35,23 @@ you wrote.
 ## Vec
 
 `Vec<T>` is a list that grows on the heap. It is built in, so it needs no
-import. Make an empty one with `Vec.new()`, or write its first values like
-an array:
+import. Make an empty one with `Vec.new()`, write its values as
+`Vec[5, 3, 8]`, or ask for `n` copies of one value with `Vec[x; n]`, where
+`n` can be worked out as the program runs:
 
 ```zeru
 var names: Vec<str> = Vec.new();
 names.push("ann");
 names.push("bob");
-var numbers: Vec<i32> = [5, 3, 8];
-println("{} {}", names.len(), numbers[2]); // 2 8
+var numbers = Vec[5, 3, 8];
+var size: usize = 3;
+var seen = Vec[false; size * size];
+println("{} {} {}", names.len(), numbers[2], seen.len()); // 2 8 9
 ```
+
+Plain brackets are always an array: `[5, 3, 8]` has a fixed length and
+lives in place, `Vec[5, 3, 8]` grows on the heap. A value that owns memory,
+as in `Vec[Vec.new(); n]`, is copied into each place.
 
 The methods:
 
@@ -65,7 +72,7 @@ The methods:
 | `copy()` | a second Vec with the same elements |
 
 ```zeru
-var v: Vec<i32> = [5, 3, 8];
+var v: Vec<i32> = Vec[5, 3, 8];
 v.sort();
 println("{} {} {}", v[0], v[1], v[2]); // 3 5 8
 println("{} {}", v.contains(8), v.sum()); // true 16
@@ -77,8 +84,8 @@ println("{}", v.get(10).is_none()); // true
 quotes:
 
 ```zeru
-var grid: Vec<Vec<i32>> = [[1, 2], [3]];
-var words: Vec<str> = ["a", ""];
+var grid: Vec<Vec<i32>> = Vec[Vec[1, 2], Vec[3]];
+var words: Vec<str> = Vec["a", ""];
 println("{} {}", grid, words); // [[1, 2], [3]] ["a", ""]
 ```
 
@@ -93,7 +100,7 @@ anything. `v[a..b]` takes the elements from `a` up to, not including, `b`;
 either end can be left out:
 
 ```zeru
-var v: Vec<i32> = [10, 20, 30, 40];
+var v: Vec<i32> = Vec[10, 20, 30, 40];
 var middle = v[1..3];
 var tail = v[2..];
 println("{} {} {}", middle.len(), middle[0], tail[1]); // 2 20 40
@@ -103,7 +110,7 @@ A slice has the `Vec` methods that only read: `len`, `contains`, `sum`,
 `min`, `max`, `windows` and `chunks`. `a[..]` gives an array them too:
 
 ```zeru
-var v: Vec<i32> = [9, 4, 7, 1];
+var v: Vec<i32> = Vec[9, 4, 7, 1];
 var fixed: Array<i32, 3> = [2, 5, 3];
 println("{} {}", v[1..].sum(), fixed[..].max().unwrap()); // 12 5
 ```
@@ -121,7 +128,7 @@ fn total(values: &[i32]) i32 {
 }
 
 fn main() {
-    var list: Vec<i32> = [1, 2, 3];
+    var list: Vec<i32> = Vec[1, 2, 3];
     var fixed: Array<i32, 2> = [10, 20];
     println("{} {}", total(&list), total(&fixed)); // 6 30
     println("{}", total(list[1..])); // 5
@@ -150,7 +157,7 @@ part that differs, so a list of tuples sorts by its first part, then its
 second:
 
 ```zeru
-var scores: Vec<(i32, str)> = [(2, "bob"), (1, "zoe"), (2, "ann")];
+var scores: Vec<(i32, str)> = Vec[(2, "bob"), (1, "zoe"), (2, "ann")];
 scores.sort();
 println("{}", scores); // [(1, "zoe"), (2, "ann"), (2, "bob")]
 ```
@@ -184,7 +191,7 @@ is worked out first, so two values swap without a helper:
 var a = 1;
 var b = 2;
 (a, b) = (b, a);
-var v: Vec<i32> = [1, 2, 3];
+var v: Vec<i32> = Vec[1, 2, 3];
 (v[0], v[2]) = (v[2], v[0]);
 println("{} {} {}", a, b, v); // 2 1 [3, 2, 1]
 ```

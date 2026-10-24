@@ -8,6 +8,6 @@ fn main() {
     os::sleep(1);
     assert(clock.elapsed() >= 1000000);
     assert(fs::current_dir().unwrap().starts_with("/"));
-    assert(os::run("true", []).unwrap() == 0);
+    assert(os::run("true", Vec[]).unwrap() == 0);
     println("os: all tests passed");
 }

@@ -1,9 +1,9 @@
 fn main() {
-    var v: Vec<i64> = [1, 2];
+    var v: Vec<i64> = Vec[1, 2];
     var r = v.get(0);
     v.push(3);
     println("{}", *r.unwrap());
     var e = &v[1];
-    v = [9];
+    v = Vec[9];
     println("{}", *e);
 }

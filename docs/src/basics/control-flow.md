@@ -16,6 +16,15 @@ if temperature > 30 {
 The condition must be a `bool`: a number is never true or false by
 itself. No parentheses go around it, and the braces are always there.
 
+An `if` whose branches each hold one expression gives a value, as long as
+it has an `else`:
+
+```zeru
+var temperature = 24;
+var feel = if temperature > 30 { "hot" } else if temperature > 15 { "mild" } else { "cold" };
+println("{}", feel); // mild
+```
+
 ## while
 
 `while` repeats its block while the condition holds:
@@ -64,7 +73,7 @@ Over an array, a `Vec` or a string, `for` gives each element in turn, and
 with two names also its index:
 
 ```zeru
-var names: Vec<str> = ["ann", "bob", "cid"];
+var names: Vec<str> = Vec["ann", "bob", "cid"];
 for name in names {
     print("{} ", name);
 }
@@ -78,7 +87,7 @@ println(""); // 0=ann 1=bob 2=cid
 To change the elements in place, loop over `&var`:
 
 ```zeru
-var scores: Vec<i32> = [1, 2, 3];
+var scores: Vec<i32> = Vec[1, 2, 3];
 for score in &var scores {
     score *= 10;
 }
@@ -88,7 +97,7 @@ println("{} {} {}", scores[0], scores[1], scores[2]); // 10 20 30
 A list of tuples can be taken apart as it is walked:
 
 ```zeru
-var scores: Vec<(str, i32)> = [("ann", 7), ("bob", 9)];
+var scores: Vec<(str, i32)> = Vec[("ann", 7), ("bob", 9)];
 for (name, points) in scores {
     print("{}:{} ", name, points);
 }
@@ -100,7 +109,7 @@ one. It copies and allocates nothing: each pair is read in place, as a
 single list would be.
 
 ```zeru
-var prices: Vec<f64> = [1.5, 2.0, 4.0];
+var prices: Vec<f64> = Vec[1.5, 2.0, 4.0];
 var amounts: Array<i32, 3> = [2, 1, 3];
 var total = 0.0;
 for (price, amount) in zip(prices, amounts) {

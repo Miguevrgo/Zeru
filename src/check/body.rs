@@ -609,20 +609,34 @@ impl<'c, 'a> FnCx<'c, 'a> {
         };
         let sequences: Vec<_> = sequences
             .into_iter()
-            .map(|(iterable, names)| (self.sequence(iterable), names))
+            .map(|(iterable, names)| (self.sequence(iterable), names.clone()))
             .collect();
         self.enter();
         let index = index.map(|index| self.declare(index, Types::USIZE, false, false));
         let walks = sequences
             .into_iter()
-            .map(|((seq, item, writable), names)| {
+            .map(|((seq, item, writable, walked), names)| {
+                let names = match walked {
+                    Walked::Set => Names::Tuple(vec![names, Names::Skip]),
+                    _ => names,
+                };
                 let view = writable || self.cx.owns_heap(item);
-                let (var, unpack) = match names {
+                let (var, unpack) = match &names {
+                    Names::One(..) | Names::Skip if walked == Walked::Map && writable => {
+                        self.error(
+                            "A map's keys cannot change; write for (key, value) in &var map",
+                            iterable.span,
+                        );
+                        (self.declare("", item, false, view), None)
+                    }
                     Names::One(name, _) => (self.declare(name, item, writable, view), None),
                     Names::Skip => (self.declare("", item, writable, view), None),
                     Names::Tuple(parts) => {
                         let var = self.declare("", item, writable, view);
                         let unpack = self.view_names(parts, item, writable, iterable.span);
+                        if walked != Walked::List {
+                            self.fix_key(&unpack);
+                        }
                         (var, Some(unpack))
                     }
                 };
@@ -651,9 +665,58 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 .is_none()
     }
 
+    /// Make the key a loop over a map names unchangeable, as changing it
+    /// would lose the entry.
+    fn fix_key(&mut self, unpack: &Unpack) {
+        fn locals(unpack: &Unpack, found: &mut Vec<LocalId>) {
+            match unpack {
+                Unpack::Declare(local) => found.push(*local),
+                Unpack::Tuple(parts) => parts.iter().for_each(|part| locals(part, found)),
+                Unpack::Skip | Unpack::Store(_) => {}
+            }
+        }
+        let Unpack::Tuple(parts) = unpack else {
+            return;
+        };
+        let mut keys = Vec::new();
+        if let Some(key) = parts.first() {
+            locals(key, &mut keys);
+        }
+        for key in keys {
+            self.mutable[key.0 as usize] = false;
+        }
+    }
+
+    /// The std collection `ty` is, which a `for` walks by its entries.
+    fn walked(&self, ty: Ty) -> Walked {
+        let Some(def) = self
+            .cx
+            .is_struct(ty)
+            .filter(|&def| self.cx.items.is_std(def))
+        else {
+            return Walked::List;
+        };
+        match self.cx.items.item(def).name.as_str() {
+            "hashmap::HashMap" => Walked::Map,
+            "hashset::HashSet" => Walked::Set,
+            _ => Walked::List,
+        }
+    }
+
+    /// The field `name` of the struct at `place`, of type `ty`.
+    fn field_of(&mut self, place: Place, ty: Ty, name: &str) -> (Place, Ty) {
+        let fields = self.cx.fields_of(ty);
+        let at = fields
+            .iter()
+            .position(|(field, _)| field == name)
+            .expect("a std collection has the field");
+        (Place::Field(Box::new(place), at as u32), fields[at].1)
+    }
+
     /// What a `for` walks: the place of the sequence, the type of its
-    /// elements, and whether the loop may write them.
-    fn sequence(&mut self, iterable: &Expression) -> (Place, Ty, bool) {
+    /// elements, whether the loop may write them, and whether it walks a
+    /// map or a set, by the list of their entries.
+    fn sequence(&mut self, iterable: &Expression) -> (Place, Ty, bool, Walked) {
         let (inner, mut writable) = match &iterable.kind {
             ExpressionKind::BorrowRefMut(inner) => (inner.as_ref(), true),
             ExpressionKind::BorrowRef(inner) => (inner.as_ref(), false),
@@ -673,6 +736,15 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 );
             }
         }
+        let walked = self.walked(seq.1);
+        let seq = match walked {
+            Walked::List => seq,
+            Walked::Map => self.field_of(seq.0, seq.1, "entries"),
+            Walked::Set => {
+                let (members, ty) = self.field_of(seq.0, seq.1, "members");
+                self.field_of(members, ty, "entries")
+            }
+        };
         let seq_ty = seq.1;
         let item = match self.cx.types.kind(seq_ty) {
             TyKind::Array(elem, _) | TyKind::Vec(elem) => *elem,
@@ -689,7 +761,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 Types::ERROR
             }
         };
-        (seq.0, item, writable)
+        (seq.0, item, writable, walked)
     }
 
     /// Report a name `names` gives twice, which would hide the first.
@@ -818,4 +890,13 @@ pub(super) fn in_temporary(place: &Place) -> bool {
         Place::Temp(_) => true,
         Place::Local(_) | Place::Deref(_) => false,
     }
+}
+
+/// How a `for` walks what it is given: as the list it is, or by the
+/// entries of a map or the keys of a set.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Walked {
+    List,
+    Map,
+    Set,
 }

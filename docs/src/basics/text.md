@@ -43,6 +43,8 @@ The methods:
 | `split(sep)` | a `Vec<str>` of the parts between each `sep`, empty ones included |
 | `lines()` | a `Vec<str>` of the lines, without their line breaks |
 | `starts_with(t)`, `ends_with(t)` | whether the text begins or ends with `t` |
+| `contains(t)` | whether `t` appears in the text |
+| `find(t)` | the byte where `t` first starts, or `None` |
 | `parse_int()`, `parse_float()` | the number the text spells, or an error (`i64!`, `f64!`) |
 
 ```zeru
@@ -66,6 +68,15 @@ println("{}", "84283   63343".split(" ")); // ["84283", "", "", "63343"]
 
 The parts `split` and `lines` give are views into the original text; no
 text is copied.
+
+`find` gives a position to slice from:
+
+```zeru
+var line = "name: Zeru";
+var colon = line.find(":").unwrap();
+println("{}|{}", line[..colon], line[colon + 2..]); // name|Zeru
+println("{}", line.contains("Ze")); // true
+```
 
 `==` and `!=` compare text byte by byte, and `<` orders it by the first
 byte that differs, a text going before those it starts:

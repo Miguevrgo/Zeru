@@ -17,6 +17,6 @@ fn whole(values: &Vec<i32>) &[i32]? {
 fn main() {
     var pairs: Vec<(String, i32)> = Vec.new();
     pairs.push((String.from("a"), 1));
-    var list: Vec<i32> = [1, 2];
+    var list: Vec<i32> = Vec[1, 2];
     println("{} {} {}", find(&pairs, 1), find(&pairs, 9), whole(&list));
 }

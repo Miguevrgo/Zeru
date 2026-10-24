@@ -651,6 +651,17 @@ impl<'s> Printer<'s> {
                 let items = items.iter().map(|item| self.expr(item)).collect();
                 list("[", items, "]", false)
             }
+            E::VecLiteral(items) => {
+                let items = items.iter().map(|item| self.expr(item)).collect();
+                list("Vec[", items, "]", false)
+            }
+            E::VecRepeat { value, count } => seq(vec![
+                text("Vec["),
+                self.expr(value),
+                text("; "),
+                self.expr(count),
+                text("]"),
+            ]),
             E::Range { start, end } => seq(vec![self.expr(start), text(".."), self.expr(end)]),
             E::ArrayRepeat { value, count } => seq(vec![
                 text("["),
@@ -672,6 +683,24 @@ impl<'s> Printer<'s> {
                 self.expr(left),
                 text(format!(" as {}", ty_text(target))),
             ]),
+            E::If {
+                condition,
+                then,
+                otherwise,
+            } => {
+                let otherwise = match otherwise.kind {
+                    E::If { .. } => self.expr(otherwise),
+                    _ => seq(vec![text("{ "), self.expr(otherwise), text(" }")]),
+                };
+                seq(vec![
+                    text("if "),
+                    self.expr(condition),
+                    text(" { "),
+                    self.expr(then),
+                    text(" } else "),
+                    otherwise,
+                ])
+            }
             E::Match { value, arms } => {
                 let head = seq(vec![text("match "), self.expr(value), text(" ")]);
                 let lines = self.lines(

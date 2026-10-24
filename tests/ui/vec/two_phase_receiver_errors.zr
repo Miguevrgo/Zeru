@@ -2,15 +2,15 @@ struct C {
     v: Vec<i64>,
     fn add(var self, x: i64) { self.v.push(x); }
 }
-fn grow(vs: &var Vec<Vec<i64>>) i64 { vs.push([1]); return 0; }
-fn grow_cs(cs: &var Vec<C>) i64 { cs.push(C { v: [] }); return 0; }
+fn grow(vs: &var Vec<Vec<i64>>) i64 { vs.push(Vec[1]); return 0; }
+fn grow_cs(cs: &var Vec<C>) i64 { cs.push(C { v: Vec[] }); return 0; }
 fn main() {
-    var vs: Vec<Vec<i64>> = [[1]];
+    var vs: Vec<Vec<i64>> = Vec[Vec[1]];
     vs[0].push(grow(&var vs));
     println("{}", vs[0][grow(&var vs)]);
-    var cs: Vec<C> = [C { v: [] }];
+    var cs: Vec<C> = Vec[C { v: Vec[] }];
     cs[0].add(grow_cs(&var cs));
-    var v: Vec<i64> = [1];
+    var v: Vec<i64> = Vec[1];
     var e = &v[0];
     v.push(1);
     println("{}", *e);

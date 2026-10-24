@@ -266,12 +266,16 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             }
             Rvalue::VecRepeat(value, count) => {
                 let elem = self.element_ty(ty);
-                let count = self.usize_type().const_int(*count, false);
+                let count = self.operand(count).imm().into_int_value();
                 let element = self.operand(value);
+                let owns = self.program.needs_drop(elem);
                 let data = self.alloc_buffer(elem, count);
                 self.counted_loop(count, |this, index| {
                     let slot = this.buffer_slot(data, elem, index);
-                    this.store_val(slot, element, elem);
+                    match (owns, element) {
+                        (true, Val::Mem(source)) => this.call_copy(slot, source, elem),
+                        _ => this.store_val(slot, element, elem),
+                    }
                 });
                 self.store_vec(dst, ty, data, count, count);
             }

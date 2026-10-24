@@ -176,7 +176,7 @@ fn bfs(grid: &Grid, start: usize, goal: usize) i64? {
     for i in 0..W * H {
         steps.push(-1);
     }
-    var queue: Vec<usize> = [start];
+    var queue: Vec<usize> = Vec[start];
     var head: usize = 0;
     steps[start] = 0;
     while head < queue.len() {
@@ -212,7 +212,7 @@ fn main() {
     var cost = result.0[goal];
     var steps = bfs(&grid, start, goal).unwrap();
 
-    var path: Vec<usize> = [goal];
+    var path: Vec<usize> = Vec[goal];
     var at = goal;
     while at != start {
         at = result.1[at];
@@ -234,7 +234,7 @@ fn main() {
     println("cheapest cost {} over {} cells, fewest steps {}", cost, path.len(), steps);
 
     var heap: MinHeap<i64> = MinHeap.new();
-    var values: Vec<i64> = [5, -2, 9, 0, 7, -2, 3];
+    var values: Vec<i64> = Vec[5, -2, 9, 0, 7, -2, 3];
     for v in values {
         heap.push(v, v * 10);
     }

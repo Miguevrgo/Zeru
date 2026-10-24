@@ -20,9 +20,9 @@ Error: Cannot change 'v' while 'r' still refers into it
 Error: Cannot change 'v' while 'e' still refers into it
    ╭─[ tests/ui/references/change_while_referenced.zr:7:5 ]
    │
- 7 │     v = [9];
-   │     ───┬───
-   │        ╰───── Cannot change 'v' while 'e' still refers into it
+ 7 │     v = Vec[9];
+   │     ─────┬────
+   │          ╰────── Cannot change 'v' while 'e' still refers into it
    │
    ├─[ tests/ui/references/change_while_referenced.zr:7:5 ]
    │

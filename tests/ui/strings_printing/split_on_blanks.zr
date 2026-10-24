@@ -2,7 +2,7 @@ fn main() {
     var parts = "  84283   63343 \t9\n".split();
     println("{}", parts);
     println("{} {}", "".split(), "a  b".split(" "));
-    var v: Vec<i32> = [1, 2, 3, 4, 5];
+    var v: Vec<i32> = Vec[1, 2, 3, 4, 5];
     v.reverse();
     var names: Vec<String> = Vec.new();
     names.push(String.from("x"));

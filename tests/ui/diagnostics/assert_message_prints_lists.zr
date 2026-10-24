@@ -1,6 +1,6 @@
 //@ checked
 fn main() {
-    var v: Vec<i32> = [1, 2, 3];
+    var v: Vec<i32> = Vec[1, 2, 3];
     assert(v.len() == 3, "never shown {}", v);
     assert(v.len() == 4, "v is {}", v);
 }

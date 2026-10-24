@@ -1,4 +1,4 @@
 fn main() {
-    var nums: Vec<i32> = [1];
+    var nums: Vec<i32> = Vec[1];
     nums.push_str("x");
 }

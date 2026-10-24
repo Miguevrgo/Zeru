@@ -22,6 +22,8 @@ const COPY_FN: &str = "__zeru_copy_bytes";
 /// str methods, each the prelude's `__zeru_str_<name>` with the str first.
 const STR_METHODS: &[&str] = &[
     "split",
+    "contains",
+    "find",
     "lines",
     "trim",
     "starts_with",
@@ -421,7 +423,7 @@ impl FnCx<'_, '_> {
 
     /// Report a `.copy()` of a `ty` that runs a `drop`, which would run once
     /// for each copy.
-    fn copies_drop(&mut self, ty: Ty, span: Span) -> bool {
+    pub(super) fn copies_drop(&mut self, ty: Ty, span: Span) -> bool {
         if !self.cx.runs_drop(ty) {
             return false;
         }
@@ -1273,10 +1275,12 @@ impl FnCx<'_, '_> {
 fn written_value(expr: &Expression) -> bool {
     match &expr.kind {
         ExpressionKind::Infix { left, right, .. } => written_value(left) && written_value(right),
-        ExpressionKind::ArrayLiteral(items) | ExpressionKind::Tuple(items) => {
-            items.iter().all(written_value)
+        ExpressionKind::ArrayLiteral(items)
+        | ExpressionKind::VecLiteral(items)
+        | ExpressionKind::Tuple(items) => items.iter().all(written_value),
+        ExpressionKind::ArrayRepeat { value, .. } | ExpressionKind::VecRepeat { value, .. } => {
+            written_value(value)
         }
-        ExpressionKind::ArrayRepeat { value, .. } => written_value(value),
         ExpressionKind::None => true,
         _ => is_number_literal(expr),
     }

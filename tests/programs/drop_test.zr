@@ -35,7 +35,7 @@ fn maybe(drops: *i32) Probe? {
 }
 
 fn listed() Vec<i64>? {
-    return [1, 2, 3];
+    return Vec[1, 2, 3];
 }
 
 fn passed_through(drops: *i32) Probe {
@@ -124,19 +124,19 @@ fn main() {
     expect(drops, 14, 12);
 
     {
-        var v: Vec<Probe> = [probe(at), probe(at)];
+        var v: Vec<Probe> = Vec[probe(at), probe(at)];
         v.push(probe(at));
     }
     expect(drops, 17, 13);
 
     {
-        var v: Vec<Probe> = [probe(at), probe(at)];
+        var v: Vec<Probe> = Vec[probe(at), probe(at)];
         v.clear();
         expect(drops, 19, 14);
     }
 
     {
-        var v: Vec<Probe> = [probe(at), probe(at)];
+        var v: Vec<Probe> = Vec[probe(at), probe(at)];
         var p = v.pop();
         var r = v.remove(0);
     }
@@ -149,7 +149,7 @@ fn main() {
     expect(drops, 23, 16);
 
     {
-        var h = Holder { probe: probe(at), probes: [probe(at)] };
+        var h = Holder { probe: probe(at), probes: Vec[probe(at)] };
         h.probe = probe(at);
         expect(drops, 24, 17);
     }
@@ -237,7 +237,7 @@ fn main() {
     var first_drops: i32 = 0;
     var second_drops: i32 = 0;
     {
-        var vs: Vec<Array<Probe, 1>> = [[probe(&first_drops)], [probe(&second_drops)]];
+        var vs: Vec<Array<Probe, 1>> = Vec[[probe(&first_drops)], [probe(&second_drops)]];
         var first = vs.remove(0);
     }
     expect(first_drops * 10 + second_drops, 11, 35);

@@ -1,5 +1,5 @@
 fn main() {
-    var v: Vec<i32> = [5, 1, 9, 3];
+    var v: Vec<i32> = Vec[5, 1, 9, 3];
     var top = v[1..];
     println("{} {} {} {}", top.sum(), top.min().unwrap(), top.max().unwrap(), top.contains(9));
     println("{} {}", v[..2].windows(2), v[1..].chunks(2));

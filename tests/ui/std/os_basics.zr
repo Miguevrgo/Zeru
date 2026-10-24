@@ -3,14 +3,14 @@ import std.os;
 fn main() {
     var big = os::output(
         "sh",
-        ["-c", "head -c 300000 /dev/zero; head -c 200000 /dev/zero >&2"],
+        Vec["-c", "head -c 300000 /dev/zero; head -c 200000 /dev/zero >&2"],
     ).unwrap();
     println("{} {} {}", big.stdout.len(), big.stderr.len(), big.code);
     os::set_env("ZERU_TEST", "from parent").unwrap();
-    var child = os::output("sh", ["-c", "echo $ZERU_TEST"]).unwrap();
+    var child = os::output("sh", Vec["-c", "echo $ZERU_TEST"]).unwrap();
     println("{}", child.stdout.trim());
     os::remove_env("ZERU_TEST").unwrap();
-    var gone = os::output("sh", ["-c", "echo [$ZERU_TEST]"]).unwrap();
+    var gone = os::output("sh", Vec["-c", "echo [$ZERU_TEST]"]).unwrap();
     println("{}", gone.stdout.trim());
     for i in 0..200000 {
         os::set_env("COUNTER", "some value that takes room").unwrap();
@@ -18,7 +18,7 @@ fn main() {
     println("{}", os::env("COUNTER").unwrap());
     var input = os::read_stdin().unwrap();
     println("{}", input.len());
-    println("{}", os::run("sh", ["-c", "kill -9 $$"]).unwrap());
+    println("{}", os::run("sh", Vec["-c", "kill -9 $$"]).unwrap());
     var start = os::Clock.now();
     os::sleep(5);
     println("{}", start.elapsed() >= 5_000_000);

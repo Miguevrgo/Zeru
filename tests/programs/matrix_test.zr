@@ -159,18 +159,18 @@ fn close(a: f64, b: f64) bool {
 }
 
 fn main() {
-    var fib: Matrix<i64> = from_rows(2, 2, [1, 1, 1, 0]);
+    var fib: Matrix<i64> = from_rows(2, 2, Vec[1, 1, 1, 0]);
     var f90 = fib.pow(90);
     println("fib(90) = {}", f90.at(0, 1));
 
-    var m: Matrix<i64> = from_rows(2, 3, [1, 2, 3, 4, 5, 6]);
+    var m: Matrix<i64> = from_rows(2, 3, Vec[1, 2, 3, 4, 5, 6]);
     var mt = m.transpose();
     var gram = m.mul(&mt);
     println("m * m^T, trace {}:", gram.trace());
     gram.show();
 
-    var a: Matrix<f64> = from_rows(3, 3, [2.0, 1.0, -1.0, -3.0, -1.0, 2.0, -2.0, 1.0, 2.0]);
-    var b: Matrix<f64> = from_rows(3, 1, [8.0, -11.0, -3.0]);
+    var a: Matrix<f64> = from_rows(3, 3, Vec[2.0, 1.0, -1.0, -3.0, -1.0, 2.0, -2.0, 1.0, 2.0]);
+    var b: Matrix<f64> = from_rows(3, 1, Vec[8.0, -11.0, -3.0]);
     var work = a.copy();
     var det = eliminate(&var work, &var b);
     println("det = {}, x = ({}, {}, {})", det, b.at(0, 0), b.at(1, 0), b.at(2, 0));
@@ -188,7 +188,7 @@ fn main() {
     }
     println("max |a * inv - I| = {}", max_err);
 
-    var h: Matrix<f64> = from_rows(2, 2, [0.5, 0.25, 0.25, 0.5]);
+    var h: Matrix<f64> = from_rows(2, 2, Vec[0.5, 0.25, 0.25, 0.5]);
     var h8 = h.pow(8);
     println("h^8 trace {}", h8.trace());
 

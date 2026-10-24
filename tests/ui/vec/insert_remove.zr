@@ -1,5 +1,5 @@
 fn main() {
-    var v: Vec<i64> = [1, 2, 3];
+    var v: Vec<i64> = Vec[1, 2, 3];
     v.insert(0, 0);
     v.insert(4, 9);
     var second = v.remove(1);

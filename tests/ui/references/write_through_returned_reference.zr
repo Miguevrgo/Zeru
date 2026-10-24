@@ -13,21 +13,21 @@ fn find(v: &var Vec<Account>, frozen: bool) (&var Account)? {
     return None;
 }
 fn main() {
-    var v: Vec<Vec<i64>> = [[1]];
+    var v: Vec<Vec<i64>> = Vec[Vec[1]];
     var s = pick(&var v);
-    *s = [2, 3];
+    *s = Vec[2, 3];
     s.push(4);
     var t = s;
     t.push(5);
     s.push(6);
     println("{}", v[0].len());
 
-    var o: Vec<i64?> = [None];
+    var o: Vec<i64?> = Vec[None];
     var x = first(&var o);
     *x = 5;
     println("{}", o[0].unwrap());
 
-    var b = Bank { accounts: [Account { state: State::Open, log: Vec.new() }] };
+    var b = Bank { accounts: Vec[Account { state: State::Open, log: Vec.new() }] };
     var acc = b.slot(0);
     acc.state = State::Frozen(1);
     acc.log.push(3);

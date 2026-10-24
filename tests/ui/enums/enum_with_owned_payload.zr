@@ -6,6 +6,6 @@ fn total(k: Kept) i64 {
     };
 }
 fn main() {
-    var k = Kept::One([3, 4]);
+    var k = Kept::One(Vec[3, 4]);
     println("{} {}", total(k), total(Kept::Nothing));
 }

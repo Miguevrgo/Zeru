@@ -6,7 +6,7 @@ fn grows() {
 }
 
 fn cleared() {
-    var v: Vec<i32> = [1, 2, 3];
+    var v: Vec<i32> = Vec[1, 2, 3];
     var part = v[0..2];
     v.clear();
     println("{}", part[0]);

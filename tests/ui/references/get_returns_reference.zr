@@ -4,18 +4,18 @@ struct P {
     fn twice(self) i64 { return self.x * 2; }
 }
 fn main() {
-    var rows: Vec<Vec<i64>> = [[1, 2], [3]];
+    var rows: Vec<Vec<i64>> = Vec[Vec[1, 2], Vec[3]];
     var row = rows.get(0).unwrap();
     println("{} {}", row.len(), row[1]);
     var copied = rows.get(1).copy().unwrap();
     rows.push(copied);
     println("{} {}", rows.len(), rows.get(9).is_none());
-    var nums: Vec<i64> = [7];
+    var nums: Vec<i64> = Vec[7];
     println("{} {}", nums.get(0).copy().unwrap(), nums.get(5).copy().is_none());
-    var ps: Vec<P> = [P { x: 5 }];
+    var ps: Vec<P> = Vec[P { x: 5 }];
     var q = &ps[0];
     println("{} {} {}", q.x, q.twice(), q.copy().x);
     var m: HashMap<i64, Vec<i64>> = HashMap.new();
-    m.insert(1, [4, 5, 6]);
+    m.insert(1, Vec[4, 5, 6]);
     println("{} {}", m.get(1).unwrap().len(), m.get(2).is_none());
 }

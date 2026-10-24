@@ -35,6 +35,7 @@ fn largest<T: Ord>(a: T, b: T) T { ... }        // generic, with a bound
 
 ```zeru,ignore
 if x > 0 { ... } else if x == 0 { ... } else { ... }
+var sign = if x < 0 { -1 } else { 1 };   // one expression per branch
 while running { ... break; ... continue; ... }
 for i in 0..10 { ... }            // 0 to 9
 for x in list { ... }             // each element
@@ -52,7 +53,8 @@ var name = match day {
 
 ```zeru,ignore
 var a: Array<i32, 3> = [1, 2, 3];   var zeros: Array<u8, 64> = [0; 64];
-var v: Vec<i32> = [1, 2];           var empty: Vec<str> = Vec.new();
+var v = Vec[1, 2];                  var empty: Vec<str> = Vec.new();
+var grid = Vec[Vec[0; width]; height];   // n known as it runs
 v.push(3);  v.pop();  v.len();  v[0];  v.get(9);  v.sort();  v.reverse();  v.copy();
 var part = v[1..];                  // a slice, &[i32]
 var t = (1, true);  t.0;
@@ -62,7 +64,7 @@ var t = (1, true);  t.0;
 
 ```zeru,ignore
 var s: str = "hello";               s.len();  s[0];  s[1..3];
-s.split();  s.split(",");  s.lines();  s.trim();  s.starts_with("he");  s.parse_int();
+s.split();  s.split(",");  s.lines();  s.contains("a");  s.find("a");  s.trim();  s.starts_with("he");  s.parse_int();
 var owned = String.from("hi");      owned.push_str("!");  owned.push('?');
 println("{} and {}", 1, "two");     println("{}", v);  // [1, 2]
 ```

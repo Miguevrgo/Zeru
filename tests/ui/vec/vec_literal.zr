@@ -1,0 +1,9 @@
+fn main() {
+    var v = Vec[1, 2, 3];
+    var n: usize = v.len() + 1;
+    var zeros: Vec<i64> = Vec[0; n];
+    var word = String.from("ab");
+    var words = Vec[word; 3];
+    words[0].push('c');
+    println("{} {} {} {} {}", v, zeros, words, word, v.len());
+}

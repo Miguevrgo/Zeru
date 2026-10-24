@@ -1,11 +1,11 @@
 import std.os;
 fn main() {
-    println("{}", os::run("./no-such-file", []).unwrap_err());
-    println("{}", os::output("/no/such/prog", []).unwrap_err());
-    println("{}", os::run("sh", ["-c", "exit 127"]).unwrap());
-    println("{}", os::output("echo", ["ok"]).unwrap().stdout.trim());
+    println("{}", os::run("./no-such-file", Vec[]).unwrap_err());
+    println("{}", os::output("/no/such/prog", Vec[]).unwrap_err());
+    println("{}", os::run("sh", Vec["-c", "exit 127"]).unwrap());
+    println("{}", os::output("echo", Vec["ok"]).unwrap().stdout.trim());
     for i in 0..2000 {
-        os::run("./no-such-file", []).unwrap_err();
+        os::run("./no-such-file", Vec[]).unwrap_err();
     }
-    println("{}", os::run("true", []).unwrap());
+    println("{}", os::run("true", Vec[]).unwrap());
 }

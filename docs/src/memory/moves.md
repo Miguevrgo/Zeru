@@ -22,7 +22,7 @@ any more.
 
 ```zeru,fails
 fn main() {
-    var first: Vec<i32> = [1, 2, 3];
+    var first: Vec<i32> = Vec[1, 2, 3];
     var second = first;
     println("{}", first.len());
 }
@@ -41,7 +41,7 @@ fn consume(list: Vec<i32>) {
 }
 
 fn main() {
-    var list: Vec<i32> = [1, 2, 3];
+    var list: Vec<i32> = Vec[1, 2, 3];
     consume(list);
     consume(list);
 }
@@ -66,9 +66,9 @@ fn main() {
 A moved-from variable can be given a new value and used again:
 
 ```zeru
-var list: Vec<i32> = [1];
+var list: Vec<i32> = Vec[1];
 var taken = list;
-list = [2, 3];
+list = Vec[2, 3];
 println("{} {}", taken.len(), list.len()); // 1 2
 ```
 
@@ -77,7 +77,7 @@ println("{} {}", taken.len(), list.len()); // 1 2
 When you really need two independent copies, `copy()` makes one:
 
 ```zeru
-var original: Vec<i32> = [1, 2, 3];
+var original: Vec<i32> = Vec[1, 2, 3];
 var backup = original.copy();
 original.push(4);
 println("{} {}", original.len(), backup.len()); // 4 3

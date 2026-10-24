@@ -1,4 +1,4 @@
 fn main() {
-    var vv: Vec<Vec<i64>> = [[1], [2]];
+    var vv: Vec<Vec<i64>> = Vec[Vec[1], Vec[2]];
     for x in &var vv { var e = &x[0]; x.push(2); println("{}", *e); }
 }

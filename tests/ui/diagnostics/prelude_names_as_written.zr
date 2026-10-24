@@ -1,13 +1,13 @@
 fn main() {
-    var words: Vec<bool> = [true, false];
+    var words: Vec<bool> = Vec[true, false];
     words.sort();
-    var flags: Vec<bool> = [true];
+    var flags: Vec<bool> = Vec[true];
     flags.sum();
     var s = String.from();
     var t = "x".trim(1);
     var u = String.with_capacity(3, 4);
     var v = String.pop();
     var w = "abc".shout();
-    var n: Vec<i32> = [1];
+    var n: Vec<i32> = Vec[1];
     n.shout();
 }

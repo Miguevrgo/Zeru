@@ -1,5 +1,5 @@
 fn main() {
-    var v: Vec<usize> = [1];
+    var v: Vec<usize> = Vec[1];
     v.push(v.len());
     v.push(v[0] + v[1]);
     println("{} {} {}", v[0], v[1], v[2]);

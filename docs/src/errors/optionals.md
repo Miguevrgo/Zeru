@@ -14,7 +14,7 @@ fn find(names: &Vec<str>, wanted: str) usize? {
 }
 
 fn main() {
-    var names: Vec<str> = ["ann", "bob"];
+    var names: Vec<str> = Vec["ann", "bob"];
     var at = find(&names, "bob");
     if at.is_some() {
         println("found at {}", at.unwrap()); // found at 1
@@ -78,7 +78,7 @@ Lookups that point into a collection, like `Vec.get` or `HashMap.get`,
 return an optional reference, `(&T)?`. `*` reads the value once it is out:
 
 ```zeru
-var scores: Vec<i32> = [10, 20];
+var scores: Vec<i32> = Vec[10, 20];
 var second = scores.get(1);
 if second.is_some() {
     println("{}", *second.unwrap()); // 20

@@ -14,6 +14,6 @@ fn main() {
     var d = t.copy();
     var o: (&Handle)? = &h;
     var e = o.copy();
-    var plain: Vec<i32> = [1, 2];
+    var plain: Vec<i32> = Vec[1, 2];
     var f = plain.copy();
 }

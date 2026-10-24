@@ -5,7 +5,7 @@ struct Stack<T> {
 }
 fn main() {
     var s: Stack<Vec<i64>> = Stack { items: Vec.new() };
-    s.push([1, 2]);
-    s.push([3]);
+    s.push(Vec[1, 2]);
+    s.push(Vec[3]);
     println("{}", s.size());
 }

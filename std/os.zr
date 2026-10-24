@@ -388,7 +388,7 @@ fn c_list(texts: &Vec<str>, packed: &var String) Vec<u64> {
 // of the `execve` that could not start it, which a pipe closed by a
 // successful one brings back from the child.
 fn spawn(path: str, args: Vec<str>, out: i32, err: i32) i64! {
-    var argv_texts: Vec<str> = [path];
+    var argv_texts: Vec<str> = Vec[path];
     for arg in args {
         argv_texts.push(arg);
     }
@@ -468,9 +468,9 @@ fn wait(pid: i64) i32! {
 // ```zeru
 // import std.os;
 //
-// println("{}", os::run("true", []).unwrap()); // 0
-// println("{}", os::run("sh", ["-c", "exit 3"]).unwrap()); // 3
-// println("{}", os::run("no-such-program", []).unwrap_err()); // 2
+// println("{}", os::run("true", Vec[]).unwrap()); // 0
+// println("{}", os::run("sh", Vec["-c", "exit 3"]).unwrap()); // 3
+// println("{}", os::run("no-such-program", Vec[]).unwrap_err()); // 2
 // ```
 pub fn run(program: str, args: Vec<str>) i32! {
     var path = locate(program)!;
@@ -501,9 +501,9 @@ pub struct Output {
 // ```zeru
 // import std.os;
 //
-// var listing = os::output("echo", ["hello", "there"]).unwrap();
+// var listing = os::output("echo", Vec["hello", "there"]).unwrap();
 // println("{} {}", listing.stdout.trim(), listing.code); // hello there 0
-// var failed = os::output("sh", ["-c", "echo oops >&2; exit 1"]).unwrap();
+// var failed = os::output("sh", Vec["-c", "echo oops >&2; exit 1"]).unwrap();
 // println("{} {}", failed.stderr.trim(), failed.code); // oops 1
 // ```
 pub fn output(program: str, args: Vec<str>) Output! {

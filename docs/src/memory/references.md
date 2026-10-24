@@ -19,7 +19,7 @@ fn add_one(list: &var Vec<i32>) {
 }
 
 fn main() {
-    var list: Vec<i32> = [1, 2, 3];
+    var list: Vec<i32> = Vec[1, 2, 3];
     add_one(&var list);
     println("{} {}", total(&list), list.len()); // 7 4
 }
@@ -66,7 +66,7 @@ that while a reference is still going to be used:
 
 ```zeru,fails
 fn main() {
-    var list: Vec<i32> = [1, 2, 3];
+    var list: Vec<i32> = Vec[1, 2, 3];
     var first = &list[0];
     list.push(4);
     println("{}", *first);
@@ -88,7 +88,7 @@ to it lives. Zeru runs on one thread, so those cannot corrupt memory; the
 reference simply sees the new value:
 
 ```zeru
-var list: Vec<i32> = [1, 2, 3];
+var list: Vec<i32> = Vec[1, 2, 3];
 var first = &list[0];
 list[0] = 9;
 println("{}", *first); // 9
@@ -106,7 +106,7 @@ fn first(list: &Vec<i32>) &i32 {
 }
 
 fn main() {
-    var list: Vec<i32> = [4, 5];
+    var list: Vec<i32> = Vec[4, 5];
     println("{}", *first(&list)); // 4
 }
 ```

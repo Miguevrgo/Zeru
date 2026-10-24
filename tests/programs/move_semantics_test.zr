@@ -40,17 +40,17 @@ fn main() {
     var kept = Point { x: 7, y: 8 };
     assert(peek(&kept) == 7 && kept.y == 8);
 
-    var list: Vec<i64> = [1, 2];
+    var list: Vec<i64> = Vec[1, 2];
     assert(take_vec(list.copy()) == 2);
     assert(list.len() == 2);
 
-    var holder = Holder { cells: [7, 8, 9] };
+    var holder = Holder { cells: Vec[7, 8, 9] };
     var carried = holder;
     assert(carried.cells[2] == 9);
-    holder = Holder { cells: [1] };
+    holder = Holder { cells: Vec[1] };
     assert(holder.cells[0] == 1);
 
-    var once: Vec<i64> = [3];
+    var once: Vec<i64> = Vec[3];
     var taken: usize = 0;
     while true {
         taken = take_vec(once);

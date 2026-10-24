@@ -2,7 +2,7 @@ fn make() String {
     return String.from("abc");
 }
 fn make_vec() Vec<i32> {
-    return [1, 2];
+    return Vec[1, 2];
 }
 fn take(s: str) str {
     return s;
@@ -12,7 +12,7 @@ fn local() str {
     return s;
 }
 fn local_slice() &[i32] {
-    var v: Vec<i32> = [1, 2];
+    var v: Vec<i32> = Vec[1, 2];
     return v[..];
 }
 struct Person {

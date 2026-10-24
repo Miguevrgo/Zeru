@@ -102,7 +102,7 @@ fn main() {
     assert(number("1x").unwrap_err() == NOT_DIGIT);
     assert(number("").unwrap_err() == EMPTY);
     assert(number("9z").is_err() && number("42").unwrap() == 42);
-    assert(first_doubled(Vec.new()).is_none() && first_doubled([3]).unwrap() == 6);
+    assert(first_doubled(Vec.new()).is_none() && first_doubled(Vec[3]).unwrap() == 6);
     assert(name(0).is_none() && name(1).is_some());
     assert(pair().unwrap().1 == 2 && sign(None) == 0);
 

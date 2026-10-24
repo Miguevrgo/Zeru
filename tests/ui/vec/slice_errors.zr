@@ -1,5 +1,5 @@
 fn make() Vec<i32> {
-    return [1, 2];
+    return Vec[1, 2];
 }
 fn main() {
     var x = make()[1..];

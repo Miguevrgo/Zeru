@@ -969,6 +969,12 @@ impl Parser {
             }
             None => match self.peek() {
                 Token::LBracket => self.parse_array_literal(),
+                Token::Identifier(name)
+                    if name == "Vec"
+                        && matches!(self.tokens.get(self.pos + 1), Some((Token::LBracket, _))) =>
+                {
+                    self.parse_vec_literal()
+                }
                 Token::Identifier(_) => self.parse_path_or_struct_literal(),
                 Token::LParen => self.parse_grouped_expression(),
                 Token::Minus | Token::Bang => {
@@ -977,6 +983,7 @@ impl Parser {
                 Token::Star => self.parse_prefix(|_, expr| ExpressionKind::Dereference(expr)),
                 Token::BitAnd => self.parse_borrow_expression(),
                 Token::Match => self.parse_match_expression(),
+                Token::If => self.parse_if_expression(),
                 Token::Asm => self.parse_asm_expression(),
                 token => self.error_here(format!("Expected an expression, found '{token}'")),
             },
@@ -1001,6 +1008,41 @@ impl Parser {
             elements.extend(p.parse_expressions(&Token::RParen)?);
             Some(p.expression(ExpressionKind::Tuple(elements), start))
         })
+    }
+
+    /// `if c { a } else { b }` giving a value: one expression in each
+    /// branch, and an `else`, which may be another such `if`.
+    fn parse_if_expression(&mut self) -> Option<Expression> {
+        let start = self.span();
+        self.bump();
+        let condition = Box::new(self.parse_condition()?);
+        let then = Box::new(self.parse_branch()?);
+        if !self.eat(&Token::Else) {
+            return self.error_here("An if that gives a value needs an else");
+        }
+        let otherwise = match self.at(&Token::If) {
+            true => self.parse_if_expression()?,
+            false => self.parse_branch()?,
+        };
+        let kind = ExpressionKind::If {
+            condition,
+            then,
+            otherwise: Box::new(otherwise),
+        };
+        Some(self.expression(kind, start))
+    }
+
+    /// One branch of an `if` giving a value: `{ expression }`.
+    fn parse_branch(&mut self) -> Option<Expression> {
+        self.expect(&Token::LBrace)?;
+        let value = self.parse_expression(Precedence::Lowest)?;
+        if !self.at(&Token::RBrace) {
+            return self.error_here(
+                "Each branch of an if that gives a value holds one expression, with no ';'",
+            );
+        }
+        self.bump();
+        Some(value)
     }
 
     fn parse_match_expression(&mut self) -> Option<Expression> {
@@ -1252,6 +1294,21 @@ impl Parser {
         let start = self.span();
         self.bump();
         let kind = self.allowing_struct_literals(Self::parse_array_elements)?;
+        Some(self.expression(kind, start))
+    }
+
+    /// `Vec[a, b]` or `Vec[x; n]`: a Vec with these elements, or `n` of `x`.
+    fn parse_vec_literal(&mut self) -> Option<Expression> {
+        let start = self.span();
+        self.bump();
+        self.bump();
+        let kind = match self.allowing_struct_literals(Self::parse_array_elements)? {
+            ExpressionKind::ArrayRepeat { value, count } => {
+                ExpressionKind::VecRepeat { value, count }
+            }
+            ExpressionKind::ArrayLiteral(items) => ExpressionKind::VecLiteral(items),
+            _ => unreachable!("an array's elements"),
+        };
         Some(self.expression(kind, start))
     }
 

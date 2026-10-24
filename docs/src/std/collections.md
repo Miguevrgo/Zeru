@@ -48,6 +48,25 @@ println("{}", seen.len()); // 1
 
 `insert` on a set returns whether the key was new.
 
+`for (key, value) in map` walks a map, and `for key in set` a set, in the
+order the keys went in until a removal moves the last one into its gap.
+With `&var map` the values can change, though the keys cannot.
+`get_or_insert(key, value)` gives the value under `key`, storing `value`
+there first when the key is new, which makes counting one line:
+
+```zeru
+import std.collections.hashmap::{HashMap};
+
+var counts: HashMap<i32, i32> = HashMap.new();
+for n in [4, 2, 4, 4] {
+    *counts.get_or_insert(n, 0) += 1;
+}
+for (n, times) in counts {
+    print("{}x{} ", n, times);
+}
+println(""); // 4x3 2x1
+```
+
 A tuple of such values is a key too, as the position on a grid:
 
 ```zeru

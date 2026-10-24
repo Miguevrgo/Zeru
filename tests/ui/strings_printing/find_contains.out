@@ -1,0 +1,4 @@
+status: exit 0
+-- stdout
+name|Zeru true true
+2 true

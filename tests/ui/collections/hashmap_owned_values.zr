@@ -1,8 +1,8 @@
 import std.collections.hashmap::{HashMap};
 fn main() {
     var m: HashMap<i64, Vec<i64>> = HashMap.new();
-    m.insert(1, [1, 2, 3]);
-    m.insert(1, [4]);
+    m.insert(1, Vec[1, 2, 3]);
+    m.insert(1, Vec[4]);
     var got = m.get(1).unwrap();
     println("{} {}", got.len(), got[0]);
 }
