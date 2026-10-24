@@ -1,0 +1,28 @@
+status: exit 0
+-- stdout
+check mid-a false
+check mid-b true
+mid-b
+r 0
+r -1
+r 2
+r 100
+first 3
+r 0
+r -1
+r 2
+r -1
+r 4
+r -1
+r 6
+first -5
+check own false
+plain 1
+drop 1
+check own true
+guarded 2
+drop 2
+check own false
+leave 3
+drop 3
+end

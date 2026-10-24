@@ -1,0 +1,54 @@
+struct D {
+    id: i32,
+    fn drop(var self) { println("drop {}", self.id); }
+}
+
+fn check(tag: str, ok: bool) bool {
+    println("check {} {}", tag, ok);
+    return ok;
+}
+
+fn make(id: i32) D? {
+    return D { id: id };
+}
+
+fn first(v: i32) i32 {
+    for i in 0..10 {
+        var r = match i {
+            x if x == v => 100,
+            x if if x > 6 { break; } else { x % 2 == 0 } => x,
+            default => -1,
+        };
+        println("r {}", r);
+        if r == 100 {
+            return i;
+        }
+    }
+    return -5;
+}
+
+fn main() {
+    var n = 4;
+    var a = match n {
+        0..=2 if check("low", true) => "low",
+        3..=5 if check("mid-a", false) => "mid-a",
+        3..=5 if check("mid-b", true) => "mid-b",
+        x if check("any", x > 0) => "any",
+        default => "none",
+    };
+    println("{}", a);
+    println("first {}", first(3));
+    println("first {}", first(42));
+    for k in 1..=3 {
+        match make(k) {
+            Some(d) if check("own", d.id == 2) => println("guarded {}", d.id),
+            Some(d) if d.id == 3 => {
+                println("leave {}", d.id);
+                break;
+            }
+            Some(d) => println("plain {}", d.id),
+            None => {}
+        }
+    }
+    println("end");
+}
