@@ -15,6 +15,9 @@ use inkwell::{
     },
 };
 
+use std::collections::HashSet;
+use std::sync::LazyLock;
+
 use crate::mir::{Asm, Operand, Place};
 use crate::tir::{BinOp, BitOp, FnId};
 use crate::ty::{Ty, TyKind, Types};
@@ -27,10 +30,9 @@ const START: &str = include_str!("start.s");
 /// Whether start.s, or the `__zeru_start` it calls, defines `symbol`, which
 /// a function of the program then cannot take.
 pub(super) fn runtime_symbol(symbol: &str) -> bool {
-    symbol == "__zeru_start"
-        || START
-            .lines()
-            .any(|line| line.strip_suffix(':') == Some(symbol))
+    static LABELS: LazyLock<HashSet<&str>> =
+        LazyLock::new(|| START.lines().filter_map(|line| line.strip_suffix(':')).collect());
+    symbol == "__zeru_start" || LABELS.contains(symbol)
 }
 
 impl<'a, 'ctx> Lower<'a, 'ctx> {

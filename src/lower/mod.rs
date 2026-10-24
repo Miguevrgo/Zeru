@@ -691,7 +691,7 @@ impl SafetyMode {
     /// The LLVM pipeline at -O0, -O2 and -O3.
     pub const fn passes(&self) -> &str {
         match self {
-            Self::Debug => "default<O0>",
+            Self::Debug => "default<O0>,globaldce",
             Self::ReleaseSafe => "default<O2>",
             Self::ReleaseFast => "default<O3>",
         }
