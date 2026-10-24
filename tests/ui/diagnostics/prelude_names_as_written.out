@@ -1,11 +1,11 @@
 status: compile error
 -- stderr
-Error: 'Vec.sort' asks for T: Ord, which str does not satisfy
+Error: 'Vec.sort' asks for T: Ord, which bool does not satisfy
    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:3:5 ]
    │
  3 │     words.sort();
    │     ──────┬─────
-   │           ╰─────── 'Vec.sort' asks for T: Ord, which str does not satisfy
+   │           ╰─────── 'Vec.sort' asks for T: Ord, which bool does not satisfy
 ───╯
 Error: 'Vec.sum' asks for T: Num, which bool does not satisfy
    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:5:5 ]

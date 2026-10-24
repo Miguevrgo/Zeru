@@ -1,0 +1,44 @@
+import std.collections.binary_heap::{BinaryHeap};
+
+enum Level {
+    Low,
+    High,
+}
+
+fn main() {
+    println("{} {} {}", (1, 9) < (2, 0), (2, 3) < (2, 5), (2, 5) < (2, 5));
+    println("{} {} {}", (2, 5) <= (2, 5), (3, 0) > (2, 9), (1, (2, 3)) >= (1, (2, 4)));
+    println("{} {} {}", "ab" < "b", "abc" < "ab", "" < "a");
+    println("{} {}", "zeru" >= "zeru", ("b", 1) < ("a", 2));
+    var s = String.from("pear");
+    println("{} {}", s < String.from("plum"), s > "apple");
+    var pairs: Vec<(i32, str)> = [(3, "c"), (1, "z"), (1, "a"), (2, "b")];
+    pairs.sort();
+    println("{}", pairs);
+    var words: Vec<str> = ["pear", "apple", "fig", "apples"];
+    words.sort();
+    println("{} {} {}", words, words.min(), words.max());
+    var heap: BinaryHeap<(i64, i32)> = BinaryHeap.new();
+    heap.push((5, 1));
+    heap.push((2, 7));
+    heap.push((9, 0));
+    heap.push((2, 3));
+    var order: Vec<(i64, i32)> = Vec.new();
+    while !heap.is_empty() {
+        order.push(heap.pop().unwrap());
+    }
+    println("{}", order);
+    var levels: Vec<(Level, i32)> = Vec.new();
+    levels.push((Level::High, 1));
+    levels.push((Level::Low, 2));
+    levels.sort();
+    println("{}", levels[0].1);
+    var names: Vec<(String, i32)> = Vec.new();
+    names.push((String.from("bo"), 1));
+    names.push((String.from("al"), 2));
+    names.sort();
+    println("{} {}", names, (String.from("x"), 1) == (String.from("x"), 1));
+    var neg: Vec<(i32, i32)> = [(0, -1), (-5, 3), (0, -9)];
+    neg.sort();
+    println("{}", neg);
+}

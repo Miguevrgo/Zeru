@@ -67,11 +67,13 @@ println("{}", "84283   63343".split(" ")); // ["84283", "", "", "63343"]
 The parts `split` and `lines` give are views into the original text; no
 text is copied.
 
-`==` and `!=` compare text byte by byte:
+`==` and `!=` compare text byte by byte, and `<` orders it by the first
+byte that differs, a text going before those it starts:
 
 ```zeru
 var answer = "yes";
 println("{}", answer == "yes"); // true
+println("{} {}", "apple" < "banana", "app" < "apple"); // true true
 ```
 
 ### Raw strings

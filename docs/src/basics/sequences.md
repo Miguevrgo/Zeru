@@ -144,8 +144,16 @@ println("{}", point.0 * point.1); // 12
 println("{}", point); // (3, 4)
 ```
 
-Tuples are most useful to return several values from a function, and are
-compared with `==` part by part.
+Tuples are most useful to return several values from a function. They
+compare part by part: `==` when every part is equal, and `<` by the first
+part that differs, so a list of tuples sorts by its first part, then its
+second:
+
+```zeru
+var scores: Vec<(i32, str)> = [(2, "bob"), (1, "zoe"), (2, "ann")];
+scores.sort();
+println("{}", scores); // [(1, "zoe"), (2, "ann"), (2, "bob")]
+```
 
 ### Taking a tuple apart
 

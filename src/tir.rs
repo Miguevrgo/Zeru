@@ -34,8 +34,8 @@ pub struct Runtime {
     pub heap: Ty,
     pub alloc: FnId,
     pub realloc: FnId,
-    pub str_eq: FnId,
-    pub string_eq: FnId,
+    pub str_cmp: FnId,
+    pub string_cmp: FnId,
 }
 
 pub struct StructLayout {

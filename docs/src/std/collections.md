@@ -75,7 +75,10 @@ println("{}", queue.len()); // 2
 
 ## BinaryHeap
 
-Gives back the largest value first, whatever the order they went in:
+Gives back the largest value first, whatever the order they went in.
+Tuples order by their first part, so `(priority, value)` pairs come out by
+priority; pushing the priority negated gives the smallest first, as a
+shortest-path search wants:
 
 ```zeru
 import std.collections.binary_heap::{BinaryHeap};
@@ -85,4 +88,10 @@ heap.push(3);
 heap.push(9);
 heap.push(5);
 println("{} {}", heap.pop().unwrap(), heap.pop().unwrap()); // 9 5
+
+var queue: BinaryHeap<(i64, str)> = BinaryHeap.new();
+queue.push((-7, "far"));
+queue.push((-2, "near"));
+var (distance, place) = queue.pop().unwrap();
+println("{} {}", -distance, place); // 2 near
 ```

@@ -39,7 +39,7 @@ compiler checks the promise at each call. Four bounds are built in:
 | Bound | Allows | Met by |
 |---|---|---|
 | `Eq` | `==` and `!=` | numbers, bools, `str`, `String`, enums without data, tuples of those |
-| `Ord` | `<`, `<=`, `>`, `>=` | numbers |
+| `Ord` | `<`, `<=`, `>`, `>=` | numbers, `str`, `String`, enums without data, tuples of those |
 | `Num` | arithmetic, and `as` from a number | numbers |
 | `Hash` | being a key of a `HashMap` or `HashSet` | integers, bools, enums without data, tuples of those |
 

@@ -671,50 +671,88 @@ impl<'a> Builder<'a> {
     }
 
     /// `op` applied to two values, unchecked, into a new local.
-    /// Whether the tuples at `left` and `right` are equal, part by part.
-    fn tuple_eq(&mut self, left: Place, right: Place, ty: Ty) -> Operand {
+    /// How the tuples at `left` and `right` order, -1, 0 or 1: the first part
+    /// that differs decides.
+    fn tuple_order(&mut self, left: Place, right: Place, ty: Ty) -> Operand {
         let TyKind::Tuple(parts) = self.types().kind(ty).clone() else {
             unreachable!("only tuples are compared part by part")
         };
-        let mut all = Operand::Constant(Constant {
-            value: ConstValue::Bool(true),
-            ty: Types::BOOL,
-        });
+        let mut order = constant(0, Types::I32);
         for (at, part) in parts.into_iter().enumerate() {
             let field = Projection::Field(at as u32);
             let (l, r) = (left.clone().project(field), right.clone().project(field));
-            let same = match self.types().kind(part) {
-                TyKind::Tuple(_) => self.tuple_eq(l, r, part),
-                _ if part == Types::STR || part == Types::STRING => {
-                    let (function, args) = match part == Types::STR {
-                        true => (
-                            self.program.runtime.str_eq,
-                            [Operand::Copy(l), Operand::Copy(r)],
-                        ),
-                        false => {
-                            let pointer = self.program.types.intern(TyKind::Ref(part));
-                            let [a, b] = [l, r].map(|place| {
-                                let held = self.temp(pointer);
-                                self.assign(Place::local(held), Rvalue::AddressOf(place));
-                                Operand::Move(Place::local(held))
-                            });
-                            (self.program.runtime.string_eq, [a, b])
-                        }
-                    };
-                    let result = self.temp(Types::BOOL);
-                    self.then(|target| TerminatorKind::Call {
-                        function,
-                        args: args.to_vec(),
-                        dest: Some(Place::local(result)),
-                        target,
-                    });
-                    Operand::Move(Place::local(result))
-                }
-                _ => self.binary(BinOp::Eq, Operand::Copy(l), Operand::Copy(r)),
-            };
-            all = self.binary(BinOp::BitAnd, all, same);
+            let this = self.part_order(l, r, part);
+            let undecided = self.binary(BinOp::Eq, order.clone(), constant(0, Types::I32));
+            let undecided = self.number(undecided);
+            let counted = self.arithmetic(BinOp::MulWrap, undecided, this);
+            order = self.arithmetic(BinOp::AddWrap, order, counted);
         }
-        all
+        order
+    }
+
+    /// How the parts at `l` and `r`, of type `ty`, order: -1, 0 or 1.
+    fn part_order(&mut self, l: Place, r: Place, ty: Ty) -> Operand {
+        if matches!(self.types().kind(ty), TyKind::Tuple(_)) {
+            return self.tuple_order(l, r, ty);
+        }
+        if ty == Types::STR || ty == Types::STRING {
+            let (function, args) = match ty == Types::STR {
+                true => (
+                    self.program.runtime.str_cmp,
+                    [Operand::Copy(l), Operand::Copy(r)],
+                ),
+                false => {
+                    let pointer = self.program.types.intern(TyKind::Ref(ty));
+                    let [a, b] = [l, r].map(|place| {
+                        let held = self.temp(pointer);
+                        self.assign(Place::local(held), Rvalue::AddressOf(place));
+                        Operand::Move(Place::local(held))
+                    });
+                    (self.program.runtime.string_cmp, [a, b])
+                }
+            };
+            let result = self.temp(Types::I32);
+            self.then(|target| TerminatorKind::Call {
+                function,
+                args: args.to_vec(),
+                dest: Some(Place::local(result)),
+                target,
+            });
+            return Operand::Move(Place::local(result));
+        }
+        let greater = self.binary(
+            BinOp::Gt,
+            Operand::Copy(l.clone()),
+            Operand::Copy(r.clone()),
+        );
+        let less = self.binary(BinOp::Lt, Operand::Copy(l), Operand::Copy(r));
+        let (greater, less) = (self.number(greater), self.number(less));
+        self.arithmetic(BinOp::SubWrap, greater, less)
+    }
+
+    /// The bool `flag` as an `i32`, 1 or 0.
+    fn number(&mut self, flag: Operand) -> Operand {
+        let value = self.temp(Types::I32);
+        let cast = Rvalue::Cast {
+            value: flag,
+            to: Types::I32,
+            checked: false,
+        };
+        self.assign(Place::local(value), cast);
+        Operand::Copy(Place::local(value))
+    }
+
+    /// `left op right` on two `i32`s, wrapping.
+    fn arithmetic(&mut self, op: BinOp, left: Operand, right: Operand) -> Operand {
+        let value = self.temp(Types::I32);
+        let rvalue = Rvalue::Binary {
+            op,
+            left,
+            right,
+            checked: false,
+        };
+        self.assign(Place::local(value), rvalue);
+        Operand::Copy(Place::local(value))
     }
 
     /// The bits a hash map hashes for the key at `key`: the key as a `u64`,
@@ -852,14 +890,16 @@ impl<'a> Builder<'a> {
                     _ => Rvalue::Unary(*op, operand),
                 }
             }
-            ExprKind::Binary(op @ (BinOp::Eq | BinOp::Ne), left, right)
+            ExprKind::Binary(op, left, right)
                 if matches!(self.types().kind(left.ty), TyKind::Tuple(_)) =>
             {
                 let (l, r) = (self.as_temp(left), self.as_temp(right));
-                let same = self.tuple_eq(Place::local(l), Place::local(r), left.ty);
-                match op {
-                    BinOp::Eq => Rvalue::Use(same),
-                    _ => Rvalue::Unary(UnOp::Not, same),
+                let order = self.tuple_order(Place::local(l), Place::local(r), left.ty);
+                Rvalue::Binary {
+                    op: *op,
+                    left: order,
+                    right: constant(0, Types::I32),
+                    checked: false,
                 }
             }
             ExprKind::Binary(op, left, right) => Rvalue::Binary {

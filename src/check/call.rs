@@ -1058,7 +1058,14 @@ impl FnCx<'_, '_> {
         match self.cx.types.kind(ty).clone() {
             TyKind::Ref(inner) | TyKind::RefMut(inner) => {
                 let pointer = self.mk(ExprKind::Read(place), ty, span);
-                self.show(Place::Deref(Box::new(pointer)), inner, quoted, stderr, out, span);
+                self.show(
+                    Place::Deref(Box::new(pointer)),
+                    inner,
+                    quoted,
+                    stderr,
+                    out,
+                    span,
+                );
             }
             _ if ty == Types::STRING || ty == Types::STR => {
                 let read = self.mk(ExprKind::Read(place), ty, span);

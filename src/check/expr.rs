@@ -864,7 +864,7 @@ impl FnCx<'_, '_> {
         );
         let hint = expected.filter(|&ty| !comparison && !self.cx.types.contains_var(ty));
         let (mut l, mut r) = self.operands(left, right, hint);
-        if matches!(operator, Token::Eq | Token::NotEq) {
+        if comparison {
             if l.ty == Types::STRING {
                 l = self.view(l);
             }
@@ -944,6 +944,17 @@ impl FnCx<'_, '_> {
         match operator {
             Token::And => self.mk(ExprKind::And(Box::new(l), Box::new(r)), Types::BOOL, span),
             Token::Or => self.mk(ExprKind::Or(Box::new(l), Box::new(r)), Types::BOOL, span),
+            Token::Lt | Token::Gt | Token::Leq | Token::Geq if l_ty == Types::STR => {
+                let cmp = self.cx.prelude_fn("__zeru_str_cmp");
+                let order = self.mk(ExprKind::Call(cmp, vec![l, r]), Types::I32, span);
+                let zero = self.mk(ExprKind::Int(0), Types::I32, span);
+                let op = binop(operator);
+                self.mk(
+                    ExprKind::Binary(op, Box::new(order), Box::new(zero)),
+                    Types::BOOL,
+                    span,
+                )
+            }
             Token::Eq | Token::NotEq if l_ty == Types::STR => {
                 let eq = self.cx.prelude_fn("__zeru_str_eq");
                 let equal = self.mk(ExprKind::Call(eq, vec![l, r]), Types::BOOL, span);
@@ -1364,8 +1375,10 @@ impl Checker<'_> {
     /// Whether `operator` means something for operands of type `ty`; the
     /// bounds `Eq`, `Ord` and `Num` ask for `==`, `<` and `+`.
     pub(super) fn operator_applies(&mut self, operator: &Token, ty: Ty) -> bool {
-        if let (Token::Eq | Token::NotEq, TyKind::Tuple(parts)) =
-            (operator, self.types.kind(ty).clone())
+        if let (
+            Token::Eq | Token::NotEq | Token::Lt | Token::Gt | Token::Leq | Token::Geq,
+            TyKind::Tuple(parts),
+        ) = (operator, self.types.kind(ty).clone())
         {
             return parts
                 .into_iter()
@@ -1390,7 +1403,11 @@ impl Checker<'_> {
                     || plain_enum
             }
             Token::Lt | Token::Gt | Token::Leq | Token::Geq => {
-                number || matches!(kind, TyKind::Ptr(_)) || plain_enum
+                number
+                    || ty == Types::STR
+                    || ty == Types::STRING
+                    || matches!(kind, TyKind::Ptr(_))
+                    || plain_enum
             }
             _ => true,
         }

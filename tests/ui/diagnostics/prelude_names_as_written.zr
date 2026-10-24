@@ -1,5 +1,5 @@
 fn main() {
-    var words: Vec<str> = ["b", "a"];
+    var words: Vec<bool> = [true, false];
     words.sort();
     var flags: Vec<bool> = [true];
     flags.sum();
