@@ -117,10 +117,53 @@ pub fn lower<'ctx>(
     lower.init_globals();
     lower.create_flush();
     lower.create_start();
-    for at in 0..bodies.len() {
-        lower.define(FnId(at as u32));
+    let reached = reached(program, bodies);
+    for (at, &reached) in reached.iter().enumerate() {
+        match reached {
+            true => lower.define(FnId(at as u32)),
+            false => unsafe { lower.functions[at].delete() },
+        }
     }
     lower.finish_debug();
+}
+
+/// Which functions the program can call: those `main` reaches, and the
+/// ones the generated code calls by itself, the runtime's and the `drop`s.
+/// The others, most of the prelude's in a small program, are not built.
+fn reached(program: &Program, bodies: &[Body]) -> Vec<bool> {
+    let runtime = &program.runtime;
+    let mut work: Vec<FnId> = [
+        runtime.write_bytes,
+        runtime.write_int,
+        runtime.write_uint,
+        runtime.write_float,
+        runtime.flush,
+        runtime.alloc,
+        runtime.realloc,
+        runtime.str_cmp,
+        runtime.string_cmp,
+    ]
+    .into_iter()
+    .chain(program.structs.values().filter_map(|layout| layout.drop))
+    .chain(
+        bodies
+            .iter()
+            .position(|body| body.symbol == "main")
+            .map(|at| FnId(at as u32)),
+    )
+    .collect();
+    let mut reached = vec![false; bodies.len()];
+    while let Some(id) = work.pop() {
+        if std::mem::replace(&mut reached[id.0 as usize], true) {
+            continue;
+        }
+        for block in &bodies[id.0 as usize].blocks {
+            if let TerminatorKind::Call { function, .. } = block.terminator.kind {
+                work.push(function);
+            }
+        }
+    }
+    reached
 }
 
 /// The target the program is built for: Linux on x86-64-v2, with SSE4.2
