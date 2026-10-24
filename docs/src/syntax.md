@@ -38,6 +38,7 @@ if x > 0 { ... } else if x == 0 { ... } else { ... }
 var sign = if x < 0 { -1 } else { 1 };   // one expression, or a block that returns
 while running { ... break; ... continue; ... }
 for i in 0..10 { ... }            // 0 to 9
+for i in 1..=10 { ... }           // 1 to 10
 for x in list { ... }             // each element
 for i, x in list { ... }          // with its index
 for x in &var list { x += 1; }    // change each element
@@ -47,6 +48,7 @@ var name = match day {
     Day::Sat | Day::Sun => "weekend",
     default => "weekday",
 };
+var size = match n { 0 => "none", 1..=9 => "few", x if x < 0 => "negative", default => "many" };
 ```
 
 ## Lists ([more](basics/sequences.md))

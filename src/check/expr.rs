@@ -555,14 +555,16 @@ impl FnCx<'_, '_> {
         self.consume(&mut second);
         let arms = vec![
             Arm {
-                tags: vec![1],
+                tags: vec![(1, 1)],
                 bindings: Vec::new(),
+                guard: None,
                 body: first,
                 span: then.span,
             },
             Arm {
                 tags: Vec::new(),
                 bindings: Vec::new(),
+                guard: None,
                 body: second,
                 span: otherwise.span,
             },

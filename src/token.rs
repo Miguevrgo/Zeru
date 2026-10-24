@@ -77,6 +77,7 @@ pub enum Token {
     Comma,
     Dot,
     DotDot,
+    DotDotEq,
     Question,
 
     SelfTok,
@@ -191,6 +192,7 @@ impl std::fmt::Display for Token {
             Token::Comma => ",",
             Token::Dot => ".",
             Token::DotDot => "..",
+            Token::DotDotEq => "..=",
             Token::Question => "?",
             Token::SelfTok => "self",
             Token::Match => "match",

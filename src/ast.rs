@@ -156,6 +156,7 @@ pub enum ExpressionKind {
     Range {
         start: Box<Expression>,
         end: Box<Expression>,
+        inclusive: bool,
     },
     ArrayRepeat {
         value: Box<Expression>,
@@ -181,7 +182,7 @@ pub enum ExpressionKind {
     },
     Match {
         value: Box<Expression>,
-        arms: Vec<(Pattern, Expression)>,
+        arms: Vec<MatchArm>,
     },
     If {
         condition: Box<Expression>,
@@ -216,6 +217,15 @@ pub enum Names {
     Tuple(Vec<Names>),
 }
 
+/// One arm of a `match`: its pattern, the condition it may add after `if`,
+/// and its body.
+#[derive(Debug, Clone)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub guard: Option<Expression>,
+    pub body: Expression,
+}
+
 /// What a `match` arm takes, with a grammar of its own.
 #[derive(Debug, Clone)]
 pub struct Pattern {
@@ -227,6 +237,7 @@ pub struct Pattern {
 pub enum PatternKind {
     Default,
     Constant(Expression),
+    Range(Expression, Expression),
     Binding(String),
     Payload { path: String, fields: Vec<Pattern> },
     Or(Vec<Pattern>),

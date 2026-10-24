@@ -1,0 +1,70 @@
+enum Token {
+    Num(i64),
+    Word(String),
+    End,
+}
+
+fn classify(c: u8) str {
+    return match c {
+        'a'..='z' | 'A'..='Z' => "letter",
+        '0'..='9' => "digit",
+        ' ' | '\t' => "space",
+        x if x > 127 => "high",
+        default => "other",
+    };
+}
+
+fn sign(n: i64) str {
+    return match n {
+        i64.MIN..=-1 => "neg",
+        0 => "zero",
+        1..=9 => "small",
+        default => "big",
+    };
+}
+
+fn describe(t: Token) str {
+    return match t {
+        Token::Num(n) if n < 0 => "negative number",
+        Token::Num(n) if n % 2 == 0 => "even number",
+        Token::Num(_) => "odd number",
+        Token::Word(w) if w.len() > 3 => "long word",
+        Token::Word(_) => "word",
+        Token::End => "end",
+    };
+}
+
+fn main() {
+    for c in "aZ5 \t?" {
+        print("{} ", classify(c));
+    }
+    println("{}", classify(200));
+    println("{} {} {} {}", sign(-5), sign(0), sign(7), sign(100));
+    println("{} {} {}", describe(Token::Num(-3)), describe(Token::Num(4)), describe(Token::Num(5)));
+    println("{} {} {}", describe(Token::Word(String.from("hello"))), describe(Token::Word(String.from("hi"))), describe(Token::End));
+    var total = 0;
+    for i in 1..=10 {
+        total += i;
+    }
+    var count = 0;
+    for b in 250..=255 {
+        var x: u8 = b as u8;
+        count += 1;
+    }
+    var bytes: u32 = 0;
+    var top: u8 = 255;
+    for v in 0..=top {
+        bytes += 1;
+    }
+    for i in 5..=4 {
+        println("never");
+    }
+    println("{} {} {}", total, count, bytes);
+    var opt: i32? = 7;
+    var r = match opt {
+        Some(v) if v > 5 => v * 10,
+        Some(v) => v,
+        None => 0,
+    };
+    println("{}", r);
+}

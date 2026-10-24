@@ -1,0 +1,8 @@
+status: exit 0
+-- stdout
+letter letter digit space space other high
+neg zero small big
+negative number even number odd number
+long word word end
+55 6 256
+70

@@ -1,0 +1,4 @@
+fn main() {
+    var n = 5;
+    var g = match n { 0..9 => 1, default => 2 };
+}

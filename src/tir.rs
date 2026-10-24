@@ -101,6 +101,7 @@ pub enum StmtKind {
         var: LocalId,
         start: Expr,
         end: Expr,
+        inclusive: bool,
         body: Block,
     },
     ForEach {
@@ -260,7 +261,10 @@ impl Expr {
             }
             ExprKind::Match { scrutinee, arms } => {
                 scrutinee.for_each_expr(f);
-                arms.iter_mut().for_each(|arm| f(&mut arm.body));
+                for arm in arms {
+                    arm.guard.iter_mut().for_each(|guard| f(guard));
+                    f(&mut arm.body);
+                }
             }
             ExprKind::Asm(asm) => {
                 asm.outputs
@@ -372,18 +376,22 @@ pub enum Builtin {
     Replace,
 }
 
-/// One arm of a `match`; `span` is its pattern, where its bindings borrow
-/// the scrutinee.
+/// One arm of a `match`: the tags it takes, each alternative a range from
+/// the first to the second, none for every other; its bindings; the guard
+/// that must hold too. `span` is its pattern, where its bindings borrow the
+/// scrutinee.
 #[derive(Clone)]
 pub struct Arm {
-    pub tags: Vec<i128>,
+    pub tags: Vec<(i128, i128)>,
     pub bindings: Vec<(LocalId, Vec<Payload>)>,
+    pub guard: Option<Expr>,
     pub body: Expr,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Payload {
+    Whole,
     SomeValue,
     OkValue,
     ErrValue,

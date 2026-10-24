@@ -1,0 +1,23 @@
+struct D {
+    id: i32,
+    fn drop(var self) { println("drop {}", self.id); }
+}
+
+fn make(id: i32) D? {
+    return D { id: id };
+}
+
+fn take(d: D) {
+    println("take {}", d.id);
+}
+
+fn main() {
+    for i in 1..=3 {
+        match make(i) {
+            Some(d) if d.id == 2 => println("guarded {}", d.id),
+            Some(d) => take(d),
+            None => {}
+        }
+    }
+    println("end");
+}

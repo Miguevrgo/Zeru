@@ -1,8 +1,6 @@
 //! `match`: its patterns, whether they cover every value, and its arms.
 
-use std::collections::HashSet;
-
-use crate::ast::{Expression, ExpressionKind, Pattern, PatternKind};
+use crate::ast::{Expression, ExpressionKind, MatchArm, Pattern, PatternKind};
 use crate::errors::Span;
 use crate::items::ItemKind;
 use crate::tir::{Arm, Expr, ExprKind, Payload, Place};
@@ -13,22 +11,23 @@ use super::body::FnCx;
 /// Where binding `field` of a pattern for variant `variant` finds its value.
 type PayloadAt = fn(u32, u32) -> Payload;
 
-/// What an arm's pattern stands for: the values it takes, to find repeats
-/// and gaps, and the names it binds, with where each finds its value for
-/// each of those values.
+/// What an arm's pattern stands for: the values it takes, each alternative
+/// a range of them, to find repeats and gaps, and the names it binds, with
+/// where each finds its value for each alternative.
 struct Shape {
-    tags: Vec<i128>,
+    tags: Vec<(i128, i128)>,
     binds: Vec<(String, Ty, Vec<Payload>)>,
 }
 
-/// One alternative of a pattern: the value it takes and what it binds.
-type Alternative = (i128, Vec<(String, Ty, Payload)>);
+/// One alternative of a pattern: the values it takes, from the first to
+/// the second, and what it binds.
+type Alternative = ((i128, i128), Vec<(String, Ty, Payload)>);
 
 impl FnCx<'_, '_> {
     pub(super) fn match_expr(
         &mut self,
         value: &Expression,
-        arms: &[(Pattern, Expression)],
+        arms: &[MatchArm],
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
@@ -58,18 +57,25 @@ impl FnCx<'_, '_> {
         let mut mismatched = false;
         let mut checked = Vec::new();
         let temporary = matches!(scrutinee, Place::Temp(_));
-        for ((pattern, body), shape) in arms.iter().zip(patterns) {
+        for (arm, shape) in arms.iter().zip(patterns) {
+            let (pattern, body) = (&arm.pattern, &arm.body);
+            let take = temporary && arm.guard.is_none();
             self.diverges = before;
             self.enter();
             let bindings: Vec<_> = shape
                 .binds
                 .into_iter()
-                .map(|(name, ty, payloads)| (self.declare(&name, ty, false, !temporary), payloads))
+                .map(|(name, ty, payloads)| (self.declare(&name, ty, false, !take), payloads))
                 .collect();
+            let guard = arm
+                .guard
+                .as_ref()
+                .map(|guard| self.condition(guard, "A match guard must be a bool, got "));
+            self.diverges = before;
             let wanted = arm_ty.or(expected);
             let mut result = self.expr(body, wanted);
             for (binding, _) in &bindings {
-                self.settle_binding(*binding, &scrutinee);
+                self.settle_binding(*binding, &scrutinee, take);
             }
             let leaves = self.diverges;
             all_leave &= leaves;
@@ -98,6 +104,7 @@ impl FnCx<'_, '_> {
             checked.push(Arm {
                 tags: shape.tags,
                 bindings,
+                guard,
                 body: result,
                 span: pattern.span,
             });
@@ -129,12 +136,12 @@ impl FnCx<'_, '_> {
     /// Check each pattern against the subject: none twice, and every value
     /// covered, by a `default` or by listing them all. A value no arm takes
     /// has nowhere to go at runtime.
-    fn patterns(&mut self, subject: Ty, arms: &[(Pattern, Expression)], span: Span) -> Vec<Shape> {
+    fn patterns(&mut self, subject: Ty, arms: &[MatchArm], span: Span) -> Vec<Shape> {
         let none = || {
             arms.iter()
-                .map(|(pattern, _)| {
+                .map(|arm| {
                     let mut names = Vec::new();
-                    first_bindings(pattern, &mut names);
+                    first_bindings(&arm.pattern, &mut names);
                     Shape {
                         tags: Vec::new(),
                         binds: names
@@ -176,17 +183,35 @@ impl FnCx<'_, '_> {
             }
         };
 
-        let mut covered = HashSet::new();
+        let mut covered = Vec::new();
         let mut has_default = false;
         let mut shapes = Vec::new();
-        for (pattern, _) in arms {
+        for arm in arms {
+            let pattern = &arm.pattern;
+            let guarded = arm.guard.is_some();
             if matches!(pattern.kind, PatternKind::Default) {
                 if has_default {
                     self.error("A match has one 'default' arm", pattern.span);
                 }
+                if guarded {
+                    self.error(
+                        "'default' takes every other value, with no 'if'; bind a name to test it, as in x if x > 3",
+                        pattern.span,
+                    );
+                }
                 has_default = true;
             }
-            shapes.push(self.shape(pattern, subject, &mut covered));
+            if let Some(name) = whole_binding(pattern)
+                && guarded
+                && !self.names_a_value(name)
+            {
+                shapes.push(Shape {
+                    tags: Vec::new(),
+                    binds: vec![(name.to_string(), subject, vec![Payload::Whole])],
+                });
+                continue;
+            }
+            shapes.push(self.shape(pattern, subject, guarded, &mut covered));
         }
 
         if has_default {
@@ -199,7 +224,7 @@ impl FnCx<'_, '_> {
         };
         let missing: Vec<String> = (0..)
             .zip(all)
-            .filter(|(at, _)| !covered.contains(at))
+            .filter(|(at, _)| !covered.iter().any(|(low, high)| low <= at && at <= high))
             .map(|(_, name)| name)
             .collect();
         if !missing.is_empty() {
@@ -215,8 +240,15 @@ impl FnCx<'_, '_> {
     }
 
     /// An arm's pattern: each alternative takes values no earlier one took,
-    /// and all bind the same names at the same types.
-    fn shape(&mut self, pattern: &Pattern, subject: Ty, covered: &mut HashSet<i128>) -> Shape {
+    /// and all bind the same names at the same types. The values of an arm
+    /// with a guard may still go on to later arms, so they stay uncovered.
+    fn shape(
+        &mut self,
+        pattern: &Pattern,
+        subject: Ty,
+        guarded: bool,
+        covered: &mut Vec<(i128, i128)>,
+    ) -> Shape {
         let alternatives = match &pattern.kind {
             PatternKind::Default => &[],
             PatternKind::Or(alternatives) => alternatives.as_slice(),
@@ -227,11 +259,17 @@ impl FnCx<'_, '_> {
             let Some((tag, binds)) = self.pattern(alternative, subject) else {
                 continue;
             };
-            if !covered.insert(tag) {
+            if covered
+                .iter()
+                .any(|&(low, high)| low <= tag.1 && tag.0 <= high)
+            {
                 self.error(
                     "This value is already matched by an earlier arm",
                     alternative.span,
                 );
+            }
+            if !guarded {
+                covered.push(tag);
             }
             let Some(shape) = &mut shape else {
                 shape = Some(Shape {
@@ -291,8 +329,26 @@ impl FnCx<'_, '_> {
             PatternKind::Constant(Expression {
                 kind: ExpressionKind::None,
                 ..
-            }) if matches!(subject_kind, TyKind::Optional(_)) => return Some((0, Vec::new())),
-            PatternKind::Constant(value) => return self.value_pattern(value, subject),
+            }) if matches!(subject_kind, TyKind::Optional(_)) => return Some(((0, 0), Vec::new())),
+            PatternKind::Constant(value) => {
+                if let Some(name) = whole_binding(pattern)
+                    && self.local(name).is_none()
+                    && self
+                        .cx
+                        .items
+                        .lookup_value(self.scope.module, name)
+                        .is_none()
+                {
+                    self.error(
+                        format!("'{name}' names no value; a name alone matches only with an 'if' after it, as in {name} if {name} > 3, and 'default' takes every other value"),
+                        pattern.span,
+                    );
+                    return None;
+                }
+                let tag = self.value_pattern(value, subject)?;
+                return Some(((tag, tag), Vec::new()));
+            }
+            PatternKind::Range(low, high) => return self.range_pattern(low, high, subject),
             PatternKind::Binding(_) | PatternKind::Or(_) | PatternKind::Default => {
                 unreachable!("the parser puts these only in a payload or as a whole arm")
             }
@@ -349,11 +405,41 @@ impl FnCx<'_, '_> {
                 }
             }
         }
-        Some((tag, binds))
+        Some(((tag, tag), binds))
+    }
+
+    /// `low..=high`, the integers from one to the other, which must not be
+    /// fewer than one.
+    fn range_pattern(
+        &mut self,
+        low: &Expression,
+        high: &Expression,
+        subject: Ty,
+    ) -> Option<Alternative> {
+        if self.cx.types.as_int(subject).is_none() {
+            let shown = self.ty(subject);
+            self.error(
+                format!("A range matches integers, not {shown}"),
+                low.span.merge(high.span),
+            );
+            return None;
+        }
+        let (low_value, high_value) = (
+            self.value_pattern(low, subject)?,
+            self.value_pattern(high, subject)?,
+        );
+        if low_value > high_value {
+            self.error(
+                format!("The range {low_value}..={high_value} takes no value"),
+                low.span.merge(high.span),
+            );
+            return None;
+        }
+        Some(((low_value, high_value), Vec::new()))
     }
 
     /// A pattern standing for one value, which it is checked and evaluated to.
-    fn value_pattern(&mut self, pattern: &Expression, subject: Ty) -> Option<Alternative> {
+    fn value_pattern(&mut self, pattern: &Expression, subject: Ty) -> Option<i128> {
         let value = self.expr(pattern, Some(subject));
         if self.cx.types.is_error(value.ty) {
             return None;
@@ -370,11 +456,22 @@ impl FnCx<'_, '_> {
             ExprKind::Variant(index, _) => Some(i128::from(*index)),
             _ => self.cx.eval(&value),
         };
-        let Some(tag) = tag else {
+        if tag.is_none() {
             self.error("A pattern must be known at compile time", pattern.span);
-            return None;
-        };
-        Some((tag, Vec::new()))
+        }
+        tag
+    }
+}
+
+/// The name a pattern is when it is a name alone, which with a guard binds
+/// the whole value.
+fn whole_binding(pattern: &Pattern) -> Option<&str> {
+    match &pattern.kind {
+        PatternKind::Constant(Expression {
+            kind: ExpressionKind::Identifier(name),
+            ..
+        }) if !name.contains("::") => Some(name),
+        _ => None,
     }
 }
 

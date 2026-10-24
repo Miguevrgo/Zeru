@@ -365,14 +365,15 @@ impl<'a> Builder<'a> {
                 self.current = Some(merge);
             }
             StmtKind::While { cond, body } => {
-                self.looping(|this| this.condition(cond), |_| {}, body, |_| {})
+                self.looping(|this| this.condition(cond), |_| {}, body, |_, _| {})
             }
             StmtKind::ForRange {
                 var,
                 start,
                 end,
+                inclusive,
                 body,
-            } => self.scope(|this| this.for_range(*var, start, end, body)),
+            } => self.scope(|this| this.for_range(*var, start, end, *inclusive, body)),
             StmtKind::ForEach {
                 index,
                 walks,
@@ -397,13 +398,14 @@ impl<'a> Builder<'a> {
     }
 
     /// A loop: `test` decides at the top of each turn whether to take it,
-    /// `at_start` begins it in the scope of `body`, and `step` ends it.
+    /// `at_start` begins it in the scope of `body`, and `step` ends it,
+    /// given the block after the loop to leave by.
     fn looping(
         &mut self,
         test: impl FnOnce(&mut Self) -> Operand,
         at_start: impl FnOnce(&mut Self),
         body: &tir::Block,
-        step: impl FnOnce(&mut Self),
+        step: impl FnOnce(&mut Self, BlockId),
     ) {
         let cond_bb = self.new_block();
         self.goto(cond_bb);
@@ -427,12 +429,21 @@ impl<'a> Builder<'a> {
         self.loops.pop();
         self.goto(next);
         self.current = Some(next);
-        step(self);
+        step(self, after);
         self.goto(cond_bb);
         self.current = Some(after);
     }
 
-    fn for_range(&mut self, var: tir::LocalId, start: &Expr, end: &Expr, body: &tir::Block) {
+    /// `for i in start..end`, or with `inclusive`, `start..=end`, which
+    /// leaves after the turn for `end` rather than count past it.
+    fn for_range(
+        &mut self,
+        var: tir::LocalId,
+        start: &Expr,
+        end: &Expr,
+        inclusive: bool,
+        body: &tir::Block,
+    ) {
         let first = self.as_operand(start);
         let bound = reused(self.as_operand(end));
         let index = self.declare(var);
@@ -440,11 +451,22 @@ impl<'a> Builder<'a> {
         self.assign(Place::local(index), Rvalue::Use(first));
         let ty = self.locals[index.0 as usize].ty;
         let at = Operand::Copy(Place::local(index));
+        let within = match inclusive {
+            true => BinOp::Le,
+            false => BinOp::Lt,
+        };
+        let last = bound.clone();
         self.looping(
-            |this| this.binary(BinOp::Lt, at.clone(), bound),
+            |this| this.binary(within, at.clone(), bound),
             |_| {},
             body,
-            |this| {
+            |this, after| {
+                if inclusive {
+                    let last = this.binary(BinOp::Eq, at.clone(), last);
+                    let more = this.new_block();
+                    this.switch(last, vec![(0, more)], after);
+                    this.current = Some(more);
+                }
                 let rvalue = Rvalue::Binary {
                     op: BinOp::AddWrap,
                     left: at.clone(),
@@ -508,7 +530,7 @@ impl<'a> Builder<'a> {
                 }
             },
             body,
-            |this| {
+            |this, _| {
                 let next = |place: Local, op| Rvalue::Binary {
                     op,
                     left: Operand::Copy(Place::local(place)),
@@ -1090,11 +1112,13 @@ impl<'a> Builder<'a> {
         self.current = Some(merge);
     }
 
-    /// `match`: a switch on the tag. Each binding is a copy of plain data or
-    /// else a reference into the scrutinee, which each alternative of its arm
-    /// sets as it enters. A temporary scrutinee that owns memory gives its
-    /// bindings their values instead: an alternative that binds one takes the
-    /// whole value, copies out the bound parts and drops the others.
+    /// `match`: a switch on the tag, or with a guard or a range, a test of
+    /// each arm in turn, a failed guard going on to the next. Each binding
+    /// is a copy of plain data or else a reference into the scrutinee, which
+    /// each alternative of its arm sets as it enters. A temporary scrutinee
+    /// that owns memory gives the bindings of an arm with no guard their
+    /// values instead: an alternative that binds one takes the whole value,
+    /// copies out the bound parts and drops the others.
     fn match_expr(&mut self, dest: Option<Place>, scrutinee: &tir::Place, arms: &[Arm]) {
         let place = self.as_place(scrutinee);
         let subject = self.place_ty(&place);
@@ -1107,55 +1131,104 @@ impl<'a> Builder<'a> {
         let tag = self.temp(tag_ty);
         self.assign(Place::local(tag), Rvalue::Discriminant(place.clone()));
         let merge = self.new_block();
-        let mut targets = Vec::new();
-        let mut otherwise = None;
+        let unmatched = self.new_block();
+        self.blocks[unmatched.0 as usize].1 = Some(Terminator {
+            kind: TerminatorKind::Unreachable,
+            span: self.span,
+        });
+        let chained = arms
+            .iter()
+            .any(|arm| arm.guard.is_some() || arm.tags.iter().any(|(low, high)| low != high));
         let mut entries = Vec::new();
         for arm in arms {
             let body = self.new_block();
+            let start = match arm.guard {
+                Some(_) => self.new_block(),
+                None => body,
+            };
+            let take = take && arm.guard.is_none();
             let locals: Vec<(Local, bool)> = arm
                 .bindings
                 .iter()
                 .map(|(local, _)| self.binding(*local, take))
                 .collect();
-            let alternatives: Vec<BlockId> = arm
-                .tags
-                .iter()
-                .map(|&value| {
-                    let entry = match locals.is_empty() {
-                        true => body,
-                        false => self.new_block(),
-                    };
-                    targets.push((value, entry));
-                    entry
-                })
-                .collect();
-            if arm.tags.is_empty() {
-                otherwise = Some(body);
+            let alternatives: Vec<(Option<(i128, i128)>, BlockId)> = match arm.tags.is_empty() {
+                true => vec![None],
+                false => arm.tags.iter().copied().map(Some).collect(),
             }
-            entries.push((body, locals, alternatives));
+            .into_iter()
+            .map(|tags| match locals.is_empty() {
+                true => (tags, start),
+                false => (tags, self.new_block()),
+            })
+            .collect();
+            entries.push((body, start, take, locals, alternatives));
         }
-        let otherwise = otherwise.unwrap_or_else(|| {
-            let block = self.new_block();
-            self.blocks[block.0 as usize].1 = Some(Terminator {
-                kind: TerminatorKind::Unreachable,
-                span: self.span,
-            });
-            block
-        });
-        self.switch(Operand::Move(Place::local(tag)), targets, otherwise);
-        for (arm, (body, locals, alternatives)) in arms.iter().zip(entries) {
+        let tests: Vec<BlockId> = match chained {
+            true => arms
+                .iter()
+                .map(|_| self.new_block())
+                .chain([unmatched])
+                .collect(),
+            false => Vec::new(),
+        };
+        match chained {
+            true => {
+                self.goto(tests[0]);
+                let read = Operand::Copy(Place::local(tag));
+                for (at, (_, _, _, _, alternatives)) in entries.iter().enumerate() {
+                    self.current = Some(tests[at]);
+                    for &(tags, entry) in alternatives {
+                        let Some((low, high)) = tags else {
+                            self.goto(entry);
+                            break;
+                        };
+                        let inside = match low == high {
+                            true => self.binary(BinOp::Eq, read.clone(), constant(low, tag_ty)),
+                            false => {
+                                let above =
+                                    self.binary(BinOp::Ge, read.clone(), constant(low, tag_ty));
+                                let below =
+                                    self.binary(BinOp::Le, read.clone(), constant(high, tag_ty));
+                                self.binary(BinOp::BitAnd, above, below)
+                            }
+                        };
+                        let next = self.new_block();
+                        self.switch(inside, vec![(0, next)], entry);
+                        self.current = Some(next);
+                    }
+                    self.goto(tests[at + 1]);
+                }
+            }
+            false => {
+                let mut targets = Vec::new();
+                let mut otherwise = unmatched;
+                for (_, _, _, _, alternatives) in &entries {
+                    for &(tags, entry) in alternatives {
+                        match tags {
+                            Some((value, _)) => targets.push((value, entry)),
+                            None => otherwise = entry,
+                        }
+                    }
+                }
+                self.switch(Operand::Move(Place::local(tag)), targets, otherwise);
+            }
+        }
+        for (at_arm, (arm, (body, start, take, locals, alternatives))) in
+            arms.iter().zip(entries).enumerate()
+        {
             let outer = replace(&mut self.span, arm.span);
-            for (at, entry) in alternatives
+            for (at, (tags, entry)) in alternatives
                 .into_iter()
                 .enumerate()
-                .filter(|(_, e)| *e != body)
+                .filter(|(_, (_, e))| *e != start)
             {
                 self.current = Some(entry);
+                let mut from = place.clone();
                 let owned = |this: &Self, (binding, copy): (Local, bool)| {
                     copy && this.program.needs_drop(this.locals[binding.0 as usize].ty)
                 };
-                let mut from = place.clone();
-                if locals.iter().any(|&local| owned(self, local)) {
+                if take && locals.iter().any(|&local| owned(self, local)) {
                     let taken = self.temp(subject);
                     self.assign(
                         Place::local(taken),
@@ -1163,7 +1236,8 @@ impl<'a> Builder<'a> {
                     );
                     from = Place::local(taken);
                     let bound: Vec<Payload> = arm.bindings.iter().map(|(_, p)| p[at]).collect();
-                    for part in self.payloads(subject, arm.tags[at]) {
+                    let variant = tags.map_or(0, |(value, _)| value);
+                    for part in self.payloads(subject, variant) {
                         let reached = payload(&from, part);
                         if !bound.contains(&part)
                             && self.program.needs_drop(self.place_ty(&reached))
@@ -1180,7 +1254,12 @@ impl<'a> Builder<'a> {
                     };
                     self.assign(Place::local(binding), value);
                 }
-                self.goto(body);
+                self.goto(start);
+            }
+            if let Some(guard) = &arm.guard {
+                self.current = Some(start);
+                let holds = self.condition(guard);
+                self.switch(holds, vec![(0, tests[at_arm + 1])], body);
             }
             self.span = outer;
             self.current = Some(body);
@@ -1467,6 +1546,7 @@ impl<'a> Builder<'a> {
 /// Where `payload` lies inside the scrutinee at `place`.
 fn payload(place: &Place, payload: Payload) -> Place {
     match payload {
+        Payload::Whole => place.clone(),
         Payload::SomeValue | Payload::OkValue => place.clone().project(Projection::Field(1)),
         Payload::ErrValue => place.clone().project(Projection::Field(2)),
         Payload::Variant { variant, field } => place

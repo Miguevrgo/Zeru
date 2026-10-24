@@ -1,0 +1,9 @@
+status: exit 0
+-- stdout
+take 1
+drop 1
+guarded 2
+drop 2
+take 3
+drop 3
+end

@@ -184,10 +184,10 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// Decide, once its arm is checked, whether `binding` views the
     /// `scrutinee` or holds a copy: a copy of a value that owns no memory
     /// and is never borrowed reads the same, and lets the arm change the
-    /// scrutinee. A temporary scrutinee is gone after the `match`, so its
-    /// bindings take their values out of it.
-    pub(super) fn settle_binding(&mut self, binding: LocalId, scrutinee: &Place) {
-        let view = !matches!(scrutinee, Place::Temp(_))
+    /// scrutinee. With `take`, the bindings take their values out of a
+    /// temporary scrutinee, which is gone after the `match`.
+    pub(super) fn settle_binding(&mut self, binding: LocalId, scrutinee: &Place, take: bool) {
+        let view = !take
             && (self.borrowed[binding.0 as usize] || self.cx.owns_heap(self.local_ty(binding)));
         self.locals[binding.0 as usize].view = view;
         if view {
@@ -546,7 +546,12 @@ impl<'c, 'a> FnCx<'c, 'a> {
         iterable: &Expression,
         body: &Statement,
     ) -> StmtKind {
-        if let ExpressionKind::Range { start, end } = &iterable.kind {
+        if let ExpressionKind::Range {
+            start,
+            end,
+            inclusive,
+        } = &iterable.kind
+        {
             if index.is_some() {
                 self.error(
                     "A range counts already; write 'for i in a..b'",
@@ -582,6 +587,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 var,
                 start,
                 end,
+                inclusive: *inclusive,
                 body,
             };
         }

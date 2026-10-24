@@ -192,7 +192,10 @@ impl<'a> Lexer<'a> {
             ':' => self.match_next(':', Token::DoubleColon, Token::Colon),
             ';' => Token::Semicolon,
             ',' => Token::Comma,
-            '.' => self.match_next('.', Token::DotDot, Token::Dot),
+            '.' => match self.match_next('.', Token::DotDot, Token::Dot) {
+                Token::DotDot => self.match_next('=', Token::DotDotEq, Token::DotDot),
+                dot => dot,
+            },
             '?' => Token::Question,
 
             '"' => self.read_string(),

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: A range in a pattern takes its end in: write 'low..=high'
+   ╭─[ tests/ui/parser/range_pattern_takes_end.zr:3:24 ]
+   │
+ 3 │     var g = match n { 0..9 => 1, default => 2 };
+   │                        ─┬
+   │                         ╰── A range in a pattern takes its end in: write 'low..=high'
+───╯
+[-] Error: aborting due to previous error

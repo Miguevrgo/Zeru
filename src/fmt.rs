@@ -662,7 +662,14 @@ impl<'s> Printer<'s> {
                 self.expr(count),
                 text("]"),
             ]),
-            E::Range { start, end } => seq(vec![self.expr(start), text(".."), self.expr(end)]),
+            E::Range {
+                start,
+                end,
+                inclusive,
+            } => {
+                let dots = if *inclusive { "..=" } else { ".." };
+                seq(vec![self.expr(start), text(dots), self.expr(end)])
+            }
             E::ArrayRepeat { value, count } => seq(vec![
                 text("["),
                 self.expr(value),
@@ -708,19 +715,19 @@ impl<'s> Printer<'s> {
                 let lines = self.lines(
                     arms,
                     expr.span.end - 1,
-                    |_, (pattern, body)| Span::new(pattern.span.start, body.span.end),
-                    |p, (pattern, body)| {
-                        let comma = if matches!(body.kind, E::Block(_)) {
+                    |_, arm| Span::new(arm.pattern.span.start, arm.body.span.end),
+                    |p, arm| {
+                        let comma = if matches!(arm.body.kind, E::Block(_)) {
                             ""
                         } else {
                             ","
                         };
-                        seq(vec![
-                            p.pattern(pattern),
-                            text(" => "),
-                            p.expr(body),
-                            text(comma),
-                        ])
+                        let mut parts = vec![p.pattern(&arm.pattern)];
+                        if let Some(guard) = &arm.guard {
+                            parts.extend([text(" if "), p.expr(guard)]);
+                        }
+                        parts.extend([text(" => "), p.expr(&arm.body), text(comma)]);
+                        seq(parts)
                     },
                 );
                 self.braced(head, lines)
@@ -813,6 +820,9 @@ impl<'s> Printer<'s> {
         match &pattern.kind {
             PatternKind::Default => text("default"),
             PatternKind::Constant(expr) => self.expr(expr),
+            PatternKind::Range(low, high) => {
+                seq(vec![self.expr(low), text("..="), self.expr(high)])
+            }
             PatternKind::Binding(name) => text(name),
             PatternKind::Payload { path, fields } => {
                 let mut parts = vec![text(format!("{path}("))];

@@ -1,0 +1,12 @@
+enum E { A, B }
+fn main() {
+    var n = 5;
+    var e = E::A;
+    var a = match n { 0..=9 => 1, 5 => 2, default => 3 };
+    var b = match e { E::A..=E::B => 1, default => 2 };
+    var c = match n { 9..=1 => 1, default => 2 };
+    var d = match n { x if x > 1 => 1, default if n > 2 => 2, default => 3 };
+    var f = match n { x => 1 };
+    var h = match n { x if 3 => 1, default => 2 };
+    var i = match n { 1 if n > 0 => 1, 1 => 2 };
+}

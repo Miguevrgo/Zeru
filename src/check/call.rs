@@ -495,14 +495,16 @@ impl FnCx<'_, '_> {
         );
         let arms = vec![
             Arm {
-                tags: vec![1],
+                tags: vec![(1, 1)],
                 bindings: vec![(binding, vec![Payload::SomeValue])],
+                guard: None,
                 body: some,
                 span,
             },
             Arm {
                 tags: Vec::new(),
                 bindings: Vec::new(),
+                guard: None,
                 body: self.mk(ExprKind::None, ty, span),
                 span,
             },
@@ -1187,8 +1189,9 @@ impl FnCx<'_, '_> {
                 };
                 let shown = self.mk(ExprKind::Block(Block { stmts }), Types::VOID, span);
                 let mut arms = vec![Arm {
-                    tags: vec![1],
+                    tags: vec![(1, 1)],
                     bindings: vec![(value, vec![payload])],
+                    guard: None,
                     body: shown,
                     span,
                 }];
@@ -1202,7 +1205,7 @@ impl FnCx<'_, '_> {
                         let read = self.mk(ExprKind::Read(Place::Local(code)), Types::I32, span);
                         let pieces = vec![text(b"Err("), text(b")")];
                         let err = self.write(stderr, pieces, vec![read], span);
-                        (vec![0], vec![(code, vec![Payload::ErrValue])], err)
+                        (vec![(0, 0)], vec![(code, vec![Payload::ErrValue])], err)
                     }
                 };
                 let body = Block {
@@ -1211,6 +1214,7 @@ impl FnCx<'_, '_> {
                 arms.push(Arm {
                     tags,
                     bindings,
+                    guard: None,
                     body: self.mk(ExprKind::Block(body), Types::VOID, span),
                     span,
                 });

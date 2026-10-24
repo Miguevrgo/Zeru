@@ -83,6 +83,16 @@ for i in 1..5 {
 println("{}", total); // 10
 ```
 
+`a..=b` takes `b` too:
+
+```zeru
+var total = 0;
+for i in 1..=5 {
+    total += i;
+}
+println("{}", total); // 15
+```
+
 Over an array, a `Vec` or a string, `for` gives each element in turn, and
 with two names also its index:
 
@@ -151,4 +161,23 @@ var kind = match day {
     default => "weekday",
 };
 println("{}", kind); // weekend
+```
+
+`low..=high` matches every integer from one to the other. An arm may add a
+condition after `if`, which must hold too, or else the next arms are
+tried; a name alone with such a condition stands for the whole value:
+
+```zeru
+fn kind(c: u8) str {
+    return match c {
+        'a'..='z' | 'A'..='Z' => "letter",
+        '0'..='9' => "digit",
+        x if x > 127 => "beyond ASCII",
+        default => "other",
+    };
+}
+
+fn main() {
+    println("{} {} {} {}", kind('q'), kind('7'), kind(200), kind('?')); // letter digit beyond ASCII other
+}
 ```

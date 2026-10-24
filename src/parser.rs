@@ -1,7 +1,7 @@
 use crate::{
     ast::{
-        AsmOperand, Expression, ExpressionKind, Names, PRIMITIVES, Pattern, PatternKind, Program,
-        Statement, StatementKind, TraitMethod, TypeParameter, TypeSpec,
+        AsmOperand, Expression, ExpressionKind, MatchArm, Names, PRIMITIVES, Pattern, PatternKind,
+        Program, Statement, StatementKind, TraitMethod, TypeParameter, TypeSpec,
     },
     errors::{Span, ZeruError},
     lexer::Lexer,
@@ -626,12 +626,14 @@ impl Parser {
         self.expect(&Token::In)?;
 
         let mut iterable = self.parse_condition()?;
-        if self.eat(&Token::DotDot) {
+        if self.at_any(&[Token::DotDot, Token::DotDotEq]) {
+            let inclusive = self.bump() == Token::DotDotEq;
             let end = self.parse_condition()?;
             let span = iterable.span.merge(end.span);
             let kind = ExpressionKind::Range {
                 start: Box::new(iterable),
                 end: Box::new(end),
+                inclusive,
             };
             iterable = Expression::new(kind, span);
         }
@@ -1089,6 +1091,10 @@ impl Parser {
                 }
                 false => self.parse_pattern(false)?,
             };
+            let guard = match self.eat(&Token::If) {
+                true => Some(self.parse_expression(Precedence::Lowest)?),
+                false => None,
+            };
             self.expect(&Token::Arrow)?;
 
             let body = match self.at(&Token::LBrace) {
@@ -1100,7 +1106,11 @@ impl Parser {
                 false => self.parse_expression(Precedence::Lowest)?,
             };
             let block = matches!(body.kind, ExpressionKind::Block(_));
-            arms.push((pattern, body));
+            arms.push(MatchArm {
+                pattern,
+                guard,
+                body,
+            });
             if block || self.at(&Token::RBrace) {
                 self.eat(&Token::Comma);
             } else {
@@ -1114,6 +1124,19 @@ impl Parser {
             arms,
         };
         Some(self.expression(kind, start))
+    }
+
+    /// A value, or the values from `low` to `high` written `low..=high`.
+    fn parse_constant_pattern(&mut self) -> Option<PatternKind> {
+        let low = self.parse_expression(Precedence::BitwiseOr)?;
+        if self.at(&Token::DotDot) {
+            return self.error_here("A range in a pattern takes its end in: write 'low..=high'");
+        }
+        if !self.eat(&Token::DotDotEq) {
+            return Some(PatternKind::Constant(low));
+        }
+        let high = self.parse_expression(Precedence::BitwiseOr)?;
+        Some(PatternKind::Range(low, high))
     }
 
     /// Alternatives separated by `|`. A name alone is a binding inside a
@@ -1155,11 +1178,11 @@ impl Parser {
                     }
                     false => {
                         self.pos = saved;
-                        PatternKind::Constant(self.parse_expression(Precedence::BitwiseOr)?)
+                        self.parse_constant_pattern()?
                     }
                 }
             }
-            _ => PatternKind::Constant(self.parse_expression(Precedence::BitwiseOr)?),
+            _ => self.parse_constant_pattern()?,
         };
         Some(Pattern {
             kind,
