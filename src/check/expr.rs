@@ -502,12 +502,21 @@ impl FnCx<'_, '_> {
                 TyKind::Optional(_) | TyKind::Result(..)
             )
         });
-        let mut first = self.expr(then, expected);
-        let target = wraps.unwrap_or(first.ty);
-        first = self.coerce(first, target).unwrap_or_else(|first| first);
-        let second = self.expr(otherwise, Some(target));
+        let before = self.diverges;
+        let mut first = self.value_branch(then, expected);
+        let first_leaves = std::mem::replace(&mut self.diverges, before);
+        let first_ty = (!first_leaves).then_some(first.ty);
+        let second = self.value_branch(otherwise, wraps.or(first_ty).or(expected));
+        let second_leaves = self.diverges;
+        self.diverges = first_leaves && second_leaves;
+        let second_ty = (!second_leaves).then_some(second.ty);
+        let target = wraps.or(first_ty).or(second_ty).unwrap_or(Types::VOID);
+        if !first_leaves {
+            first = self.coerce(first, target).unwrap_or_else(|first| first);
+        }
         let mut second = match self.coerce(second, target) {
             Ok(second) => second,
+            Err(second) if second_leaves => second,
             Err(second) => {
                 if !self.cx.types.is_error(second.ty) && !self.cx.types.is_error(target) {
                     let (want, got) = (self.ty(target), self.ty(second.ty));
@@ -537,6 +546,20 @@ impl FnCx<'_, '_> {
         ];
         let scrutinee = Place::Temp(Box::new(cond));
         self.mk(ExprKind::Match { scrutinee, arms }, target, span)
+    }
+
+    /// One branch of an `if` giving a value. A block in its place must
+    /// leave with `return`, `break` or `continue`.
+    fn value_branch(&mut self, branch: &Expression, expected: Option<Ty>) -> Expr {
+        let checked = self.expr(branch, expected);
+        if matches!(branch.kind, ExpressionKind::Block(_)) && !self.diverges {
+            self.error(
+                "A branch of an if that gives a value holds one expression, or leaves with return, break or continue",
+                branch.span,
+            );
+            return self.error_expr(branch.span);
+        }
+        checked
     }
 
     /// Where `e` lives: a local, a field, an element, what a pointer points

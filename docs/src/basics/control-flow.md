@@ -25,6 +25,20 @@ var feel = if temperature > 30 { "hot" } else if temperature > 15 { "mild" } els
 println("{}", feel); // mild
 ```
 
+A branch may instead be a block that leaves with `return`, `break` or
+`continue`, so it gives no value:
+
+```zeru
+fn half(n: i32) i32 {
+    var even = if n % 2 == 0 { n } else { return -1; };
+    return even / 2;
+}
+
+fn main() {
+    println("{} {}", half(8), half(3)); // 4 -1
+}
+```
+
 ## while
 
 `while` repeats its block while the condition holds:

@@ -803,8 +803,7 @@ impl Parser {
         if !self.at(&Token::Lt) {
             return Some(function);
         }
-        let saved = (self.pos, self.errors.len(), self.panic_mode, self.brackets);
-        let splits = self.splits.len();
+        let saved = self.checkpoint();
         if let Some(type_args) = self.parse_generic_arguments()
             && !type_args
                 .iter()
@@ -821,13 +820,30 @@ impl Parser {
             };
             return Some(self.expression(kind, start));
         }
+        self.rewind(saved);
+        Some(function)
+    }
+
+    /// Where parsing is, to try one reading and [`Self::rewind`] if it fails.
+    fn checkpoint(&self) -> [usize; 6] {
+        [
+            self.pos,
+            self.errors.len(),
+            usize::from(self.panic_mode),
+            self.depth,
+            self.brackets,
+            self.splits.len(),
+        ]
+    }
+
+    fn rewind(&mut self, [pos, errors, panic_mode, depth, brackets, splits]: [usize; 6]) {
         for (at, token) in self.splits.drain(splits..).rev() {
             self.tokens.remove(at + 1);
             self.tokens[at] = token;
         }
-        (self.pos, _, self.panic_mode, self.brackets) = saved;
-        self.errors.truncate(saved.1);
-        Some(function)
+        (self.pos, self.panic_mode, self.depth, self.brackets) =
+            (pos, panic_mode == 1, depth, brackets);
+        self.errors.truncate(errors);
     }
 
     /// Read the condition of a construct whose body follows in braces.
@@ -1032,17 +1048,20 @@ impl Parser {
         Some(self.expression(kind, start))
     }
 
-    /// One branch of an `if` giving a value: `{ expression }`.
+    /// One branch of an `if` giving a value: `{ expression }`, or a block
+    /// of statements, which the checker requires to leave.
     fn parse_branch(&mut self) -> Option<Expression> {
+        let start = self.span();
+        let saved = self.checkpoint();
         self.expect(&Token::LBrace)?;
-        let value = self.parse_expression(Precedence::Lowest)?;
-        if !self.at(&Token::RBrace) {
-            return self.error_here(
-                "Each branch of an if that gives a value holds one expression, with no ';'",
-            );
+        if let Some(value) = self.parse_expression(Precedence::Lowest)
+            && self.eat(&Token::RBrace)
+        {
+            return Some(value);
         }
-        self.bump();
-        Some(value)
+        self.rewind(saved);
+        let body = self.parse_block_statement()?;
+        Some(self.expression(ExpressionKind::Block(body), start))
     }
 
     fn parse_match_expression(&mut self) -> Option<Expression> {

@@ -688,16 +688,18 @@ impl<'s> Printer<'s> {
                 then,
                 otherwise,
             } => {
-                let otherwise = match otherwise.kind {
-                    E::If { .. } => self.expr(otherwise),
-                    _ => seq(vec![text("{ "), self.expr(otherwise), text(" }")]),
+                let condition = self.expr(condition);
+                let mut branch = |branch: &Expression| match branch.kind {
+                    E::If { .. } | E::Block(_) => self.expr(branch),
+                    _ => seq(vec![text("{ "), self.expr(branch), text(" }")]),
                 };
+                let (then, otherwise) = (branch(then), branch(otherwise));
                 seq(vec![
                     text("if "),
-                    self.expr(condition),
-                    text(" { "),
-                    self.expr(then),
-                    text(" } else "),
+                    condition,
+                    text(" "),
+                    then,
+                    text(" else "),
                     otherwise,
                 ])
             }
