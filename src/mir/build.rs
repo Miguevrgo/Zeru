@@ -653,7 +653,7 @@ impl<'a> Builder<'a> {
             tir::Place::Deref(pointer) => {
                 let ty = pointer.ty;
                 let pointer = self.as_temp(pointer);
-                if self.checks {
+                if self.checks && matches!(self.types().kind(ty), TyKind::Ptr(_)) {
                     let set = self.binary(
                         BinOp::Ne,
                         Operand::Copy(Place::local(pointer)),
