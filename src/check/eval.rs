@@ -297,7 +297,7 @@ impl Eval<'_, '_> {
                 let mut seqs = Vec::new();
                 for walk in walks {
                     let loc = self.loc(&walk.seq)?;
-                    let len = match self.get(&loc) {
+                    let len = match self.at(&loc) {
                         Value::Parts(parts) => parts.len(),
                         Value::Text(bytes) => bytes.len(),
                         _ => return cannot("walk a Vec: it lives on the heap", stmt.span),
@@ -339,7 +339,7 @@ impl Eval<'_, '_> {
     /// Element `at` of the array or text at `loc`: a place for an array's,
     /// a value for a byte of text.
     fn element(&mut self, loc: &Loc, at: usize, span: Span) -> Run<Element> {
-        match self.get(loc) {
+        match self.at(loc) {
             Value::Text(bytes) => Ok(Element::Value(Value::Int(i128::from(bytes[at])))),
             Value::Parts(_) => {
                 let mut loc = loc.clone();
@@ -400,6 +400,11 @@ impl Eval<'_, '_> {
     }
 
     fn get(&self, loc: &Loc) -> Value {
+        self.at(loc).clone()
+    }
+
+    /// The value at `loc`, to look at without copying it.
+    fn at(&self, loc: &Loc) -> &Value {
         let mut value = self.frames[loc.frame].slots[loc.slot]
             .as_ref()
             .expect("set before it is read");
@@ -410,7 +415,7 @@ impl Eval<'_, '_> {
                 _ => unreachable!("a path follows the parts of a value"),
             };
         }
-        value.clone()
+        value
     }
 
     fn set(&mut self, loc: &Loc, new: Value) {
@@ -449,7 +454,7 @@ impl Eval<'_, '_> {
             Place::Index(base, index) => {
                 let mut loc = self.loc(base)?;
                 let at = self.int(index)?;
-                let len = match self.get(&loc) {
+                let len = match self.at(&loc) {
                     Value::Parts(parts) => parts.len(),
                     Value::Text(_) => return cannot("index text in place", index.span),
                     _ => return cannot("index a Vec: it lives on the heap", index.span),
@@ -477,7 +482,8 @@ impl Eval<'_, '_> {
     fn read(&mut self, place: &Place, span: Span) -> Run<Value> {
         if let Place::Index(base, index) = place {
             let loc = self.loc(base)?;
-            if let Value::Text(bytes) = self.get(&loc) {
+            if let Value::Text(bytes) = self.at(&loc) {
+                let bytes = bytes.clone();
                 let at = self.int(index)?;
                 return match bytes.get(at as usize).filter(|_| at >= 0) {
                     Some(&byte) => Ok(Value::Int(i128::from(byte))),
@@ -664,10 +670,10 @@ impl Eval<'_, '_> {
 
     fn match_expr(&mut self, scrutinee: &Place, arms: &[tir::Arm]) -> Run<Value> {
         let loc = self.loc(scrutinee)?;
-        let tag = match self.get(&loc) {
-            Value::Int(n) => n,
-            Value::Bool(b) => i128::from(b),
-            Value::Variant(at, _) => i128::from(at),
+        let tag = match self.at(&loc) {
+            Value::Int(n) => *n,
+            Value::Bool(b) => i128::from(*b),
+            Value::Variant(at, _) => i128::from(*at),
             Value::Optional(inner) => i128::from(inner.is_some()),
             _ => unreachable!("a matched value has a tag"),
         };
