@@ -37,8 +37,12 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     /// A read-only global holding `bytes` and a terminating NUL, which a
     /// syscall taking a C string needs; a `\0` inside is kept as data.
     pub(super) fn const_bytes(&self, bytes: &[u8]) -> PointerValue<'ctx> {
-        let value = self.context.const_string(bytes, true);
-        let global = self.module.add_global(value.get_type(), None, "str");
+        self.read_only(self.context.const_string(bytes, true).into(), "str")
+    }
+
+    /// A private global holding `value`, which nothing writes.
+    pub(super) fn read_only(&self, value: BasicValueEnum<'ctx>, name: &str) -> PointerValue<'ctx> {
+        let global = self.module.add_global(value.get_type(), None, name);
         global.set_initializer(&value);
         global.set_constant(true);
         global.set_linkage(Linkage::Private);

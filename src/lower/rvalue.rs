@@ -2,7 +2,6 @@
 
 use inkwell::{
     FloatPredicate, IntPredicate,
-    module::Linkage,
     types::BasicTypeEnum,
     values::{BasicValueEnum, IntValue, PointerValue},
 };
@@ -87,12 +86,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             }
             ConstValue::Parts(_) => {
                 let value = self.const_value(&constant.value, constant.ty);
-                let global = self.module.add_global(value.get_type(), None, "parts");
-                global.set_initializer(&value);
-                global.set_constant(true);
-                global.set_linkage(Linkage::Private);
-                global.set_unnamed_addr(true);
-                Val::Mem(global.as_pointer_value())
+                Val::Mem(self.read_only(value, "parts"))
             }
             _ => Val::Imm(self.const_value(&constant.value, constant.ty)),
         }
