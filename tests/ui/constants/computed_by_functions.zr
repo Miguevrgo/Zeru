@@ -1,0 +1,107 @@
+struct Point {
+    x: i32,
+    y: i32,
+
+    fn new(x: i32, y: i32) Point {
+        return Point { x: x, y: y };
+    }
+
+    fn len2(self) i32 {
+        return self.x * self.x + self.y * self.y;
+    }
+}
+
+enum Dir { Up, Down }
+
+fn squares() Array<i64, 10> {
+    var a: Array<i64, 10> = [0; 10];
+    for i in 0..10 {
+        a[i] = (i * i) as i64;
+    }
+    return a;
+}
+
+fn crc_table() Array<u32, 256> {
+    var table: Array<u32, 256> = [0; 256];
+    for n in 0..256 {
+        var c = n as u32;
+        for k in 0..8 {
+            if c & 1 == 1 {
+                c = 0xedb88320 ^ (c >> 1);
+            } else {
+                c = c >> 1;
+            }
+        }
+        table[n] = c;
+    }
+    return table;
+}
+
+fn fib(n: i32) i64 {
+    if n < 2 {
+        return n as i64;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn fill(a: &var Array<i32, 4>, v: i32) {
+    for x in a {
+        x = v;
+    }
+}
+
+fn filled() Array<i32, 4> {
+    var a: Array<i32, 4> = [1, 2, 3, 4];
+    fill(&var a, 7);
+    a[2] += 1;
+    return a;
+}
+
+fn first_word_len(s: str) usize {
+    for i, c in s {
+        if c == ' ' {
+            return i;
+        }
+    }
+    return s.len();
+}
+
+fn pick(d: Dir) (i32, f64) {
+    return match d {
+        Dir::Up => (1, 0.5),
+        Dir::Down => (-1, 2.25),
+    };
+}
+
+fn maybe(n: i32) i32? {
+    if n > 3 {
+        return n;
+    }
+    return None;
+}
+
+const SQ = squares();
+const CRC: Array<u32, 256> = crc_table();
+const FIB = fib(20);
+const P = Point.new(3, 4);
+const LEN = P.len2();
+const F = filled();
+const W = first_word_len("hello world");
+const UP = pick(Dir::Up);
+const M = maybe(5);
+const N = maybe(2);
+const HALF: f32 = 1.0 / 3.0;
+const SIZE: usize = W * 2;
+
+fn main() {
+    var grid: Array<u8, SIZE> = [0; SIZE];
+    println("{} {} {} {}", SQ, FIB, P.x, LEN);
+    println("{:x} {:x} {}", CRC[1], CRC[255], F);
+    println("{} {} {} {}", W, UP, M, N.is_none());
+    println("{} {} {}", HALF, SIZE, grid[9]);
+    var total: u64 = 0;
+    for i in 0..1000 {
+        total += CRC[i % 256] as u64;
+    }
+    println("{}", total);
+}

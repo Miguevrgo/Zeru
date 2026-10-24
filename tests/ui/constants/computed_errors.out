@@ -1,0 +1,91 @@
+status: compile error
+-- stderr
+Error: Computing a constant while compiling cannot use the heap or a slice
+      ╭─[ std/builtin.zr:1309:13 ]
+      │
+ 1309 │     var s = String.new();
+      │             ──────┬─────
+      │                   ╰─────── Computing a constant while compiling cannot use the heap or a slice
+      │
+      ├─[ tests/ui/constants/computed_errors.zr:41:1 ]
+      │
+   41 │ const H = text();
+      │ ────────┬────────
+      │         ╰────────── while computing 'H'
+──────╯
+Error: Computing a constant while compiling cannot make a Vec: it lives on the heap
+    ╭─[ tests/ui/constants/computed_errors.zr:2:23 ]
+    │
+  2 │     var v: Vec<i32> = Vec[1, 2];
+    │                       ────┬────
+    │                           ╰────── Computing a constant while compiling cannot make a Vec: it lives on the heap
+    │
+ 34 │ const A = heap();
+    │ ────────┬────────
+    │         ╰────────── while computing 'A'
+────╯
+Error: Computing a constant while compiling cannot print
+    ╭─[ tests/ui/constants/computed_errors.zr:6:5 ]
+    │
+  6 │     println("hi");
+    │     ──────┬──────
+    │           ╰──────── Computing a constant while compiling cannot print
+    │
+ 35 │ const B = noisy();
+    │ ─────────┬────────
+    │          ╰────────── while computing 'B'
+────╯
+Error: A constant takes more than 10000000 steps to compute; it may never end
+    ╭─[ tests/ui/constants/computed_errors.zr:11:5 ]
+    │
+ 11 │ ╭─▶     while true {
+    ┆ ┆
+ 13 │ ├─▶     }
+    │ │
+    │ ╰─────────── A constant takes more than 10000000 steps to compute; it may never end
+    │
+ 36 │     const C = forever();
+    │     ──────────┬─────────
+    │               ╰─────────── while computing 'C'
+────╯
+Error: A constant's calls go more than 256 deep while computing it
+    ╭─[ tests/ui/constants/computed_errors.zr:17:12 ]
+    │
+ 17 │     return deep(n + 1);
+    │            ─────┬─────
+    │                 ╰─────── A constant's calls go more than 256 deep while computing it
+    │
+ 37 │ const D = deep(0);
+    │ ─────────┬────────
+    │          ╰────────── while computing 'D'
+────╯
+Error: Arithmetic overflow of i8 while computing a constant
+    ╭─[ tests/ui/constants/computed_errors.zr:21:12 ]
+    │
+ 21 │     return x + x;
+    │            ──┬──
+    │              ╰──── Arithmetic overflow of i8 while computing a constant
+    │
+ 38 │ const E = overflow();
+    │ ──────────┬──────────
+    │           ╰──────────── while computing 'E'
+────╯
+Error: Index 5 is outside 0..3 while computing a constant
+    ╭─[ tests/ui/constants/computed_errors.zr:26:14 ]
+    │
+ 26 │     return a[i];
+    │              ┬
+    │              ╰── Index 5 is outside 0..3 while computing a constant
+    │
+ 39 │ const G = outside();
+    │ ──────────┬─────────
+    │           ╰─────────── while computing 'G'
+────╯
+Error: 'LOOP' is defined in terms of itself
+    ╭─[ tests/ui/constants/computed_errors.zr:29:12 ]
+    │
+ 29 │     return LOOP + 1;
+    │            ──┬─
+    │              ╰─── 'LOOP' is defined in terms of itself
+────╯
+[-] Error: aborting due to previous error

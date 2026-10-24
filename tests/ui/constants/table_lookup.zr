@@ -1,0 +1,38 @@
+fn crc_table() Array<u32, 256> {
+    var table: Array<u32, 256> = [0; 256];
+    for n in 0..256 {
+        var c = n as u32;
+        for k in 0..8 {
+            if c & 1 == 1 {
+                c = 0xedb88320 ^ (c >> 1);
+            } else {
+                c = c >> 1;
+            }
+        }
+        table[n] = c;
+    }
+    return table;
+}
+
+const CRC: Array<u32, 256> = crc_table();
+
+fn crc(data: &[u8]) u32 {
+    var c: u32 = 0xffffffff;
+    for b in data {
+        c = CRC[((c ^ b as u32) & 0xff) as usize] ^ (c >> 8);
+    }
+    return c ^ 0xffffffff;
+}
+
+fn main() {
+    var data: Vec<u8> = Vec.new();
+    for i in 0..4096 {
+        data.push((i * 31 % 251) as u8);
+    }
+    var total: u32 = 0;
+    for i in 0..20000 {
+        data[i % 4096] +%= 1;
+        total ^= crc(&data);
+    }
+    println("{:x}", total);
+}

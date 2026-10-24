@@ -1,0 +1,42 @@
+fn heap() i32 {
+    var v: Vec<i32> = Vec[1, 2];
+    return v[0];
+}
+fn noisy() i32 {
+    println("hi");
+    return 1;
+}
+fn forever() i32 {
+    var n = 0;
+    while true {
+        n +%= 1;
+    }
+    return n;
+}
+fn deep(n: i32) i32 {
+    return deep(n + 1);
+}
+fn overflow() i8 {
+    var x: i8 = 100;
+    return x + x;
+}
+fn outside() i32 {
+    var a: Array<i32, 3> = [1, 2, 3];
+    var i = 5;
+    return a[i];
+}
+fn selfish() i32 {
+    return LOOP + 1;
+}
+fn text() String {
+    return String.from("x");
+}
+const A = heap();
+const B = noisy();
+const C = forever();
+const D = deep(0);
+const E = overflow();
+const G = outside();
+const LOOP = selfish();
+const H = text();
+fn main() {}

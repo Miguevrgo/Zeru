@@ -25,6 +25,29 @@ fn main() {
 }
 ```
 
+A constant at the top of a file may also call functions: the compiler runs
+them while compiling and keeps only the result, so a table costs nothing
+when the program starts. Those functions work on plain data, numbers,
+bools, text, and arrays, tuples and structs of them; one that needs a
+`Vec`, a `String` or other memory on the heap, a pointer, or prints, is an
+error there:
+
+```zeru
+fn squares() Array<i32, 8> {
+    var table: Array<i32, 8> = [0; 8];
+    for i in 0..8 {
+        table[i] = (i * i) as i32;
+    }
+    return table;
+}
+
+const SQUARES: Array<i32, 8> = squares();
+
+fn main() {
+    println("{} {}", SQUARES[3], SQUARES); // 9 [0, 1, 4, 9, 16, 25, 36, 49]
+}
+```
+
 Declaring a variable again with the same name hides the old one from then
 on, which is handy when a value changes type:
 

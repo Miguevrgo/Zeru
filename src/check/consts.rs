@@ -43,19 +43,24 @@ impl Checker<'_> {
         let expected = type_annotation
             .as_ref()
             .map(|spec| self.resolve_type(spec, &scope, span));
+        let errors = self.errors.len();
         let mut cx = FnCx::for_constant(self, scope);
         let checked = cx.expr(value, expected);
-        let checked = match expected {
+        let mut checked = match expected {
             Some(ty) => cx.coerce_or(checked, ty, span, |want, got| {
                 format!("Type mismatch for variable '{name}'. Annotated as {want} but got {got}")
             }),
             None => checked,
         };
-        if !is_constant(value) {
-            self.error(
-                "A global constant must be made of literals, other constants, enum variants and operators on them",
-                value.span,
-            );
+        if !is_constant(value) && self.errors.len() == errors {
+            checked = match self.run_constant(&checked, name, span) {
+                Some(value) => value,
+                None => Expr {
+                    kind: ExprKind::Void,
+                    ty: Types::ERROR,
+                    span,
+                },
+            };
         }
         self.consts.insert(def, ConstState::Done(checked.clone()));
         checked
@@ -131,7 +136,7 @@ impl Checker<'_> {
 
 /// `value` as an integer of type `int` holds it: its low bits, read with
 /// that type's sign.
-fn wrap(value: i128, int: IntTy) -> i128 {
+pub(super) fn wrap(value: i128, int: IntTy) -> i128 {
     let bits = int.bits();
     let low = value & ((1 << bits) - 1);
     if int.signed() && low >> (bits - 1) == 1 {
@@ -202,8 +207,8 @@ impl FnCx<'_, '_> {
     }
 }
 
-/// What a global constant may be made of. Its value is copied into every
-/// use, so a call in it would run once per use instead of once.
+/// Whether a global constant is written with literals, other constants and
+/// operators on them alone, which need no running to give its value.
 fn is_constant(expr: &Expression) -> bool {
     match &expr.kind {
         ExpressionKind::Int(_)

@@ -11,6 +11,7 @@ var (q, r) = divide(7, 2);        // a tuple taken apart; (q: i32, _) works too
 (a, b) = (b, a);                  // assigned at once
 var ratio: f64 = 0.5;
 const LIMIT: i32 = 10;            // never changes; also at top level
+const TABLE: Array<u32, 256> = make_table();   // top level: computed while compiling
 var input = "42";
 var input = input.parse_int();    // a new variable hiding the old one
 

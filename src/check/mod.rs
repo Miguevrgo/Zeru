@@ -6,6 +6,7 @@
 mod body;
 mod call;
 mod consts;
+mod eval;
 mod expr;
 mod infer;
 mod pattern;
@@ -239,6 +240,9 @@ impl<'a> Checker<'a> {
 
     fn drain(&mut self) {
         while let Some(id) = self.pending.pop_front() {
+            if self.functions[id.0 as usize].is_some() {
+                continue;
+            }
             let instance = &self.queued[id.0 as usize];
             let (def, args) = (instance.def, instance.args.clone());
             let function = body::check_function(self, def, &args);
