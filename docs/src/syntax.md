@@ -19,6 +19,7 @@ i8 i16 i32 i64 u8 u16 u32 u64 usize f32 f64 bool str
 x as i64                          // the only way to change a number's type
 i32.MAX  i64.MIN  f64.MAX         // each number type's limits
 a +% b   a -% b   a *% b          // wrapping arithmetic
+x.count_ones()  x.leading_zeros()  x.trailing_zeros()  x.rotate_left(3)  x.swap_bytes()
 ```
 
 ## Functions ([more](basics/functions.md))

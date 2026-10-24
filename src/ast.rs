@@ -304,10 +304,13 @@ pub const MAX_PRECISION: usize = 100;
 const SPEC_FORM: &str =
     "A format spec is written as in {:>8}, {:<5}, {:*^7}, {:08.3}, {:.2}, {:x}, {:X}, {:o} or {:b}";
 
+/// A format taken apart: the text around each `{}`, and the spec of each.
+pub type Pieces = (Vec<Vec<u8>>, Vec<Option<Spec>>);
+
 /// The text of a `print` format around each `{}`: one piece more than there
 /// are values, and the spec each `{}` gives, if any. `{{` and `}}` stand
 /// for a brace.
-pub fn format_pieces(format: &[u8]) -> Result<(Vec<Vec<u8>>, Vec<Option<Spec>>), String> {
+pub fn format_pieces(format: &[u8]) -> Result<Pieces, String> {
     let mut pieces = vec![Vec::new()];
     let mut specs = Vec::new();
     let mut bytes = format.iter().copied().peekable();
@@ -348,7 +351,7 @@ pub fn format_pieces(format: &[u8]) -> Result<(Vec<Vec<u8>>, Vec<Option<Spec>>),
 fn parse_spec(text: &[u8]) -> Result<Spec, String> {
     let mut spec = Spec::default();
     let mut rest = text;
-    let aligns = [b'<', b'>', b'^'];
+    let aligns = *b"<>^";
     match rest {
         [fill, align, ..] if aligns.contains(align) && fill.is_ascii() => {
             (spec.fill, spec.align) = (Some(*fill), Some(*align));

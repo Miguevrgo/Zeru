@@ -158,3 +158,15 @@ Escapes: `\n` (new line), `\t` (tab), `\r`, `\0`, `\\`, `\'`, `\"` and
 
 `>>` on a signed integer keeps the sign; on an unsigned one it fills with
 zeros.
+
+Integers also have methods on their bits: `count_ones`, `leading_zeros` and
+`trailing_zeros` count them, as a `usize`; `rotate_left(n)` and
+`rotate_right(n)` move them round by `n` places; `swap_bytes` reverses the
+order of the bytes.
+
+```zeru
+var flags: u8 = 0b1011_0000;
+var word: u16 = 0x1234;
+println("{} {} {}", flags.count_ones(), flags.leading_zeros(), flags.trailing_zeros()); // 3 0 4
+println("{:08b} {:x}", flags.rotate_left(2), word.swap_bytes()); // 11000010 3412
+```

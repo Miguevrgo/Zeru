@@ -1375,6 +1375,11 @@ impl<'a> Builder<'a> {
                 return self.push(StatementKind::CopyBytes(to, from, count));
             }
             Builtin::VecNew => Rvalue::VecNew(None),
+            Builtin::Bits(op) => {
+                let value = operand(self, 0);
+                let amount = (args.len() > 1).then(|| operand(self, 1));
+                Rvalue::Bits(op, value, amount)
+            }
             Builtin::VecWithCapacity => Rvalue::VecNew(Some(operand(self, 0))),
             _ => {
                 let (held, moved) = self.receiver(&args[0], args.len() > 1);
@@ -1440,7 +1445,8 @@ impl<'a> Builder<'a> {
                     Builtin::Flush
                     | Builtin::CopyBytes
                     | Builtin::VecNew
-                    | Builtin::VecWithCapacity => unreachable!("handled above"),
+                    | Builtin::VecWithCapacity
+                    | Builtin::Bits(_) => unreachable!("handled above"),
                 }
             }
         };

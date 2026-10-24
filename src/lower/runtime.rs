@@ -16,7 +16,7 @@ use inkwell::{
 };
 
 use crate::mir::{Asm, Operand, Place};
-use crate::tir::{BinOp, FnId};
+use crate::tir::{BinOp, BitOp, FnId};
 use crate::ty::{Ty, TyKind, Types};
 
 use super::{Lower, Val};
@@ -259,6 +259,67 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             .into_int_value();
         self.trap_if(overflowed, "arithmetic overflow");
         self.builder.build_extract_value(pair, 0, "value").unwrap()
+    }
+
+    /// What `op` makes of the integer `value`: a count of its bits, as a
+    /// usize, or the integer with its bits rotated by `amount` or its bytes
+    /// in the opposite order.
+    pub(super) fn bits(
+        &mut self,
+        op: BitOp,
+        value: &Operand,
+        amount: Option<&Operand>,
+    ) -> BasicValueEnum<'ctx> {
+        let value = self.operand(value).imm().into_int_value();
+        let int_type = value.get_type();
+        let mut args: Vec<BasicMetadataValueEnum> = vec![value.into()];
+        let name = match op {
+            BitOp::CountOnes => "llvm.ctpop",
+            BitOp::LeadingZeros => "llvm.ctlz",
+            BitOp::TrailingZeros => "llvm.cttz",
+            BitOp::RotateLeft => "llvm.fshl",
+            BitOp::RotateRight => "llvm.fshr",
+            BitOp::SwapBytes if int_type.get_bit_width() == 8 => return value.into(),
+            BitOp::SwapBytes => "llvm.bswap",
+        };
+        match op {
+            BitOp::LeadingZeros | BitOp::TrailingZeros => {
+                args.push(self.context.bool_type().const_zero().into());
+            }
+            BitOp::RotateLeft | BitOp::RotateRight => {
+                let amount = self.operand(amount.expect("a rotation has an amount"));
+                let amount = self
+                    .builder
+                    .build_int_cast_sign_flag(
+                        amount.imm().into_int_value(),
+                        int_type,
+                        false,
+                        "amount",
+                    )
+                    .unwrap();
+                args.extend::<[BasicMetadataValueEnum; 2]>([value.into(), amount.into()]);
+            }
+            _ => {}
+        }
+        let declaration = Intrinsic::find(name)
+            .and_then(|i| i.get_declaration(self.module, &[int_type.into()]))
+            .expect("the bit intrinsics exist");
+        let result = self
+            .builder
+            .build_call(declaration, &args, "bits")
+            .unwrap()
+            .try_as_basic_value()
+            .basic()
+            .unwrap()
+            .into_int_value();
+        match op {
+            BitOp::CountOnes | BitOp::LeadingZeros | BitOp::TrailingZeros => self
+                .builder
+                .build_int_cast_sign_flag(result, self.usize_type(), false, "count")
+                .unwrap()
+                .into(),
+            _ => result.into(),
+        }
     }
 
     pub(super) fn counted_loop(

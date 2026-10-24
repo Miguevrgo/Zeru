@@ -5,7 +5,7 @@ use crate::ast::{Expression, ExpressionKind, Spec, TypeSpec, format_pieces};
 use crate::errors::Span;
 use crate::items::{DefId, ItemKind};
 use crate::tir::{
-    Arm, BinOp, Block, Builtin, Expr, ExprKind, Payload, Place, Stmt, StmtKind, Walk,
+    Arm, BinOp, BitOp, Block, Builtin, Expr, ExprKind, Payload, Place, Stmt, StmtKind, Walk,
 };
 use crate::ty::{Ty, TyKind, Types};
 
@@ -450,6 +450,10 @@ impl FnCx<'_, '_> {
                 let receiver = self.address(place, struct_ty, mutable, object.span);
                 self.call_def(def, known, Some(receiver), args, expected, span)
             }
+            TyKind::Int(_) if bit_op(name).is_some() => {
+                let value = self.mk(ExprKind::Read(place), ty, object.span);
+                self.bit_method(value, name, args, span)
+            }
             kind => {
                 let shown = self.ty(ty);
                 let hint = match (kind, name) {
@@ -460,6 +464,40 @@ impl FnCx<'_, '_> {
                 self.error_expr(span)
             }
         }
+    }
+
+    /// An integer's bit method: a count of its bits as a usize, or the
+    /// integer with them moved, by an amount for a rotation.
+    fn bit_method(&mut self, value: Expr, name: &str, args: &[Expression], span: Span) -> Expr {
+        let op = bit_op(name).expect("a bit method");
+        let rotates = matches!(op, BitOp::RotateLeft | BitOp::RotateRight);
+        let mut values = vec![value];
+        match (rotates, args) {
+            (true, [amount]) => {
+                let checked = self.expr(amount, Some(Types::USIZE));
+                values.push(
+                    self.coerce_or(checked, Types::USIZE, amount.span, |want, got| {
+                        format!("{name} takes the places to move, a {want}, not {got}")
+                    }),
+                );
+            }
+            (false, []) => {}
+            _ => {
+                let wanted = if rotates {
+                    "the places to move"
+                } else {
+                    "nothing"
+                };
+                self.error(format!("{name} takes {wanted}"), span);
+                self.check_args_only(args);
+                return self.error_expr(span);
+            }
+        }
+        let ty = match rotates || op == BitOp::SwapBytes {
+            true => values[0].ty,
+            false => Types::USIZE,
+        };
+        self.mk(ExprKind::Builtin(Builtin::Bits(op), values), ty, span)
     }
 
     /// Report a `.copy()` of a `ty` that runs a `drop`, which would run once
@@ -1455,6 +1493,19 @@ impl FnCx<'_, '_> {
         let text = self.mk(ExprKind::Call(function, args), Types::STRING, span);
         self.view(text)
     }
+}
+
+/// The bit method of an integer called `name`.
+fn bit_op(name: &str) -> Option<BitOp> {
+    Some(match name {
+        "count_ones" => BitOp::CountOnes,
+        "leading_zeros" => BitOp::LeadingZeros,
+        "trailing_zeros" => BitOp::TrailingZeros,
+        "rotate_left" => BitOp::RotateLeft,
+        "rotate_right" => BitOp::RotateRight,
+        "swap_bytes" => BitOp::SwapBytes,
+        _ => return None,
+    })
 }
 
 /// A number written out, `None`, or arithmetic, an array or a tuple of

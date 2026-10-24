@@ -1,0 +1,31 @@
+status: compile error
+-- stderr
+Error: count_ones takes nothing
+   ╭─[ tests/ui/arithmetic/bit_method_errors.zr:4:5 ]
+   │
+ 4 │     a.count_ones(1);
+   │     ───────┬───────
+   │            ╰───────── count_ones takes nothing
+───╯
+Error: rotate_left takes the places to move
+   ╭─[ tests/ui/arithmetic/bit_method_errors.zr:5:5 ]
+   │
+ 5 │     a.rotate_left();
+   │     ───────┬───────
+   │            ╰───────── rotate_left takes the places to move
+───╯
+Error: rotate_left takes the places to move, a usize, not bool
+   ╭─[ tests/ui/arithmetic/bit_method_errors.zr:6:19 ]
+   │
+ 6 │     a.rotate_left(true);
+   │                   ──┬─
+   │                     ╰─── rotate_left takes the places to move, a usize, not bool
+───╯
+Error: f64 has no method 'count_ones'
+   ╭─[ tests/ui/arithmetic/bit_method_errors.zr:7:5 ]
+   │
+ 7 │     f.count_ones();
+   │     ───────┬──────
+   │            ╰──────── f64 has no method 'count_ones'
+───╯
+[-] Error: aborting due to previous error

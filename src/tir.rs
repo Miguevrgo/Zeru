@@ -262,7 +262,9 @@ impl Expr {
             ExprKind::Match { scrutinee, arms } => {
                 scrutinee.for_each_expr(f);
                 for arm in arms {
-                    arm.guard.iter_mut().for_each(|guard| f(guard));
+                    if let Some(guard) = &mut arm.guard {
+                        f(guard);
+                    }
                     f(&mut arm.body);
                 }
             }
@@ -374,6 +376,20 @@ pub enum Builtin {
     Slice,
     HashBits,
     Replace,
+    Bits(BitOp),
+}
+
+/// What an integer's bit methods do: count its set bits, or the zeros
+/// above or below its highest or lowest set one, or rotate its bits or
+/// reverse its bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BitOp {
+    CountOnes,
+    LeadingZeros,
+    TrailingZeros,
+    RotateLeft,
+    RotateRight,
+    SwapBytes,
 }
 
 /// One arm of a `match`: the tags it takes, each alternative a range from

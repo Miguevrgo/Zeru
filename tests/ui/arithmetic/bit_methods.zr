@@ -1,0 +1,18 @@
+fn main() {
+    var a: u32 = 0b1011_0000;
+    println("{} {} {}", a.count_ones(), a.leading_zeros(), a.trailing_zeros());
+    var z: u64 = 0;
+    println("{} {} {}", z.count_ones(), z.leading_zeros(), z.trailing_zeros());
+    var m: i8 = -1;
+    println("{} {} {}", m.count_ones(), m.leading_zeros(), m.trailing_zeros());
+    var r: u8 = 0b1000_0001;
+    println("{} {} {}", r.rotate_left(1), r.rotate_right(1), r.rotate_left(9));
+    var w: u32 = 0x12345678;
+    println("{:x} {:x} {}", w.swap_bytes(), w.rotate_left(8), r.swap_bytes());
+    var h: u16 = 0xabcd;
+    println("{:x} {}", h.swap_bytes(), (h as i16).count_ones());
+    var big: i64 = i64.MIN;
+    println("{} {}", big.trailing_zeros(), big.rotate_left(1));
+    var n: usize = 40;
+    println("{}", n.leading_zeros() + n.trailing_zeros());
+}

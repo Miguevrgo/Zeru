@@ -201,6 +201,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             }
             Rvalue::Use(operand) => self.operand(operand),
             Rvalue::Take(place) => self.read(place),
+            Rvalue::Bits(op, value, amount) => Val::Imm(self.bits(*op, value, amount.as_ref())),
             Rvalue::AddressOf(place) => Val::Imm(self.place(place).into()),
             Rvalue::Binary {
                 op,

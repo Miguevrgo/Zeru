@@ -9,7 +9,7 @@ mod build;
 mod elaborate;
 
 use crate::errors::Span;
-use crate::tir::{BinOp, FnId, Program, UnOp};
+use crate::tir::{BinOp, BitOp, FnId, Program, UnOp};
 use crate::ty::{Ty, TyKind};
 
 pub use build::build;
@@ -184,6 +184,8 @@ pub enum Rvalue {
     /// The value at a place about to get a new one, which owns it from now
     /// on: what pointed into the memory it owns no longer may.
     Take(Place),
+    /// An integer's bit method, with the amount to rotate by if any.
+    Bits(BitOp, Operand, Option<Operand>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -256,6 +258,7 @@ impl Rvalue {
                 vec![left, right]
             }
             Rvalue::Aggregate(_, values) => values.iter().collect(),
+            Rvalue::Bits(_, value, amount) => std::iter::once(value).chain(amount).collect(),
             Rvalue::VecNew(capacity) => capacity.iter().collect(),
             Rvalue::AddressOf(_)
             | Rvalue::DeepCopy(_)
