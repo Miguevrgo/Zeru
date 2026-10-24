@@ -282,11 +282,24 @@ impl FnCx<'_, '_> {
                 is_volatile,
             } => {
                 let values: Vec<Expr> = inputs.iter().map(|op| self.expr(&op.expr, None)).collect();
-                for value in &values {
+                for (value, input) in values.iter().zip(inputs) {
                     self.asm_operand(value.ty, value.span);
+                    if input.constraint.is_empty() || input.constraint.starts_with(['=', '+', '~'])
+                    {
+                        self.error(
+                            "An asm input's constraint says where the value goes, as \"r\"",
+                            value.span,
+                        );
+                    }
                 }
                 let mut places = Vec::new();
                 for output in outputs {
+                    if output.constraint.len() < 2 || !output.constraint.starts_with('=') {
+                        self.error(
+                            "An asm output's constraint starts with '=', as \"=r\"",
+                            output.expr.span,
+                        );
+                    }
                     if !matches!(output.expr.kind, ExpressionKind::Identifier(_)) {
                         self.error(
                             "Inline assembly output must be a variable",

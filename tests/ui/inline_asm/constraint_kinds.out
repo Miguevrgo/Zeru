@@ -1,0 +1,38 @@
+status: compile error
+-- stderr
+Error: An asm input's constraint says where the value goes, as "r"
+   ╭─[ tests/ui/inline_asm/constraint_kinds.zr:4:44 ]
+   │
+ 4 │     asm ("mov $1, $0" : "=r" (out) : "=r" (a));
+   │                                            ┬
+   │                                            ╰── An asm input's constraint says where the value goes, as "r"
+───╯
+Error: An asm output's constraint starts with '=', as "=r"
+   ╭─[ tests/ui/inline_asm/constraint_kinds.zr:5:31 ]
+   │
+ 5 │     asm ("mov $1, $0" : "+r" (out) : "r" (a));
+   │                               ─┬─
+   │                                ╰─── An asm output's constraint starts with '=', as "=r"
+───╯
+Error: An asm output's constraint starts with '=', as "=r"
+   ╭─[ tests/ui/inline_asm/constraint_kinds.zr:6:30 ]
+   │
+ 6 │     asm ("mov $1, $0" : "r" (out), "r" (a));
+   │                              ─┬─
+   │                               ╰─── An asm output's constraint starts with '=', as "=r"
+───╯
+Error: An asm output's constraint starts with '=', as "=r"
+   ╭─[ tests/ui/inline_asm/constraint_kinds.zr:6:41 ]
+   │
+ 6 │     asm ("mov $1, $0" : "r" (out), "r" (a));
+   │                                         ┬
+   │                                         ╰── An asm output's constraint starts with '=', as "=r"
+───╯
+Error: An asm input's constraint says where the value goes, as "r"
+   ╭─[ tests/ui/inline_asm/constraint_kinds.zr:7:42 ]
+   │
+ 7 │     asm ("mov $1, $0" : "=r" (out) : "" (a));
+   │                                          ┬
+   │                                          ╰── An asm input's constraint says where the value goes, as "r"
+───╯
+[-] Error: aborting due to previous error

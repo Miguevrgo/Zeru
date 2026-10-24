@@ -1,0 +1,8 @@
+fn main() {
+    var out: i64 = 0;
+    var a: i64 = 1;
+    asm ("mov $1, $0" : "=r" (out) : "=r" (a));
+    asm ("mov $1, $0" : "+r" (out) : "r" (a));
+    asm ("mov $1, $0" : "r" (out), "r" (a));
+    asm ("mov $1, $0" : "=r" (out) : "" (a));
+}
