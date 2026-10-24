@@ -1189,55 +1189,48 @@ impl<'a> Builder<'a> {
             .collect();
             entries.push((body, start, take, locals, alternatives));
         }
-        let tests: Vec<BlockId> = match chained {
-            true => arms
-                .iter()
-                .map(|_| self.new_block())
-                .chain([unmatched])
-                .collect(),
-            false => Vec::new(),
-        };
-        match chained {
-            true => {
-                self.goto(tests[0]);
-                let read = Operand::Copy(Place::local(tag));
-                for (at, (_, _, _, _, alternatives)) in entries.iter().enumerate() {
-                    self.current = Some(tests[at]);
-                    for &(tags, entry) in alternatives {
-                        let Some((low, high)) = tags else {
-                            self.goto(entry);
-                            break;
-                        };
-                        let inside = match low == high {
-                            true => self.binary(BinOp::Eq, read.clone(), constant(low, tag_ty)),
-                            false => {
-                                let above =
-                                    self.binary(BinOp::Ge, read.clone(), constant(low, tag_ty));
-                                let below =
-                                    self.binary(BinOp::Le, read.clone(), constant(high, tag_ty));
-                                self.binary(BinOp::BitAnd, above, below)
-                            }
-                        };
-                        let next = self.new_block();
-                        self.switch(inside, vec![(0, next)], entry);
-                        self.current = Some(next);
-                    }
-                    self.goto(tests[at + 1]);
-                }
-            }
-            false => {
-                let mut targets = Vec::new();
-                let mut otherwise = unmatched;
-                for (_, _, _, _, alternatives) in &entries {
-                    for &(tags, entry) in alternatives {
-                        match tags {
-                            Some((value, _)) => targets.push((value, entry)),
-                            None => otherwise = entry,
+        let mut next = vec![unmatched; arms.len()];
+        if chained {
+            let order = tir::tried(arms);
+            let tests: Vec<BlockId> = order.iter().map(|_| self.new_block()).collect();
+            self.goto(tests[0]);
+            let read = Operand::Copy(Place::local(tag));
+            for (k, &at) in order.iter().enumerate() {
+                let fail = tests.get(k + 1).copied().unwrap_or(unmatched);
+                next[at] = fail;
+                self.current = Some(tests[k]);
+                for &(tags, entry) in &entries[at].4 {
+                    let Some((low, high)) = tags else {
+                        self.goto(entry);
+                        break;
+                    };
+                    let inside = match low == high {
+                        true => self.binary(BinOp::Eq, read.clone(), constant(low, tag_ty)),
+                        false => {
+                            let above = self.binary(BinOp::Ge, read.clone(), constant(low, tag_ty));
+                            let below =
+                                self.binary(BinOp::Le, read.clone(), constant(high, tag_ty));
+                            self.binary(BinOp::BitAnd, above, below)
                         }
+                    };
+                    let next = self.new_block();
+                    self.switch(inside, vec![(0, next)], entry);
+                    self.current = Some(next);
+                }
+                self.goto(fail);
+            }
+        } else {
+            let mut targets = Vec::new();
+            let mut otherwise = unmatched;
+            for (_, _, _, _, alternatives) in &entries {
+                for &(tags, entry) in alternatives {
+                    match tags {
+                        Some((value, _)) => targets.push((value, entry)),
+                        None => otherwise = entry,
                     }
                 }
-                self.switch(Operand::Move(Place::local(tag)), targets, otherwise);
             }
+            self.switch(Operand::Move(Place::local(tag)), targets, otherwise);
         }
         for (at_arm, (arm, (body, start, take, locals, alternatives))) in
             arms.iter().zip(entries).enumerate()
@@ -1284,7 +1277,7 @@ impl<'a> Builder<'a> {
             if let Some(guard) = &arm.guard {
                 self.current = Some(start);
                 let holds = self.condition(guard);
-                self.switch(holds, vec![(0, tests[at_arm + 1])], body);
+                self.switch(holds, vec![(0, next[at_arm])], body);
             }
             self.span = outer;
             self.current = Some(body);
