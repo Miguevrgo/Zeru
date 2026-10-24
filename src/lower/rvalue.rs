@@ -78,7 +78,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
 
     /// A constant: a scalar as it is, text and parts in memory, the parts
     /// read from a global, which lets a value nothing writes stay there.
-    fn constant(&mut self, constant: &Constant) -> Val<'ctx> {
+    pub(super) fn constant(&mut self, constant: &Constant) -> Val<'ctx> {
         match &constant.value {
             ConstValue::Str(_) => {
                 let slot = self.alloca(constant.ty, "str");
@@ -216,6 +216,12 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     }
 
     pub(super) fn assign(&mut self, dest: &'a Place, rvalue: &'a Rvalue) {
+        if dest
+            .as_local()
+            .is_some_and(|local| self.fixed[local.0 as usize])
+        {
+            return;
+        }
         let ty = self.place_ty(dest);
         let value = match rvalue {
             Rvalue::Use(Operand::Constant(constant))

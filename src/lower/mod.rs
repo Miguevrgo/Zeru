@@ -28,8 +28,8 @@ use inkwell::{
 
 use crate::errors::{Sources, Span};
 use crate::mir::{
-    BlockId, Body, Local, Operand, Panic, Place, Projection, RETURN, Rvalue, StatementKind,
-    TerminatorKind,
+    BlockId, Body, ConstValue, Constant, Local, Operand, Panic, Place, Projection, RETURN, Rvalue,
+    StatementKind, TerminatorKind,
 };
 use crate::tir::{FnId, Program};
 use crate::ty::{Ty, Types};
@@ -70,6 +70,7 @@ pub struct Lower<'a, 'ctx> {
     current: Option<FunctionValue<'ctx>>,
     body: Option<&'a Body>,
     locals: Vec<Slot<'ctx>>,
+    fixed: Vec<bool>,
     blocks: Vec<Option<BasicBlock<'ctx>>>,
     span: Span,
 }
@@ -106,6 +107,7 @@ pub fn lower<'ctx>(
         current: None,
         body: None,
         locals: Vec::new(),
+        fixed: Vec::new(),
         blocks: Vec::new(),
         span: Span::default(),
     };
@@ -125,6 +127,63 @@ pub fn lower<'ctx>(
         }
     }
     lower.finish_debug();
+}
+
+/// The temporaries that only ever hold the constant parts given to them
+/// once, which are read where the constant lives rather than copied.
+fn fixed_locals(body: &Body) -> Vec<Option<&Constant>> {
+    let mut found = vec![None; body.locals.len()];
+    let mut touched = vec![0u32; body.locals.len()];
+    for block in &body.blocks {
+        for statement in &block.statements {
+            match &statement.kind {
+                StatementKind::Assign(place, rvalue) => {
+                    touched[place.local.0 as usize] += 1;
+                    match rvalue {
+                        Rvalue::Use(Operand::Constant(constant))
+                            if place.projection.is_empty()
+                                && matches!(constant.value, ConstValue::Parts(_)) =>
+                        {
+                            found[place.local.0 as usize] = Some(constant);
+                        }
+                        Rvalue::AddressOf(target) | Rvalue::Take(target) => {
+                            touched[target.local.0 as usize] += 2;
+                        }
+                        _ => {}
+                    }
+                }
+                StatementKind::VecPush(place, _)
+                | StatementKind::VecInsert(place, ..)
+                | StatementKind::VecClear(place)
+                | StatementKind::VecReserve(place, _)
+                | StatementKind::VecShrinkToFit(place) => touched[place.local.0 as usize] += 2,
+                StatementKind::Asm(asm) => {
+                    for place in &asm.outputs {
+                        touched[place.local.0 as usize] += 2;
+                    }
+                }
+                _ => {}
+            }
+        }
+        match &block.terminator.kind {
+            TerminatorKind::Call {
+                dest: Some(place), ..
+            }
+            | TerminatorKind::Drop { place, .. } => {
+                touched[place.local.0 as usize] += 2;
+            }
+            _ => {}
+        }
+    }
+    found
+        .into_iter()
+        .zip(touched)
+        .zip(&body.locals)
+        .enumerate()
+        .map(|(at, ((found, touched), decl))| {
+            found.filter(|_| at > body.arg_count && touched == 1 && decl.name.is_none())
+        })
+        .collect()
 }
 
 /// Which functions the program can call: those `main` reaches, and the
@@ -248,6 +307,8 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         self.enter_debug_scope(value, body.span);
 
         let ssa = self.ssa_locals(body);
+        let fixed = fixed_locals(body);
+        self.fixed = fixed.iter().map(Option::is_some).collect();
         let mut args = value.get_param_iter();
         let ret = body.locals[0].ty;
         let sret = self
@@ -261,6 +322,10 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 .then(|| args.next().unwrap());
             let slot = match (at, arg) {
                 (0, _) if sret.is_some() => Slot::Mem(sret.unwrap()),
+                (_, None) if let Some(constant) = fixed[at] => match self.constant(constant) {
+                    Val::Mem(global) => Slot::Mem(global),
+                    _ => unreachable!("parts are kept in memory"),
+                },
                 (_, None) if decl.ty == Types::VOID || ssa[at] => Slot::Ssa(None),
                 (_, None) => Slot::Mem(self.alloca(decl.ty, name)),
                 (_, Some(arg)) if self.is_scalar(decl.ty) => {

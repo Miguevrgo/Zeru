@@ -1,0 +1,25 @@
+fn build() Array<u32, 65536> {
+    var t: Array<u32, 65536> = [0; 65536];
+    for i in 0..65536 {
+        var x = i as u32;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        t[i] = x;
+    }
+    return t;
+}
+
+const T: Array<u32, 65536> = build();
+
+fn look(i: usize) u32 {
+    return T[i & 65535];
+}
+
+fn main() {
+    var s: u32 = 0;
+    for i in 0..1000000 {
+        s ^= look(i as usize) +% T[(i * 7) & 65535];
+    }
+    println("{}", s);
+}
