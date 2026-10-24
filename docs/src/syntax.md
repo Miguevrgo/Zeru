@@ -68,6 +68,7 @@ var s: str = "hello";               s.len();  s[0];  s[1..3];
 s.split();  s.split(",");  s.lines();  s.contains("a");  s.find("a");  s.trim();  s.starts_with("he");  s.parse_int();
 var owned = String.from("hi");      owned.push_str("!");  owned.push('?');
 println("{} and {}", 1, "two");     println("{}", v);  // [1, 2]
+println("{:.2} {:>5} {:08b} {:x}", 2.0 / 3.0, "ab", 5, 255);  // 0.67    ab 00000101 ff
 ```
 
 ## Structs, enums, traits ([more](structure/structs.md))

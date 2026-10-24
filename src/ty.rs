@@ -56,6 +56,18 @@ impl IntTy {
         }
     }
 
+    /// The unsigned type of the same width.
+    pub fn unsigned(self) -> Self {
+        match self {
+            Self::I8 => Self::U8,
+            Self::I16 => Self::U16,
+            Self::I32 => Self::U32,
+            Self::I64 => Self::U64,
+            Self::Isize => Self::Usize,
+            other => other,
+        }
+    }
+
     pub fn contains(self, value: i128) -> bool {
         (self.min()..=self.max()).contains(&value)
     }

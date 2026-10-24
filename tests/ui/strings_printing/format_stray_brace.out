@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: A brace in a format is '{}', '{{' or '}}'
+Error: A brace in a format is '{}', '{:spec}', '{{' or '}}'
    ╭─[ tests/ui/strings_printing/format_stray_brace.zr:2:13 ]
    │
  2 │     println("{", 1);
    │             ─┬─
-   │              ╰─── A brace in a format is '{}', '{{' or '}}'
+   │              ╰─── A brace in a format is '{}', '{:spec}', '{{' or '}}'
 ───╯
 [-] Error: aborting due to previous error

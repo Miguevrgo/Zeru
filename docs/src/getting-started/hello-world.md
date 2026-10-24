@@ -67,6 +67,19 @@ var list: Vec<i32> = Vec[1, 2, 3];
 println("{} and {}", list, (1, "one")); // [1, 2, 3] and (1, "one")
 ```
 
+A `{:spec}` says how to write one number, bool or text: a width to pad it
+to, with `<`, `>` or `^` to put it at the left, right or middle and a
+character before that to pad with; a `0` to pad a number with zeros; `.n`
+for a float with `n` decimals, rounded to the nearest; and `x`, `X`, `o` or
+`b` for an integer in hexadecimal, octal or binary. Numbers go to the right
+of their width and text to the left unless told otherwise:
+
+```zeru
+println("[{:.2}] [{:>6}] [{:<6}] [{:^6}]", 3.14159, 42, "ab", "ab"); // [3.14] [    42] [ab    ] [  ab  ]
+println("[{:05}] [{:08.3}] [{:*>4}]", -42, 2.5, 7); // [-0042] [0002.500] [***7]
+println("{:x} {:X} {:o} {:08b}", 255, 255, 8, 5); // ff FF 10 00000101
+```
+
 `eprint` and `eprintln` write to the standard error instead.
 
 ## Comments

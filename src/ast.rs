@@ -273,15 +273,51 @@ impl Drop for Expression {
     }
 }
 
+/// How a `{:spec}` writes its value: padded with `fill` to `width`
+/// characters on the side `align` names, or with zeros after its sign when
+/// `zero`; a float with `precision` decimals; an integer in `radix`, its
+/// letters capitals when `upper`.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Spec {
+    pub fill: Option<u8>,
+    pub align: Option<u8>,
+    pub zero: bool,
+    pub width: usize,
+    pub precision: Option<usize>,
+    pub radix: Option<(u64, bool)>,
+}
+
+/// The most decimals a `{:.n}` writes.
+pub const MAX_PRECISION: usize = 100;
+
+const SPEC_FORM: &str =
+    "A format spec is written as in {:>8}, {:<5}, {:*^7}, {:08.3}, {:.2}, {:x}, {:X}, {:o} or {:b}";
+
 /// The text of a `print` format around each `{}`: one piece more than there
-/// are values. `{{` and `}}` stand for a brace.
-pub fn format_pieces(format: &[u8]) -> Result<Vec<Vec<u8>>, String> {
+/// are values, and the spec each `{}` gives, if any. `{{` and `}}` stand
+/// for a brace.
+pub fn format_pieces(format: &[u8]) -> Result<(Vec<Vec<u8>>, Vec<Option<Spec>>), String> {
     let mut pieces = vec![Vec::new()];
+    let mut specs = Vec::new();
     let mut bytes = format.iter().copied().peekable();
     while let Some(byte) = bytes.next() {
         match (byte, bytes.peek()) {
             (b'{', Some(b'}')) => {
                 bytes.next();
+                pieces.push(Vec::new());
+                specs.push(None);
+            }
+            (b'{', Some(b':')) => {
+                bytes.next();
+                let mut text = Vec::new();
+                loop {
+                    match bytes.next() {
+                        Some(b'}') => break,
+                        Some(byte) => text.push(byte),
+                        None => return Err(SPEC_FORM.to_string()),
+                    }
+                }
+                specs.push(Some(parse_spec(&text)?));
                 pieces.push(Vec::new());
             }
             (b'{', Some(b'{')) | (b'}', Some(b'}')) => {
@@ -289,10 +325,62 @@ pub fn format_pieces(format: &[u8]) -> Result<Vec<Vec<u8>>, String> {
                 pieces.last_mut().unwrap().push(byte);
             }
             (b'{' | b'}', _) => {
-                return Err("A brace in a format is '{}', '{{' or '}}'".to_string());
+                return Err("A brace in a format is '{}', '{:spec}', '{{' or '}}'".to_string());
             }
             _ => pieces.last_mut().unwrap().push(byte),
         }
     }
-    Ok(pieces)
+    Ok((pieces, specs))
+}
+
+/// What follows the ':' of a `{:spec}`: `[[fill]align][0][width][.precision][type]`.
+fn parse_spec(text: &[u8]) -> Result<Spec, String> {
+    let mut spec = Spec::default();
+    let mut rest = text;
+    let aligns = [b'<', b'>', b'^'];
+    match rest {
+        [fill, align, ..] if aligns.contains(align) && fill.is_ascii() => {
+            (spec.fill, spec.align) = (Some(*fill), Some(*align));
+            rest = &rest[2..];
+        }
+        [align, ..] if aligns.contains(align) => {
+            spec.align = Some(*align);
+            rest = &rest[1..];
+        }
+        _ => {}
+    }
+    if let [b'0', more @ ..] = rest {
+        spec.zero = true;
+        rest = more;
+    }
+    let number = |rest: &mut &[u8]| -> Result<Option<usize>, String> {
+        let digits = rest.iter().take_while(|b| b.is_ascii_digit()).count();
+        let (written, after) = rest.split_at(digits);
+        *rest = after;
+        match written {
+            [] => Ok(None),
+            _ => std::str::from_utf8(written)
+                .unwrap()
+                .parse()
+                .map(Some)
+                .map_err(|_| SPEC_FORM.to_string()),
+        }
+    };
+    spec.width = number(&mut rest)?.unwrap_or(0);
+    if let [b'.', more @ ..] = rest {
+        rest = more;
+        spec.precision = Some(number(&mut rest)?.ok_or(SPEC_FORM)?);
+    }
+    if spec.precision.is_some_and(|p| p > MAX_PRECISION) {
+        return Err(format!("A format writes at most {MAX_PRECISION} decimals"));
+    }
+    spec.radix = match rest {
+        [] => None,
+        [b'x'] => Some((16, false)),
+        [b'X'] => Some((16, true)),
+        [b'o'] => Some((8, false)),
+        [b'b'] => Some((2, false)),
+        _ => return Err(SPEC_FORM.to_string()),
+    };
+    Ok(spec)
 }

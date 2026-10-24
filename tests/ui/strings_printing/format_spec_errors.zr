@@ -1,0 +1,12 @@
+fn main() {
+    var v: Vec<i32> = Vec[1];
+    println("{:x}", 1.5);
+    println("{:.2}", 3);
+    println("{:05}", "text");
+    println("{:>4}", v);
+    println("{:q}", 1);
+    println("{:.}", 1.0);
+    println("{:.101}", 1.0);
+    println("{:>8", 1);
+    println("{:.2}", true);
+}

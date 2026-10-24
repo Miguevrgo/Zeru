@@ -289,6 +289,79 @@ struct OutStream {
             self.write_bytes(&digits[point as usize], count - point as usize);
         }
     }
+
+    // `value` in base `radix`, from 2 to 16, its digits past 9 as letters,
+    // capitals when `upper`.
+    fn write_radix(var self, value: u64, radix: u64, upper: bool) {
+        var digits: Array<u8, 64> = [0; 64];
+        var at: usize = 64;
+        var rest = value;
+        var letters: u8 = 'a';
+        if upper {
+            letters = 'A';
+        }
+        while true {
+            at -= 1;
+            var digit = (rest % radix) as u8;
+            if digit < 10 {
+                digits[at] = '0' + digit;
+            } else {
+                digits[at] = letters + digit - 10;
+            }
+            rest /= radix;
+            if rest == 0 {
+                break;
+            }
+        }
+        self.write_bytes(&digits[at], 64 - at);
+    }
+
+    // `value` with `precision` decimals: of the numbers with that many, the
+    // nearest to its exact value, and on a tie the one ending in an even
+    // digit.
+    fn write_fixed(var self, value: f64, precision: usize) {
+        if value != value {
+            self.write_text("NaN");
+            return;
+        }
+        var rest = value;
+        if rest < 0 || 1 / rest < 0 {
+            self.write_text("-");
+            rest = -rest;
+        }
+        if rest > 1.7976931348623157e308 {
+            self.write_text("inf");
+            return;
+        }
+        var hidden: u64 = 1 << 52;
+        var bits = *((&rest) as *u64);
+        var mantissa = bits & (hidden - 1);
+        var exponent = ((bits >> 52) & 2047) as i64;
+        if exponent == 0 {
+            exponent = -1074;
+        } else {
+            mantissa = mantissa | hidden;
+            exponent -= 1075;
+        }
+        var scaled = __zeru_big(mantissa);
+        scaled.mul_pow10(precision as i64);
+        if exponent >= 0 {
+            scaled.mul_pow2(exponent);
+        } else {
+            scaled.div_pow2_round(0 - exponent);
+        }
+        var digits: Array<u8, 512> = [0; 512];
+        var count: usize = 0;
+        while scaled.len > 0 || count <= precision {
+            count += 1;
+            digits[512 - count] = '0' + scaled.div_small(10) as u8;
+        }
+        self.write_bytes(&digits[512 - count], count - precision);
+        if precision > 0 {
+            self.write_text(".");
+            self.write_bytes(&digits[512 - precision], precision);
+        }
+    }
 }
 
 // A natural number in 32-bit limbs, least significant first, wide enough for
@@ -350,6 +423,41 @@ struct ZeruBig {
         }
         if at > self.len {
             self.len = at;
+        }
+    }
+
+    // Divide by `divisor`, giving back the remainder.
+    fn div_small(var self, divisor: u32) u32 {
+        var rest: u64 = 0;
+        var at = self.len;
+        while at > 0 {
+            at -= 1;
+            var current = (rest << 32) | self.limbs[at] as u64;
+            self.limbs[at] = (current / divisor as u64) as u32;
+            rest = current % divisor as u64;
+        }
+        while self.len > 0 && self.limbs[self.len - 1] == 0 {
+            self.len -= 1;
+        }
+        return rest as u32;
+    }
+
+    // Divide by 2^power, rounding to the nearest and a tie to even.
+    fn div_pow2_round(var self, power: i64) {
+        var left = power;
+        var below = false;
+        while left > 1 {
+            var step = left - 1;
+            if step > 31 {
+                step = 31;
+            }
+            var dropped = self.div_small((1 << step) as u32);
+            below = below || dropped != 0;
+            left -= step;
+        }
+        var half = self.div_small(2) == 1;
+        if half && (below || self.len > 0 && self.limbs[0] % 2 == 1) {
+            self.add(__zeru_big(1));
         }
     }
 
@@ -523,6 +631,96 @@ fn __zeru_shortest(value: f64, mantissa: u64, exponent: i64, hidden: u64, lowest
 fn __zeru_out_of_memory() {
     eprintln("panic: out of memory");
     exit(134);
+}
+
+// What `{:spec}` writes for an integer: `value`, or its bits read unsigned
+// when `unsigned`, in base `radix`, padded as `__zeru_pad` does.
+fn __zeru_format_int(
+    value: i64,
+    unsigned: bool,
+    radix: u64,
+    upper: bool,
+    fill: u8,
+    align: u8,
+    zero: bool,
+    width: usize,
+) String {
+    var out = OutStream { fd: -1, buffer: [0; 4096], index: 0 };
+    if unsigned || value >= 0 {
+        out.write_radix(value as u64, radix, upper);
+    } else {
+        out.write_text("-");
+        out.write_radix(0 -% (value as u64), radix, upper);
+    }
+    return __zeru_pad(out.buffer[..out.index], fill, align, zero, width);
+}
+
+// What `{:spec}` writes for a float: with `precision` decimals, or the
+// fewest digits that read back as `value` when it is below 0, padded as
+// `__zeru_pad` does.
+fn __zeru_format_float(
+    value: f64,
+    single: bool,
+    precision: i64,
+    fill: u8,
+    align: u8,
+    zero: bool,
+    width: usize,
+) String {
+    var out = OutStream { fd: -1, buffer: [0; 4096], index: 0 };
+    if precision < 0 {
+        out.write_float(value, single);
+    } else {
+        out.write_fixed(value, precision as usize);
+    }
+    return __zeru_pad(out.buffer[..out.index], fill, align, zero, width);
+}
+
+// `text` padded to `width` characters with `fill`, before it when `align`
+// is '>', after it when '<', on both sides when '^'; or with zeros after
+// its sign when `zero`.
+fn __zeru_pad(text: str, fill: u8, align: u8, zero: bool, width: usize) String {
+    var count: usize = 0;
+    for byte in text {
+        if (byte & 192) != 128 {
+            count += 1;
+        }
+    }
+    var gap: usize = 0;
+    if width > count {
+        gap = width - count;
+    }
+    var padded = String.new();
+    var pad = fill;
+    var before = gap;
+    var start: usize = 0;
+    if zero {
+        pad = '0';
+        if text.len() > 0 && (text[0] == '-' || text[0] == '+') {
+            padded.push(text[0]);
+            start = 1;
+        }
+    } else if align == '<' {
+        before = 0;
+    } else if align == '^' {
+        before = gap / 2;
+    }
+    for i in 0..before {
+        padded.push(pad);
+    }
+    padded.push_str(text[start..]);
+    for i in before..gap {
+        padded.push(pad);
+    }
+    return padded;
+}
+
+// "true" or "false", for a bool `{:spec}` pads.
+fn __zeru_bool_text(flag: bool) str {
+    if flag {
+        return "true";
+    }
+    return "false";
 }
 
 // Whether two strings hold the same bytes, for `==` and `!=` on str.

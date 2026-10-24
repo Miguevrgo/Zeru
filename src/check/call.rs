@@ -1,7 +1,7 @@
 //! Calls: functions, methods, generic inference, the constructors of enums,
 //! results and Vecs, the built-in methods, and `print`.
 
-use crate::ast::{Expression, ExpressionKind, TypeSpec, format_pieces};
+use crate::ast::{Expression, ExpressionKind, Spec, TypeSpec, format_pieces};
 use crate::errors::Span;
 use crate::items::{DefId, ItemKind};
 use crate::tir::{
@@ -1316,12 +1316,12 @@ impl FnCx<'_, '_> {
             self.check_args_only(values);
             return None;
         };
-        let pieces = match format_pieces(text) {
+        let (pieces, specs) = match format_pieces(text) {
             Err(message) => {
                 self.error(message, format.span);
-                Vec::new()
+                (Vec::new(), Vec::new())
             }
-            Ok(pieces) if pieces.len() - 1 != values.len() => {
+            Ok((pieces, _)) if pieces.len() - 1 != values.len() => {
                 self.error(
                     format!(
                         "The format has {} '{{}}' but {} value(s) follow it",
@@ -1330,12 +1330,12 @@ impl FnCx<'_, '_> {
                     ),
                     span,
                 );
-                Vec::new()
+                (Vec::new(), Vec::new())
             }
-            Ok(pieces) => pieces,
+            Ok(parts) => parts,
         };
         let mut checked = Vec::new();
-        for value in values {
+        for (at, value) in values.iter().enumerate() {
             let value = self.expr(value, None);
             let value = match self.cx.types.kind(value.ty) {
                 TyKind::Ref(_) | TyKind::RefMut(_) => {
@@ -1353,9 +1353,103 @@ impl FnCx<'_, '_> {
                     value.span,
                 );
             }
+            let value = match specs.get(at) {
+                Some(Some(spec)) if *spec != Spec::default() => self.formatted(value, *spec),
+                _ => value,
+            };
             checked.push(value);
         }
         Some((pieces, checked))
+    }
+
+    /// The text `spec` makes of `value`, a number, a bool or text, from the
+    /// prelude's `__zeru_format_*`.
+    fn formatted(&mut self, value: Expr, spec: Spec) -> Expr {
+        let span = value.span;
+        let ty = value.ty;
+        let int = self.cx.types.as_int(ty);
+        let float = self.cx.types.is_float(ty);
+        let mistake = match () {
+            _ if self.cx.types.is_error(ty) => return value,
+            _ if int.is_none() && !float && ty != Types::BOOL && ty != Types::STR => {
+                let shown = self.ty(ty);
+                Some(format!(
+                    "A format spec applies to a number, a bool or text, not {shown}"
+                ))
+            }
+            _ if spec.radix.is_some() && int.is_none() => {
+                Some("Only an integer is written in another base".to_string())
+            }
+            _ if spec.precision.is_some() && !float => {
+                Some("Only a float is written with a number of decimals".to_string())
+            }
+            _ if spec.zero && int.is_none() && !float => {
+                Some("Only a number is padded with zeros".to_string())
+            }
+            _ => None,
+        };
+        if let Some(message) = mistake {
+            self.error(message, span);
+            return self.error_expr(span);
+        }
+        let int_expr = |this: &Self, number: i128, ty: Ty| this.mk(ExprKind::Int(number), ty, span);
+        let flag = |this: &Self, on: bool| this.mk(ExprKind::Bool(on), Types::BOOL, span);
+        let align = spec.align.unwrap_or(match int.is_some() || float {
+            true => b'>',
+            false => b'<',
+        });
+        let i64_ty = self.cx.types.int(crate::ty::IntTy::I64);
+        let padding = [
+            int_expr(self, i128::from(spec.fill.unwrap_or(b' ')), Types::U8),
+            int_expr(self, i128::from(align), Types::U8),
+            flag(self, spec.zero),
+            int_expr(self, spec.width as i128, Types::USIZE),
+        ];
+        let (name, mut args) = match int {
+            Some(int) => {
+                let (radix, upper) = spec.radix.unwrap_or((10, false));
+                let bits = radix != 10 && int.signed();
+                let value = match bits {
+                    true => {
+                        let unsigned = self.cx.types.int(int.unsigned());
+                        self.mk(ExprKind::Cast(Box::new(value)), unsigned, span)
+                    }
+                    false => value,
+                };
+                let wide = self.mk(ExprKind::Cast(Box::new(value)), i64_ty, span);
+                let args = vec![
+                    wide,
+                    flag(self, bits || !int.signed()),
+                    int_expr(self, i128::from(radix), Types::U64),
+                    flag(self, upper),
+                ];
+                ("__zeru_format_int", args)
+            }
+            None if float => {
+                let precision = spec.precision.map_or(-1, |p| p as i128);
+                let wide = self.mk(ExprKind::Cast(Box::new(value)), Types::F64, span);
+                let args = vec![
+                    wide,
+                    flag(self, ty == Types::F32),
+                    int_expr(self, precision, i64_ty),
+                ];
+                ("__zeru_format_float", args)
+            }
+            None => {
+                let text = match ty == Types::BOOL {
+                    true => {
+                        let shown = self.cx.prelude_fn("__zeru_bool_text");
+                        self.mk(ExprKind::Call(shown, vec![value]), Types::STR, span)
+                    }
+                    false => value,
+                };
+                ("__zeru_pad", vec![text])
+            }
+        };
+        args.extend(padding);
+        let function = self.cx.prelude_fn(name);
+        let text = self.mk(ExprKind::Call(function, args), Types::STRING, span);
+        self.view(text)
     }
 }
 

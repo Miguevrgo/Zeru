@@ -1,0 +1,66 @@
+status: compile error
+-- stderr
+Error: Only an integer is written in another base
+   ╭─[ tests/ui/strings_printing/format_spec_errors.zr:3:21 ]
+   │
+ 3 │     println("{:x}", 1.5);
+   │                     ─┬─
+   │                      ╰─── Only an integer is written in another base
+───╯
+Error: Only a float is written with a number of decimals
+   ╭─[ tests/ui/strings_printing/format_spec_errors.zr:4:22 ]
+   │
+ 4 │     println("{:.2}", 3);
+   │                      ┬
+   │                      ╰── Only a float is written with a number of decimals
+───╯
+Error: Only a number is padded with zeros
+   ╭─[ tests/ui/strings_printing/format_spec_errors.zr:5:22 ]
+   │
+ 5 │     println("{:05}", "text");
+   │                      ───┬──
+   │                         ╰──── Only a number is padded with zeros
+───╯
+Error: A format spec applies to a number, a bool or text, not Vec<i32>
+   ╭─[ tests/ui/strings_printing/format_spec_errors.zr:6:22 ]
+   │
+ 6 │     println("{:>4}", v);
+   │                      ┬
+   │                      ╰── A format spec applies to a number, a bool or text, not Vec<i32>
+───╯
+Error: A format spec is written as in {:>8}, {:<5}, {:*^7}, {:08.3}, {:.2}, {:x}, {:X}, {:o} or {:b}
+   ╭─[ tests/ui/strings_printing/format_spec_errors.zr:7:13 ]
+   │
+ 7 │     println("{:q}", 1);
+   │             ───┬──
+   │                ╰──── A format spec is written as in {:>8}, {:<5}, {:*^7}, {:08.3}, {:.2}, {:x}, {:X}, {:o} or {:b}
+───╯
+Error: A format spec is written as in {:>8}, {:<5}, {:*^7}, {:08.3}, {:.2}, {:x}, {:X}, {:o} or {:b}
+   ╭─[ tests/ui/strings_printing/format_spec_errors.zr:8:13 ]
+   │
+ 8 │     println("{:.}", 1.0);
+   │             ───┬──
+   │                ╰──── A format spec is written as in {:>8}, {:<5}, {:*^7}, {:08.3}, {:.2}, {:x}, {:X}, {:o} or {:b}
+───╯
+Error: A format writes at most 100 decimals
+   ╭─[ tests/ui/strings_printing/format_spec_errors.zr:9:13 ]
+   │
+ 9 │     println("{:.101}", 1.0);
+   │             ────┬────
+   │                 ╰────── A format writes at most 100 decimals
+───╯
+Error: A format spec is written as in {:>8}, {:<5}, {:*^7}, {:08.3}, {:.2}, {:x}, {:X}, {:o} or {:b}
+    ╭─[ tests/ui/strings_printing/format_spec_errors.zr:10:13 ]
+    │
+ 10 │     println("{:>8", 1);
+    │             ───┬──
+    │                ╰──── A format spec is written as in {:>8}, {:<5}, {:*^7}, {:08.3}, {:.2}, {:x}, {:X}, {:o} or {:b}
+────╯
+Error: Only a float is written with a number of decimals
+    ╭─[ tests/ui/strings_printing/format_spec_errors.zr:11:22 ]
+    │
+ 11 │     println("{:.2}", true);
+    │                      ──┬─
+    │                        ╰─── Only a float is written with a number of decimals
+────╯
+[-] Error: aborting due to previous error
