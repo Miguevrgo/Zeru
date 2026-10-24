@@ -405,6 +405,16 @@ pub struct Arm {
     pub span: Span,
 }
 
+/// The order a `match` tries its arms in: as written, but a `default`,
+/// which takes every value the others leave, last wherever it is written.
+pub fn tried(arms: &[Arm]) -> Vec<usize> {
+    let rest = |arm: &Arm| arm.tags.is_empty() && arm.guard.is_none();
+    let (mut order, others): (Vec<usize>, Vec<usize>) =
+        (0..arms.len()).partition(|&at| !rest(&arms[at]));
+    order.extend(others);
+    order
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Payload {
     Whole,

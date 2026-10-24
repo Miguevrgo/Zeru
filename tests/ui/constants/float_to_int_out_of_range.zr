@@ -1,0 +1,3 @@
+fn big() f64 { return 9223372036854775808.0; }
+const B: i64 = big() as i64;
+fn main() { println("{}", B); }

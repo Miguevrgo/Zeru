@@ -132,6 +132,11 @@ impl<'c, 'a> FnCx<'c, 'a> {
         Self::new(cx, scope, Types::VOID)
     }
 
+    /// Which of its locals are views.
+    pub(super) fn views(&self) -> Vec<bool> {
+        self.locals.iter().map(|local| local.view).collect()
+    }
+
     pub(super) fn ret_ty(&self) -> Ty {
         self.ret
     }

@@ -15,6 +15,7 @@ use crate::tir::{
 use crate::ty::{IntTy, Ty, TyKind, Types};
 
 use super::Checker;
+use super::consts::wrap;
 
 /// How many statements and loop turns a constant may take, and how deep its
 /// calls may go, before it is taken to never end.
@@ -76,13 +77,21 @@ struct Eval<'c, 'a> {
 impl Checker<'_> {
     /// The value of `expr`, the definition of the constant `name` declared
     /// at `span`, run now and written as literals.
-    pub(super) fn run_constant(&mut self, expr: &Expr, name: &str, span: Span) -> Option<Expr> {
+    /// `views` says which of the locals the definition's own `match`
+    /// declares are views.
+    pub(super) fn run_constant(
+        &mut self,
+        expr: &Expr,
+        views: &[bool],
+        name: &str,
+        span: Span,
+    ) -> Option<Expr> {
         let mut eval = Eval {
             cx: self,
             bodies: HashMap::new(),
             frames: vec![Frame {
-                slots: Vec::new(),
-                views: Rc::from([]),
+                slots: vec![None; views.len()],
+                views: Rc::from(views),
             }],
             steps: 0,
         };
@@ -281,14 +290,12 @@ impl Eval<'_, '_> {
                 body,
             } => {
                 let (first, last) = (self.int(start)?, self.int(end)?);
-                let mut at = first;
-                while at < last || *inclusive && at == last {
+                for at in first..=last - i128::from(!*inclusive) {
                     self.step(stmt.span)?;
                     self.set_local(*var, Value::Int(at));
-                    if self.turn(body)? || at == last {
+                    if self.turn(body)? {
                         break;
                     }
-                    at += 1;
                 }
             }
             StmtKind::ForEach {
@@ -537,7 +544,7 @@ impl Eval<'_, '_> {
         let ty = expr.ty;
         Ok(match &expr.kind {
             ExprKind::Int(n) => Value::Int(*n),
-            ExprKind::Float(x) => Value::Float(*x),
+            ExprKind::Float(x) => Value::Float(round(*x, ty)),
             ExprKind::Bool(b) => Value::Bool(*b),
             ExprKind::Str(bytes) => Value::Text(Rc::from(bytes.as_slice())),
             ExprKind::Void => Value::Void,
@@ -677,7 +684,7 @@ impl Eval<'_, '_> {
             Value::Optional(inner) => i128::from(inner.is_some()),
             _ => unreachable!("a matched value has a tag"),
         };
-        for arm in arms {
+        for arm in tir::tried(arms).into_iter().map(|at| &arms[at]) {
             let alternative = match arm.tags.is_empty() {
                 true => Some(0),
                 false => arm
@@ -764,11 +771,13 @@ impl Eval<'_, '_> {
             (Value::Int(n), Some(int)) => Value::Int(wrap(n, int)),
             (Value::Bool(b), Some(_)) => Value::Int(i128::from(b)),
             (Value::Variant(at, _), Some(int)) => Value::Int(wrap(i128::from(at), int)),
-            (Value::Int(n), None) => Value::Float(round(n as f64, to)),
+            (Value::Int(n), None) if to == Types::F32 => Value::Float(f64::from(n as f32)),
+            (Value::Int(n), None) => Value::Float(n as f64),
+            (Value::Variant(at, _), None) => Value::Float(f64::from(at)),
             (Value::Float(x), None) => Value::Float(round(x, to)),
             (Value::Float(x), Some(int)) => {
                 let whole = x.trunc();
-                if whole.is_nan() || whole < int.min() as f64 || whole > int.max() as f64 {
+                if whole.is_nan() || !int.contains(whole as i128) {
                     let shown = types.show(to);
                     return fail(
                         format!("{x} does not fit {shown}, while computing a constant"),
@@ -785,6 +794,18 @@ impl Eval<'_, '_> {
     }
 
     fn binary(&self, op: BinOp, l: Value, r: Value, operand: Ty, ty: Ty, span: Span) -> Run<Value> {
+        if let (Value::Float(a), Value::Float(b)) = (&l, &r)
+            && comparison(op).is_some()
+        {
+            return Ok(Value::Bool(match op {
+                BinOp::Eq => a == b,
+                BinOp::Ne => a != b,
+                BinOp::Lt => a < b,
+                BinOp::Le => a <= b,
+                BinOp::Gt => a > b,
+                _ => a >= b,
+            }));
+        }
         if let Some(order) = comparison(op) {
             return Ok(Value::Bool(order(compare(&l, &r))));
         }
@@ -800,6 +821,9 @@ impl Eval<'_, '_> {
                         return fail("Division by zero while computing a constant", span);
                     }
                     BinOp::Div => self.fit(a.checked_div(b), ty, span)?,
+                    BinOp::Rem if int.signed() && a == int.min() && b == -1 => {
+                        return fail("Division of MIN by -1 while computing a constant", span);
+                    }
                     BinOp::Rem => self.fit(a.checked_rem(b), ty, span)?,
                     BinOp::AddWrap => Value::Int(wrap(a.wrapping_add(b), int)),
                     BinOp::SubWrap => Value::Int(wrap(a.wrapping_sub(b), int)),
@@ -883,12 +907,6 @@ fn round(x: f64, ty: Ty) -> f64 {
         true => x as f32 as f64,
         false => x,
     }
-}
-
-/// `value` as an integer of type `int` holds it: its low bits, read with
-/// that type's sign.
-fn wrap(value: i128, int: IntTy) -> i128 {
-    super::consts::wrap(value, int)
 }
 
 /// What a bit method gives for `value`, an integer of type `int`.

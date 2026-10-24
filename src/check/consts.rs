@@ -52,8 +52,9 @@ impl Checker<'_> {
             }),
             None => checked,
         };
+        let views = cx.views();
         if !is_constant(value) && self.errors.len() == errors {
-            checked = match self.run_constant(&checked, name, span) {
+            checked = match self.run_constant(&checked, &views, name, span) {
                 Some(value) => value,
                 None => Expr {
                     kind: ExprKind::Void,
