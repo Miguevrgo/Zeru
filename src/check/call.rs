@@ -414,6 +414,14 @@ impl FnCx<'_, '_> {
                     self.check_args_only(args);
                     return self.error_expr(span);
                 };
+                if name == "drop" {
+                    self.error(
+                        "drop runs on its own when the value goes away; it is never called by hand",
+                        span,
+                    );
+                    self.check_args_only(args);
+                    return self.error_expr(span);
+                }
                 self.cx.check_visible(def, self.scope.module, span);
                 let sig = self.cx.sig(def);
                 let receiver = sig.as_ref().map(|sig| sig.receiver);

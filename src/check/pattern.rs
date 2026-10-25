@@ -431,8 +431,9 @@ impl FnCx<'_, '_> {
 
     /// A pattern standing for one value, which it is checked and evaluated to.
     fn value_pattern(&mut self, pattern: &Expression, subject: Ty) -> Option<i128> {
+        let errors = self.cx.errors.len();
         let value = self.expr(pattern, Some(subject));
-        if self.cx.types.is_error(value.ty) {
+        if self.cx.types.is_error(value.ty) || self.cx.errors.len() > errors {
             return None;
         }
         if value.ty != subject {

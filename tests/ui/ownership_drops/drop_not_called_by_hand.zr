@@ -1,0 +1,12 @@
+struct Token {
+    id: i32,
+
+    fn drop(var self) {
+        println("drop {}", self.id);
+    }
+}
+
+fn main() {
+    var t = Token { id: 1 };
+    t.drop();
+}

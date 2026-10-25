@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: drop runs on its own when the value goes away; it is never called by hand
+    ╭─[ tests/ui/ownership_drops/drop_not_called_by_hand.zr:11:5 ]
+    │
+ 11 │     t.drop();
+    │     ────┬───
+    │         ╰───── drop runs on its own when the value goes away; it is never called by hand
+────╯
+[-] Error: aborting due to previous error
