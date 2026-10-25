@@ -188,12 +188,7 @@ impl Eval<'_, '_> {
         if let Some(body) = self.bodies.get(&id) {
             return body.clone();
         }
-        if self.cx.functions[id.0 as usize].is_none() {
-            let instance = &self.cx.queued[id.0 as usize];
-            let (def, args) = (instance.def, instance.args.clone());
-            let function = super::body::check_function(self.cx, def, &args);
-            self.cx.functions[id.0 as usize] = Some(function);
-        }
+        self.cx.check_instance(id);
         let function = self.cx.functions[id.0 as usize].as_ref().unwrap();
         let body = Rc::new(Body {
             views: function.locals.iter().map(|local| local.view).collect(),

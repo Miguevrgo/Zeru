@@ -17,7 +17,8 @@ use super::expr::is_number_literal;
 /// newline after.
 const PRINTS: &[&str] = &["print", "println", "eprint", "eprintln"];
 
-/// Writes out what the print streams hold; the compiler emits it.
+/// Copies a count of bytes from a source to a destination; the compiler
+/// emits it.
 const COPY_FN: &str = "__zeru_copy_bytes";
 /// str methods, each the prelude's `__zeru_str_<name>` with the str first.
 const STR_METHODS: &[&str] = &[
@@ -133,10 +134,7 @@ impl FnCx<'_, '_> {
         if name == "assert" {
             return self.assert(args, span);
         }
-        if name == "zip"
-            && self.local(name).is_none()
-            && self.cx.items.lookup_value(module, name).is_none()
-        {
+        if name == "zip" && self.builtin_name(name) {
             self.error(
                 "zip walks two sequences side by side in a for: for (a, b) in zip(xs, ys)",
                 span,
@@ -205,10 +203,7 @@ impl FnCx<'_, '_> {
                 _ => {}
             }
         }
-        if name == "replace"
-            && self.local(name).is_none()
-            && self.cx.items.lookup_value(module, name).is_none()
-        {
+        if name == "replace" && self.builtin_name(name) {
             return self.replace(args, span);
         }
         match name {
@@ -317,6 +312,14 @@ impl FnCx<'_, '_> {
         }
 
         match self.cx.types.kind(ty).clone() {
+            TyKind::Slice(_) | TyKind::SliceMut(_) if name == "len" && args.is_empty() => {
+                let slice = self.mk(ExprKind::Read(place), ty, object.span);
+                self.mk(
+                    ExprKind::Builtin(Builtin::Len, vec![slice]),
+                    Types::USIZE,
+                    span,
+                )
+            }
             TyKind::Vec(elem) if elem == Types::U8 && STR_METHODS.contains(&name) => {
                 let text = self.mk(ExprKind::Read(place), ty, object.span);
                 let text = self.view(text);
@@ -357,13 +360,6 @@ impl FnCx<'_, '_> {
             }
             TyKind::SliceMut(elem) => {
                 let slice = self.mk(ExprKind::Read(place), ty, object.span);
-                if name == "len" && args.is_empty() {
-                    return self.mk(
-                        ExprKind::Builtin(Builtin::Len, vec![slice]),
-                        Types::USIZE,
-                        span,
-                    );
-                }
                 if !SLICE_METHODS.contains(&name) && !SLICE_MUT_METHODS.contains(&name) {
                     let shown = self.ty(ty);
                     self.error(format!("{shown} has no method '{name}'"), span);
@@ -380,14 +376,6 @@ impl FnCx<'_, '_> {
                 self.call_def(def, vec![elem], Some(slice), args, expected, span)
             }
             TyKind::Slice(_) => {
-                if name == "len" && args.is_empty() {
-                    let slice = self.mk(ExprKind::Read(place), ty, object.span);
-                    return self.mk(
-                        ExprKind::Builtin(Builtin::Len, vec![slice]),
-                        Types::USIZE,
-                        span,
-                    );
-                }
                 if ty == Types::STR && STR_METHODS.contains(&name) {
                     let text = self.mk(ExprKind::Read(place), ty, object.span);
                     return self.str_method(text, name, args, expected, span);
@@ -1010,8 +998,8 @@ impl FnCx<'_, '_> {
         self.mk(ExprKind::Builtin(builtin, vec![value]), result, span)
     }
 
-    /// `print("x is {}", x)`: a literal format with one `{}` per value, each
-    /// a number, a bool or a `str`.
+    /// `print("x is {}", x)`: a literal format with one `{}` per printable
+    /// value.
     fn print(&mut self, name: &str, args: &[Expression], span: Span) -> Expr {
         let Some((pieces, values)) = self.format(args, span) else {
             return self.error_expr(span);

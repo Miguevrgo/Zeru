@@ -3,8 +3,7 @@
 
 use std::collections::HashMap;
 
-use crate::ast::StatementKind;
-use crate::ast::{Expression, ExpressionKind, TypeSpec};
+use crate::ast::{Expression, ExpressionKind, StatementKind, TypeSpec};
 use crate::errors::Span;
 use crate::items::{DefId, ItemKind};
 use crate::tir::{Arm, Asm, BinOp, Builtin, Expr, ExprKind, Place, UnOp, Unpack};
@@ -519,12 +518,7 @@ impl FnCx<'_, '_> {
         span: Span,
     ) -> Expr {
         let cond = self.condition(condition, "If condition must be boolean, got ");
-        let wraps = expected.filter(|&ty| {
-            matches!(
-                self.cx.types.kind(ty),
-                TyKind::Optional(_) | TyKind::Result(..)
-            )
-        });
+        let wraps = self.wrapper(expected);
         let before = self.diverges;
         let mut first = self.value_branch(then, expected);
         let first_leaves = std::mem::replace(&mut self.diverges, before);
@@ -824,16 +818,7 @@ impl FnCx<'_, '_> {
     fn assign_tuple(&mut self, targets: &[Expression], value: &Expression, span: Span) -> Expr {
         let mut stored = Vec::new();
         let (target, hints) = self.stores(targets, &mut stored, span);
-        let mut value = match &value.kind {
-            ExpressionKind::Tuple(items) if items.len() == hints.len() => {
-                self.tuple(items, hints, value.span)
-            }
-            _ => {
-                let whole = hints.into_iter().collect::<Option<Vec<Ty>>>();
-                let whole = whole.map(|parts| self.cx.types.intern(TyKind::Tuple(parts)));
-                self.value(value, whole)
-            }
-        };
+        let mut value = self.unpacked(value, hints);
         self.consume(&mut value);
         self.check_stores(&target, value.ty, &mut stored.into_iter(), span);
         let kind = ExprKind::Unpack {
@@ -841,6 +826,37 @@ impl FnCx<'_, '_> {
             value: Box::new(value),
         };
         self.mk(kind, Types::VOID, span)
+    }
+
+    /// `value` worked out against the part types `hints`: a tuple literal
+    /// part by part, anything else whole.
+    pub(super) fn unpacked(&mut self, value: &Expression, hints: Vec<Option<Ty>>) -> Expr {
+        match &value.kind {
+            ExpressionKind::Tuple(items) if items.len() == hints.len() => {
+                self.tuple(items, hints, value.span)
+            }
+            _ => {
+                let whole = self.tuple_hint(hints);
+                self.value(value, whole)
+            }
+        }
+    }
+
+    /// `expected` when it is a `T?` or a `T!`, which a plain value wraps
+    /// into.
+    pub(super) fn wrapper(&self, expected: Option<Ty>) -> Option<Ty> {
+        expected.filter(|&ty| {
+            matches!(
+                self.cx.types.kind(ty),
+                TyKind::Optional(_) | TyKind::Result(..)
+            )
+        })
+    }
+
+    /// The tuple type of the part types `hints`, when each is known.
+    fn tuple_hint(&mut self, hints: Vec<Option<Ty>>) -> Option<Ty> {
+        let parts = hints.into_iter().collect::<Option<Vec<Ty>>>()?;
+        Some(self.cx.types.intern(TyKind::Tuple(parts)))
     }
 
     /// Where each of `targets` stores its part, with the part's type when
@@ -861,8 +877,7 @@ impl FnCx<'_, '_> {
                 }
                 ExpressionKind::Tuple(inner) => {
                     let (part, inner) = self.stores(inner, stored, span);
-                    let whole = inner.into_iter().collect::<Option<Vec<Ty>>>();
-                    hints.push(whole.map(|parts| self.cx.types.intern(TyKind::Tuple(parts))));
+                    hints.push(self.tuple_hint(inner));
                     parts.push(part);
                 }
                 _ => {
@@ -1482,10 +1497,7 @@ impl FnCx<'_, '_> {
         hints: Vec<Option<Ty>>,
         span: Span,
     ) -> Expr {
-        let wanted = match hints.is_empty() {
-            true => None,
-            false => Some(hints),
-        };
+        let wanted = (!hints.is_empty()).then_some(hints);
         if let Some(wanted) = &wanted
             && wanted.len() != elements.len()
         {

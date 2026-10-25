@@ -215,10 +215,10 @@ pub fn format(source: &str) -> Result<String, Vec<ZeruError>> {
     let formatted = render(&doc);
     let same = parse(&formatted).is_ok_and(|(again, again_comments, _)| {
         let texts = |spans: &[Span], text: &str| -> Vec<String> {
-            let texts = spans
+            spans
                 .iter()
-                .map(|span| text[span.start..span.end].trim_end());
-            texts.map(str::to_string).collect()
+                .map(|span| text[span.start..span.end].trim_end().to_string())
+                .collect()
         };
         shape(&again) == shape(&program)
             && texts(&again_comments, &formatted) == texts(&comments, source)
@@ -647,21 +647,29 @@ impl<'s> Printer<'s> {
             E::Call { .. } | E::Get { .. } | E::Index { .. } | E::Slice { .. } | E::Try { .. } => {
                 self.chain(expr)
             }
-            E::ArrayLiteral(items) => {
+            E::ArrayLiteral(items) | E::VecLiteral(items) => {
+                let open = if matches!(expr.kind, E::VecLiteral(_)) {
+                    "Vec["
+                } else {
+                    "["
+                };
                 let items = items.iter().map(|item| self.expr(item)).collect();
-                list("[", items, "]", false)
+                list(open, items, "]", false)
             }
-            E::VecLiteral(items) => {
-                let items = items.iter().map(|item| self.expr(item)).collect();
-                list("Vec[", items, "]", false)
+            E::ArrayRepeat { value, count } | E::VecRepeat { value, count } => {
+                let open = if matches!(expr.kind, E::VecRepeat { .. }) {
+                    "Vec["
+                } else {
+                    "["
+                };
+                seq(vec![
+                    text(open),
+                    self.expr(value),
+                    text("; "),
+                    self.expr(count),
+                    text("]"),
+                ])
             }
-            E::VecRepeat { value, count } => seq(vec![
-                text("Vec["),
-                self.expr(value),
-                text("; "),
-                self.expr(count),
-                text("]"),
-            ]),
             E::Range {
                 start,
                 end,
@@ -670,13 +678,6 @@ impl<'s> Printer<'s> {
                 let dots = if *inclusive { "..=" } else { ".." };
                 seq(vec![self.expr(start), text(dots), self.expr(end)])
             }
-            E::ArrayRepeat { value, count } => seq(vec![
-                text("["),
-                self.expr(value),
-                text("; "),
-                self.expr(count),
-                text("]"),
-            ]),
             E::Assign {
                 target,
                 operator,

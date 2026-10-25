@@ -381,12 +381,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
     fn branch(&mut self, statement: &Statement) -> Block {
         match &statement.kind {
             StatementKind::Block(statements) => self.block(statements),
-            _ => {
-                self.enter();
-                let stmts = self.stmt(statement).into_iter().collect();
-                self.leave();
-                Block { stmts }
-            }
+            _ => self.block(std::slice::from_ref(statement)),
         }
     }
 
@@ -424,16 +419,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 self.named_once(names, span);
                 let hints: Vec<Option<Ty>> =
                     names.iter().map(|names| self.names_type(names)).collect();
-                let mut value = match &value.kind {
-                    ExpressionKind::Tuple(items) if items.len() == names.len() => {
-                        self.tuple(items, hints, value.span)
-                    }
-                    _ => {
-                        let whole = hints.iter().copied().collect::<Option<Vec<Ty>>>();
-                        let whole = whole.map(|parts| self.cx.types.intern(TyKind::Tuple(parts)));
-                        self.value(value, whole)
-                    }
-                };
+                let mut value = self.unpacked(value, hints);
                 self.consume(&mut value);
                 self.cx.note_types_in(value.ty, span);
                 let target = self.declare_names(names, value.ty, !is_const, span);
@@ -669,11 +655,17 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// function of that name.
     fn is_zip(&self, function: &Expression) -> bool {
         matches!(&function.kind, ExpressionKind::Identifier(name) if name == "zip")
-            && self.local("zip").is_none()
+            && self.builtin_name("zip")
+    }
+
+    /// Whether `name` means the built-in of that name: no local or item of
+    /// the program takes it.
+    pub(super) fn builtin_name(&self, name: &str) -> bool {
+        self.local(name).is_none()
             && self
                 .cx
                 .items
-                .lookup_value(self.scope.module, "zip")
+                .lookup_value(self.scope.module, name)
                 .is_none()
     }
 

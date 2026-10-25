@@ -109,9 +109,8 @@ impl<'a> Lexer<'a> {
 
         let start_pos = self.pos;
 
-        let ch = match self.advance() {
-            Some(c) => c,
-            None => return (Token::Eof, Span::new(start_pos, start_pos + 1)),
+        let Some(ch) = self.advance() else {
+            return (Token::Eof, Span::new(start_pos, start_pos + 1));
         };
 
         let token = match ch {

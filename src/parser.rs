@@ -82,7 +82,7 @@ impl Parser {
             brackets: 0,
             nesting: 0,
             splits: Vec::new(),
-            comments: std::mem::take(&mut lexer.comments),
+            comments: lexer.comments,
             parens: Vec::new(),
         };
         p.report_illegal();
@@ -818,8 +818,7 @@ impl Parser {
                 .any(|arg| matches!(arg, TypeSpec::IntLiteral(_)))
             && self.eat(&Token::LParen)
         {
-            let arguments =
-                self.allowing_struct_literals(|p| p.parse_expressions(&Token::RParen))?;
+            let arguments = self.struct_literals(true, |p| p.parse_expressions(&Token::RParen))?;
             let start = function.span;
             let kind = ExpressionKind::Call {
                 function: Box::new(function),
@@ -856,16 +855,14 @@ impl Parser {
 
     /// Read the condition of a construct whose body follows in braces.
     fn parse_condition(&mut self) -> Option<Expression> {
-        let saved = std::mem::replace(&mut self.no_struct_literal, true);
-        let condition = self.parse_expression(Precedence::Lowest);
-        self.no_struct_literal = saved;
-        condition
+        self.struct_literals(false, |p| p.parse_expression(Precedence::Lowest))
     }
 
-    /// Read `parse` with struct literals allowed again, for a context already
-    /// delimited by parentheses, brackets or commas.
-    fn allowing_struct_literals<T>(&mut self, parse: impl FnOnce(&mut Self) -> T) -> T {
-        let saved = std::mem::replace(&mut self.no_struct_literal, false);
+    /// Read `parse` with struct literals allowed or not; they are allowed
+    /// again in a context already delimited by parentheses, brackets or
+    /// commas.
+    fn struct_literals<T>(&mut self, allowed: bool, parse: impl FnOnce(&mut Self) -> T) -> T {
+        let saved = std::mem::replace(&mut self.no_struct_literal, !allowed);
         let parsed = parse(self);
         self.no_struct_literal = saved;
         parsed
@@ -873,7 +870,7 @@ impl Parser {
 
     fn parse_struct_literal(&mut self, name: String, start: Span) -> Option<Expression> {
         self.bump();
-        let fields = self.allowing_struct_literals(|p| {
+        let fields = self.struct_literals(true, |p| {
             p.parse_list(&Token::RBrace, |p| {
                 let field = p.identifier("field name")?;
                 p.expect(&Token::Colon)?;
@@ -1018,7 +1015,7 @@ impl Parser {
     fn parse_grouped_expression(&mut self) -> Option<Expression> {
         let start = self.span();
         self.bump();
-        self.allowing_struct_literals(|p| {
+        self.struct_literals(true, |p| {
             if p.eat(&Token::RParen) {
                 return Some(p.expression(ExpressionKind::Tuple(vec![]), start));
             }
@@ -1269,7 +1266,7 @@ impl Parser {
                 let bound = |p: &mut Self| match p.at(&Token::DotDot) || p.at(&Token::RBracket) {
                     true => Some(None),
                     false => p
-                        .allowing_struct_literals(|p| p.parse_expression(Precedence::Lowest))
+                        .struct_literals(true, |p| p.parse_expression(Precedence::Lowest))
                         .map(|e| Some(Box::new(e))),
                 };
                 let start = bound(self)?;
@@ -1287,7 +1284,7 @@ impl Parser {
             }
             Token::LParen => {
                 let arguments =
-                    self.allowing_struct_literals(|p| p.parse_expressions(&Token::RParen))?;
+                    self.struct_literals(true, |p| p.parse_expressions(&Token::RParen))?;
                 ExpressionKind::Call {
                     function: left,
                     type_args: Vec::new(),
@@ -1341,7 +1338,7 @@ impl Parser {
     fn parse_array_literal(&mut self) -> Option<Expression> {
         let start = self.span();
         self.bump();
-        let kind = self.allowing_struct_literals(Self::parse_array_elements)?;
+        let kind = self.struct_literals(true, Self::parse_array_elements)?;
         Some(self.expression(kind, start))
     }
 
@@ -1350,7 +1347,7 @@ impl Parser {
         let start = self.span();
         self.bump();
         self.bump();
-        let kind = match self.allowing_struct_literals(Self::parse_array_elements)? {
+        let kind = match self.struct_literals(true, Self::parse_array_elements)? {
             ExpressionKind::ArrayRepeat { value, count } => {
                 ExpressionKind::VecRepeat { value, count }
             }
@@ -1430,20 +1427,8 @@ enum Precedence {
 
 fn token_precedence(token: &Token) -> Precedence {
     match token {
-        Token::Assign
-        | Token::PlusEq
-        | Token::MinusEq
-        | Token::StarEq
-        | Token::SlashEq
-        | Token::ModEq
-        | Token::BitAndEq
-        | Token::BitOrEq
-        | Token::BitXorEq
-        | Token::BitRShiftEq
-        | Token::BitLShiftEq
-        | Token::PlusWrapEq
-        | Token::MinusWrapEq
-        | Token::StarWrapEq => Precedence::Assignment,
+        Token::Assign => Precedence::Assignment,
+        token if token.compound_base().is_some() => Precedence::Assignment,
 
         Token::Or => Precedence::LogicalOr,
         Token::And => Precedence::LogicalAnd,
@@ -1506,14 +1491,8 @@ mod tests {
     }
 
     fn check_parser_errors(parser: &Parser) {
-        if parser.errors.is_empty() {
-            return;
-        }
-        eprintln!("Parser has {} errors:", parser.errors.len());
-        for err in &parser.errors {
-            eprintln!("Parser error: {}", err.message);
-        }
-        panic!("Parser failed")
+        let messages: Vec<&str> = parser.errors.iter().map(|e| e.message.as_str()).collect();
+        assert!(messages.is_empty(), "{messages:?}");
     }
 
     fn get_function_body(statement: &Statement) -> &Vec<Statement> {

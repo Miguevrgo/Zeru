@@ -14,6 +14,7 @@ type PayloadAt = fn(u32, u32) -> Payload;
 /// What an arm's pattern stands for: the values it takes, each alternative
 /// a range of them, to find repeats and gaps, and the names it binds, with
 /// where each finds its value for each alternative.
+#[derive(Default)]
 struct Shape {
     tags: Vec<(i128, i128)>,
     binds: Vec<(String, Ty, Vec<Payload>)>,
@@ -47,12 +48,7 @@ impl FnCx<'_, '_> {
 
         let before = self.diverges;
         let mut all_leave = true;
-        let wraps = expected.filter(|&ty| {
-            matches!(
-                self.cx.types.kind(ty),
-                TyKind::Optional(_) | TyKind::Result(..)
-            )
-        });
+        let wraps = self.wrapper(expected);
         let mut arm_ty: Option<Ty> = wraps;
         let mut mismatched = false;
         let mut checked = Vec::new();
@@ -314,10 +310,7 @@ impl FnCx<'_, '_> {
             }
             shape.tags.push(tag);
         }
-        shape.unwrap_or(Shape {
-            tags: Vec::new(),
-            binds: Vec::new(),
-        })
+        shape.unwrap_or_default()
     }
 
     /// One alternative: a literal, a constant or a variant, `Some(x)`,
@@ -354,11 +347,9 @@ impl FnCx<'_, '_> {
             }
         };
         let found = match (path.as_str(), &subject_kind) {
-            ("Some", TyKind::Optional(inner)) => Some((
-                1,
-                vec![*inner],
-                (|_, _| Payload::SomeValue) as fn(u32, u32) -> Payload,
-            )),
+            ("Some", TyKind::Optional(inner)) => {
+                Some((1, vec![*inner], (|_, _| Payload::SomeValue) as PayloadAt))
+            }
             ("Ok", TyKind::Result(ok, _)) => Some((1, vec![*ok], (|_, _| Payload::OkValue) as _)),
             ("Err", TyKind::Result(_, err)) => {
                 Some((0, vec![*err], (|_, _| Payload::ErrValue) as _))

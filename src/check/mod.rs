@@ -137,21 +137,11 @@ impl<'a> Checker<'a> {
         for &def in &defs {
             let item = self.items.item(def);
             match item.kind {
-                ItemKind::Struct => {
-                    self.struct_def(def);
-                }
-                ItemKind::Enum => {
-                    self.enum_def(def);
-                }
-                ItemKind::Trait => {
-                    self.trait_def(def);
-                }
-                ItemKind::Const => {
-                    self.const_value(def, item.decl.span);
-                }
-                ItemKind::Fn => {
-                    self.sig(def);
-                }
+                ItemKind::Struct => _ = self.struct_def(def),
+                ItemKind::Enum => _ = self.enum_def(def),
+                ItemKind::Trait => _ = self.trait_def(def),
+                ItemKind::Const => _ = self.const_value(def, item.decl.span),
+                ItemKind::Fn => _ = self.sig(def),
             }
         }
         for &def in &defs {
@@ -240,14 +230,19 @@ impl<'a> Checker<'a> {
 
     fn drain(&mut self) {
         while let Some(id) = self.pending.pop_front() {
-            if self.functions[id.0 as usize].is_some() {
-                continue;
-            }
-            let instance = &self.queued[id.0 as usize];
-            let (def, args) = (instance.def, instance.args.clone());
-            let function = body::check_function(self, def, &args);
-            self.functions[id.0 as usize] = Some(function);
+            self.check_instance(id);
         }
+    }
+
+    /// Check function instance `id`, unless it is checked already.
+    pub(super) fn check_instance(&mut self, id: FnId) {
+        if self.functions[id.0 as usize].is_some() {
+            return;
+        }
+        let instance = &self.queued[id.0 as usize];
+        let (def, args) = (instance.def, instance.args.clone());
+        let function = body::check_function(self, def, &args);
+        self.functions[id.0 as usize] = Some(function);
     }
 
     /// The function instance `def` at `args`, made and queued the first time.
@@ -716,8 +711,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Report an argument that does not meet its parameter's bound, once per
-    /// item and arguments, so the complaint lands on the use, not inside.
     /// Whether `ty` can be a hash map key: an integer, a bool, an enum
     /// without payloads, or a tuple or struct of those.
     pub(super) fn hashes(&mut self, ty: Ty) -> bool {
@@ -729,6 +722,8 @@ impl<'a> Checker<'a> {
             || self.is_enum(ty).is_some_and(|def| !self.enum_has_data(def))
     }
 
+    /// Report an argument that does not meet its parameter's bound, once per
+    /// item and arguments, so the complaint lands on the use, not inside.
     fn check_bounds(
         &mut self,
         def: DefId,
