@@ -3,7 +3,17 @@ fn grow(v: &var Vec<i64>) {
     v.push(2);
     println("{}", *e);
 }
-fn main() {
+fn reference_param_then_push() {
     var v: Vec<i64> = Vec[1];
     grow(&var v);
 }
+
+fn reference_through_var_reference() {
+    var v: Vec<i64> = Vec[1];
+    var m = &var v;
+    var e = &m[0];
+    m.push(1);
+    println("{}", *e);
+}
+
+fn main() {}

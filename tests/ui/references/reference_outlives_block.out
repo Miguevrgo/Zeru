@@ -11,4 +11,15 @@ Error: 'r' refers into 'w', which ends with its block first
    │                   ─────┬─────
    │                        ╰─────── used later here
 ───╯
+Error: 'r' refers into 'x', which ends with its block first
+    ╭─[ tests/ui/references/reference_outlives_block.zr:17:17 ]
+    │
+ 17 │             r = &x;
+    │                 ─┬
+    │                  ╰── 'r' refers into 'x', which ends with its block first
+    │
+ 19 │         println("{}", *r);
+    │                        ┬
+    │                        ╰── used later here
+────╯
 [-] Error: aborting due to previous error

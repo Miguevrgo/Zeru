@@ -3,7 +3,7 @@ enum E {
     A,
     B,
 }
-fn main() {
+fn payload_pattern_names_a_value() {
     var o: i64? = 7;
     match o {
         Some(LIMIT) => {
@@ -23,3 +23,13 @@ fn main() {
         }
     }
 }
+
+fn pattern_with_literal_payload() {
+    var o: i32? = 1;
+    var x = match o {
+        Some(1) => 1,
+        default => 0,
+    };
+}
+
+fn main() {}

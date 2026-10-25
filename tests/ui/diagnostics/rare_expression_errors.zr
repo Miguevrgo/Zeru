@@ -1,0 +1,15 @@
+fn nothing() {}
+
+fn main() {
+    var f = 1.5;
+    var c = match f {
+        default => 1,
+    };
+    var g = main;
+    var k = 5.x;
+    var arr = [1, true];
+    var n = -true;
+    var i = 5[0];
+    var v = Vec[];
+    var w = nothing() + 1;
+}

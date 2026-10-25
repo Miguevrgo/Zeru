@@ -1,7 +1,0 @@
-struct S {
-    v: Vec<i64>,
-}
-fn main() {
-    var vs: Vec<S> = Vec.new();
-    var s = vs[0];
-}

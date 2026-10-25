@@ -14,4 +14,11 @@ Error: Cannot modify constant 'G'
    │     ───┬───
    │        ╰───── Cannot modify constant 'G'
 ───╯
+Error: Cannot reassign constant variable 'x'
+   ╭─[ tests/ui/constants/cannot_reassign.zr:9:5 ]
+   │
+ 9 │     x += 1;
+   │     ───┬──
+   │        ╰──── Cannot reassign constant variable 'x'
+───╯
 [-] Error: aborting due to previous error

@@ -1,0 +1,24 @@
+fn positive(n: i32) i32 {
+    assert(n > 0);
+    return n;
+}
+
+fn first(v: i32?) i32 {
+    return v.unwrap();
+}
+
+fn div(a: i32, b: i32) i32 {
+    return a / b;
+}
+
+fn shift(a: i32, b: i32) i32 {
+    return a << b;
+}
+
+const A: i32 = positive(0);
+const B: i32 = first(None);
+const C: i32 = div(1, 0);
+const D: i32 = div(-2147483647 - 1, -1);
+const E: i32 = shift(1, 40);
+
+fn main() {}

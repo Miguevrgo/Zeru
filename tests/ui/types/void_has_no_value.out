@@ -60,4 +60,11 @@ Error: This has no value to use
     │ │
     │ ╰──────────────── This has no value to use
 ────╯
+Error: void has no values; only what a function returns can be void
+    ╭─[ tests/ui/types/void_has_no_value.zr:33:1 ]
+    │
+ 33 │ fn f(a: void) {}
+    │ ──────┬──────
+    │       ╰──────── void has no values; only what a function returns can be void
+────╯
 [-] Error: aborting due to previous error

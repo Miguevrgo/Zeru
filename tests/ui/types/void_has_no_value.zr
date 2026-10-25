@@ -11,7 +11,7 @@ fn id<T>(x: T) T {
     return x;
 }
 fn nothing() void {}
-fn main() {
+fn void_has_no_value() {
     var v = greet();
     id(greet());
     var t = (greet(), 1);
@@ -29,3 +29,8 @@ fn main() {
     }
     nothing();
 }
+
+fn f(a: void) {}
+fn void_parameter() {}
+
+fn main() {}

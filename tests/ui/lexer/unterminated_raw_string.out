@@ -1,0 +1,11 @@
+status: compile error
+-- stderr
+Error: Unterminated raw string
+   ╭─[ tests/ui/lexer/unterminated_raw_string.zr:2:13 ]
+   │
+ 2 │ ╭─▶     var s = `never closed;
+ 3 │ ├─▶ }
+   │ │
+   │ ╰─────── Unterminated raw string
+───╯
+[-] Error: aborting due to previous error

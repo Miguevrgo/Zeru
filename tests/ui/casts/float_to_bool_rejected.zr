@@ -1,3 +1,0 @@
-fn main() {
-    var b = 2.5 as bool;
-}

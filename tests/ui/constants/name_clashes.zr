@@ -1,0 +1,9 @@
+const LIMIT: i32 = 1;
+const LIMIT: i32 = 2;
+fn duplicate_constant() {}
+
+fn A() {}
+const A: i32 = 2;
+fn constant_clashes_with_function() {}
+
+fn main() {}

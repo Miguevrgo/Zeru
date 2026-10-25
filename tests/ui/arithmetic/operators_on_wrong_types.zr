@@ -1,0 +1,36 @@
+struct Point {
+    x: Vec<i32>,
+}
+fn operators_need_matching_operands() {
+    var p = Point { x: Vec[1] };
+    var q = Point { x: Vec[1] };
+    var a = true + true;
+    var b = 1 && 2;
+    var c = p == q;
+    var d = "a" == "b";
+    var e = true < false;
+    var f = 1.5 & 2.5;
+    var g = 1.5 << 2.5;
+}
+
+fn logical_needs_bool() {
+    var a: i32 = 10;
+    var b = true;
+    var c = a && b;
+}
+
+fn compound_on_bool() {
+    var b = true;
+    b += true;
+}
+
+fn compound_on_str() {
+    var s: str = "ab";
+    s += "c";
+}
+
+fn wrapping_on_float_rejected() {
+    var f = 1.5 +% 2.0;
+}
+
+fn main() {}

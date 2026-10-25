@@ -1,9 +1,16 @@
 fn bump(b: &var u8) {
     *b += 1;
 }
-fn main() {
+fn write_through_str() {
     var s = "abc";
     var p = &var s[0];
     bump(&var s[1]);
     s[2] = 'x';
 }
+
+fn str_write_rejected() {
+    var text: str = "abc";
+    text[0] = 65;
+}
+
+fn main() {}

@@ -1,4 +1,0 @@
-fn main() {
-    var s1: *u8 = "hello" as *u8;
-    var s2: str = s1;
-}

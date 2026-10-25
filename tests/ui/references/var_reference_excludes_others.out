@@ -50,4 +50,26 @@ Error: Cannot change 'v' while the loop still refers into it
     │              ┬
     │              ╰── borrowed here
 ────╯
+Error: Cannot change 'v' while a reference into it is still in use
+    ╭─[ tests/ui/references/var_reference_excludes_others.zr:31:19 ]
+    │
+ 31 │     println("{}", first_after_push(&var v, &v));
+    │                   ──────────────┬───────────┬─
+    │                                 ╰─────────────── Cannot change 'v' while a reference into it is still in use
+    │                                             │
+    │                                             ╰─── borrowed here
+────╯
+Error: Cannot change 'v' while a reference into it is still in use
+    ╭─[ tests/ui/references/var_reference_excludes_others.zr:33:5 ]
+    │
+ 33 │     both(r, r);
+    │     ─────┬────
+    │          ╰────── Cannot change 'v' while a reference into it is still in use
+    │
+    ├─[ tests/ui/references/var_reference_excludes_others.zr:33:5 ]
+    │
+ 32 │     var r = &var v;
+    │             ───┬──
+    │                ╰──── borrowed here
+────╯
 [-] Error: aborting due to previous error

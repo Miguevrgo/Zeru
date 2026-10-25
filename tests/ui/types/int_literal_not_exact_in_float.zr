@@ -1,0 +1,12 @@
+fn int_literal_not_exact_in_f32() {
+    var x: f32 = 16777217;
+}
+
+fn int_literal_not_exact_in_f64() {
+    var f: f64 = 18446744073709551615;
+    var g: f32 = 18446744073709551615;
+    var h: f64 = 9007199254740992;
+    println("{}", h);
+}
+
+fn main() {}

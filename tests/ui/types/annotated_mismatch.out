@@ -7,4 +7,60 @@ Error: Type mismatch for variable 'x'. Annotated as i32 but got bool
    │     ─────────┬────────
    │              ╰────────── Type mismatch for variable 'x'. Annotated as i32 but got bool
 ───╯
+Error: Type mismatch for variable 'arr'. Annotated as Array<i32, 3> but got Array<f64, 3>
+   ╭─[ tests/ui/types/annotated_mismatch.zr:6:5 ]
+   │
+ 6 │     var arr: Array<i32, 3> = [1.0, 2.0, 3.0];
+   │     ────────────────────┬────────────────────
+   │                         ╰────────────────────── Type mismatch for variable 'arr'. Annotated as Array<i32, 3> but got Array<f64, 3>
+───╯
+Error: Type mismatch for variable 'arr'. Annotated as Array<i32, 5> but got Array<i32, 3>
+    ╭─[ tests/ui/types/annotated_mismatch.zr:10:5 ]
+    │
+ 10 │     var arr: Array<i32, 5> = [1, 2, 3];
+    │     ─────────────────┬─────────────────
+    │                      ╰─────────────────── Type mismatch for variable 'arr'. Annotated as Array<i32, 5> but got Array<i32, 3>
+────╯
+Error: Type mismatch for variable 'b'. Annotated as f64 but got f32
+    ╭─[ tests/ui/types/annotated_mismatch.zr:15:5 ]
+    │
+ 15 │     var b: f64 = a;
+    │     ───────┬───────
+    │            ╰───────── Type mismatch for variable 'b'. Annotated as f64 but got f32
+────╯
+Error: Type mismatch for variable 'x'. Annotated as i32 but got f64
+    ╭─[ tests/ui/types/annotated_mismatch.zr:19:5 ]
+    │
+ 19 │     var x: i32 = 3.14;
+    │     ─────────┬────────
+    │              ╰────────── Type mismatch for variable 'x'. Annotated as i32 but got f64
+────╯
+Error: Type mismatch for variable 'x'. Annotated as f32 but got i32
+    ╭─[ tests/ui/types/annotated_mismatch.zr:24:5 ]
+    │
+ 24 │     var x: f32 = i;
+    │     ───────┬───────
+    │            ╰───────── Type mismatch for variable 'x'. Annotated as f32 but got i32
+────╯
+Error: Type mismatch for variable 'y'. Annotated as i64 but got i32
+    ╭─[ tests/ui/types/annotated_mismatch.zr:29:5 ]
+    │
+ 29 │     var y: i64 = x;
+    │     ───────┬───────
+    │            ╰───────── Type mismatch for variable 'y'. Annotated as i64 but got i32
+────╯
+Error: Type mismatch for variable 's2'. Annotated as str but got *u8
+    ╭─[ tests/ui/types/annotated_mismatch.zr:34:5 ]
+    │
+ 34 │     var s2: str = s1;
+    │     ────────┬────────
+    │             ╰────────── Type mismatch for variable 's2'. Annotated as str but got *u8
+────╯
+Error: Type mismatch for variable 't'. Annotated as (i32, bool) but got (bool, i32)
+    ╭─[ tests/ui/types/annotated_mismatch.zr:38:5 ]
+    │
+ 38 │     var t: (i32, bool) = (true, 42);
+    │     ────────────────┬───────────────
+    │                     ╰───────────────── Type mismatch for variable 't'. Annotated as (i32, bool) but got (bool, i32)
+────╯
 [-] Error: aborting due to previous error

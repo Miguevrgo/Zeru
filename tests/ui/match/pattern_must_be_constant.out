@@ -7,4 +7,11 @@ Error: A pattern must be known at compile time
    │         ──┬──
    │           ╰──── A pattern must be known at compile time
 ───╯
+Error: A pattern must be known at compile time
+    ╭─[ tests/ui/match/pattern_must_be_constant.zr:13:9 ]
+    │
+ 13 │         y => 1,
+    │         ┬
+    │         ╰── A pattern must be known at compile time
+────╯
 [-] Error: aborting due to previous error

@@ -1,0 +1,59 @@
+status: compile error
+-- stderr
+Error: Cannot cast bool to f64
+   ╭─[ tests/ui/casts/invalid_casts.zr:2:13 ]
+   │
+ 2 │     var f = true as f64;
+   │             ─────┬─────
+   │                  ╰─────── Cannot cast bool to f64
+───╯
+Error: Cannot cast f64 to bool
+   ╭─[ tests/ui/casts/invalid_casts.zr:6:13 ]
+   │
+ 6 │     var b = 2.5 as bool;
+   │             ─────┬─────
+   │                  ╰─────── Cannot cast f64 to bool
+───╯
+Error: Cannot cast i32 to bool
+    ╭─[ tests/ui/casts/invalid_casts.zr:11:13 ]
+    │
+ 11 │     var b = n as bool;
+    │             ────┬────
+    │                 ╰────── Cannot cast i32 to bool
+────╯
+Error: Cannot cast str to u64
+    ╭─[ tests/ui/casts/invalid_casts.zr:16:13 ]
+    │
+ 16 │     var n = s as u64;
+    │             ────┬───
+    │                 ╰───── Cannot cast str to u64
+────╯
+Error: Cannot cast i32 to Color
+    ╭─[ tests/ui/casts/invalid_casts.zr:23:13 ]
+    │
+ 23 │     var c = 1 as Color;
+    │             ─────┬────
+    │                  ╰────── Cannot cast i32 to Color
+────╯
+Error: Cannot cast f64 to Color
+    ╭─[ tests/ui/casts/invalid_casts.zr:24:13 ]
+    │
+ 24 │     var d = 2.5 as Color;
+    │             ──────┬─────
+    │                   ╰─────── Cannot cast f64 to Color
+────╯
+Error: Cannot cast P to i32
+    ╭─[ tests/ui/casts/invalid_casts.zr:32:13 ]
+    │
+ 32 │     var a = p as i32;
+    │             ────┬───
+    │                 ╰───── Cannot cast P to i32
+────╯
+Error: Cannot cast P to *u8
+    ╭─[ tests/ui/casts/invalid_casts.zr:33:13 ]
+    │
+ 33 │     var b = p as *u8;
+    │             ────┬───
+    │                 ╰───── Cannot cast P to *u8
+────╯
+[-] Error: aborting due to previous error

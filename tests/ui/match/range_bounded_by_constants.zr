@@ -1,0 +1,14 @@
+const LO: u8 = 3;
+const HI: u8 = 9;
+fn main() {
+    var b: u8 = 5;
+    var a = match b {
+        LO => 1,
+        default => 3,
+    };
+    var c = match b {
+        LO..=HI => 1,
+        default => 3,
+    };
+    println("{} {}", a, c);
+}

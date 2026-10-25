@@ -35,4 +35,11 @@ Error: Cannot tell the type of None here; annotate it
    │             ──┬─
    │               ╰─── Cannot tell the type of None here; annotate it
 ───╯
+Error: Cannot tell the type of None here; annotate it
+    ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:11:13 ]
+    │
+ 11 │     var x = None;
+    │             ──┬─
+    │               ╰─── Cannot tell the type of None here; annotate it
+────╯
 [-] Error: aborting due to previous error

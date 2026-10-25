@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: Division by zero in a constant expression
-   ╭─[ tests/ui/constants/constant_division_by_zero.zr:3:13 ]
+   ╭─[ tests/ui/constants/constant_division_by_zero.zr:2:13 ]
    │
- 3 │     var x = 5 / 0;
+ 2 │     var x = 5 / 0;
    │             ──┬──
    │               ╰──── Division by zero in a constant expression
 ───╯

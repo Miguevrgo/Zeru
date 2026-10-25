@@ -1,0 +1,36 @@
+fn bool_to_float_rejected() {
+    var f = true as f64;
+}
+
+fn float_to_bool_rejected() {
+    var b = 2.5 as bool;
+}
+
+fn int_to_bool_rejected() {
+    var n: i32 = 4;
+    var b = n as bool;
+}
+
+fn str_to_int_rejected() {
+    var s = "abc";
+    var n = s as u64;
+}
+
+enum Color {
+    Red,
+}
+fn int_to_enum_rejected() {
+    var c = 1 as Color;
+    var d = 2.5 as Color;
+}
+
+struct P {
+    x: i32,
+}
+fn struct_cast_rejected() {
+    var p = P { x: 1 };
+    var a = p as i32;
+    var b = p as *u8;
+}
+
+fn main() {}

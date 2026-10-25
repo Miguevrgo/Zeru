@@ -1,7 +1,7 @@
 fn reset(o: &var (&i64)?) {
     *o = None;
 }
-fn main() {
+fn var_reference_resets_variant() {
     var k: i64 = 3;
     var o: (&i64)? = &k;
     match o {
@@ -12,3 +12,23 @@ fn main() {
         None => {}
     }
 }
+
+struct S {
+    o: (&i64)?,
+    fn reset(var self) {
+        self.o = None;
+    }
+}
+fn var_self_resets_variant() {
+    var k: i64 = 3;
+    var s = S { o: &k };
+    match s.o {
+        Some(r) => {
+            s.reset();
+            println("{}", *r);
+        }
+        None => {}
+    }
+}
+
+fn main() {}

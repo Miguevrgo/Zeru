@@ -14,4 +14,11 @@ Error: A pattern binds names, as in Some(x); match the value inside again
     │              ──┬─
     │                ╰─── A pattern binds names, as in Some(x); match the value inside again
 ────╯
+Error: A pattern binds names, as in Some(x); match the value inside again
+    ╭─[ tests/ui/match/payload_pattern_names_a_value.zr:30:14 ]
+    │
+ 30 │         Some(1) => 1,
+    │              ┬
+    │              ╰── A pattern binds names, as in Some(x); match the value inside again
+────╯
 [-] Error: aborting due to previous error

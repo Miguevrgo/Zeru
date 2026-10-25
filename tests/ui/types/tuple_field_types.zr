@@ -1,3 +1,0 @@
-fn main() {
-    var t: (i32, bool) = (true, 42);
-}

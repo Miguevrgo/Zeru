@@ -1,4 +1,4 @@
-fn main() {
+fn reference_outlives_block() {
     var v: Vec<i64> = Vec[1];
     var r = v.get(0);
     if v.len() > 0 {
@@ -7,3 +7,17 @@ fn main() {
     }
     println("{}", r.is_some());
 }
+
+fn reference_outlives_nested_block() {
+    var y: i32 = 5;
+    var r: &i32 = &y;
+    if true {
+        {
+            var x: i32 = 1;
+            r = &x;
+        }
+        println("{}", *r);
+    }
+}
+
+fn main() {}

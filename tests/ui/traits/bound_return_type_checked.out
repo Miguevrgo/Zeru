@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: 'f' asks for T: Tr, which A does not satisfy
+    ╭─[ tests/ui/traits/bound_return_type_checked.zr:14:13 ]
+    │
+ 14 │     var r = f(A { x: 1 });
+    │             ──────┬──────
+    │                   ╰──────── 'f' asks for T: Tr, which A does not satisfy
+────╯
+[-] Error: aborting due to previous error

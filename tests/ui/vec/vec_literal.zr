@@ -4,6 +4,7 @@ fn main() {
     var zeros: Vec<i64> = Vec[0; n];
     var word = String.from("ab");
     var words = Vec[word; 3];
+    var empty: Vec<i32> = Vec[];
     words[0].push('c');
-    println("{} {} {} {} {}", v, zeros, words, word, v.len());
+    println("{} {} {} {} {} {}", v, zeros, words, word, v.len(), empty.len());
 }

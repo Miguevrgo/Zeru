@@ -1,4 +1,0 @@
-fn main() {
-    var i: i32 = 10;
-    var x: f32 = i;
-}

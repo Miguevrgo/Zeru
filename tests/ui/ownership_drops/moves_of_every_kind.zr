@@ -2,7 +2,7 @@ struct S {
     v: Vec<i64>,
 }
 fn take(v: Vec<i64>) {}
-fn main() {
+fn moves_of_every_kind() {
     var a: Vec<i64> = Vec.new();
     var row = [a];
     take(a);
@@ -18,3 +18,11 @@ fn main() {
     e = d;
     take(d);
 }
+
+fn use_after_move() {
+    var a: Vec<i64> = Vec.new();
+    var s = S { v: a };
+    take(a);
+}
+
+fn main() {}

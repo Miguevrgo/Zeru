@@ -1,3 +1,0 @@
-fn A() {}
-const A: i32 = 2;
-fn main() {}

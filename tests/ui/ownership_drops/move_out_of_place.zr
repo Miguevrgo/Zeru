@@ -1,0 +1,14 @@
+struct S {
+    v: Vec<i64>,
+}
+fn move_out_of_element() {
+    var vs: Vec<S> = Vec.new();
+    var s = vs[0];
+}
+
+fn move_out_of_field() {
+    var s = S { v: Vec.new() };
+    var v = s.v;
+}
+
+fn main() {}

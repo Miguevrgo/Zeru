@@ -1,4 +1,3 @@
-//@ checked
 fn main() {
     var x = 5 / 0;
     println("{}", x);

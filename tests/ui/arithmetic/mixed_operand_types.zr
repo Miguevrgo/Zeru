@@ -1,0 +1,13 @@
+fn mixed_arithmetic() {
+    var a: i32 = 10;
+    var b: f32 = 2.5;
+    var c = a + b;
+}
+
+fn mixed_signs_rejected() {
+    var a: i32 = 1;
+    var b: u32 = 2;
+    var c = a + b;
+}
+
+fn main() {}

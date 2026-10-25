@@ -1,0 +1,9 @@
+fn break_outside_loop() {
+    break;
+}
+
+fn continue_outside_loop() {
+    continue;
+}
+
+fn main() {}

@@ -17,4 +17,21 @@ Error: Cannot change 'o' while 'r' still refers into it
     │                            ┬
     │                            ╰── used later here
 ────╯
+Error: Cannot change 's' while 'r' still refers into it
+    ╭─[ tests/ui/references/var_reference_resets_variant.zr:27:13 ]
+    │
+ 27 │             s.reset();
+    │             ────┬────
+    │                 ╰────── Cannot change 's' while 'r' still refers into it
+    │
+    ├─[ tests/ui/references/var_reference_resets_variant.zr:27:13 ]
+    │
+ 26 │         Some(r) => {
+    │         ───┬───
+    │            ╰───── borrowed here
+    │
+ 28 │             println("{}", *r);
+    │                            ┬
+    │                            ╰── used later here
+────╯
 [-] Error: aborting due to previous error

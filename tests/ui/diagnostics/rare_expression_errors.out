@@ -1,0 +1,61 @@
+status: compile error
+-- stderr
+Error: Cannot match on f64, only on an integer, a bool, an enum, a T? or a T!
+   ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:5:13 ]
+   │
+ 5 │ ╭─▶     var c = match f {
+   ┆ ┆
+ 7 │ ├─▶     };
+   │ │
+   │ ╰──────────── Cannot match on f64, only on an integer, a bool, an enum, a T? or a T!
+───╯
+Error: 'main' is a function, not a variable
+   ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:8:13 ]
+   │
+ 8 │     var g = main;
+   │             ──┬─
+   │               ╰─── 'main' is a function, not a variable
+───╯
+Error: Cannot access property on non-struct type
+   ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:9:13 ]
+   │
+ 9 │     var k = 5.x;
+   │             ─┬─
+   │              ╰─── Cannot access property on non-struct type
+───╯
+Error: Array element at index 1 type mismatch. Expected i32, got bool
+    ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:10:19 ]
+    │
+ 10 │     var arr = [1, true];
+    │                   ──┬─
+    │                     ╰─── Array element at index 1 type mismatch. Expected i32, got bool
+────╯
+Error: Cannot negate non-numeric type bool
+    ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:11:13 ]
+    │
+ 11 │     var n = -true;
+    │             ──┬──
+    │               ╰──── Cannot negate non-numeric type bool
+────╯
+Error: Cannot index type i32
+    ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:12:13 ]
+    │
+ 12 │     var i = 5[0];
+    │             ──┬─
+    │               ╰─── Cannot index type i32
+────╯
+Error: Cannot tell the type of Vec[] here; annotate it
+    ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:13:13 ]
+    │
+ 13 │     var v = Vec[];
+    │             ──┬──
+    │               ╰──── Cannot tell the type of Vec[] here; annotate it
+────╯
+Error: Binary operation '+' requires operands of same type. Got void and i32
+    ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:14:13 ]
+    │
+ 14 │     var w = nothing() + 1;
+    │             ──────┬──────
+    │                   ╰──────── Binary operation '+' requires operands of same type. Got void and i32
+────╯
+[-] Error: aborting due to previous error

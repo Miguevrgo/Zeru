@@ -1,0 +1,24 @@
+status: compile error
+-- stderr
+Error: Literal 16777217 has no exact f32 value
+   ╭─[ tests/ui/types/int_literal_not_exact_in_float.zr:2:18 ]
+   │
+ 2 │     var x: f32 = 16777217;
+   │                  ────┬───
+   │                      ╰───── Literal 16777217 has no exact f32 value
+───╯
+Error: Literal 18446744073709551615 has no exact f64 value
+   ╭─[ tests/ui/types/int_literal_not_exact_in_float.zr:6:18 ]
+   │
+ 6 │     var f: f64 = 18446744073709551615;
+   │                  ──────────┬─────────
+   │                            ╰─────────── Literal 18446744073709551615 has no exact f64 value
+───╯
+Error: Literal 18446744073709551615 has no exact f32 value
+   ╭─[ tests/ui/types/int_literal_not_exact_in_float.zr:7:18 ]
+   │
+ 7 │     var g: f32 = 18446744073709551615;
+   │                  ──────────┬─────────
+   │                            ╰─────────── Literal 18446744073709551615 has no exact f32 value
+───╯
+[-] Error: aborting due to previous error

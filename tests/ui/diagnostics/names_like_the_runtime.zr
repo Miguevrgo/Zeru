@@ -1,0 +1,33 @@
+struct OutStream {
+    x: i32,
+}
+
+fn syscall1(a: i64) i64 {
+    return a;
+}
+
+fn strlen(n: i32) i32 {
+    return n + 1;
+}
+
+fn __zeru_env() i32 {
+    return 2;
+}
+
+fn memset(x: i64) i64 {
+    return x + 1;
+}
+
+fn abort() {
+    println("mine");
+}
+
+fn main() {
+    var v: Vec<i64> = Vec.with_capacity(100);
+    for i in 0..100 {
+        v.push(memset(i as i64));
+    }
+    abort();
+    var s = OutStream { x: 3 };
+    println("{} {} {} {} {}", v[99], strlen(4), __zeru_env(), syscall1(7), s.x);
+}

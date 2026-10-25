@@ -1,0 +1,66 @@
+status: compile error
+-- stderr
+Error: Array length 'i32' is not a constant
+   ╭─[ tests/ui/types/array_length_errors.zr:2:5 ]
+   │
+ 2 │     var a: Array<i32, i32> = [1];
+   │     ──────────────┬──────────────
+   │                   ╰──────────────── Array length 'i32' is not a constant
+───╯
+Error: An array length must be a constant integer
+   ╭─[ tests/ui/types/array_length_errors.zr:8:17 ]
+   │
+ 8 │     var a = [0; n];
+   │                 ┬
+   │                 ╰── An array length must be a constant integer
+───╯
+Error: An array length goes from 0 to 4294967295, not -1
+   ╭─[ tests/ui/types/array_length_errors.zr:9:17 ]
+   │
+ 9 │     var b = [0; BELOW];
+   │                 ──┬──
+   │                   ╰──── An array length goes from 0 to 4294967295, not -1
+───╯
+Error: Array length 'n' is not a constant
+    ╭─[ tests/ui/types/array_length_errors.zr:10:5 ]
+    │
+ 10 │     var c: Array<u8, n> = [0; 3];
+    │     ──────────────┬──────────────
+    │                   ╰──────────────── Array length 'n' is not a constant
+────╯
+Error: An array length goes from 0 to 4294967295, not 4294967298
+    ╭─[ tests/ui/types/array_length_errors.zr:16:5 ]
+    │
+ 16 │     var a: Array<u8, 4294967298> = [0; 2];
+    │     ───────────────────┬──────────────────
+    │                        ╰──────────────────── An array length goes from 0 to 4294967295, not 4294967298
+────╯
+Error: An array length must be a constant integer
+    ╭─[ tests/ui/types/array_length_errors.zr:17:5 ]
+    │
+ 17 │     var b: Array<i32, B> = [1];
+    │     ─────────────┬─────────────
+    │                  ╰─────────────── An array length must be a constant integer
+────╯
+Error: An array length goes from 0 to 4294967295, not 4294967298
+    ╭─[ tests/ui/types/array_length_errors.zr:18:5 ]
+    │
+ 18 │     var c: Array<u8, HUGE> = [0; HUGE];
+    │     ─────────────────┬─────────────────
+    │                      ╰─────────────────── An array length goes from 0 to 4294967295, not 4294967298
+────╯
+Error: An array length goes from 0 to 4294967295, not 4294967298
+    ╭─[ tests/ui/types/array_length_errors.zr:18:34 ]
+    │
+ 18 │     var c: Array<u8, HUGE> = [0; HUGE];
+    │                                  ──┬─
+    │                                    ╰─── An array length goes from 0 to 4294967295, not 4294967298
+────╯
+Error: Literal -1 does not fit in usize
+    ╭─[ tests/ui/types/array_length_errors.zr:19:17 ]
+    │
+ 19 │     var d = [0; -1];
+    │                 ─┬
+    │                  ╰── Literal -1 does not fit in usize
+────╯
+[-] Error: aborting due to previous error

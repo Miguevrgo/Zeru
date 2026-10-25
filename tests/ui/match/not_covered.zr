@@ -1,0 +1,31 @@
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+fn enum_not_covered() {
+    var c = Color::Red;
+    var r = match c {
+        Color::Red => 1,
+    };
+}
+
+enum S {
+    A(i32),
+    B,
+}
+fn payload_variant_not_covered() {
+    var s = S::B;
+    var x = match s {
+        S::A(v) => v,
+    };
+}
+
+fn optional_not_covered() {
+    var o: i32? = 1;
+    var x = match o {
+        Some(v) => 1,
+    };
+}
+
+fn main() {}

@@ -14,4 +14,11 @@ Error: 'default' goes last, after every other arm
    │         ───┬───
    │            ╰───── 'default' goes last, after every other arm
 ───╯
+Error: 'default' goes last, after every other arm
+    ╭─[ tests/ui/match/default_goes_last.zr:17:9 ]
+    │
+ 17 │         default => 1,
+    │         ───┬───
+    │            ╰───── 'default' goes last, after every other arm
+────╯
 [-] Error: aborting due to previous error

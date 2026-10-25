@@ -1,6 +1,14 @@
 const G: i32 = 100;
-fn main() {
+fn cannot_reassign() {
     const x = 10;
     x = 20;
     G = 200;
 }
+
+fn f(x: i32) i32 {
+    x += 1;
+    return x;
+}
+fn parameter_is_constant() {}
+
+fn main() {}

@@ -1,5 +1,0 @@
-fn main() {
-    var x: i64 = 1;
-    var a: Array<i64?, 2> = [x, None];
-    println("{}", a[1].is_none());
-}

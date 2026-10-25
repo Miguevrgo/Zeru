@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Unterminated block comment
+   ╭─[ tests/ui/lexer/unterminated_block_comment.zr:2:1 ]
+   │
+ 2 │ /* never closed
+   │ ─┬
+   │  ╰── Unterminated block comment
+───╯
+[-] Error: aborting due to previous error

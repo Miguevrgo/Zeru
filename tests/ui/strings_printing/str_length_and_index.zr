@@ -1,4 +1,0 @@
-fn main() {
-    var s: str = "hello";
-    println("{} {}", s.len(), s[1]);
-}

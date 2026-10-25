@@ -13,4 +13,17 @@ Error: 'r' refers into 'x', which ends with its block first
     │                            ┬
     │                            ╰── used here in the next turn of the loop
 ────╯
+Error: 'r' refers into 'w', which ends with its block first
+    ╭─[ tests/ui/references/reference_outlives_loop_turn.zr:26:13 ]
+    │
+ 26 │         r = w.get(0).unwrap();
+    │             ────┬───
+    │                 ╰───── 'r' refers into 'w', which ends with its block first
+    │
+    ├─[ tests/ui/references/reference_outlives_loop_turn.zr:26:13 ]
+    │
+ 23 │             println("{}", *r);
+    │                            ┬
+    │                            ╰── used here in the next turn of the loop
+────╯
 [-] Error: aborting due to previous error

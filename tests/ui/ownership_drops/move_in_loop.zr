@@ -1,0 +1,18 @@
+fn eat(v: Vec<i32>) {}
+fn move_inside_loop() {
+    var v: Vec<i32> = Vec.new();
+    while true {
+        eat(v);
+    }
+}
+
+fn move_then_continue() {
+    var v: Vec<i32> = Vec.new();
+    var c = true;
+    while c {
+        eat(v);
+        continue;
+    }
+}
+
+fn main() {}

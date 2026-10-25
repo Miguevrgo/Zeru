@@ -1,0 +1,17 @@
+fn eat(v: Vec<i32>) {}
+fn borrowed_element_cannot_move() {
+    var vv: Vec<Vec<i32>> = Vec.new();
+    for v in vv {
+        eat(v);
+    }
+}
+
+struct S {
+    v: Vec<i32>,
+    fn take(self) S {
+        return self;
+    }
+}
+fn borrowed_self_cannot_move() {}
+
+fn main() {}

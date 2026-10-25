@@ -1,4 +1,0 @@
-fn process(x: i32) {}
-fn main() {
-    process(3.14);
-}

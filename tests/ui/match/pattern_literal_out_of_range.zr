@@ -1,4 +1,8 @@
 fn main() {
     var b: u8 = 200;
-    var r = match b { 300 => 2, -1 => 4, default => 3 };
+    var r = match b {
+        300 => 2,
+        -1 => 4,
+        default => 3,
+    };
 }

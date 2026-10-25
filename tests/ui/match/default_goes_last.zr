@@ -1,4 +1,4 @@
-fn main() {
+fn default_goes_last() {
     var x: i32 = 2;
     var a = match x {
         default => 0,
@@ -10,3 +10,13 @@ fn main() {
         1 => 1,
     };
 }
+
+fn two_defaults() {
+    var x: i32 = 1;
+    var r = match x {
+        default => 1,
+        default => 2,
+    };
+}
+
+fn main() {}

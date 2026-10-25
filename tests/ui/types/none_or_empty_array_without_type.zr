@@ -1,4 +1,4 @@
-fn main() {
+fn none_or_empty_array_without_type() {
     var x: i32? = 5;
     var a = [None, 5];
     var t = (None, 1);
@@ -6,3 +6,9 @@ fn main() {
     var e = [];
     var b = None == x;
 }
+
+fn none_needs_context() {
+    var x = None;
+}
+
+fn main() {}

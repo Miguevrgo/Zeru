@@ -17,4 +17,21 @@ Error: Cannot change 'v' while 'e' still refers into it
    │                    ┬
    │                    ╰── used later here
 ───╯
+Error: Cannot change 'v' while 'e' still refers into it
+    ╭─[ tests/ui/references/reference_param_then_push.zr:15:5 ]
+    │
+ 15 │     m.push(1);
+    │     ────┬────
+    │         ╰────── Cannot change 'v' while 'e' still refers into it
+    │
+    ├─[ tests/ui/references/reference_param_then_push.zr:15:5 ]
+    │
+ 14 │     var e = &m[0];
+    │             ──┬──
+    │               ╰──── borrowed here
+    │
+ 16 │     println("{}", *e);
+    │                    ┬
+    │                    ╰── used later here
+────╯
 [-] Error: aborting due to previous error

@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: Unknown escape sequence '\q', expected one of \n \t \r \0 \x \' \" \\
+   ╭─[ tests/ui/lexer/bad_literals.zr:2:13 ]
+   │
+ 2 │     var a = "\q";
+   │             ──┬─
+   │               ╰─── Unknown escape sequence '\q', expected one of \n \t \r \0 \x \' \" \\
+───╯
+Error: Empty character literal
+   ╭─[ tests/ui/lexer/bad_literals.zr:3:13 ]
+   │
+ 3 │     var b = '';
+   │             ─┬
+   │              ╰── Empty character literal
+───╯
+[-] Error: aborting due to previous error

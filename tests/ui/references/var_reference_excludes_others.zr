@@ -1,6 +1,6 @@
 fn drain(a: &var Vec<i64>, b: &Vec<i64>) {}
 fn pair(a: (&i64)?, b: i64?) {}
-fn main() {
+fn var_reference_excludes_others() {
     var v: Vec<i64> = Vec[1, 2, 3];
     drain(&var v, &v);
     pair(v.get(0), v.pop());
@@ -12,3 +12,28 @@ fn main() {
         r.push(x);
     }
 }
+
+struct P {
+    hp: i64,
+    mana: i64,
+}
+fn first_after_push(a: &var Vec<i64>, b: &Vec<i64>) i64 {
+    var e = &b[0];
+    a.push(2);
+    return *e;
+}
+fn both(a: &var Vec<i64>, b: &var Vec<i64>) {}
+fn heal(hp: &var i64, mana: &i64) {
+    *hp += *mana;
+}
+fn call_aliased_arguments() {
+    var v: Vec<i64> = Vec[1];
+    println("{}", first_after_push(&var v, &v));
+    var r = &var v;
+    both(r, r);
+    var p = P { hp: 1, mana: 2 };
+    heal(&var p.hp, &p.mana);
+    v.push(v.len() as i64);
+}
+
+fn main() {}

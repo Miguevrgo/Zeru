@@ -1,0 +1,22 @@
+fn array_length_not_a_number() {
+    var a: Array<i32, i32> = [1];
+}
+
+const BELOW: i64 = -1;
+fn array_length_not_constant() {
+    var n: usize = 3;
+    var a = [0; n];
+    var b = [0; BELOW];
+    var c: Array<u8, n> = [0; 3];
+}
+
+const B: bool = true;
+const HUGE: usize = 4294967298;
+fn array_length_out_of_range() {
+    var a: Array<u8, 4294967298> = [0; 2];
+    var b: Array<i32, B> = [1];
+    var c: Array<u8, HUGE> = [0; HUGE];
+    var d = [0; -1];
+}
+
+fn main() {}

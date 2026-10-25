@@ -1,4 +1,0 @@
-fn main() {
-    var text: str = "abc";
-    text[0] = 65;
-}

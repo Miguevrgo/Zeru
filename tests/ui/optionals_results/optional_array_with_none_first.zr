@@ -1,5 +1,0 @@
-fn main() {
-    var x: i64 = 1;
-    var a: Array<i64?, 2> = [None, x];
-    println("{}", a[1].unwrap());
-}
