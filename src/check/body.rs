@@ -496,7 +496,16 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     _ => StmtKind::Continue,
                 }
             }
-            StatementKind::Expression(expr) => StmtKind::Expr(self.expr(expr, None)),
+            StatementKind::Expression(expr) => {
+                let value = self.expr(expr, None);
+                if matches!(self.cx.types.kind(value.ty), TyKind::Result(..)) {
+                    self.error(
+                        "This result is ignored; propagate its error with !, unwrap() it or store it in a variable",
+                        expr.span,
+                    );
+                }
+                StmtKind::Expr(value)
+            }
             StatementKind::Function { .. }
             | StatementKind::Struct { .. }
             | StatementKind::Enum { .. }

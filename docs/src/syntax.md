@@ -133,6 +133,7 @@ fn parse(..) i64! { return 3; ... return Err(EINVAL); }
 fn save(..) ! { ... return Ok(); ... }        // success or an error code
 x.is_some()  x.is_none()  x.is_ok()  x.is_err()  x.unwrap()  x.unwrap_err()
 var n = parse(text)!;    // returns the error from this function
+save(path);              // error: a result is never ignored
 var i = find(list)?;     // returns None from this function
 match r { Ok(v) => .., Err(code) => .. }
 match o { Some(v) => .., None => .. }

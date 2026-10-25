@@ -1,0 +1,21 @@
+import std.fs;
+
+fn half(n: i32) i32! {
+    if n % 2 != 0 {
+        return Err(22);
+    }
+    return n / 2;
+}
+
+fn save() ! {
+    fs::write_file("ignored.txt", "x")!;
+}
+
+fn main() {
+    half(3);
+    save();
+    fs::write_file("ignored.txt", "y");
+    var kept = half(4);
+    half(4).unwrap();
+    save().unwrap();
+}

@@ -100,9 +100,13 @@ fn main() {
 }
 ```
 
-## A result's value comes out checked
+## Results must be looked at
 
 A `T!` has to be taken apart before its value can be used: there is no
-way to read the value and forget the error by accident. A result is not a
-number either, so `parse_int() + 1` is a compile error that points at the
-missing `!` or `unwrap()`.
+way to read the value and forget the error by accident. Nor can a result
+be dropped unseen: a call like `fs::remove_file("old.txt");` on its own is
+a compile error. Pass the error on with `!`, `unwrap()` it, or keep the
+result in a variable to look at later.
+
+A result is not a number either, so `parse_int() + 1` is a compile error
+that points at the missing `!` or `unwrap()`.
