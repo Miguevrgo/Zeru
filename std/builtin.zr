@@ -176,12 +176,7 @@ struct OutStream {
                 to_copy = space_left;
             }
 
-            var copy_idx: usize = 0;
-            while copy_idx < to_copy {
-                var src_ptr: *u8 = bytes + src_index + copy_idx;
-                self.buffer[self.index + copy_idx] = *src_ptr;
-                copy_idx += 1;
-            }
+            __zeru_copy_bytes(&self.buffer[self.index], bytes + src_index, to_copy);
 
             self.index += to_copy;
             src_index += to_copy;
@@ -554,19 +549,14 @@ fn __zeru_shortest(
         minus.mul_pow2(exponent);
         r.mul_pow2(exponent + 1);
         s.mul_small(2);
-        if uneven_gaps {
-            plus.mul_small(2);
-            r.mul_small(2);
-            s.mul_small(2);
-        }
     } else {
         r.mul_small(2);
         s.mul_pow2(1 - exponent);
-        if uneven_gaps {
-            plus.mul_small(2);
-            r.mul_small(2);
-            s.mul_small(2);
-        }
+    }
+    if uneven_gaps {
+        plus.mul_small(2);
+        r.mul_small(2);
+        s.mul_small(2);
     }
 
     var point: i64 = 0;
@@ -670,8 +660,8 @@ fn __zeru_format_int(
 }
 
 // What `{:spec}` writes for a float: with `precision` decimals, or the
-// fewest digits that read back as `value` when it is below 0, padded as
-// `__zeru_pad` does.
+// fewest digits that read back as `value` when `precision` is below 0,
+// padded as `__zeru_pad` does.
 fn __zeru_format_float(
     value: f64,
     single: bool,

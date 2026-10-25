@@ -24,20 +24,18 @@ struct State {
 
 pub(super) fn elaborate(body: &mut Body, program: &Program) {
     remove_unreachable(body);
-    let tracked: Vec<Option<usize>> = {
-        let mut count = 0;
-        body.locals
-            .iter()
-            .enumerate()
-            .map(|(at, decl)| {
-                (at != RETURN.0 as usize && program.needs_drop(decl.ty)).then(|| {
-                    count += 1;
-                    count - 1
-                })
+    let mut count = 0;
+    let tracked: Vec<Option<usize>> = body
+        .locals
+        .iter()
+        .enumerate()
+        .map(|(at, decl)| {
+            (at != RETURN.0 as usize && program.needs_drop(decl.ty)).then(|| {
+                count += 1;
+                count - 1
             })
-            .collect()
-    };
-    let count = tracked.iter().flatten().count();
+        })
+        .collect();
     if count > 0 {
         let entry = entry_states(body, &tracked, count);
         let drops = classify(body, &tracked, &entry);

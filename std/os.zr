@@ -344,10 +344,8 @@ fn c_string(text: str) String {
 // The file `program` names: itself when it holds a "/", else the first
 // one of that name in the directories of $PATH that may be run.
 fn locate(program: str) String! {
-    for byte in program {
-        if byte == '/' {
-            return String.from(program);
-        }
+    if program.contains("/") {
+        return String.from(program);
     }
     var path = env("PATH");
     if path.is_none() {

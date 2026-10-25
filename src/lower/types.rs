@@ -11,7 +11,7 @@ use inkwell::{
     values::{BasicValueEnum, IntValue, PointerValue},
 };
 
-use crate::ty::{Ty, TyKind, Types};
+use crate::ty::{Ty, TyKind};
 
 use super::Lower;
 
@@ -41,11 +41,7 @@ impl<'ctx> Lower<'_, 'ctx> {
             | TyKind::Ptr(_)
             | TyKind::Ref(_)
             | TyKind::RefMut(_) => true,
-            TyKind::Adt(..) => self
-                .program
-                .enums
-                .get(&ty)
-                .is_some_and(|e| e.variants.iter().all(Vec::is_empty)),
+            TyKind::Adt(..) => self.program.is_plain_enum(ty),
             _ => false,
         }
     }
@@ -218,9 +214,5 @@ impl<'ctx> Lower<'_, 'ctx> {
 
     pub(super) fn is_signed(&self, ty: Ty) -> bool {
         self.types().as_int(ty).is_none_or(|int| int.signed())
-    }
-
-    pub(super) fn is_unit(&self, ty: Ty) -> bool {
-        ty == Types::VOID
     }
 }

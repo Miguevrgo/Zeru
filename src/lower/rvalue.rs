@@ -164,7 +164,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     }
 
     pub(super) fn load_val(&mut self, ptr: PointerValue<'ctx>, ty: Ty) -> Val<'ctx> {
-        if self.is_unit(ty) {
+        if ty == Types::VOID {
             return Val::Unit;
         }
         if !self.is_scalar(ty) {

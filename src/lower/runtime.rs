@@ -115,7 +115,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         function
     }
 
-    /// A block that panics with the message `label` names, at the span
+    /// A block that panics with the message `what` names, at the span
     /// being lowered.
     pub(super) fn panic_block(&mut self, what: &str) -> BasicBlock<'ctx> {
         let message = match self.sources.position(self.span) {
@@ -139,6 +139,24 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         self.builder.build_unreachable().unwrap();
         self.builder.position_at_end(here);
         panic_bb
+    }
+
+    /// A call to the LLVM intrinsic `name` at type `ty`.
+    fn intrinsic(
+        &self,
+        name: &str,
+        ty: BasicTypeEnum<'ctx>,
+        args: &[BasicMetadataValueEnum<'ctx>],
+    ) -> BasicValueEnum<'ctx> {
+        let declaration = Intrinsic::find(name)
+            .and_then(|i| i.get_declaration(self.module, &[ty]))
+            .expect("the intrinsics used exist");
+        self.builder
+            .build_call(declaration, args, name)
+            .unwrap()
+            .try_as_basic_value()
+            .basic()
+            .unwrap()
     }
 
     /// Panic when `condition` holds, then carry on in a fresh block.
@@ -200,16 +218,8 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         unsigned: bool,
     ) {
         let float_type = value.get_type();
-        let trunc = Intrinsic::find("llvm.trunc")
-            .and_then(|i| i.get_declaration(self.module, &[float_type.into()]))
-            .expect("llvm.trunc exists");
         let whole = self
-            .builder
-            .build_call(trunc, &[value.into()], "whole")
-            .unwrap()
-            .try_as_basic_value()
-            .basic()
-            .unwrap()
+            .intrinsic("llvm.trunc", float_type.into(), &[value.into()])
             .into_float_value();
         let high = 2f64.powi(int_type.get_bit_width() as i32 - i32::from(!unsigned));
         let low = if unsigned { 0.0 } else { -high };
@@ -251,16 +261,8 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             (BinOp::Mul, true) => "llvm.smul.with.overflow",
             _ => "llvm.umul.with.overflow",
         };
-        let declaration = Intrinsic::find(name)
-            .and_then(|i| i.get_declaration(self.module, &[l.get_type().into()]))
-            .expect("the overflow intrinsics exist");
         let pair = self
-            .builder
-            .build_call(declaration, &[l.into(), r.into()], "arith")
-            .unwrap()
-            .try_as_basic_value()
-            .basic()
-            .unwrap()
+            .intrinsic(name, l.get_type().into(), &[l.into(), r.into()])
             .into_struct_value();
         let overflowed = self
             .builder
@@ -311,16 +313,8 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             }
             _ => {}
         }
-        let declaration = Intrinsic::find(name)
-            .and_then(|i| i.get_declaration(self.module, &[int_type.into()]))
-            .expect("the bit intrinsics exist");
         let result = self
-            .builder
-            .build_call(declaration, &args, "bits")
-            .unwrap()
-            .try_as_basic_value()
-            .basic()
-            .unwrap()
+            .intrinsic(name, int_type.into(), &args)
             .into_int_value();
         match op {
             BitOp::CountOnes | BitOp::LeadingZeros | BitOp::TrailingZeros => self

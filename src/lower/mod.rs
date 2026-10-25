@@ -688,7 +688,8 @@ impl SafetyMode {
         }
     }
 
-    /// The LLVM pipeline at -O0, -O2 and -O3.
+    /// The LLVM pipeline at -O0, which also drops functions nothing calls,
+    /// -O2 and -O3.
     pub const fn passes(&self) -> &str {
         match self {
             Self::Debug => "default<O0>,globaldce",

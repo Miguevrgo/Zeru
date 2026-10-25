@@ -467,12 +467,7 @@ impl<'a> Builder<'a> {
                     this.switch(last, vec![(0, more)], after);
                     this.current = Some(more);
                 }
-                let rvalue = Rvalue::Binary {
-                    op: BinOp::AddWrap,
-                    left: at.clone(),
-                    right: constant(1, ty),
-                    checked: false,
-                };
+                let rvalue = unchecked(BinOp::AddWrap, at.clone(), constant(1, ty));
                 this.assign(Place::local(index), rvalue);
             },
         );
@@ -678,10 +673,7 @@ impl<'a> Builder<'a> {
         let at = self.temp(Types::USIZE);
         let value = match &index.kind {
             ExprKind::Int(value) => Rvalue::Use(constant(*value, Types::USIZE)),
-            _ if index.ty == Types::USIZE => {
-                let value = self.as_operand(index);
-                Rvalue::Use(value)
-            }
+            _ if index.ty == Types::USIZE => Rvalue::Use(self.as_operand(index)),
             _ => Rvalue::Cast {
                 value: self.as_operand(index),
                 to: Types::USIZE,
@@ -761,79 +753,49 @@ impl<'a> Builder<'a> {
 
     /// The bool `flag` as an `i32`, 1 or 0.
     fn number(&mut self, flag: Operand) -> Operand {
-        let value = self.temp(Types::I32);
         let cast = Rvalue::Cast {
             value: flag,
             to: Types::I32,
             checked: false,
         };
-        self.assign(Place::local(value), cast);
-        Operand::Copy(Place::local(value))
+        self.computed(Types::I32, cast)
     }
 
     /// `left op right` on two `i32`s, wrapping.
     fn arithmetic(&mut self, op: BinOp, left: Operand, right: Operand) -> Operand {
-        let value = self.temp(Types::I32);
-        let rvalue = Rvalue::Binary {
-            op,
-            left,
-            right,
-            checked: false,
-        };
-        self.assign(Place::local(value), rvalue);
-        Operand::Copy(Place::local(value))
+        self.computed(Types::I32, unchecked(op, left, right))
     }
 
     /// The bits a hash map hashes for the key at `key`: the key as a `u64`,
     /// or for a tuple or struct the bits of its parts mixed in turn.
     fn hash_bits(&mut self, key: Place, ty: Ty) -> Operand {
         let Some(parts) = self.parts_of(ty) else {
-            let bits = self.temp(Types::U64);
-            let value = Operand::Copy(key);
             let cast = Rvalue::Cast {
-                value,
+                value: Operand::Copy(key),
                 to: Types::U64,
                 checked: false,
             };
-            self.assign(Place::local(bits), cast);
-            return Operand::Move(Place::local(bits));
+            return self.computed(Types::U64, cast);
         };
         let mut bits = constant(0, Types::U64);
         for (at, part) in parts.into_iter().enumerate() {
             let part_bits = self.hash_bits(key.clone().project(Projection::Field(at as u32)), part);
-            let mixed = self.temp(Types::U64);
-            let spread = Rvalue::Binary {
-                op: BinOp::MulWrap,
-                left: bits,
-                right: constant(0x100000001b3, Types::U64),
-                checked: false,
-            };
-            self.assign(Place::local(mixed), spread);
-            let next = self.temp(Types::U64);
-            let joined = Rvalue::Binary {
-                op: BinOp::BitXor,
-                left: Operand::Move(Place::local(mixed)),
-                right: part_bits,
-                checked: false,
-            };
-            self.assign(Place::local(next), joined);
-            bits = Operand::Move(Place::local(next));
+            let prime = constant(0x100000001b3, Types::U64);
+            let mixed = self.computed(Types::U64, unchecked(BinOp::MulWrap, bits, prime));
+            bits = self.computed(Types::U64, unchecked(BinOp::BitXor, mixed, part_bits));
         }
         bits
     }
 
     fn binary(&mut self, op: BinOp, left: Operand, right: Operand) -> Operand {
-        let result = self.temp(Types::BOOL);
-        self.assign(
-            Place::local(result),
-            Rvalue::Binary {
-                op,
-                left,
-                right,
-                checked: false,
-            },
-        );
-        Operand::Move(Place::local(result))
+        self.computed(Types::BOOL, unchecked(op, left, right))
+    }
+
+    /// A new temporary of type `ty` holding `rvalue`.
+    fn computed(&mut self, ty: Ty, rvalue: Rvalue) -> Operand {
+        let value = self.temp(ty);
+        self.assign(Place::local(value), rvalue);
+        Operand::Copy(Place::local(value))
     }
 
     fn constant(&self, expr: &Expr) -> Option<Constant> {
@@ -862,7 +824,7 @@ impl<'a> Builder<'a> {
             ExprKind::Int(value) => Some(ConstValue::Int(*value)),
             ExprKind::Float(value) => Some(ConstValue::Float(*value)),
             ExprKind::Bool(value) => Some(ConstValue::Bool(*value)),
-            ExprKind::Variant(index, _) if self.is_plain_enum(expr.ty) => {
+            ExprKind::Variant(index, _) if self.program.is_plain_enum(expr.ty) => {
                 Some(ConstValue::Int(i128::from(*index)))
             }
             ExprKind::Array(values) | ExprKind::Tuple(values) => parts(values.iter().collect()),
@@ -873,13 +835,6 @@ impl<'a> Builder<'a> {
             }
             _ => None,
         }
-    }
-
-    fn is_plain_enum(&self, ty: Ty) -> bool {
-        self.program
-            .enums
-            .get(&ty)
-            .is_some_and(|e| e.variants.iter().all(Vec::is_empty))
     }
 
     /// The value of `expr`, a constant or a temporary.
@@ -947,12 +902,7 @@ impl<'a> Builder<'a> {
             ExprKind::Binary(op, left, right) if self.parts_of(left.ty).is_some() => {
                 let (l, r) = (self.as_temp(left), self.as_temp(right));
                 let order = self.tuple_order(Place::local(l), Place::local(r), left.ty);
-                Rvalue::Binary {
-                    op: *op,
-                    left: order,
-                    right: constant(0, Types::I32),
-                    checked: false,
-                }
+                unchecked(*op, order, constant(0, Types::I32))
             }
             ExprKind::Binary(op, left, right) => Rvalue::Binary {
                 op: *op,
@@ -1410,12 +1360,11 @@ impl<'a> Builder<'a> {
                     Builtin::VecIsEmpty => {
                         let len = self.temp(Types::USIZE);
                         self.assign(Place::local(len), Rvalue::Len(held));
-                        Rvalue::Binary {
-                            op: BinOp::Eq,
-                            left: Operand::Move(Place::local(len)),
-                            right: constant(0, Types::USIZE),
-                            checked: false,
-                        }
+                        unchecked(
+                            BinOp::Eq,
+                            Operand::Move(Place::local(len)),
+                            constant(0, Types::USIZE),
+                        )
                     }
                     Builtin::IsSome | Builtin::IsOk => Rvalue::Discriminant(held),
                     Builtin::IsNone | Builtin::IsErr => {
@@ -1512,12 +1461,11 @@ impl<'a> Builder<'a> {
         let count = self.temp(Types::USIZE);
         self.assign(
             Place::local(count),
-            Rvalue::Binary {
-                op: BinOp::Sub,
-                left: Operand::Copy(Place::local(to)),
-                right: Operand::Copy(Place::local(from)),
-                checked: false,
-            },
+            unchecked(
+                BinOp::Sub,
+                Operand::Copy(Place::local(to)),
+                Operand::Copy(Place::local(from)),
+            ),
         );
         Rvalue::Aggregate(
             Aggregate::Tuple,
@@ -1614,5 +1562,15 @@ fn reused(operand: Operand) -> Operand {
     match operand {
         Operand::Move(place) => Operand::Copy(place),
         other => other,
+    }
+}
+
+/// `left op right` with no overflow check.
+fn unchecked(op: BinOp, left: Operand, right: Operand) -> Rvalue {
+    Rvalue::Binary {
+        op,
+        left,
+        right,
+        checked: false,
     }
 }

@@ -1028,29 +1028,9 @@ pub fn hard_link(target: str, path: str) ! {
 // ```
 pub fn real_path(path: str) String! {
     var opened = File { fd: open_path(path, O_PATH, 0)!, buffer: Vec.new(), start: 0 };
-    var fd = opened.fd;
-    var link: Array<u8, 32> = [0; 32];
-    var prefix = "/proc/self/fd/";
-    __zeru_copy_bytes(&link[0], prefix as *u8, prefix.len());
-    var digits: Array<u8, 20> = [0; 20];
-    var count: usize = 0;
-    var rest = fd;
-    while true {
-        digits[count] = '0' + (rest % 10) as u8;
-        count += 1;
-        rest /= 10;
-        if rest == 0 {
-            break;
-        }
-    }
-    for i in 0..count {
-        link[prefix.len() + i] = digits[count - 1 - i];
-    }
-    var text: Array<u8, PATH_MAX> = [0; PATH_MAX];
-    var len = sys_result(
-        syscall3(SYS_READLINK, (&link[0]) as i64, (&text[0]) as i64, PATH_MAX as i64),
-    )!;
-    return String.from(text[..len as usize]);
+    var link = String.from("/proc/self/fd/");
+    link.push_str(__zeru_format_int(opened.fd as i64, false, 10, false, ' ', '>', false, 0));
+    return read_link(link);
 }
 
 // Returns the working directory, which relative paths start from.

@@ -48,6 +48,13 @@ pub struct EnumLayout {
 }
 
 impl Program {
+    /// Whether `ty` is an enum whose variants carry no data.
+    pub fn is_plain_enum(&self, ty: Ty) -> bool {
+        self.enums
+            .get(&ty)
+            .is_some_and(|e| e.variants.iter().all(Vec::is_empty))
+    }
+
     /// Whether a value of `ty` owns memory or runs a `drop`: what is freed
     /// as it goes and duplicated by a deep copy.
     pub fn needs_drop(&self, ty: Ty) -> bool {

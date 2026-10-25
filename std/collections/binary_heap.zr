@@ -39,7 +39,7 @@ pub struct BinaryHeap<T: Ord> {
             if self.data[idx] <= self.data[parent] {
                 break;
             }
-            __zeru_vec_swap(&var self.data, idx, parent);
+            self.data.swap(idx, parent);
             idx = parent;
         }
     }
@@ -60,7 +60,7 @@ pub struct BinaryHeap<T: Ord> {
     // ```
     pub fn pop(var self) T? {
         if self.data.len() > 1 {
-            __zeru_vec_swap(&var self.data, 0, self.data.len() - 1);
+            self.data.swap(0, self.data.len() - 1);
         }
         var largest = self.data.pop();
         __zeru_sift(&var self.data, 0, 0, self.data.len());
