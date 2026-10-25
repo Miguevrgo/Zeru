@@ -15,7 +15,7 @@ Compile and run it in one step:
 
 ```sh
 $ zeru run main.zr
-   Compiling v0.3.0 (main.zr)
+   Compiling v0.4.0 (main.zr)
     Finished unoptimized + debug info in 0.014s
      Running build/main
 Hello, World!
@@ -25,7 +25,7 @@ Hello, World!
 
 ```sh
 $ zeru build main.zr
-   Compiling v0.3.0 (main.zr)
+   Compiling v0.4.0 (main.zr)
     Finished unoptimized + debug info in 0.013s
 $ ./build/main
 Hello, World!
