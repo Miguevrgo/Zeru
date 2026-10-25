@@ -30,8 +30,12 @@ const START: &str = include_str!("start.s");
 /// Whether start.s, or the `__zeru_start` it calls, defines `symbol`, which
 /// a function of the program then cannot take.
 pub(super) fn runtime_symbol(symbol: &str) -> bool {
-    static LABELS: LazyLock<HashSet<&str>> =
-        LazyLock::new(|| START.lines().filter_map(|line| line.strip_suffix(':')).collect());
+    static LABELS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+        START
+            .lines()
+            .filter_map(|line| line.strip_suffix(':'))
+            .collect()
+    });
     symbol == "__zeru_start" || LABELS.contains(symbol)
 }
 
