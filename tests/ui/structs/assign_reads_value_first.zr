@@ -1,5 +1,11 @@
-struct P { a: u64, b: u64 }
-fn bump(p: &var P) usize { p.a = 77; return 1; }
+struct P {
+    a: u64,
+    b: u64,
+}
+fn bump(p: &var P) usize {
+    p.a = 77;
+    return 1;
+}
 fn main() {
     var src = P { a: 1, b: 2 };
     var w: Array<P, 3> = [P { a: 0, b: 0 }; 3];

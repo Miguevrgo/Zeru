@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: '==' does not apply to S, whose variants carry values; use a match
-   ╭─[ tests/ui/enums/payload_enum_equality_rejected.zr:4:8 ]
+   ╭─[ tests/ui/enums/payload_enum_equality_rejected.zr:7:8 ]
    │
- 4 │     if s == S::B { }
+ 7 │     if s == S::B {}
    │        ────┬────
    │            ╰────── '==' does not apply to S, whose variants carry values; use a match
 ───╯

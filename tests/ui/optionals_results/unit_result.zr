@@ -1,5 +1,7 @@
-fn check(n: i32) ()! {
-    if n < 0 { return Err(1); }
+fn check(n: i32) ! {
+    if n < 0 {
+        return Err(1);
+    }
     return Ok();
 }
 fn main() {

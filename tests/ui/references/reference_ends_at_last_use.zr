@@ -8,7 +8,9 @@ fn main() {
         println("{}", first.is_some());
         v.push(4);
     }
-    if v.get(0).is_some() { v.push(5); }
+    if v.get(0).is_some() {
+        v.push(5);
+    }
     v.push(*v.get(0).unwrap());
     println("{}", v.len());
 }

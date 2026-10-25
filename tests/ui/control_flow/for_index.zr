@@ -8,7 +8,9 @@ fn main() {
     }
     var n: usize = 0;
     for b in "hello" {
-        if b == 'l' { n += 1; }
+        if b == 'l' {
+            n += 1;
+        }
     }
     println("{}", n);
     for i, x in &var v {
@@ -17,7 +19,13 @@ fn main() {
     println("{} {} {}", v[0], v[1], v[2]);
     var words: Vec<Vec<str>> = Vec.new();
     words.push("a b".split(" "));
-    for i, w in words { println("{} {}", i, w.len()); }
+    for i, w in words {
+        println("{} {}", i, w.len());
+    }
     var arr: Array<i32, 3> = [7, 8, 9];
-    for i, a in arr { if i == 2 { println("{}", a); } }
+    for i, a in arr {
+        if i == 2 {
+            println("{}", a);
+        }
+    }
 }

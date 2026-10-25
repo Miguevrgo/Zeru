@@ -1,7 +1,13 @@
 fn main() {
     var line = "name: Zeru";
     var colon = line.find(":").unwrap();
-    println("{}|{} {} {}", line[..colon], line[colon + 2..], line.contains("Ze"), line.find("zz").is_none());
+    println(
+        "{}|{} {} {}",
+        line[..colon],
+        line[colon + 2..],
+        line.contains("Ze"),
+        line.find("zz").is_none(),
+    );
     var owned = String.from("abcabc");
     println("{} {}", owned.find("ca").unwrap(), owned.contains(""));
 }

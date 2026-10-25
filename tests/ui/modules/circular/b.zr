@@ -1,2 +1,7 @@
 import a;
-pub fn pong(n: i32) i32 { if n == 0 { return 0; } return a::ping(n - 1) + 10; }
+pub fn pong(n: i32) i32 {
+    if n == 0 {
+        return 0;
+    }
+    return a::ping(n - 1) + 10;
+}

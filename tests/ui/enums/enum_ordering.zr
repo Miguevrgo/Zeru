@@ -1,4 +1,8 @@
-enum Level { Low, Mid, High }
+enum Level {
+    Low,
+    Mid,
+    High,
+}
 fn main() {
     var a = Level::Low;
     var b = Level::High;

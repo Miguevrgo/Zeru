@@ -2,7 +2,9 @@ struct Vector3 {
     x: f32,
     y: f32,
     z: f32,
-    fn length_squared(self) f32 { return self.x * self.x + self.y * self.y + self.z * self.z; }
+    fn length_squared(self) f32 {
+        return self.x * self.x + self.y * self.y + self.z * self.z;
+    }
     fn scale(var self, factor: f32) {
         self.x = self.x * factor;
         self.y = self.y * factor;

@@ -1,4 +1,6 @@
-fn pair() (i32, bool) { return (7, true); }
+fn pair() (i32, bool) {
+    return (7, true);
+}
 fn main() {
     var t: (i64, bool) = (2, false);
     t.0 = 5;

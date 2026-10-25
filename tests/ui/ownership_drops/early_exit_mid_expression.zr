@@ -1,13 +1,44 @@
-struct D { id: i32, fn drop(var self) { println("drop {}", self.id); } }
-fn mk(id: i32) D { return D { id: id }; }
-fn fail() i32! { return Err(5); }
-fn none() i32? { return None; }
-fn take(d: D, x: i32) i32 { return d.id + x; }
-fn tuple() i32! { var t = (mk(1), fail()!); return t.1; }
-fn args() i32! { return take(mk(2), fail()!); }
-fn array() i32? { var a = [mk(3), mk(4), D { id: none()? }]; return 0; }
-fn vec() i32? { var v: Vec<D> = Vec[mk(5), D { id: none()? }]; return 0; }
-fn arm(x: i32) i32 { return take(D { id: 6 }, match x { 1 => 1, default => { return 0; } }); }
+struct D {
+    id: i32,
+    fn drop(var self) {
+        println("drop {}", self.id);
+    }
+}
+fn mk(id: i32) D {
+    return D { id: id };
+}
+fn fail() i32! {
+    return Err(5);
+}
+fn none() i32? {
+    return None;
+}
+fn take(d: D, x: i32) i32 {
+    return d.id + x;
+}
+fn tuple() i32! {
+    var t = (mk(1), fail()!);
+    return t.1;
+}
+fn args() i32! {
+    return take(mk(2), fail()!);
+}
+fn array() i32? {
+    var a = [mk(3), mk(4), D { id: none()? }];
+    return 0;
+}
+fn vec() i32? {
+    var v: Vec<D> = Vec[mk(5), D { id: none()? }];
+    return 0;
+}
+fn arm(x: i32) i32 {
+    return take(D { id: 6 }, match x {
+        1 => 1,
+        default => {
+            return 0;
+        }
+    });
+}
 fn main() {
     println("tuple {}", tuple().is_err());
     println("args {}", args().is_err());

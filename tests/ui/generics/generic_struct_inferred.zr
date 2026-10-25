@@ -1,7 +1,9 @@
 struct Pair<T: Eq> {
     first: T,
     second: T,
-    fn same(self) bool { return self.first == self.second; }
+    fn same(self) bool {
+        return self.first == self.second;
+    }
 }
 fn main() {
     var a = Pair { first: 1, second: 1 };

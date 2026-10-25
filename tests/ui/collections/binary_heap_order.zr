@@ -6,6 +6,8 @@ fn main() {
     h.push(9);
     h.push(3);
     println("{}", *h.peek().unwrap());
-    while !h.is_empty() { print("{} ", h.pop().unwrap()); }
+    while !h.is_empty() {
+        print("{} ", h.pop().unwrap());
+    }
     println("");
 }

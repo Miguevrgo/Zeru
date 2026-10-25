@@ -1,1 +1,3 @@
-pub fn name() i32 { return 2; }
+pub fn name() i32 {
+    return 2;
+}

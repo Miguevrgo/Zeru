@@ -1,16 +1,23 @@
 struct Probe {
     id: i64,
     log: *i64,
-    fn drop(var self) { *self.log = *self.log * 10 + self.id; }
+    fn drop(var self) {
+        *self.log = *self.log * 10 + self.id;
+    }
 }
-fn probe(id: i64, log: *i64) Probe { return Probe { id: id, log: log }; }
-fn consume(p: Probe) { }
+fn probe(id: i64, log: *i64) Probe {
+    return Probe { id: id, log: log };
+}
+fn consume(p: Probe) {}
 fn main() {
     var log: i64 = 0;
     var at: *i64 = &log;
     {
         var p = probe(1, at);
-        while true { consume(p); break; }
+        while true {
+            consume(p);
+            break;
+        }
     }
     println("dropped: {}", log);
 }

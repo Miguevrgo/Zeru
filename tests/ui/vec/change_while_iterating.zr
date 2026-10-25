@@ -1,4 +1,6 @@
 fn main() {
     var v: Vec<i64> = Vec[1];
-    for x in &var v { v.push(2); }
+    for x in &var v {
+        v.push(2);
+    }
 }

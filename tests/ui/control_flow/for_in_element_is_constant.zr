@@ -1,4 +1,6 @@
 fn main() {
     var a: Array<i32, 2> = [1, 2];
-    for item in a { item = 9; }
+    for item in a {
+        item = 9;
+    }
 }

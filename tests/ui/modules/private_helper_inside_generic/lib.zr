@@ -1,2 +1,6 @@
-fn helper(x: i64) i64 { return x + 1; }
-pub fn wrapped<T>(x: T) i64 { return helper(7); }
+fn helper(x: i64) i64 {
+    return x + 1;
+}
+pub fn wrapped<T>(x: T) i64 {
+    return helper(7);
+}

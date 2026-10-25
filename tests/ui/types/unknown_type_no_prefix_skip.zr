@@ -1,4 +1,6 @@
-struct HashMapEntry { key: i32 }
+struct HashMapEntry {
+    key: i32,
+}
 fn main() {
     var x: Entry = 10;
 }

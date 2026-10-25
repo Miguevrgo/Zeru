@@ -1,4 +1,6 @@
-fn swap<T>(p: (T, T)) (T, T) { return (p.1, p.0); }
+fn swap<T>(p: (T, T)) (T, T) {
+    return (p.1, p.0);
+}
 fn main() {
     var a = swap((1, 2));
     var b = swap((true, false));

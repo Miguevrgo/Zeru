@@ -1,4 +1,6 @@
-fn f() i64! { return 5; }
+fn f() i64! {
+    return 5;
+}
 fn main() {
     var x: u8! = 7;
     println("{} {}", f().unwrap(), x.unwrap());

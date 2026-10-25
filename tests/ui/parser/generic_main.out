@@ -3,7 +3,7 @@ status: compile error
 Error: Function 'main' must not take type parameters
    ╭─[ tests/ui/parser/generic_main.zr:1:1 ]
    │
- 1 │ fn main<T>() { }
+ 1 │ fn main<T>() {}
    │ ──────┬─────
    │       ╰─────── Function 'main' must not take type parameters
 ───╯

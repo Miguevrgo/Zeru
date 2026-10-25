@@ -1,5 +1,7 @@
 fn main() {
     println("before");
-    if true { return; }
+    if true {
+        return;
+    }
     println("after");
 }

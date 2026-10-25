@@ -1,14 +1,20 @@
 status: compile error
 -- stderr
 Error: Cannot change 'o' while 'r' still refers into it
-   ╭─[ tests/ui/references/var_reference_resets_variant.zr:2:73 ]
-   │
- 2 │ fn main() { var k: i64 = 3; var o: (&i64)? = &k; match o { Some(r) => { reset(&var o); println("{}", *r); } None => {} } }
-   │                                                            ───┬───      ──────┬──────                 ┬
-   │                                                               ╰────────────────────────────────────────── borrowed here
-   │                                                                               │                       │
-   │                                                                               ╰────────────────────────── Cannot change 'o' while 'r' still refers into it
-   │                                                                                                       │
-   │                                                                                                       ╰── used later here
-───╯
+    ╭─[ tests/ui/references/var_reference_resets_variant.zr:9:13 ]
+    │
+  9 │             reset(&var o);
+    │             ──────┬──────
+    │                   ╰──────── Cannot change 'o' while 'r' still refers into it
+    │
+    ├─[ tests/ui/references/var_reference_resets_variant.zr:9:13 ]
+    │
+  8 │         Some(r) => {
+    │         ───┬───
+    │            ╰───── borrowed here
+    │
+ 10 │             println("{}", *r);
+    │                            ┬
+    │                            ╰── used later here
+────╯
 [-] Error: aborting due to previous error

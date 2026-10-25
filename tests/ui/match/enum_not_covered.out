@@ -1,10 +1,12 @@
 status: compile error
 -- stderr
 Error: Match does not cover Color::Green, Color::Blue; add an arm for each or a 'default' arm
-   ╭─[ tests/ui/match/enum_not_covered.zr:4:13 ]
-   │
- 4 │     var r = match c { Color::Red => 1 };
-   │             ─────────────┬─────────────
-   │                          ╰─────────────── Match does not cover Color::Green, Color::Blue; add an arm for each or a 'default' arm
-───╯
+    ╭─[ tests/ui/match/enum_not_covered.zr:8:13 ]
+    │
+  8 │ ╭─▶     var r = match c {
+    ┆ ┆
+ 10 │ ├─▶     };
+    │ │
+    │ ╰──────────── Match does not cover Color::Green, Color::Blue; add an arm for each or a 'default' arm
+────╯
 [-] Error: aborting due to previous error

@@ -6,6 +6,8 @@ fn make() Vec<i64> {
 }
 fn main() {
     var s: i64 = 0;
-    for x in make() { s += x; }
+    for x in make() {
+        s += x;
+    }
     println("{}", s);
 }

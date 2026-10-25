@@ -1,8 +1,21 @@
-enum E { A(i32), B(i64), C(i32) }
+enum E {
+    A(i32),
+    B(i64),
+    C(i32),
+}
 
 fn main() {
     var e = E::A(1);
-    var a = match e { E::A(x) | E::C(y) => 1, default => 2 };
-    var b = match e { E::A(x) | E::B(x) => 1, default => 2 };
-    var c = match 3 { 1 | 1 => 1, default => 2 };
+    var a = match e {
+        E::A(x) | E::C(y) => 1,
+        default => 2,
+    };
+    var b = match e {
+        E::A(x) | E::B(x) => 1,
+        default => 2,
+    };
+    var c = match 3 {
+        1 | 1 => 1,
+        default => 2,
+    };
 }

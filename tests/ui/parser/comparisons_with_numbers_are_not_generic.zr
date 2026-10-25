@@ -1,4 +1,6 @@
-fn show(a: bool, b: bool) { println("{} {}", a, b); }
+fn show(a: bool, b: bool) {
+    println("{} {}", a, b);
+}
 fn main() {
     var i = 1;
     var j = 5;

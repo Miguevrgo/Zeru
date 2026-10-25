@@ -1,4 +1,6 @@
-struct Point { x: f32 }
+struct Point {
+    x: f32,
+}
 fn main() {
     var p = Point { x: 1.0 };
     p.unknown_method();

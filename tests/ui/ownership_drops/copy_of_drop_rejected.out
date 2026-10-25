@@ -1,37 +1,37 @@
 status: compile error
 -- stderr
 Error: Cannot copy Handle: it runs a drop, or holds a value that does, which both copies would run
-   ╭─[ tests/ui/ownership_drops/copy_of_drop_rejected.zr:8:13 ]
-   │
- 8 │     var a = h.copy();
-   │             ────┬───
-   │                 ╰───── Cannot copy Handle: it runs a drop, or holds a value that does, which both copies would run
-───╯
-Error: Cannot copy Vec<Handle>: it runs a drop, or holds a value that does, which both copies would run
-    ╭─[ tests/ui/ownership_drops/copy_of_drop_rejected.zr:10:13 ]
+    ╭─[ tests/ui/ownership_drops/copy_of_drop_rejected.zr:12:13 ]
     │
- 10 │     var b = v.copy();
+ 12 │     var a = h.copy();
+    │             ────┬───
+    │                 ╰───── Cannot copy Handle: it runs a drop, or holds a value that does, which both copies would run
+────╯
+Error: Cannot copy Vec<Handle>: it runs a drop, or holds a value that does, which both copies would run
+    ╭─[ tests/ui/ownership_drops/copy_of_drop_rejected.zr:14:13 ]
+    │
+ 14 │     var b = v.copy();
     │             ────┬───
     │                 ╰───── Cannot copy Vec<Handle>: it runs a drop, or holds a value that does, which both copies would run
 ────╯
 Error: Cannot copy Holder: it runs a drop, or holds a value that does, which both copies would run
-    ╭─[ tests/ui/ownership_drops/copy_of_drop_rejected.zr:12:13 ]
+    ╭─[ tests/ui/ownership_drops/copy_of_drop_rejected.zr:16:13 ]
     │
- 12 │     var c = s.copy();
+ 16 │     var c = s.copy();
     │             ────┬───
     │                 ╰───── Cannot copy Holder: it runs a drop, or holds a value that does, which both copies would run
 ────╯
 Error: Cannot copy (Handle, i32): it runs a drop, or holds a value that does, which both copies would run
-    ╭─[ tests/ui/ownership_drops/copy_of_drop_rejected.zr:14:13 ]
+    ╭─[ tests/ui/ownership_drops/copy_of_drop_rejected.zr:18:13 ]
     │
- 14 │     var d = t.copy();
+ 18 │     var d = t.copy();
     │             ────┬───
     │                 ╰───── Cannot copy (Handle, i32): it runs a drop, or holds a value that does, which both copies would run
 ────╯
 Error: Cannot copy Handle: it runs a drop, or holds a value that does, which both copies would run
-    ╭─[ tests/ui/ownership_drops/copy_of_drop_rejected.zr:16:13 ]
+    ╭─[ tests/ui/ownership_drops/copy_of_drop_rejected.zr:20:13 ]
     │
- 16 │     var e = o.copy();
+ 20 │     var e = o.copy();
     │             ────┬───
     │                 ╰───── Cannot copy Handle: it runs a drop, or holds a value that does, which both copies would run
 ────╯

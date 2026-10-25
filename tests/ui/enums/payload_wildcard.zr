@@ -1,6 +1,12 @@
-enum Shape { Rect(f64, f64), Empty }
+enum Shape {
+    Rect(f64, f64),
+    Empty,
+}
 fn main() {
     var s = Shape::Rect(4.0, 9.0);
-    var w = match s { Shape::Rect(w, _) => w, Shape::Empty => 0.0 };
+    var w = match s {
+        Shape::Rect(w, _) => w,
+        Shape::Empty => 0.0,
+    };
     println("{}", w);
 }

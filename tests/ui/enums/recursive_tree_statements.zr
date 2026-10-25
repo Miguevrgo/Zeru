@@ -1,9 +1,18 @@
-enum Tree { Leaf(i64), Node(Vec<Tree>) }
+enum Tree {
+    Leaf(i64),
+    Node(Vec<Tree>),
+}
 fn sum(t: Tree) i64 {
     var s: i64 = 0;
     match t {
-        Tree::Leaf(v) => { s = v; }
-        Tree::Node(kids) => { for k in kids { s += sum(k.copy()); } }
+        Tree::Leaf(v) => {
+            s = v;
+        }
+        Tree::Node(kids) => {
+            for k in kids {
+                s += sum(k.copy());
+            }
+        }
     }
     return s;
 }

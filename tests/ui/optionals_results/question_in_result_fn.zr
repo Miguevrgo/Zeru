@@ -1,6 +1,8 @@
-fn f() i32? { return 1; }
+fn f() i32? {
+    return 1;
+}
 fn g() i32! {
     var x = f()?;
     return x;
 }
-fn main() { }
+fn main() {}

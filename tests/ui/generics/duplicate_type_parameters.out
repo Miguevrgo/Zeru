@@ -3,15 +3,17 @@ status: compile error
 Error: Function 'f' declares type parameter 'T' twice
    ╭─[ tests/ui/generics/duplicate_type_parameters.zr:1:1 ]
    │
- 1 │ fn f<T, T>(a: T) T { return a; }
+ 1 │ fn f<T, T>(a: T) T {
    │ ─────────┬────────
    │          ╰────────── Function 'f' declares type parameter 'T' twice
 ───╯
 Error: Struct 'B' declares type parameter 'T' twice
-   ╭─[ tests/ui/generics/duplicate_type_parameters.zr:2:1 ]
+   ╭─[ tests/ui/generics/duplicate_type_parameters.zr:4:1 ]
    │
- 2 │ struct B<T, T> { v: T }
-   │ ───────────┬───────────
-   │            ╰───────────── Struct 'B' declares type parameter 'T' twice
+ 4 │ ╭─▶ struct B<T, T> {
+   ┆ ┆
+ 6 │ ├─▶ }
+   │ │
+   │ ╰─────── Struct 'B' declares type parameter 'T' twice
 ───╯
 [-] Error: aborting due to previous error

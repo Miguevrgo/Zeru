@@ -1,27 +1,27 @@
 status: compile error
 -- stderr
 Error: Cannot change 'vs' while a reference into it is still in use
-   ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:9:16 ]
-   │
- 9 │     vs[0].push(grow(&var vs));
-   │     ────────────┬────┬───────
-   │                 ╰────────────── borrowed here
-   │                      │
-   │                      ╰───────── Cannot change 'vs' while a reference into it is still in use
-───╯
-Error: Cannot change 'vs' while a reference into it is still in use
-    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:10:25 ]
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:17:16 ]
     │
- 10 │     println("{}", vs[0][grow(&var vs)]);
+ 17 │     vs[0].push(grow(&var vs));
+    │     ────────────┬────┬───────
+    │                 ╰────────────── borrowed here
+    │                      │
+    │                      ╰───────── Cannot change 'vs' while a reference into it is still in use
+────╯
+Error: Cannot change 'vs' while a reference into it is still in use
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:18:25 ]
+    │
+ 18 │     println("{}", vs[0][grow(&var vs)]);
     │                   ──────────┬─┬───────
     │                             ╰─────────── borrowed here
     │                               │
     │                               ╰───────── Cannot change 'vs' while a reference into it is still in use
 ────╯
 Error: Cannot change 'cs' while a reference into it is still in use
-    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:12:15 ]
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:20:15 ]
     │
- 12 │     cs[0].add(grow_cs(&var cs));
+ 20 │     cs[0].add(grow_cs(&var cs));
     │     ──┬──────────┬────┬────────
     │       ╰────────────────────────── borrowed here
     │                  │    │
@@ -30,19 +30,19 @@ Error: Cannot change 'cs' while a reference into it is still in use
     │                       ╰────────── Cannot change 'cs' while a reference into it is still in use
 ────╯
 Error: Cannot change 'v' while 'e' still refers into it
-    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:15:5 ]
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:23:5 ]
     │
- 15 │     v.push(1);
+ 23 │     v.push(1);
     │     ────┬────
     │         ╰────── Cannot change 'v' while 'e' still refers into it
     │
-    ├─[ tests/ui/vec/two_phase_receiver_errors.zr:15:5 ]
+    ├─[ tests/ui/vec/two_phase_receiver_errors.zr:23:5 ]
     │
- 14 │     var e = &v[0];
+ 22 │     var e = &v[0];
     │             ──┬──
     │               ╰──── borrowed here
     │
- 16 │     println("{}", *e);
+ 24 │     println("{}", *e);
     │                    ┬
     │                    ╰── used later here
 ────╯

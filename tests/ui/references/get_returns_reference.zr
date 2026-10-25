@@ -1,7 +1,9 @@
 import std.collections.hashmap::{HashMap};
 struct P {
     x: i64,
-    fn twice(self) i64 { return self.x * 2; }
+    fn twice(self) i64 {
+        return self.x * 2;
+    }
 }
 fn main() {
     var rows: Vec<Vec<i64>> = Vec[Vec[1, 2], Vec[3]];

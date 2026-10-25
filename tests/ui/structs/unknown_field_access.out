@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: Struct 'Point' has no field 'z'
-   ╭─[ tests/ui/structs/unknown_field_access.zr:4:15 ]
+   ╭─[ tests/ui/structs/unknown_field_access.zr:6:15 ]
    │
- 4 │     var val = p.z;
+ 6 │     var val = p.z;
    │               ─┬─
    │                ╰─── Struct 'Point' has no field 'z'
 ───╯

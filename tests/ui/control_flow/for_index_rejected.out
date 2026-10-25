@@ -3,14 +3,14 @@ status: compile error
 Error: A range counts already; write 'for i in a..b'
    ╭─[ tests/ui/control_flow/for_index_rejected.zr:2:17 ]
    │
- 2 │     for i, x in 0..3 { }
+ 2 │     for i, x in 0..3 {}
    │                 ──┬─
    │                   ╰─── A range counts already; write 'for i in a..b'
 ───╯
 Error: &var str is not iterable
    ╭─[ tests/ui/control_flow/for_index_rejected.zr:4:14 ]
    │
- 4 │     for c in &var s { }
+ 4 │     for c in &var s {}
    │              ───┬──
    │                 ╰──── &var str is not iterable
 ───╯

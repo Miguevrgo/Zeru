@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: 'hashmap::HashMap' asks for K: Hash, which P does not satisfy
-   ╭─[ tests/ui/diagnostics/generic_error_inside_std.zr:4:5 ]
+   ╭─[ tests/ui/diagnostics/generic_error_inside_std.zr:6:5 ]
    │
- 4 │     var m: HashMap<P, i32> = HashMap.new();
+ 6 │     var m: HashMap<P, i32> = HashMap.new();
    │     ───────────────────┬───────────────────
    │                        ╰───────────────────── 'hashmap::HashMap' asks for K: Hash, which P does not satisfy
 ───╯

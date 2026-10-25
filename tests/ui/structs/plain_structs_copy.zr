@@ -1,4 +1,7 @@
-struct Point { x: i32, y: i32 }
+struct Point {
+    x: i32,
+    y: i32,
+}
 fn moved(p: Point) Point {
     var q = p;
     q.x = 100;

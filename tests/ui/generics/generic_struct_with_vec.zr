@@ -1,8 +1,14 @@
 struct Stack<T> {
     items: Vec<T>,
-    fn push(var self, x: T) { self.items.push(x); }
-    fn pop(var self) T? { return self.items.pop(); }
-    fn size(self) usize { return self.items.len(); }
+    fn push(var self, x: T) {
+        self.items.push(x);
+    }
+    fn pop(var self) T? {
+        return self.items.pop();
+    }
+    fn size(self) usize {
+        return self.items.len();
+    }
 }
 fn main() {
     var s: Stack<i64> = Stack { items: Vec.new() };

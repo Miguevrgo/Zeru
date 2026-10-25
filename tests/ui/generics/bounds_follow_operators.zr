@@ -1,8 +1,21 @@
-enum Color { Red, Green }
-fn same<T: Eq>(a: T, b: T) bool { return a == b; }
-fn less<T: Ord>(a: T, b: T) bool { return a < b; }
+enum Color {
+    Red,
+    Green,
+}
+fn same<T: Eq>(a: T, b: T) bool {
+    return a == b;
+}
+fn less<T: Ord>(a: T, b: T) bool {
+    return a < b;
+}
 fn main() {
     var x = 1;
     var p: *i32 = &x;
-    println("{} {} {} {}", same("a", "a"), same("a", "b"), less(Color::Red, Color::Green), less(p, p));
+    println(
+        "{} {} {} {}",
+        same("a", "a"),
+        same("a", "b"),
+        less(Color::Red, Color::Green),
+        less(p, p),
+    );
 }

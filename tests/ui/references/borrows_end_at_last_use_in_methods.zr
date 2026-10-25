@@ -1,16 +1,24 @@
 struct Bag {
     items: Vec<i64>,
-    fn first(self) &i64 { return &self.items[0]; }
+    fn first(self) &i64 {
+        return &self.items[0];
+    }
     fn biggest(self) (&i64)? {
         var best = self.items.get(0);
         for i in 0..self.items.len() {
-            if self.items[i] > *best.unwrap() { best = self.items.get(i); }
+            if self.items[i] > *best.unwrap() {
+                best = self.items.get(i);
+            }
         }
         return best;
     }
-    fn add(var self, x: i64) { self.items.push(x); }
+    fn add(var self, x: i64) {
+        self.items.push(x);
+    }
 }
-fn pick(a: &Vec<i64>, b: &Vec<i64>) &i64 { return &a[0]; }
+fn pick(a: &Vec<i64>, b: &Vec<i64>) &i64 {
+    return &a[0];
+}
 fn main() {
     var v: Vec<i64> = Vec[5, 9, 2];
     var r = &var v;
@@ -26,7 +34,9 @@ fn main() {
     println("{}", *p);
     w.push(1);
     var total: i64 = 0;
-    for x in &v { total += x; }
+    for x in &v {
+        total += x;
+    }
     var cur = v.get(0);
     while cur.is_some() {
         total += *cur.unwrap();
@@ -35,6 +45,8 @@ fn main() {
     v.push(total);
     println("{} {}", total, v.len());
     var opt: (&i64)? = None;
-    if v.len() > 2 { opt = v.get(2); }
+    if v.len() > 2 {
+        opt = v.get(2);
+    }
     println("{}", opt.copy().unwrap());
 }

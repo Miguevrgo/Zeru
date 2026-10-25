@@ -1,6 +1,8 @@
 struct D {
     id: i32,
-    fn drop(var self) { println("drop {}", self.id); }
+    fn drop(var self) {
+        println("drop {}", self.id);
+    }
 }
 
 fn check(tag: str, ok: bool) bool {
@@ -16,7 +18,9 @@ fn first(v: i32) i32 {
     for i in 0..10 {
         var r = match i {
             x if x == v => 100,
-            x if if x > 6 { break; } else { x % 2 == 0 } => x,
+            x if if x > 6 {
+                break;
+            } else { x % 2 == 0 } => x,
             default => -1,
         };
         println("r {}", r);

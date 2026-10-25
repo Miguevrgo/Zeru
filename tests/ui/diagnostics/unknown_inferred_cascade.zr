@@ -1,4 +1,6 @@
-fn ident<T>(x: T) T { return x; }
+fn ident<T>(x: T) T {
+    return x;
+}
 fn main() {
     var a = ident(Vec.new());
 }

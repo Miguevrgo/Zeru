@@ -1,9 +1,13 @@
-enum Status { Connected, Disconnected, Connecting }
+enum Status {
+    Connected,
+    Disconnected,
+    Connecting,
+}
 fn name(s: Status) str {
     return match s {
         Status::Connected => "online",
         Status::Disconnected => "offline",
-        Status::Connecting => "wait"
+        Status::Connecting => "wait",
     };
 }
 fn main() {

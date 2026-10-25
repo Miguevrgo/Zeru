@@ -1,4 +1,6 @@
-fn zero<T>() T { return 0; }
+fn zero<T>() T {
+    return 0;
+}
 fn main() {
     var v: Vec<i32> = Vec.new();
     var a = zero<i32, i64>();

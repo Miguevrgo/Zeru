@@ -1,5 +1,9 @@
-fn first<T, U>(a: T, b: U) T { return a; }
-fn second<T, U>(a: T, b: U) U { return b; }
+fn first<T, U>(a: T, b: U) T {
+    return a;
+}
+fn second<T, U>(a: T, b: U) U {
+    return b;
+}
 fn main() {
     println("{} {}", first(10, 3.14), second(true, 2.5));
 }

@@ -1,5 +1,9 @@
-struct Num<T: Num> { v: T }
-fn mk<T>(x: T) Num<T> { return Num { v: x }; }
+struct Num<T: Num> {
+    v: T,
+}
+fn mk<T>(x: T) Num<T> {
+    return Num { v: x };
+}
 fn main() {
     var n = mk("str");
     var m = mk(3);

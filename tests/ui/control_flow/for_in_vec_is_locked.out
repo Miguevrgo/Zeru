@@ -1,12 +1,16 @@
 status: compile error
 -- stderr
 Error: Cannot change 'v' while the loop still refers into it
-   ╭─[ tests/ui/control_flow/for_in_vec_is_locked.zr:3:18 ]
+   ╭─[ tests/ui/control_flow/for_in_vec_is_locked.zr:4:9 ]
    │
- 3 │     for x in v { v.push(x); }
-   │              ┬   ────┬────
-   │              ╰────────────── borrowed here
-   │                      │
-   │                      ╰────── Cannot change 'v' while the loop still refers into it
+ 4 │         v.push(x);
+   │         ────┬────
+   │             ╰────── Cannot change 'v' while the loop still refers into it
+   │
+   ├─[ tests/ui/control_flow/for_in_vec_is_locked.zr:4:9 ]
+   │
+ 3 │     for x in v {
+   │              ┬
+   │              ╰── borrowed here
 ───╯
 [-] Error: aborting due to previous error

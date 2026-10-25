@@ -1,17 +1,17 @@
 status: compile error
 -- stderr
 Error: Invalid return type. Function expects i32, returning void
-   ╭─[ tests/ui/control_flow/return_wrong_type.zr:1:14 ]
+   ╭─[ tests/ui/control_flow/return_wrong_type.zr:2:5 ]
    │
- 1 │ fn f() i32 { return; }
-   │              ───┬───
-   │                 ╰───── Invalid return type. Function expects i32, returning void
+ 2 │     return;
+   │     ───┬───
+   │        ╰───── Invalid return type. Function expects i32, returning void
 ───╯
 Error: Invalid return type. Function expects i32, returning bool
-   ╭─[ tests/ui/control_flow/return_wrong_type.zr:2:14 ]
+   ╭─[ tests/ui/control_flow/return_wrong_type.zr:5:5 ]
    │
- 2 │ fn g() i32 { return true; }
-   │              ──────┬─────
-   │                    ╰─────── Invalid return type. Function expects i32, returning bool
+ 5 │     return true;
+   │     ──────┬─────
+   │           ╰─────── Invalid return type. Function expects i32, returning bool
 ───╯
 [-] Error: aborting due to previous error

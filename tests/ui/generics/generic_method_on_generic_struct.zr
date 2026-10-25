@@ -1,8 +1,15 @@
 struct Box<T> {
     v: T,
-    fn get(self) T { return self.v; }
-    fn pair<U>(self, u: U) (T, U) { return (self.v, u); }
-    fn set<U>(var self, u: U, t: T) U { self.v = t; return u; }
+    fn get(self) T {
+        return self.v;
+    }
+    fn pair<U>(self, u: U) (T, U) {
+        return (self.v, u);
+    }
+    fn set<U>(var self, u: U, t: T) U {
+        self.v = t;
+        return u;
+    }
 }
 fn main() {
     var b: Box<i64> = Box { v: 7 };

@@ -1,7 +1,11 @@
 struct Counter {
     n: i32,
-    fn new() Counter { return Counter { n: 0 }; }
-    fn bump(var self) { self.n += 1; }
+    fn new() Counter {
+        return Counter { n: 0 };
+    }
+    fn bump(var self) {
+        self.n += 1;
+    }
 }
 fn main() {
     var c = Counter.new();

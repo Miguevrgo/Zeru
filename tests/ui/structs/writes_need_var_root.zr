@@ -1,5 +1,12 @@
-struct P { x: i32, fn bump(var self) { self.x += 1; } }
-fn set(p: *i32) { *p = 2; }
+struct P {
+    x: i32,
+    fn bump(var self) {
+        self.x += 1;
+    }
+}
+fn set(p: *i32) {
+    *p = 2;
+}
 fn main() {
     const p = P { x: 1 };
     p.x = 2;

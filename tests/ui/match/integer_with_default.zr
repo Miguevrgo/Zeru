@@ -1,5 +1,9 @@
 fn main() {
     var x: i32 = 7;
-    var r = match x { 0 => "zero", 7 => "seven", default => "other" };
+    var r = match x {
+        0 => "zero",
+        7 => "seven",
+        default => "other",
+    };
     println("{}", r);
 }

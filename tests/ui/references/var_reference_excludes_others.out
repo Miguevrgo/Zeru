@@ -38,12 +38,16 @@ Error: Cannot change 'v' while 'g' still refers into it
     │                        ╰─────── used later here
 ────╯
 Error: Cannot change 'v' while the loop still refers into it
-    ╭─[ tests/ui/references/var_reference_excludes_others.zr:11:18 ]
+    ╭─[ tests/ui/references/var_reference_excludes_others.zr:12:9 ]
     │
- 11 │     for x in v { r.push(x); }
-    │              ┬   ────┬────
-    │              ╰────────────── borrowed here
-    │                      │
-    │                      ╰────── Cannot change 'v' while the loop still refers into it
+ 12 │         r.push(x);
+    │         ────┬────
+    │             ╰────── Cannot change 'v' while the loop still refers into it
+    │
+    ├─[ tests/ui/references/var_reference_excludes_others.zr:12:9 ]
+    │
+ 11 │     for x in v {
+    │              ┬
+    │              ╰── borrowed here
 ────╯
 [-] Error: aborting due to previous error

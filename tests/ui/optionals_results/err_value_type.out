@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
 Error: Err() takes i32, got bool
-   ╭─[ tests/ui/optionals_results/err_value_type.zr:1:22 ]
+   ╭─[ tests/ui/optionals_results/err_value_type.zr:2:12 ]
    │
- 1 │ fn f() i32! { return Err(true); }
-   │                      ────┬────
-   │                          ╰────── Err() takes i32, got bool
+ 2 │     return Err(true);
+   │            ────┬────
+   │                ╰────── Err() takes i32, got bool
 ───╯
 [-] Error: aborting due to previous error

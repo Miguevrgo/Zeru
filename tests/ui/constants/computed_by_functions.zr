@@ -11,7 +11,10 @@ struct Point {
     }
 }
 
-enum Dir { Up, Down }
+enum Dir {
+    Up,
+    Down,
+}
 
 fn squares() Array<i64, 10> {
     var a: Array<i64, 10> = [0; 10];

@@ -1,4 +1,14 @@
-enum Shape { Rect(i32, i32), Dot }
-fn make() Shape { return Shape::Rect(2, 3); }
-const AREA: i32 = match make() { Shape::Rect(w, h) => w * h, Shape::Dot => 0 };
-fn main() { println("{}", AREA); }
+enum Shape {
+    Rect(i32, i32),
+    Dot,
+}
+fn make() Shape {
+    return Shape::Rect(2, 3);
+}
+const AREA: i32 = match make() {
+    Shape::Rect(w, h) => w * h,
+    Shape::Dot => 0,
+};
+fn main() {
+    println("{}", AREA);
+}

@@ -1,5 +1,7 @@
 const A: u8 = 200;
-fn take(x: u8) u8 { return x; }
+fn take(x: u8) u8 {
+    return x;
+}
 fn main() {
     var y = take(A + A);
 }

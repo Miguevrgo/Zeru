@@ -5,6 +5,8 @@ fn main() {
     println("{} {}", b == "help", "" == "");
     var words: Vec<str> = Vec["x", "y"];
     for w in words {
-        if w == "y" { println("found y"); }
+        if w == "y" {
+            println("found y");
+        }
     }
 }

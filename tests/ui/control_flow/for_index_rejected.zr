@@ -1,5 +1,5 @@
 fn main() {
-    for i, x in 0..3 { }
+    for i, x in 0..3 {}
     var s = "x";
-    for c in &var s { }
+    for c in &var s {}
 }

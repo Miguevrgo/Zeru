@@ -1,12 +1,16 @@
 status: compile error
 -- stderr
 Error: Cannot change 'v' while the loop still refers into it
-   ╭─[ tests/ui/vec/change_while_iterating.zr:3:23 ]
+   ╭─[ tests/ui/vec/change_while_iterating.zr:4:9 ]
    │
- 3 │     for x in &var v { v.push(2); }
-   │              ───┬──   ────┬────
-   │                 ╰──────────────── borrowed here
-   │                           │
-   │                           ╰────── Cannot change 'v' while the loop still refers into it
+ 4 │         v.push(2);
+   │         ────┬────
+   │             ╰────── Cannot change 'v' while the loop still refers into it
+   │
+   ├─[ tests/ui/vec/change_while_iterating.zr:4:9 ]
+   │
+ 3 │     for x in &var v {
+   │              ───┬──
+   │                 ╰──── borrowed here
 ───╯
 [-] Error: aborting due to previous error

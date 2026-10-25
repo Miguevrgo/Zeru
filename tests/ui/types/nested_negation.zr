@@ -1,5 +1,5 @@
 fn main() {
     var x: i32 = 10;
-    var y: i32 = --x;
+    var y: i32 = - -x;
     println("{}", y);
 }

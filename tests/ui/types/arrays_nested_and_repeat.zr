@@ -3,6 +3,8 @@ fn main() {
     var m: Array<Array<f32, 2>, 2> = [[1.0, 0.0], [0.0, 1.0]];
     zeros[3] = 9;
     var total: u32 = 0;
-    for z in zeros { total += z as u32; }
+    for z in zeros {
+        total += z as u32;
+    }
     println("{} {} {}", total, m[1][1], m[0][1]);
 }

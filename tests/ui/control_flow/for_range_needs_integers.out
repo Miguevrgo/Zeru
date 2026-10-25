@@ -3,7 +3,7 @@ status: compile error
 Error: A range counts between two integers of one type, not i32 and f64
    ╭─[ tests/ui/control_flow/for_range_needs_integers.zr:2:14 ]
    │
- 2 │     for i in 0..2.5 { }
+ 2 │     for i in 0..2.5 {}
    │              ───┬──
    │                 ╰──── A range counts between two integers of one type, not i32 and f64
 ───╯

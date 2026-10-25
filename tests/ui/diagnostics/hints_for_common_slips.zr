@@ -6,7 +6,6 @@ fn main() {
     var arr: Array<i32, 3> = [1, 2, 3];
     var n = arr.len();
     var x = 1;
-    if x = 2 {
-    }
+    if x = 2 {}
     var o: i32? = Some(3);
 }

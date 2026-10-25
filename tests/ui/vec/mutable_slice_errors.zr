@@ -1,4 +1,6 @@
-fn change(xs: &var [i32]) { xs[0] = 1; }
+fn change(xs: &var [i32]) {
+    xs[0] = 1;
+}
 fn main() {
     var v: Vec<i32> = Vec[1, 2, 3];
     var ro = v[0..2];

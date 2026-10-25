@@ -3,7 +3,7 @@ status: compile error
 Error: A map's keys cannot change; write for (key, value) in &var map
    ╭─[ tests/ui/collections/hashmap_keys_are_fixed.zr:6:18 ]
    │
- 6 │     for entry in &var m { }
+ 6 │     for entry in &var m {}
    │                  ───┬──
    │                     ╰──── A map's keys cannot change; write for (key, value) in &var map
 ───╯

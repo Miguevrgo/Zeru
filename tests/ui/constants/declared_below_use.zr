@@ -1,4 +1,6 @@
-fn f() i32 { return N; }
+fn f() i32 {
+    return N;
+}
 const N: i32 = M + 1;
 const M: i32 = 3;
 fn main() {

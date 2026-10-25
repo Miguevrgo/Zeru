@@ -3,8 +3,10 @@ status: compile error
 Error: Struct 'S' declares field 'x' twice
    ╭─[ tests/ui/structs/duplicate_field_declaration.zr:1:1 ]
    │
- 1 │ struct S { x: i32, x: i32 }
-   │ ─────────────┬─────────────
-   │              ╰─────────────── Struct 'S' declares field 'x' twice
+ 1 │ ╭─▶ struct S {
+   ┆ ┆
+ 4 │ ├─▶ }
+   │ │
+   │ ╰─────── Struct 'S' declares field 'x' twice
 ───╯
 [-] Error: aborting due to previous error

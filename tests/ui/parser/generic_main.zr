@@ -1,1 +1,1 @@
-fn main<T>() { }
+fn main<T>() {}

@@ -1,8 +1,12 @@
 fn main() {
     var total = 0;
-    for i in 0..5 { total += i; }
+    for i in 0..5 {
+        total += i;
+    }
     var n: u64 = 4;
     var big: u64 = 0;
-    for j in 0..n { big += j * 10; }
+    for j in 0..n {
+        big += j * 10;
+    }
     println("{} {}", total, big);
 }

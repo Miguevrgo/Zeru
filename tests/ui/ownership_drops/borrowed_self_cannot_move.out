@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
 Error: Cannot move 'self', which is borrowed; call .copy() on it
-   ╭─[ tests/ui/ownership_drops/borrowed_self_cannot_move.zr:1:50 ]
+   ╭─[ tests/ui/ownership_drops/borrowed_self_cannot_move.zr:4:16 ]
    │
- 1 │ struct S { v: Vec<i32>, fn take(self) S { return self; } }
-   │                                                  ──┬─
-   │                                                    ╰─── Cannot move 'self', which is borrowed; call .copy() on it
+ 4 │         return self;
+   │                ──┬─
+   │                  ╰─── Cannot move 'self', which is borrowed; call .copy() on it
 ───╯
 [-] Error: aborting due to previous error

@@ -3,7 +3,9 @@ import std.collections.hashset::{HashSet};
 
 struct D {
     id: i32,
-    fn drop(var self) { println("drop {}", self.id); }
+    fn drop(var self) {
+        println("drop {}", self.id);
+    }
 }
 
 fn main() {
@@ -12,7 +14,9 @@ fn main() {
     println("{}", ages.remove(5));
     println("{}", ages.remove(5).is_none());
     var owners: HashMap<i32, D> = HashMap.new();
-    for i in 0..4 { owners.insert(i, D { id: i }); }
+    for i in 0..4 {
+        owners.insert(i, D { id: i });
+    }
     match owners.remove(2) {
         Some(d) => println("got {}", d.id),
         None => {}

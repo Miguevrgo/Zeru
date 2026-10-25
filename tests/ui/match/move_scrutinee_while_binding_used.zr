@@ -1,5 +1,11 @@
 fn take(v: Vec<i64>?) {}
 fn main() {
     var o: Vec<i64>? = Vec[1, 2];
-    match o { Some(x) => { take(o); println("{}", x[0]); } None => {} }
+    match o {
+        Some(x) => {
+            take(o);
+            println("{}", x[0]);
+        }
+        None => {}
+    }
 }

@@ -3,57 +3,61 @@ status: compile error
 Error: void has no values; only what a function returns can be void
    ╭─[ tests/ui/types/void_has_no_value.zr:1:1 ]
    │
- 1 │ struct S { v: void }
-   │ ──────────┬─────────
-   │           ╰─────────── void has no values; only what a function returns can be void
+ 1 │ ╭─▶ struct S {
+   ┆ ┆
+ 3 │ ├─▶ }
+   │ │
+   │ ╰─────── void has no values; only what a function returns can be void
 ───╯
 Error: greet() returns nothing, so it has no value to use
-   ╭─[ tests/ui/types/void_has_no_value.zr:7:13 ]
-   │
- 7 │     var v = greet();
-   │             ───┬───
-   │                ╰───── greet() returns nothing, so it has no value to use
-───╯
-Error: greet() returns nothing, so it has no value to use
-   ╭─[ tests/ui/types/void_has_no_value.zr:8:8 ]
-   │
- 8 │     id(greet());
-   │        ───┬───
-   │           ╰───── greet() returns nothing, so it has no value to use
-───╯
-Error: greet() returns nothing, so it has no value to use
-   ╭─[ tests/ui/types/void_has_no_value.zr:9:14 ]
-   │
- 9 │     var t = (greet(), 1);
-   │              ───┬───
-   │                 ╰───── greet() returns nothing, so it has no value to use
-───╯
-Error: greet() returns nothing, so it has no value to use
-    ╭─[ tests/ui/types/void_has_no_value.zr:10:14 ]
+    ╭─[ tests/ui/types/void_has_no_value.zr:15:13 ]
     │
- 10 │     var a = [greet()];
+ 15 │     var v = greet();
+    │             ───┬───
+    │                ╰───── greet() returns nothing, so it has no value to use
+────╯
+Error: greet() returns nothing, so it has no value to use
+    ╭─[ tests/ui/types/void_has_no_value.zr:16:8 ]
+    │
+ 16 │     id(greet());
+    │        ───┬───
+    │           ╰───── greet() returns nothing, so it has no value to use
+────╯
+Error: greet() returns nothing, so it has no value to use
+    ╭─[ tests/ui/types/void_has_no_value.zr:17:14 ]
+    │
+ 17 │     var t = (greet(), 1);
+    │              ───┬───
+    │                 ╰───── greet() returns nothing, so it has no value to use
+────╯
+Error: greet() returns nothing, so it has no value to use
+    ╭─[ tests/ui/types/void_has_no_value.zr:18:14 ]
+    │
+ 18 │     var a = [greet()];
     │              ───┬───
     │                 ╰───── greet() returns nothing, so it has no value to use
 ────╯
 Error: void has no values; only what a function returns can be void
-    ╭─[ tests/ui/types/void_has_no_value.zr:11:5 ]
+    ╭─[ tests/ui/types/void_has_no_value.zr:19:5 ]
     │
- 11 │     var w: Vec<void> = Vec.new();
+ 19 │     var w: Vec<void> = Vec.new();
     │     ──────────────┬──────────────
     │                   ╰──────────────── void has no values; only what a function returns can be void
 ────╯
 Error: void has no values; only what a function returns can be void
-    ╭─[ tests/ui/types/void_has_no_value.zr:12:5 ]
+    ╭─[ tests/ui/types/void_has_no_value.zr:20:5 ]
     │
- 12 │     var b: Box<void>? = None;
+ 20 │     var b: Box<void>? = None;
     │     ────────────┬────────────
     │                 ╰────────────── void has no values; only what a function returns can be void
 ────╯
 Error: This has no value to use
-    ╭─[ tests/ui/types/void_has_no_value.zr:15:17 ]
+    ╭─[ tests/ui/types/void_has_no_value.zr:23:17 ]
     │
- 15 │         var y = match c { true => { break; }, false => {} };
-    │                 ─────────────────────┬─────────────────────
-    │                                      ╰─────────────────────── This has no value to use
+ 23 │ ╭─▶         var y = match c {
+    ┆ ┆
+ 28 │ ├─▶         };
+    │ │
+    │ ╰──────────────── This has no value to use
 ────╯
 [-] Error: aborting due to previous error

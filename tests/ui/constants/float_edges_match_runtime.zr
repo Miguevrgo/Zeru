@@ -1,7 +1,15 @@
-fn nan() f64 { return 0.0 / 0.0; }
-fn widen(x: f32) f64 { return x as f64; }
-fn big() f64 { return 9223372036854775808.0; }
-fn tof(n: i64) f32 { return n as f32; }
+fn nan() f64 {
+    return 0.0 / 0.0;
+}
+fn widen(x: f32) f64 {
+    return x as f64;
+}
+fn big() f64 {
+    return 9223372036854775808.0;
+}
+fn tof(n: i64) f32 {
+    return n as f32;
+}
 const B: bool = nan() == nan();
 const B2: bool = nan() != nan();
 const B3: bool = nan() <= 1.0;

@@ -1,4 +1,6 @@
-struct P { x: i32 }
+struct P {
+    x: i32,
+}
 fn main() {
     var o: P? = P { x: 3 };
     var p = o.unwrap();

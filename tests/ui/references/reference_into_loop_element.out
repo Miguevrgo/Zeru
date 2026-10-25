@@ -1,14 +1,20 @@
 status: compile error
 -- stderr
 Error: Cannot change 'vv' while 'e' still refers into it
-   ╭─[ tests/ui/references/reference_into_loop_element.zr:3:39 ]
+   ╭─[ tests/ui/references/reference_into_loop_element.zr:5:9 ]
    │
- 3 │     for x in &var vv { var e = &x[0]; x.push(2); println("{}", *e); }
-   │                                ──┬──  ────┬────                 ┬
-   │                                  ╰───────────────────────────────── borrowed here
-   │                                           │                     │
-   │                                           ╰──────────────────────── Cannot change 'vv' while 'e' still refers into it
-   │                                                                 │
-   │                                                                 ╰── used later here
+ 5 │         x.push(2);
+   │         ────┬────
+   │             ╰────── Cannot change 'vv' while 'e' still refers into it
+   │
+   ├─[ tests/ui/references/reference_into_loop_element.zr:5:9 ]
+   │
+ 4 │         var e = &x[0];
+   │                 ──┬──
+   │                   ╰──── borrowed here
+   │
+ 6 │         println("{}", *e);
+   │                        ┬
+   │                        ╰── used later here
 ───╯
 [-] Error: aborting due to previous error

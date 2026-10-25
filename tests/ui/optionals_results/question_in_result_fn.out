@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: '?' returns from a function returning i32!, which is no T?
-   ╭─[ tests/ui/optionals_results/question_in_result_fn.zr:3:13 ]
+   ╭─[ tests/ui/optionals_results/question_in_result_fn.zr:5:13 ]
    │
- 3 │     var x = f()?;
+ 5 │     var x = f()?;
    │             ──┬─
    │               ╰─── '?' returns from a function returning i32!, which is no T?
 ───╯

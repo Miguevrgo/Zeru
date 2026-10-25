@@ -1,37 +1,37 @@
 status: compile error
 -- stderr
 Error: Cannot modify constant 'ARR'
-    ╭─[ tests/ui/constants/writes_to_constant.zr:10:5 ]
+    ╭─[ tests/ui/constants/writes_to_constant.zr:16:5 ]
     │
- 10 │     ARR[0] = 9;
+ 16 │     ARR[0] = 9;
     │     ─────┬────
     │          ╰────── Cannot modify constant 'ARR'
 ────╯
 Error: Cannot modify constant 'K'
-    ╭─[ tests/ui/constants/writes_to_constant.zr:11:10 ]
+    ╭─[ tests/ui/constants/writes_to_constant.zr:17:10 ]
     │
- 11 │     bump(&var K);
+ 17 │     bump(&var K);
     │          ───┬──
     │             ╰──── Cannot modify constant 'K'
 ────╯
 Error: Cannot modify constant 'K'
-    ╭─[ tests/ui/constants/writes_to_constant.zr:12:5 ]
+    ╭─[ tests/ui/constants/writes_to_constant.zr:18:5 ]
     │
- 12 │     K = 6;
+ 18 │     K = 6;
     │     ──┬──
     │       ╰──── Cannot modify constant 'K'
 ────╯
 Error: Cannot modify constant 'K'
-    ╭─[ tests/ui/constants/writes_to_constant.zr:13:5 ]
+    ╭─[ tests/ui/constants/writes_to_constant.zr:19:5 ]
     │
- 13 │     K += 1;
+ 19 │     K += 1;
     │     ───┬──
     │        ╰──── Cannot modify constant 'K'
 ────╯
 Error: Cannot modify constant 'ARR'
-    ╭─[ tests/ui/constants/writes_to_constant.zr:14:14 ]
+    ╭─[ tests/ui/constants/writes_to_constant.zr:20:14 ]
     │
- 14 │     for x in &var ARR { x = 0; }
+ 20 │     for x in &var ARR {
     │              ────┬───
     │                  ╰───── Cannot modify constant 'ARR'
 ────╯

@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: 9223372036854776000 does not fit i64, while computing a constant
-   ╭─[ tests/ui/constants/float_to_int_out_of_range.zr:2:16 ]
+   ╭─[ tests/ui/constants/float_to_int_out_of_range.zr:4:16 ]
    │
- 2 │ const B: i64 = big() as i64;
+ 4 │ const B: i64 = big() as i64;
    │ ──────────────┬──────┬──────
    │               ╰─────────────── while computing 'B'
    │                      │

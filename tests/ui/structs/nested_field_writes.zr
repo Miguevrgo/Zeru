@@ -1,5 +1,10 @@
-struct Inner { v: Array<i32, 2> }
-struct Outer { inner: Inner, tag: i32 }
+struct Inner {
+    v: Array<i32, 2>,
+}
+struct Outer {
+    inner: Inner,
+    tag: i32,
+}
 fn main() {
     var o = Outer { inner: Inner { v: [1, 2] }, tag: 0 };
     o.inner.v[1] = 7;

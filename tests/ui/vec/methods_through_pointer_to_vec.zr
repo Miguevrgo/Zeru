@@ -1,4 +1,6 @@
-fn add(v: *Vec<i64>) { (*v).push(5); }
+fn add(v: *Vec<i64>) {
+    (*v).push(5);
+}
 fn main() {
     var v: Vec<i64> = Vec.new();
     add(&v);

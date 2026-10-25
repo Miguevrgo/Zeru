@@ -1,5 +1,7 @@
 fn find_positive(x: i32) i32? {
-    if x > 0 { return x; }
+    if x > 0 {
+        return x;
+    }
     return None;
 }
 fn main() {

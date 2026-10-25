@@ -3,15 +3,19 @@ status: compile error
 Error: A branch of an if that gives a value holds one expression, or leaves with return, break or continue
    ╭─[ tests/ui/control_flow/if_value_branch_block.zr:3:22 ]
    │
- 3 │     var x = if a > 0 { a; } else { 2 };
-   │                      ───┬──
-   │                         ╰──── A branch of an if that gives a value holds one expression, or leaves with return, break or continue
+ 3 │ ╭─▶     var x = if a > 0 {
+   ┆ ┆
+ 5 │ ├─▶     } else { 2 };
+   │ │
+   │ ╰─────────────────────── A branch of an if that gives a value holds one expression, or leaves with return, break or continue
 ───╯
 Error: A branch of an if that gives a value holds one expression, or leaves with return, break or continue
-   ╭─[ tests/ui/control_flow/if_value_branch_block.zr:4:22 ]
+   ╭─[ tests/ui/control_flow/if_value_branch_block.zr:6:22 ]
    │
- 4 │     var y = if a > 0 { println("hi"); } else { 2 };
-   │                      ─────────┬────────
-   │                               ╰────────── A branch of an if that gives a value holds one expression, or leaves with return, break or continue
+ 6 │ ╭─▶     var y = if a > 0 {
+   ┆ ┆
+ 8 │ ├─▶     } else { 2 };
+   │ │
+   │ ╰─────────────────────── A branch of an if that gives a value holds one expression, or leaves with return, break or continue
 ───╯
 [-] Error: aborting due to previous error

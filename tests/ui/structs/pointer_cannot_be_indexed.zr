@@ -1,2 +1,4 @@
-fn f(p: *Array<i32, 4>) i32 { return p[0]; }
-fn main() { }
+fn f(p: *Array<i32, 4>) i32 {
+    return p[0];
+}
+fn main() {}

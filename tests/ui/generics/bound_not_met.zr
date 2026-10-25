@@ -1,5 +1,10 @@
-struct Pair<T: Eq> { first: T, second: T }
-struct Point { x: Vec<i32> }
+struct Pair<T: Eq> {
+    first: T,
+    second: T,
+}
+struct Point {
+    x: Vec<i32>,
+}
 fn main() {
     var p = Point { x: Vec[1] };
     var bad = Pair { first: p, second: p };

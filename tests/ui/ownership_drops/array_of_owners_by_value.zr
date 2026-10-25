@@ -1,15 +1,25 @@
 struct Probe {
     id: i64,
     log: *i64,
-    fn drop(var self) { *self.log = *self.log * 10 + self.id; }
+    fn drop(var self) {
+        *self.log = *self.log * 10 + self.id;
+    }
 }
-fn probe(id: i64, log: *i64) Probe { return Probe { id: id, log: log }; }
-fn consume_all(ps: Array<Probe, 2>) { println("inside {}", ps[1].id); }
+fn probe(id: i64, log: *i64) Probe {
+    return Probe { id: id, log: log };
+}
+fn consume_all(ps: Array<Probe, 2>) {
+    println("inside {}", ps[1].id);
+}
 fn main() {
     var log: i64 = 0;
     var at: *i64 = &log;
     {
-        { var ps: Array<Probe, 2> = [probe(1, at), probe(2, at)]; consume_all(ps); println("consumed"); }
+        {
+            var ps: Array<Probe, 2> = [probe(1, at), probe(2, at)];
+            consume_all(ps);
+            println("consumed");
+        }
     }
     println("dropped: {}", log);
 }

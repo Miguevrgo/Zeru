@@ -1,2 +1,2 @@
-fn f(a: void) { }
-fn main() { }
+fn f(a: void) {}
+fn main() {}

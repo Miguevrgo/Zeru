@@ -1,4 +1,4 @@
-fn eat(v: Vec<i64>, n: i32) { }
+fn eat(v: Vec<i64>, n: i32) {}
 fn main() {
     var v: Vec<i64> = Vec[1];
     eat(v, true);

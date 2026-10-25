@@ -1,16 +1,16 @@
 status: compile error
 -- stderr
 Error: Type mismatch: Field 'x' in struct 'Point' expected f32, got bool
-   ╭─[ tests/ui/structs/field_type_mismatch.zr:3:24 ]
+   ╭─[ tests/ui/structs/field_type_mismatch.zr:6:24 ]
    │
- 3 │     var p = Point { x: true, y: 2.0 };
+ 6 │     var p = Point { x: true, y: 2.0 };
    │                        ──┬─
    │                          ╰─── Type mismatch: Field 'x' in struct 'Point' expected f32, got bool
 ───╯
 Error: Type mismatch in assignment. Expected f32, got bool
-   ╭─[ tests/ui/structs/field_type_mismatch.zr:4:5 ]
+   ╭─[ tests/ui/structs/field_type_mismatch.zr:7:5 ]
    │
- 4 │     p.x = false;
+ 7 │     p.x = false;
    │     ─────┬─────
    │          ╰─────── Type mismatch in assignment. Expected f32, got bool
 ───╯

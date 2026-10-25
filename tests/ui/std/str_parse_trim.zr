@@ -1,12 +1,51 @@
 fn main() {
     println("[{}] [{}]", "  hi there \n".trim(), "\t\n".trim());
-    println("{} {} {} {}", "hello".starts_with("he"), "hello".starts_with("lo"), "hello".ends_with("lo"), "he".ends_with("hello"));
-    for t in ["42", "-17", "+3", "9223372036854775807", "-9223372036854775808", "9223372036854775808", "", "-", "12a"] {
+    println(
+        "{} {} {} {}",
+        "hello".starts_with("he"),
+        "hello".starts_with("lo"),
+        "hello".ends_with("lo"),
+        "he".ends_with("hello"),
+    );
+    for t in [
+        "42",
+        "-17",
+        "+3",
+        "9223372036854775807",
+        "-9223372036854775808",
+        "9223372036854775808",
+        "",
+        "-",
+        "12a",
+    ] {
         var r = t.parse_int();
-        if r.is_ok() { println("{} -> {}", t, r.unwrap()); } else { println("{} -> err {}", t, r.unwrap_err()); }
+        if r.is_ok() {
+            println("{} -> {}", t, r.unwrap());
+        } else {
+            println("{} -> err {}", t, r.unwrap_err());
+        }
     }
-    for t in ["3.5", "-12.25", "1e3", "2.5E-3", "0.1", ".5", "7.", "123456789012345678901234", "1e-5", "x", "1e", "1.2.3", "1e999999999", "-1e-999999999"] {
+    for t in [
+        "3.5",
+        "-12.25",
+        "1e3",
+        "2.5E-3",
+        "0.1",
+        ".5",
+        "7.",
+        "123456789012345678901234",
+        "1e-5",
+        "x",
+        "1e",
+        "1.2.3",
+        "1e999999999",
+        "-1e-999999999",
+    ] {
         var r = t.parse_float();
-        if r.is_ok() { println("{} -> {}", t, r.unwrap()); } else { println("{} -> err {}", t, r.unwrap_err()); }
+        if r.is_ok() {
+            println("{} -> {}", t, r.unwrap());
+        } else {
+            println("{} -> err {}", t, r.unwrap_err());
+        }
     }
 }

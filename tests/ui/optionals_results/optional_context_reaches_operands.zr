@@ -1,5 +1,9 @@
-fn doubled(a: i64) i64? { return a * 2; }
-fn takes(x: i64?) i64 { return x.unwrap(); }
+fn doubled(a: i64) i64? {
+    return a * 2;
+}
+fn takes(x: i64?) i64 {
+    return x.unwrap();
+}
 fn main() {
     var a: i64 = 3;
     var b: i64 = 4;
@@ -8,5 +12,12 @@ fn main() {
     var n: i32 = 7;
     var p: *i32 = &n;
     var read: i32? = *p;
-    println("{} {} {} {} {}", doubled(a).unwrap(), sum.unwrap(), neg.unwrap(), read.unwrap(), takes(a + 1));
+    println(
+        "{} {} {} {} {}",
+        doubled(a).unwrap(),
+        sum.unwrap(),
+        neg.unwrap(),
+        read.unwrap(),
+        takes(a + 1),
+    );
 }

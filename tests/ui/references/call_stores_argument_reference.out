@@ -1,48 +1,52 @@
 status: compile error
 -- stderr
 Error: Cannot change 'v' while 'slot' still refers into it
-    ╭─[ tests/ui/references/call_stores_argument_reference.zr:10:5 ]
+    ╭─[ tests/ui/references/call_stores_argument_reference.zr:14:5 ]
     │
- 10 │     v.push(2);
+ 14 │     v.push(2);
     │     ────┬────
     │         ╰────── Cannot change 'v' while 'slot' still refers into it
     │
-    ├─[ tests/ui/references/call_stores_argument_reference.zr:10:5 ]
+    ├─[ tests/ui/references/call_stores_argument_reference.zr:14:5 ]
     │
-  9 │     set(&var slot, &v[0]);
-    │                    ──┬──
-    │                      ╰──── borrowed here
+ 13 │         set(&var slot, &v[0]);
+    │                        ──┬──
+    │                          ╰──── borrowed here
     │
- 11 │     match slot { Some(r) => { println("{}", *r); } None => {} }
-    │     ─────────────────────────────┬─────────────────────────────
-    │                                  ╰─────────────────────────────── used later here
+ 15 │ ╭─▶     match slot {
+    ┆ ┆
+ 20 │ ├─▶     }
+    │ │
+    │ ╰─────────── used later here
 ────╯
 Error: Cannot change 'w' while 'bag' still refers into it
-    ╭─[ tests/ui/references/call_stores_argument_reference.zr:16:5 ]
+    ╭─[ tests/ui/references/call_stores_argument_reference.zr:25:5 ]
     │
- 16 │     w.push(2);
+ 25 │     w.push(2);
     │     ────┬────
     │         ╰────── Cannot change 'w' while 'bag' still refers into it
     │
-    ├─[ tests/ui/references/call_stores_argument_reference.zr:16:5 ]
+    ├─[ tests/ui/references/call_stores_argument_reference.zr:25:5 ]
     │
- 15 │     bag.add(&w[0]);
+ 24 │     bag.add(&w[0]);
     │             ──┬──
     │               ╰──── borrowed here
     │
- 17 │     println("{}", *bag.items[0]);
+ 26 │     println("{}", *bag.items[0]);
     │                    ──────┬─────
     │                          ╰─────── used later here
 ────╯
 Error: 'kept' refers into 'x', which ends with its block first
-    ╭─[ tests/ui/references/call_stores_argument_reference.zr:22:24 ]
+    ╭─[ tests/ui/references/call_stores_argument_reference.zr:31:24 ]
     │
- 22 │         set(&var kept, &x);
-    │                        ─┬
-    │                         ╰── 'kept' refers into 'x', which ends with its block first
+ 31 │             set(&var kept, &x);
+    │                            ─┬
+    │                             ╰── 'kept' refers into 'x', which ends with its block first
     │
- 24 │     match kept { Some(r) => { println("{}", *r); } None => {} }
-    │     ─────────────────────────────┬─────────────────────────────
-    │                                  ╰─────────────────────────────── used later here
+ 33 │ ╭─▶     match kept {
+    ┆ ┆
+ 38 │ ├─▶     }
+    │ │
+    │ ╰─────────── used later here
 ────╯
 [-] Error: aborting due to previous error

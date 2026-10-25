@@ -1,53 +1,53 @@
 status: compile error
 -- stderr
 Error: Cannot change 'a' while 'e' still refers into it
-    ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:11:5 ]
+    ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:22:5 ]
     │
- 11 │     grow(w);
+ 22 │     grow(w);
     │     ───┬───
     │        ╰───── Cannot change 'a' while 'e' still refers into it
     │
-    ├─[ tests/ui/references/call_reallocates_through_held_reference.zr:11:5 ]
+    ├─[ tests/ui/references/call_reallocates_through_held_reference.zr:22:5 ]
     │
- 10 │     var e = &a[0];
+ 21 │     var e = &a[0];
     │             ──┬──
     │               ╰──── borrowed here
     │
- 12 │     println("{}", *e);
+ 23 │     println("{}", *e);
     │                    ┬
     │                    ╰── used later here
 ────╯
 Error: Cannot change 'b' while 'f' still refers into it
-    ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:17:5 ]
+    ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:28:5 ]
     │
- 17 │     grow_some(o);
+ 28 │     grow_some(o);
     │     ──────┬─────
     │           ╰─────── Cannot change 'b' while 'f' still refers into it
     │
-    ├─[ tests/ui/references/call_reallocates_through_held_reference.zr:17:5 ]
+    ├─[ tests/ui/references/call_reallocates_through_held_reference.zr:28:5 ]
     │
- 16 │     var f = &b[0];
+ 27 │     var f = &b[0];
     │             ──┬──
     │               ╰──── borrowed here
     │
- 18 │     println("{}", *f);
+ 29 │     println("{}", *f);
     │                    ┬
     │                    ╰── used later here
 ────╯
 Error: Cannot change 'c' while 'g' still refers into it
-    ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:23:5 ]
+    ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:34:5 ]
     │
- 23 │     x.grow();
+ 34 │     x.grow();
     │     ────┬───
     │         ╰───── Cannot change 'c' while 'g' still refers into it
     │
-    ├─[ tests/ui/references/call_reallocates_through_held_reference.zr:23:5 ]
+    ├─[ tests/ui/references/call_reallocates_through_held_reference.zr:34:5 ]
     │
- 22 │     var g = &c[0];
+ 33 │     var g = &c[0];
     │             ──┬──
     │               ╰──── borrowed here
     │
- 24 │     println("{}", *g);
+ 35 │     println("{}", *g);
     │                    ┬
     │                    ╰── used later here
 ────╯

@@ -1,6 +1,12 @@
-fn pick(v: &var Vec<Vec<i64>>) &var Vec<i64> { return &var v[0]; }
-fn head(v: &Vec<i64>) &i64 { return &v[0]; }
-fn store(dst: &var (&var i64)?, src: &var Vec<i64>) { *dst = &var src[0]; }
+fn pick(v: &var Vec<Vec<i64>>) &var Vec<i64> {
+    return &var v[0];
+}
+fn head(v: &Vec<i64>) &i64 {
+    return &v[0];
+}
+fn store(dst: &var (&var i64)?, src: &var Vec<i64>) {
+    *dst = &var src[0];
+}
 fn owner_changes() {
     var v: Vec<Vec<i64>> = Vec[Vec[1]];
     var s = pick(&var v);

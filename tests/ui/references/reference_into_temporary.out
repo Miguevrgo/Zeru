@@ -1,13 +1,13 @@
 status: compile error
 -- stderr
 Error: Cannot keep a reference into a temporary value past its statement; store the value in a variable first
-   ╭─[ tests/ui/references/reference_into_temporary.zr:3:13 ]
+   ╭─[ tests/ui/references/reference_into_temporary.zr:5:13 ]
    │
- 3 │     var r = mk().get(0).unwrap();
+ 5 │     var r = mk().get(0).unwrap();
    │             ─────┬─────
    │                  ╰─────── Cannot keep a reference into a temporary value past its statement; store the value in a variable first
    │
- 5 │     println("{}", *r);
+ 7 │     println("{}", *r);
    │                    ┬
    │                    ╰── used later here
 ───╯

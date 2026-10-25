@@ -3,7 +3,7 @@ status: compile error
 Error: Type parameter 'T' of 'f' is already a parameter of B
    ╭─[ tests/ui/generics/method_parameter_reuses_struct_parameter.zr:3:5 ]
    │
- 3 │     fn f<T>(self, x: T) T { return x; }
+ 3 │     fn f<T>(self, x: T) T {
    │     ──────────┬──────────
    │               ╰──────────── Type parameter 'T' of 'f' is already a parameter of B
 ───╯

@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: '!' takes a T! value, not i32?
-   ╭─[ tests/ui/optionals_results/bang_on_optional.zr:3:13 ]
+   ╭─[ tests/ui/optionals_results/bang_on_optional.zr:5:13 ]
    │
- 3 │     var x = f()!;
+ 5 │     var x = f()!;
    │             ──┬─
    │               ╰─── '!' takes a T! value, not i32?
 ───╯

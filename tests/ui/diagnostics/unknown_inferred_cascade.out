@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: Cannot infer Vec element type. Please add a type annotation
-   ╭─[ tests/ui/diagnostics/unknown_inferred_cascade.zr:3:19 ]
+   ╭─[ tests/ui/diagnostics/unknown_inferred_cascade.zr:5:19 ]
    │
- 3 │     var a = ident(Vec.new());
+ 5 │     var a = ident(Vec.new());
    │                   ────┬────
    │                       ╰────── Cannot infer Vec element type. Please add a type annotation
 ───╯

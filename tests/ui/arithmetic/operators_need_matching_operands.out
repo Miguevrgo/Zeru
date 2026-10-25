@@ -1,44 +1,44 @@
 status: compile error
 -- stderr
 Error: Operator '+' cannot be applied to bool
-   ╭─[ tests/ui/arithmetic/operators_need_matching_operands.zr:5:13 ]
+   ╭─[ tests/ui/arithmetic/operators_need_matching_operands.zr:7:13 ]
    │
- 5 │     var a = true + true;
+ 7 │     var a = true + true;
    │             ─────┬─────
    │                  ╰─────── Operator '+' cannot be applied to bool
 ───╯
 Error: Operator '&&' cannot be applied to i32
-   ╭─[ tests/ui/arithmetic/operators_need_matching_operands.zr:6:13 ]
+   ╭─[ tests/ui/arithmetic/operators_need_matching_operands.zr:8:13 ]
    │
- 6 │     var b = 1 && 2;
+ 8 │     var b = 1 && 2;
    │             ───┬──
    │                ╰──── Operator '&&' cannot be applied to i32
 ───╯
 Error: Operator '==' cannot be applied to Point
-   ╭─[ tests/ui/arithmetic/operators_need_matching_operands.zr:7:13 ]
+   ╭─[ tests/ui/arithmetic/operators_need_matching_operands.zr:9:13 ]
    │
- 7 │     var c = p == q;
+ 9 │     var c = p == q;
    │             ───┬──
    │                ╰──── Operator '==' cannot be applied to Point
 ───╯
 Error: Operator '<' cannot be applied to bool
-   ╭─[ tests/ui/arithmetic/operators_need_matching_operands.zr:9:13 ]
-   │
- 9 │     var e = true < false;
-   │             ──────┬─────
-   │                   ╰─────── Operator '<' cannot be applied to bool
-───╯
-Error: Operator '&' cannot be applied to f64
-    ╭─[ tests/ui/arithmetic/operators_need_matching_operands.zr:10:13 ]
+    ╭─[ tests/ui/arithmetic/operators_need_matching_operands.zr:11:13 ]
     │
- 10 │     var f = 1.5 & 2.5;
+ 11 │     var e = true < false;
+    │             ──────┬─────
+    │                   ╰─────── Operator '<' cannot be applied to bool
+────╯
+Error: Operator '&' cannot be applied to f64
+    ╭─[ tests/ui/arithmetic/operators_need_matching_operands.zr:12:13 ]
+    │
+ 12 │     var f = 1.5 & 2.5;
     │             ────┬────
     │                 ╰────── Operator '&' cannot be applied to f64
 ────╯
 Error: Operator '<<' cannot be applied to f64
-    ╭─[ tests/ui/arithmetic/operators_need_matching_operands.zr:11:13 ]
+    ╭─[ tests/ui/arithmetic/operators_need_matching_operands.zr:13:13 ]
     │
- 11 │     var g = 1.5 << 2.5;
+ 13 │     var g = 1.5 << 2.5;
     │             ─────┬────
     │                  ╰────── Operator '<<' cannot be applied to f64
 ────╯

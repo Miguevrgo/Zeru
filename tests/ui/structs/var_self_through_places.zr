@@ -1,5 +1,13 @@
-struct C { n: i32, fn bump(var self) { self.n += 1; } }
-struct Holder { c: C, cs: Array<C, 2> }
+struct C {
+    n: i32,
+    fn bump(var self) {
+        self.n += 1;
+    }
+}
+struct Holder {
+    c: C,
+    cs: Array<C, 2>,
+}
 fn main() {
     var h = Holder { c: C { n: 0 }, cs: [C { n: 10 }, C { n: 20 }] };
     h.c.bump();

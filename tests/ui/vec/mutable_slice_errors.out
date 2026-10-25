@@ -1,44 +1,44 @@
 status: compile error
 -- stderr
 Error: Cannot write through a slice, which may point at read-only memory
-   ╭─[ tests/ui/vec/mutable_slice_errors.zr:5:5 ]
+   ╭─[ tests/ui/vec/mutable_slice_errors.zr:7:5 ]
    │
- 5 │     ro[0] = 3;
+ 7 │     ro[0] = 3;
    │     ────┬────
    │         ╰────── Cannot write through a slice, which may point at read-only memory
 ───╯
 Error: Cannot write through a slice, which may point at read-only memory
-   ╭─[ tests/ui/vec/mutable_slice_errors.zr:6:12 ]
+   ╭─[ tests/ui/vec/mutable_slice_errors.zr:8:12 ]
    │
- 6 │     change(&var ro[..]);
+ 8 │     change(&var ro[..]);
    │            ─────┬─────
    │                 ╰─────── Cannot write through a slice, which may point at read-only memory
 ───╯
 Error: Argument 1 type mismatch: expected &var [i32], got &Vec<i32>
-   ╭─[ tests/ui/vec/mutable_slice_errors.zr:7:12 ]
+   ╭─[ tests/ui/vec/mutable_slice_errors.zr:9:12 ]
    │
- 7 │     change(&v);
+ 9 │     change(&v);
    │            ─┬
    │             ╰── Argument 1 type mismatch: expected &var [i32], got &Vec<i32>
 ───╯
 Error: Argument 1 type mismatch: expected &var [i32], got &[i32]
-   ╭─[ tests/ui/vec/mutable_slice_errors.zr:8:12 ]
-   │
- 8 │     change(v[0..1]);
-   │            ───┬───
-   │               ╰───── Argument 1 type mismatch: expected &var [i32], got &[i32]
-───╯
-Error: Cannot write through a slice, which may point at read-only memory
-    ╭─[ tests/ui/vec/mutable_slice_errors.zr:10:17 ]
+    ╭─[ tests/ui/vec/mutable_slice_errors.zr:10:12 ]
     │
- 10 │     var bytes = &var text[0..1];
+ 10 │     change(v[0..1]);
+    │            ───┬───
+    │               ╰───── Argument 1 type mismatch: expected &var [i32], got &[i32]
+────╯
+Error: Cannot write through a slice, which may point at read-only memory
+    ╭─[ tests/ui/vec/mutable_slice_errors.zr:12:17 ]
+    │
+ 12 │     var bytes = &var text[0..1];
     │                 ───────┬───────
     │                        ╰───────── Cannot write through a slice, which may point at read-only memory
 ────╯
 Error: &var [i32] has no method 'push'
-    ╭─[ tests/ui/vec/mutable_slice_errors.zr:13:5 ]
+    ╭─[ tests/ui/vec/mutable_slice_errors.zr:15:5 ]
     │
- 13 │     s.push(3);
+ 15 │     s.push(3);
     │     ────┬────
     │         ╰────── &var [i32] has no method 'push'
 ────╯

@@ -1,2 +1,4 @@
-struct OutStream { x: i32 }
-fn main() { }
+struct OutStream {
+    x: i32,
+}
+fn main() {}

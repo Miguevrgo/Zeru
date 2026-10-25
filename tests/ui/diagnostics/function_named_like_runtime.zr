@@ -1,8 +1,14 @@
-fn memset(x: i64) i64 { return x + 1; }
-fn abort() { println("mine"); }
+fn memset(x: i64) i64 {
+    return x + 1;
+}
+fn abort() {
+    println("mine");
+}
 fn main() {
     var v: Vec<i64> = Vec.with_capacity(100);
-    for i in 0..100 { v.push(memset(i as i64)); }
+    for i in 0..100 {
+        v.push(memset(i as i64));
+    }
     abort();
     println("{}", v[99]);
 }

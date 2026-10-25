@@ -1,17 +1,40 @@
 struct Probe {
     id: i64,
     log: *i64,
-    fn drop(var self) { *self.log = *self.log * 10 + self.id; }
+    fn drop(var self) {
+        *self.log = *self.log * 10 + self.id;
+    }
 }
-fn probe(id: i64, log: *i64) Probe { return Probe { id: id, log: log }; }
-enum Kept { One(Probe), Two(Probe, Probe), Nothing }
+fn probe(id: i64, log: *i64) Probe {
+    return Probe { id: id, log: log };
+}
+enum Kept {
+    One(Probe),
+    Two(Probe, Probe),
+    Nothing,
+}
 fn main() {
     var log: i64 = 0;
     var at: *i64 = &log;
     {
-        { var k = Kept::Two(probe(1, at), probe(2, at)); }
-        { var k = Kept::One(probe(3, at)); var twin = Kept::One(probe(3, at)); k = Kept::Nothing; println("reset"); }
-        { var k = Kept::One(probe(4, at)); match k { Kept::One(p) => { println("matched {}", p.id); } default => { } } }
+        {
+            var k = Kept::Two(probe(1, at), probe(2, at));
+        }
+        {
+            var k = Kept::One(probe(3, at));
+            var twin = Kept::One(probe(3, at));
+            k = Kept::Nothing;
+            println("reset");
+        }
+        {
+            var k = Kept::One(probe(4, at));
+            match k {
+                Kept::One(p) => {
+                    println("matched {}", p.id);
+                }
+                default => {}
+            }
+        }
     }
     println("dropped: {}", log);
 }

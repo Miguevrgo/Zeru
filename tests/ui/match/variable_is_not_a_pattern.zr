@@ -1,5 +1,8 @@
 fn main() {
     var x: i32 = 1;
     var y: i32 = 1;
-    var r = match x { y => 1, default => 2 };
+    var r = match x {
+        y => 1,
+        default => 2,
+    };
 }

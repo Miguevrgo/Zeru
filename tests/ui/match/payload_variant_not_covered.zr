@@ -1,5 +1,10 @@
-enum S { A(i32), B }
+enum S {
+    A(i32),
+    B,
+}
 fn main() {
     var s = S::B;
-    var x = match s { S::A(v) => v };
+    var x = match s {
+        S::A(v) => v,
+    };
 }

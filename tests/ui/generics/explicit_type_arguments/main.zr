@@ -1,12 +1,22 @@
 import nums;
 struct Box<T> {
     v: T,
-    fn make(v: T) Box<T> { return Box { v: v }; }
-    fn get(self) T { return self.v; }
-    fn wider<U>(self, extra: U) (T, U) { return (self.v, extra); }
+    fn make(v: T) Box<T> {
+        return Box { v: v };
+    }
+    fn get(self) T {
+        return self.v;
+    }
+    fn wider<U>(self, extra: U) (T, U) {
+        return (self.v, extra);
+    }
 }
-fn zero<T>() T { return 0; }
-fn pair<A, B>(a: A, b: B) B { return b; }
+fn zero<T>() T {
+    return 0;
+}
+fn pair<A, B>(a: A, b: B) B {
+    return b;
+}
 fn main() {
     var a = 3;
     var b = 4;

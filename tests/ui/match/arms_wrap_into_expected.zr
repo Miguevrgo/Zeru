@@ -1,9 +1,21 @@
 fn half(x: i64) i64? {
-    return match x % 2 { 0 => x / 2, default => None };
+    return match x % 2 {
+        0 => x / 2,
+        default => None,
+    };
 }
 fn check(x: i64) i64! {
-    return match x { 0 => 10, default => Err(4) };
+    return match x {
+        0 => 10,
+        default => Err(4),
+    };
 }
 fn main() {
-    println("{} {} {} {}", half(4).unwrap(), half(3).is_none(), check(0).unwrap(), check(1).unwrap_err());
+    println(
+        "{} {} {} {}",
+        half(4).unwrap(),
+        half(3).is_none(),
+        check(0).unwrap(),
+        check(1).unwrap_err(),
+    );
 }

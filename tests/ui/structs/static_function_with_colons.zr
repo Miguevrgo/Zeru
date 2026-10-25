@@ -1,4 +1,9 @@
-struct Box { n: i32, fn empty() Box { return Box { n: 0 }; } }
+struct Box {
+    n: i32,
+    fn empty() Box {
+        return Box { n: 0 };
+    }
+}
 fn main() {
     var b = Box::empty();
 }

@@ -1,5 +1,8 @@
 fn main() {
     var b = false;
-    var s = match b { true => 1, false => 0 };
+    var s = match b {
+        true => 1,
+        false => 0,
+    };
     println("{}", s);
 }

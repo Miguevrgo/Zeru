@@ -1,6 +1,9 @@
 const MAX_RETRIES: u32 = 5;
 fn main() {
     var retries: u32 = 5;
-    var last = match retries { MAX_RETRIES => true, default => false };
+    var last = match retries {
+        MAX_RETRIES => true,
+        default => false,
+    };
     println("{}", last);
 }

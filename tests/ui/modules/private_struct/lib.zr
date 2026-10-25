@@ -1,1 +1,3 @@
-struct Inner { n: i32 }
+struct Inner {
+    n: i32,
+}

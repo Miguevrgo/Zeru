@@ -3,22 +3,26 @@ status: compile error
 Error: Function 'f' can finish without returning a value
    ╭─[ tests/ui/control_flow/missing_return.zr:1:1 ]
    │
- 1 │ fn f() i32 { }
+ 1 │ fn f() i32 {}
    │ ─────┬────
    │      ╰────── Function 'f' can finish without returning a value
 ───╯
 Error: Function 'g' can finish without returning a value
-   ╭─[ tests/ui/control_flow/missing_return.zr:2:21 ]
+   ╭─[ tests/ui/control_flow/missing_return.zr:3:5 ]
    │
- 2 │ fn g(n: i32) bool { if n > 0 { return true; } }
-   │                     ────────────┬────────────
-   │                                 ╰────────────── Function 'g' can finish without returning a value
+ 3 │ ╭─▶     if n > 0 {
+   ┆ ┆
+ 5 │ ├─▶     }
+   │ │
+   │ ╰─────────── Function 'g' can finish without returning a value
 ───╯
 Error: Function 'h' can finish without returning a value
-   ╭─[ tests/ui/control_flow/missing_return.zr:3:21 ]
-   │
- 3 │ fn h(n: i32?) i32 { match n { Some(v) => { return v; } None => { } } }
-   │                     ────────────────────────┬───────────────────────
-   │                                             ╰───────────────────────── Function 'h' can finish without returning a value
-───╯
+    ╭─[ tests/ui/control_flow/missing_return.zr:8:5 ]
+    │
+  8 │ ╭─▶     match n {
+    ┆ ┆
+ 13 │ ├─▶     }
+    │ │
+    │ ╰─────────── Function 'h' can finish without returning a value
+────╯
 [-] Error: aborting due to previous error

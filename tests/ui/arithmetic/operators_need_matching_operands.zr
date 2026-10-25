@@ -1,4 +1,6 @@
-struct Point { x: Vec<i32> }
+struct Point {
+    x: Vec<i32>,
+}
 fn main() {
     var p = Point { x: Vec[1] };
     var q = Point { x: Vec[1] };

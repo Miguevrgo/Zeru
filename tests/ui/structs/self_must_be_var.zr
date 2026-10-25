@@ -1,6 +1,10 @@
 struct C {
     v: i32,
-    fn t(self) { self.v = self.v + 1; }
-    fn u(self) { self.v += 1; }
+    fn t(self) {
+        self.v = self.v + 1;
+    }
+    fn u(self) {
+        self.v += 1;
+    }
 }
-fn main() { }
+fn main() {}

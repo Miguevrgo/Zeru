@@ -1,4 +1,6 @@
-struct P { x: i32 }
+struct P {
+    x: i32,
+}
 fn main() {
     var p = P { x: 1 };
     var a = p as i32;

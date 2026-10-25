@@ -1,12 +1,16 @@
 status: compile error
 -- stderr
 Error: 'r' refers into 'x', which ends with its block first
-   ╭─[ tests/ui/references/reference_outlives_loop_turn.zr:5:69 ]
-   │
- 5 │     while i < 2 { if i == 1 { println("{}", *r); } { var x = 1; r = &x; } i += 1; }
-   │                                              ┬                      ─┬
-   │                                              ╰────────────────────────── used here in the next turn of the loop
-   │                                                                      │
-   │                                                                      ╰── 'r' refers into 'x', which ends with its block first
-───╯
+    ╭─[ tests/ui/references/reference_outlives_loop_turn.zr:11:17 ]
+    │
+ 11 │             r = &x;
+    │                 ─┬
+    │                  ╰── 'r' refers into 'x', which ends with its block first
+    │
+    ├─[ tests/ui/references/reference_outlives_loop_turn.zr:11:17 ]
+    │
+  7 │             println("{}", *r);
+    │                            ┬
+    │                            ╰── used here in the next turn of the loop
+────╯
 [-] Error: aborting due to previous error

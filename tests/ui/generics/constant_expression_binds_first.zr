@@ -1,4 +1,6 @@
-fn g<T>(a: T, b: T) T { return a; }
+fn g<T>(a: T, b: T) T {
+    return a;
+}
 fn main() {
     var x: i64 = 5;
     var r = g(1 + 1, x);

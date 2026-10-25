@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: Missing field 'y' in struct literal Point
-   ╭─[ tests/ui/structs/missing_field.zr:3:13 ]
+   ╭─[ tests/ui/structs/missing_field.zr:6:13 ]
    │
- 3 │     var p = Point { x: 1.0 };
+ 6 │     var p = Point { x: 1.0 };
    │             ────────┬───────
    │                     ╰───────── Missing field 'y' in struct literal Point
 ───╯

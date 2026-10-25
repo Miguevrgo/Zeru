@@ -3,8 +3,10 @@ status: compile error
 Error: Enum 'E' declares variant 'A' twice
    ╭─[ tests/ui/enums/duplicate_variant.zr:1:1 ]
    │
- 1 │ enum E { A, A }
-   │ ───────┬───────
-   │        ╰───────── Enum 'E' declares variant 'A' twice
+ 1 │ ╭─▶ enum E {
+   ┆ ┆
+ 4 │ ├─▶ }
+   │ │
+   │ ╰─────── Enum 'E' declares variant 'A' twice
 ───╯
 [-] Error: aborting due to previous error

@@ -1,5 +1,8 @@
 import std.collections.hashmap::{HashMap};
-enum Tone { Low, High }
+enum Tone {
+    Low,
+    High,
+}
 fn main() {
     var m: HashMap<Tone, i32> = HashMap.new();
     m.insert(Tone::Low, 1);

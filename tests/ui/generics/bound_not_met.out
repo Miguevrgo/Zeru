@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
 Error: 'Pair' asks for T: Eq, which Point does not satisfy
-   ╭─[ tests/ui/generics/bound_not_met.zr:5:15 ]
-   │
- 5 │     var bad = Pair { first: p, second: p };
-   │               ──────────────┬─────────────
-   │                             ╰─────────────── 'Pair' asks for T: Eq, which Point does not satisfy
-───╯
+    ╭─[ tests/ui/generics/bound_not_met.zr:10:15 ]
+    │
+ 10 │     var bad = Pair { first: p, second: p };
+    │               ──────────────┬─────────────
+    │                             ╰─────────────── 'Pair' asks for T: Eq, which Point does not satisfy
+────╯
 [-] Error: aborting due to previous error

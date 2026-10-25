@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
 Error: Cannot return a reference into 'x', which ends with this function
-   ╭─[ tests/ui/references/return_reference_to_match_binding.zr:3:40 ]
+   ╭─[ tests/ui/references/return_reference_to_match_binding.zr:7:20 ]
    │
- 3 │     match make() { Some(x) => { return &x; } default => { } }
-   │                                        ─┬
-   │                                         ╰── Cannot return a reference into 'x', which ends with this function
+ 7 │             return &x;
+   │                    ─┬
+   │                     ╰── Cannot return a reference into 'x', which ends with this function
 ───╯
 [-] Error: aborting due to previous error

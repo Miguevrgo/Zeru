@@ -1,2 +1,4 @@
-fn syscall1(a: i64) i64 { return a; }
-fn main() { }
+fn syscall1(a: i64) i64 {
+    return a;
+}
+fn main() {}

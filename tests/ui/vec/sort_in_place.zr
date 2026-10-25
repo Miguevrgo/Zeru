@@ -17,6 +17,8 @@ fn sort(v: *Vec<i64>) {
 fn main() {
     var v: Vec<i64> = Vec[5, 3, 9, 1, 4];
     sort(&v);
-    for x in v { print("{} ", x); }
+    for x in v {
+        print("{} ", x);
+    }
     println("");
 }

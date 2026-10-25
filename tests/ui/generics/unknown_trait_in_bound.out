@@ -3,8 +3,10 @@ status: compile error
 Error: Unknown trait 'Nonesuch' in a bound
    ╭─[ tests/ui/generics/unknown_trait_in_bound.zr:1:1 ]
    │
- 1 │ struct Pair<T: Nonesuch> { first: T, second: T }
-   │ ────────────────────────┬───────────────────────
-   │                         ╰───────────────────────── Unknown trait 'Nonesuch' in a bound
+ 1 │ ╭─▶ struct Pair<T: Nonesuch> {
+   ┆ ┆
+ 4 │ ├─▶ }
+   │ │
+   │ ╰─────── Unknown trait 'Nonesuch' in a bound
 ───╯
 [-] Error: aborting due to previous error

@@ -3,7 +3,7 @@ status: compile error
 Error: void has no values; only what a function returns can be void
    ╭─[ tests/ui/types/void_parameter.zr:1:1 ]
    │
- 1 │ fn f(a: void) { }
+ 1 │ fn f(a: void) {}
    │ ──────┬──────
    │       ╰──────── void has no values; only what a function returns can be void
 ───╯

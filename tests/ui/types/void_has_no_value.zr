@@ -1,8 +1,16 @@
-struct S { v: void }
-struct Box<T> { v: T }
-fn greet() { println("hi"); }
-fn id<T>(x: T) T { return x; }
-fn nothing() void { }
+struct S {
+    v: void,
+}
+struct Box<T> {
+    v: T,
+}
+fn greet() {
+    println("hi");
+}
+fn id<T>(x: T) T {
+    return x;
+}
+fn nothing() void {}
 fn main() {
     var v = greet();
     id(greet());
@@ -12,7 +20,12 @@ fn main() {
     var b: Box<void>? = None;
     var c = true;
     while true {
-        var y = match c { true => { break; }, false => {} };
+        var y = match c {
+            true => {
+                break;
+            }
+            false => {}
+        };
     }
     nothing();
 }

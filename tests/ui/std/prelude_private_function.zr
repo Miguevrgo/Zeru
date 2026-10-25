@@ -1,1 +1,3 @@
-fn main() { syscall1(60, 0); }
+fn main() {
+    syscall1(60, 0);
+}

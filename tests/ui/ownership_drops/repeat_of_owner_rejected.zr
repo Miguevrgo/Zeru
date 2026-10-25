@@ -1,4 +1,9 @@
-struct P { id: i32, fn drop(var self) { println("drop {}", self.id); } }
+struct P {
+    id: i32,
+    fn drop(var self) {
+        println("drop {}", self.id);
+    }
+}
 fn main() {
     var p = P { id: 1 };
     var a = [(p, 0); 2];

@@ -1,2 +1,8 @@
-fn f(r: &Vec<i32>) { r.push(1); }
-fn main() { var v: Vec<i32> = Vec.new(); f(&v); println("{}", v.len()); }
+fn f(r: &Vec<i32>) {
+    r.push(1);
+}
+fn main() {
+    var v: Vec<i32> = Vec.new();
+    f(&v);
+    println("{}", v.len());
+}

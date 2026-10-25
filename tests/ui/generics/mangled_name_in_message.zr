@@ -1,4 +1,6 @@
-struct Box<T> { v: T }
+struct Box<T> {
+    v: T,
+}
 fn main() {
     var b: Box<i64> = Box { v: true };
 }

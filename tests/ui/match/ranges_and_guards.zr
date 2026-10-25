@@ -41,7 +41,12 @@ fn main() {
     println("{}", classify(200));
     println("{} {} {} {}", sign(-5), sign(0), sign(7), sign(100));
     println("{} {} {}", describe(Token::Num(-3)), describe(Token::Num(4)), describe(Token::Num(5)));
-    println("{} {} {}", describe(Token::Word(String.from("hello"))), describe(Token::Word(String.from("hi"))), describe(Token::End));
+    println(
+        "{} {} {}",
+        describe(Token::Word(String.from("hello"))),
+        describe(Token::Word(String.from("hi"))),
+        describe(Token::End),
+    );
     var total = 0;
     for i in 1..=10 {
         total += i;

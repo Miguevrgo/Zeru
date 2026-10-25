@@ -16,7 +16,7 @@ fn crc_table() Array<u32, 256> {
 
 const CRC: Array<u32, 256> = crc_table();
 
-fn crc(data: &[u8]) u32 {
+fn crc(data: str) u32 {
     var c: u32 = 0xffffffff;
     for b in data {
         c = CRC[((c ^ b as u32) & 0xff) as usize] ^ (c >> 8);

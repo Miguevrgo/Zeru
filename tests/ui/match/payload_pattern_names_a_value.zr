@@ -1,14 +1,25 @@
 const LIMIT: i64 = 5;
-enum E { A, B }
+enum E {
+    A,
+    B,
+}
 fn main() {
     var o: i64? = 7;
     match o {
-        Some(LIMIT) => { println("limit"); }
-        default => { println("other"); }
+        Some(LIMIT) => {
+            println("limit");
+        }
+        default => {
+            println("other");
+        }
     }
     var e: E? = E::B;
     match e {
-        Some(E::A) => { println("A"); }
-        default => { println("other"); }
+        Some(E::A) => {
+            println("A");
+        }
+        default => {
+            println("other");
+        }
     }
 }

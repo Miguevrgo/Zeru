@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: Constant 400 does not fit in u8
-   ╭─[ tests/ui/constants/overflow_through_global.zr:4:18 ]
+   ╭─[ tests/ui/constants/overflow_through_global.zr:6:18 ]
    │
- 4 │     var y = take(A + A);
+ 6 │     var y = take(A + A);
    │                  ──┬──
    │                    ╰──── Constant 400 does not fit in u8
 ───╯

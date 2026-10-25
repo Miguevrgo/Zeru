@@ -8,5 +8,7 @@ fn main() {
     var g = v.get(0);
     r.push(1);
     println("{}", g.is_some());
-    for x in v { r.push(x); }
+    for x in v {
+        r.push(x);
+    }
 }

@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: Use of moved value 'v'. Value was previously moved and is no longer valid
-   ╭─[ tests/ui/ownership_drops/conditional_move.zr:6:9 ]
+   ╭─[ tests/ui/ownership_drops/conditional_move.zr:8:9 ]
    │
- 6 │     eat(v);
+ 8 │     eat(v);
    │         ┬
    │         ╰── Use of moved value 'v'. Value was previously moved and is no longer valid
 ───╯

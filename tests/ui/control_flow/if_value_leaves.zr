@@ -1,5 +1,7 @@
 fn f(x: i32) i32 {
-    var y = if x > 0 { x * 2 } else { return -1; };
+    var y = if x > 0 { x * 2 } else {
+        return -1;
+    };
     return y;
 }
 
@@ -15,10 +17,16 @@ fn main() {
     println("{} {} {} {}", f(3), f(-2), g(4), g(None));
     var total = 0;
     for i in 0..10 {
-        var k = if i % 2 == 0 { continue; } else if i > 7 { break; } else { i };
+        var k = if i % 2 == 0 {
+            continue;
+        } else if i > 7 {
+            break;
+        } else { i };
         total += k;
     }
     println("{}", total);
-    var s = if total > 0 { return; } else { 5 };
+    var s = if total > 0 {
+        return;
+    } else { 5 };
     println("{}", s);
 }

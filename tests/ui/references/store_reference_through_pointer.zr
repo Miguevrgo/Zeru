@@ -1,3 +1,13 @@
-fn f(p: &var &i64) { var x: i64 = 7; *p = &x; }
-fn g(p: &var Vec<&i64>, q: &i64) { p.push(q); }
-fn main() { var d: i64 = 1; var r = &d; f(&var r); println("{}", *r); }
+fn f(p: &var &i64) {
+    var x: i64 = 7;
+    *p = &x;
+}
+fn g(p: &var Vec<&i64>, q: &i64) {
+    p.push(q);
+}
+fn main() {
+    var d: i64 = 1;
+    var r = &d;
+    f(&var r);
+    println("{}", *r);
+}

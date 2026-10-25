@@ -1,6 +1,12 @@
-fn put(slot: &var &i32, r: &i32) { *slot = r; }
-fn put_raw(slot: *&i32, r: &i32) { *slot = r; }
-fn read(r: & &i32) i32 { return **r; }
+fn put(slot: &var &i32, r: &i32) {
+    *slot = r;
+}
+fn put_raw(slot: *&i32, r: &i32) {
+    *slot = r;
+}
+fn read(r: & &i32) i32 {
+    return **r;
+}
 const k: i32 = 5;
 fn main() {
     var y = 1;

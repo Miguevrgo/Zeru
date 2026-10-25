@@ -1,6 +1,12 @@
-trait Shape { fn area(self) i64; }
-struct Bad { x: i64 }
-struct H<T: Shape> { v: T }
+trait Shape {
+    fn area(self) i64;
+}
+struct Bad {
+    x: i64,
+}
+struct H<T: Shape> {
+    v: T,
+}
 fn main() {
     var h: H<Bad> = H { v: Bad { x: 2 } };
 }

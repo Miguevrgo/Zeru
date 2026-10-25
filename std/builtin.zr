@@ -148,7 +148,12 @@ struct OutStream {
         var buf_ptr: *u8 = &self.buffer[0];
         var done: usize = 0;
         while done < self.index {
-            var written = syscall3(SYS_WRITE, self.fd as i64, (buf_ptr + done) as i64, (self.index - done) as i64);
+            var written = syscall3(
+                SYS_WRITE,
+                self.fd as i64,
+                (buf_ptr + done) as i64,
+                (self.index - done) as i64,
+            );
             if written < 0 {
                 self.index = 0;
                 return -1;
@@ -529,7 +534,15 @@ fn __zeru_under(low: &ZeruBig, high: &ZeruBig, inclusive: bool) bool {
 // them and on a tie the even one, written to
 // `digits` with their number in `count`. Returns where the point goes:
 // the value is 0.digits * 10^point.
-fn __zeru_shortest(value: f64, mantissa: u64, exponent: i64, hidden: u64, lowest: i64, digits: *u8, count: *usize) i64 {
+fn __zeru_shortest(
+    value: f64,
+    mantissa: u64,
+    exponent: i64,
+    hidden: u64,
+    lowest: i64,
+    digits: *u8,
+    count: *usize,
+) i64 {
     var even = mantissa % 2 == 0;
     var uneven_gaps = mantissa == hidden && exponent > lowest;
     var r = __zeru_big(mantissa);
@@ -1427,7 +1440,14 @@ struct Heap {
     // the old one; a size of 0 is no block.
     fn realloc(var self, old: *u8, old_size: usize, new_size: usize) *u8 {
         if old_size > HEAP_LARGEST && new_size > HEAP_LARGEST {
-            var moved: i64 = syscall5(SYS_MREMAP, old as i64, old_size as i64, new_size as i64, MREMAP_MAYMOVE, 0);
+            var moved: i64 = syscall5(
+                SYS_MREMAP,
+                old as i64,
+                old_size as i64,
+                new_size as i64,
+                MREMAP_MAYMOVE,
+                0,
+            );
             if moved < 0 {
                 __zeru_out_of_memory();
             }

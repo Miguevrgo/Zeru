@@ -1,4 +1,7 @@
-enum Mode { Fast, Slow }
+enum Mode {
+    Fast,
+    Slow,
+}
 const BASE: i32 = 4;
 const SPAN: i64 = (BASE * 2 + 1) as i64;
 const NAME: str = "zeru";

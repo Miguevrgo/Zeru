@@ -1,12 +1,16 @@
 status: compile error
 -- stderr
 Error: Cannot move 'v' while the loop still refers into it
-   ╭─[ tests/ui/control_flow/move_sequence_inside_for.zr:4:23 ]
+   ╭─[ tests/ui/control_flow/move_sequence_inside_for.zr:5:14 ]
    │
- 4 │     for x in v { take(v); println("{}", x); }
-   │              ┬        ┬
-   │              ╰─────────── borrowed here
-   │                       │
-   │                       ╰── Cannot move 'v' while the loop still refers into it
+ 5 │         take(v);
+   │              ┬
+   │              ╰── Cannot move 'v' while the loop still refers into it
+   │
+   ├─[ tests/ui/control_flow/move_sequence_inside_for.zr:5:14 ]
+   │
+ 4 │     for x in v {
+   │              ┬
+   │              ╰── borrowed here
 ───╯
 [-] Error: aborting due to previous error

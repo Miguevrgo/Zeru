@@ -1,8 +1,12 @@
 struct Handle {
     fd: i32,
-    fn drop(var self) { println("closed {}", self.fd); }
+    fn drop(var self) {
+        println("closed {}", self.fd);
+    }
 }
-struct Holder { h: Handle }
+struct Holder {
+    h: Handle,
+}
 fn main() {
     var h = Handle { fd: 1 };
     var a = h.copy();

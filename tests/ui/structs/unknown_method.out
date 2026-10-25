@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: Struct 'Point' has no method 'unknown_method'
-   ╭─[ tests/ui/structs/unknown_method.zr:4:5 ]
+   ╭─[ tests/ui/structs/unknown_method.zr:6:5 ]
    │
- 4 │     p.unknown_method();
+ 6 │     p.unknown_method();
    │     ─────────┬────────
    │              ╰────────── Struct 'Point' has no method 'unknown_method'
 ───╯

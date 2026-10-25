@@ -1,4 +1,9 @@
-struct P { x: i32, fn bump(var self) { self.x += 1; } }
+struct P {
+    x: i32,
+    fn bump(var self) {
+        self.x += 1;
+    }
+}
 fn f(p: *P) {
     p.x = 2;
     p.bump();

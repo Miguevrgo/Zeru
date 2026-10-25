@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: 'Box::empty' takes no 'self'; call it on the type, not a value
-   ╭─[ tests/ui/structs/static_function_on_value.zr:4:13 ]
+   ╭─[ tests/ui/structs/static_function_on_value.zr:9:13 ]
    │
- 4 │     var c = b.empty();
+ 9 │     var c = b.empty();
    │             ────┬────
    │                 ╰────── 'Box::empty' takes no 'self'; call it on the type, not a value
 ───╯

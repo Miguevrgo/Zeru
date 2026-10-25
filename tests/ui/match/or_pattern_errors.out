@@ -1,24 +1,24 @@
 status: compile error
 -- stderr
 Error: 'x' is not bound in every alternative
-   ╭─[ tests/ui/match/or_pattern_errors.zr:5:33 ]
-   │
- 5 │     var a = match e { E::A(x) | E::C(y) => 1, default => 2 };
-   │                                 ───┬───
-   │                                    ╰───── 'x' is not bound in every alternative
-───╯
+    ╭─[ tests/ui/match/or_pattern_errors.zr:10:19 ]
+    │
+ 10 │         E::A(x) | E::C(y) => 1,
+    │                   ───┬───
+    │                      ╰───── 'x' is not bound in every alternative
+────╯
 Error: 'x' is i64 here but i32 in the first alternative
-   ╭─[ tests/ui/match/or_pattern_errors.zr:6:33 ]
-   │
- 6 │     var b = match e { E::A(x) | E::B(x) => 1, default => 2 };
-   │                                 ───┬───
-   │                                    ╰───── 'x' is i64 here but i32 in the first alternative
-───╯
+    ╭─[ tests/ui/match/or_pattern_errors.zr:14:19 ]
+    │
+ 14 │         E::A(x) | E::B(x) => 1,
+    │                   ───┬───
+    │                      ╰───── 'x' is i64 here but i32 in the first alternative
+────╯
 Error: This value is already matched by an earlier arm
-   ╭─[ tests/ui/match/or_pattern_errors.zr:7:27 ]
-   │
- 7 │     var c = match 3 { 1 | 1 => 1, default => 2 };
-   │                           ┬
-   │                           ╰── This value is already matched by an earlier arm
-───╯
+    ╭─[ tests/ui/match/or_pattern_errors.zr:18:13 ]
+    │
+ 18 │         1 | 1 => 1,
+    │             ┬
+    │             ╰── This value is already matched by an earlier arm
+────╯
 [-] Error: aborting due to previous error

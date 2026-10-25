@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: Use of moved value 's'. Value was previously moved and is no longer valid
-   ╭─[ tests/ui/optionals_results/ok_wraps_owner.zr:6:10 ]
+   ╭─[ tests/ui/optionals_results/ok_wraps_owner.zr:8:10 ]
    │
- 6 │     keep(s);
+ 8 │     keep(s);
    │          ┬
    │          ╰── Use of moved value 's'. Value was previously moved and is no longer valid
 ───╯

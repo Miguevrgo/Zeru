@@ -1,2 +1,5 @@
 pub const LIMIT: i32 = 100;
-pub enum Level { Low, High }
+pub enum Level {
+    Low,
+    High,
+}

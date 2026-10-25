@@ -1,66 +1,70 @@
 status: compile error
 -- stderr
 Error: This value is already matched by an earlier arm
-   ╭─[ tests/ui/match/range_and_guard_errors.zr:5:35 ]
-   │
- 5 │     var a = match n { 0..=9 => 1, 5 => 2, default => 3 };
-   │                                   ┬
-   │                                   ╰── This value is already matched by an earlier arm
-───╯
-Error: A range matches integers, not E
-   ╭─[ tests/ui/match/range_and_guard_errors.zr:6:23 ]
-   │
- 6 │     var b = match e { E::A..=E::B => 1, default => 2 };
-   │                       ─────┬─────
-   │                            ╰─────── A range matches integers, not E
-───╯
-Error: The range 9..=1 takes no value
-   ╭─[ tests/ui/match/range_and_guard_errors.zr:7:23 ]
-   │
- 7 │     var c = match n { 9..=1 => 1, default => 2 };
-   │                       ──┬──
-   │                         ╰──── The range 9..=1 takes no value
-───╯
-Error: 'default' goes last, after every other arm
-   ╭─[ tests/ui/match/range_and_guard_errors.zr:8:40 ]
-   │
- 8 │     var d = match n { x if x > 1 => 1, default if n > 2 => 2, default => 3 };
-   │                                        ───┬───
-   │                                           ╰───── 'default' goes last, after every other arm
-───╯
-Error: 'default' takes every other value, with no 'if'; bind a name to test it, as in x if x > 3
-   ╭─[ tests/ui/match/range_and_guard_errors.zr:8:40 ]
-   │
- 8 │     var d = match n { x if x > 1 => 1, default if n > 2 => 2, default => 3 };
-   │                                        ───┬───
-   │                                           ╰───── 'default' takes every other value, with no 'if'; bind a name to test it, as in x if x > 3
-───╯
-Error: A match on i32 needs a 'default' arm
-   ╭─[ tests/ui/match/range_and_guard_errors.zr:9:13 ]
-   │
- 9 │     var f = match n { x => 1 };
-   │             ─────────┬────────
-   │                      ╰────────── A match on i32 needs a 'default' arm
-───╯
-Error: 'x' names no value; a name alone matches only with an 'if' after it, as in x if x > 3, and 'default' takes every other value
-   ╭─[ tests/ui/match/range_and_guard_errors.zr:9:23 ]
-   │
- 9 │     var f = match n { x => 1 };
-   │                       ┬
-   │                       ╰── 'x' names no value; a name alone matches only with an 'if' after it, as in x if x > 3, and 'default' takes every other value
-───╯
-Error: A match guard must be a bool, got i32
-    ╭─[ tests/ui/match/range_and_guard_errors.zr:10:28 ]
+    ╭─[ tests/ui/match/range_and_guard_errors.zr:10:9 ]
     │
- 10 │     var h = match n { x if 3 => 1, default => 2 };
-    │                            ┬
-    │                            ╰── A match guard must be a bool, got i32
+ 10 │         5 => 2,
+    │         ┬
+    │         ╰── This value is already matched by an earlier arm
+────╯
+Error: A range matches integers, not E
+    ╭─[ tests/ui/match/range_and_guard_errors.zr:14:9 ]
+    │
+ 14 │         E::A..=E::B => 1,
+    │         ─────┬─────
+    │              ╰─────── A range matches integers, not E
+────╯
+Error: The range 9..=1 takes no value
+    ╭─[ tests/ui/match/range_and_guard_errors.zr:18:9 ]
+    │
+ 18 │         9..=1 => 1,
+    │         ──┬──
+    │           ╰──── The range 9..=1 takes no value
+────╯
+Error: 'default' goes last, after every other arm
+    ╭─[ tests/ui/match/range_and_guard_errors.zr:23:9 ]
+    │
+ 23 │         default if n > 2 => 2,
+    │         ───┬───
+    │            ╰───── 'default' goes last, after every other arm
+────╯
+Error: 'default' takes every other value, with no 'if'; bind a name to test it, as in x if x > 3
+    ╭─[ tests/ui/match/range_and_guard_errors.zr:23:9 ]
+    │
+ 23 │         default if n > 2 => 2,
+    │         ───┬───
+    │            ╰───── 'default' takes every other value, with no 'if'; bind a name to test it, as in x if x > 3
 ────╯
 Error: A match on i32 needs a 'default' arm
-    ╭─[ tests/ui/match/range_and_guard_errors.zr:11:13 ]
+    ╭─[ tests/ui/match/range_and_guard_errors.zr:26:13 ]
     │
- 11 │     var i = match n { 1 if n > 0 => 1, 1 => 2 };
-    │             ─────────────────┬─────────────────
-    │                              ╰─────────────────── A match on i32 needs a 'default' arm
+ 26 │ ╭─▶     var f = match n {
+    ┆ ┆
+ 28 │ ├─▶     };
+    │ │
+    │ ╰──────────── A match on i32 needs a 'default' arm
+────╯
+Error: 'x' names no value; a name alone matches only with an 'if' after it, as in x if x > 3, and 'default' takes every other value
+    ╭─[ tests/ui/match/range_and_guard_errors.zr:27:9 ]
+    │
+ 27 │         x => 1,
+    │         ┬
+    │         ╰── 'x' names no value; a name alone matches only with an 'if' after it, as in x if x > 3, and 'default' takes every other value
+────╯
+Error: A match guard must be a bool, got i32
+    ╭─[ tests/ui/match/range_and_guard_errors.zr:30:14 ]
+    │
+ 30 │         x if 3 => 1,
+    │              ┬
+    │              ╰── A match guard must be a bool, got i32
+────╯
+Error: A match on i32 needs a 'default' arm
+    ╭─[ tests/ui/match/range_and_guard_errors.zr:33:13 ]
+    │
+ 33 │ ╭─▶     var i = match n {
+    ┆ ┆
+ 36 │ ├─▶     };
+    │ │
+    │ ╰──────────── A match on i32 needs a 'default' arm
 ────╯
 [-] Error: aborting due to previous error

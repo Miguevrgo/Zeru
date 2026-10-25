@@ -1,4 +1,6 @@
-fn set(p: *i32) { *p = 9; }
+fn set(p: *i32) {
+    *p = 9;
+}
 fn main() {
     var x: i32 = 1;
     set(&x);

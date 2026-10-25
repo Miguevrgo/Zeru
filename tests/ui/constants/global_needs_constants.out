@@ -1,13 +1,13 @@
 status: compile error
 -- stderr
 Error: Computing a constant while compiling cannot make a Vec: it lives on the heap
-   ╭─[ tests/ui/constants/global_needs_constants.zr:3:23 ]
+   ╭─[ tests/ui/constants/global_needs_constants.zr:5:23 ]
    │
- 3 │     var v: Vec<i32> = Vec[1, 2];
+ 5 │     var v: Vec<i32> = Vec[1, 2];
    │                       ────┬────
    │                           ╰────── Computing a constant while compiling cannot make a Vec: it lives on the heap
    │
- 7 │ const BAD: i32 = heap();
+ 9 │ const BAD: i32 = heap();
    │ ────────────┬───────────
    │             ╰───────────── while computing 'BAD'
 ───╯

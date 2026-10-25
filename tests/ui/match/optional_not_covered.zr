@@ -1,4 +1,6 @@
 fn main() {
     var o: i32? = 1;
-    var x = match o { Some(v) => 1 };
+    var x = match o {
+        Some(v) => 1,
+    };
 }

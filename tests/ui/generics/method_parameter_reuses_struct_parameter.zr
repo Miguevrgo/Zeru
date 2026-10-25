@@ -1,6 +1,8 @@
 struct B<T> {
     v: T,
-    fn f<T>(self, x: T) T { return x; }
+    fn f<T>(self, x: T) T {
+        return x;
+    }
 }
 fn main() {
     var b: B<i64> = B { v: 1 };

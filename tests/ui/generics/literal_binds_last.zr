@@ -1,4 +1,9 @@
-fn mx<T: Ord>(a: T, b: T) T { if a > b { return a; } return b; }
+fn mx<T: Ord>(a: T, b: T) T {
+    if a > b {
+        return a;
+    }
+    return b;
+}
 fn main() {
     var x: i64 = 5000000000;
     println("{} {}", mx(x, 1), mx(1, x));

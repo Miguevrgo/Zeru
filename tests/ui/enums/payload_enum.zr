@@ -1,9 +1,13 @@
-enum Shape { Circle(f64), Rect(f64, f64), Empty }
+enum Shape {
+    Circle(f64),
+    Rect(f64, f64),
+    Empty,
+}
 fn area(s: Shape) f64 {
     return match s {
         Shape::Circle(r) => 3.0 * r * r,
         Shape::Rect(w, h) => w * h,
-        Shape::Empty => 0.0
+        Shape::Empty => 0.0,
     };
 }
 fn main() {

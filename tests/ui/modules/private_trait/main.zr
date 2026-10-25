@@ -1,6 +1,13 @@
 import lib::{Hidden};
-struct S { n: i32, fn go(self) i32 { return 1; } }
-fn use_it<T: Hidden>(t: T) i32 { return t.go(); }
+struct S {
+    n: i32,
+    fn go(self) i32 {
+        return 1;
+    }
+}
+fn use_it<T: Hidden>(t: T) i32 {
+    return t.go();
+}
 fn main() {
     println("{}", use_it(S { n: 0 }));
 }

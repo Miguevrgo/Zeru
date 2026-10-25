@@ -2,11 +2,23 @@ import std.collections.hashmap::{HashMap};
 fn main() {
     var m: HashMap<i64, i64> = HashMap.new();
     var i: i64 = 0;
-    while i < 5000 { m.insert(i, i * i); i += 1; }
+    while i < 5000 {
+        m.insert(i, i * i);
+        i += 1;
+    }
     var ok = true;
     i = 0;
-    while i < 5000 { if *m.get(i).unwrap() != i * i { ok = false; } i += 1; }
+    while i < 5000 {
+        if *m.get(i).unwrap() != i * i {
+            ok = false;
+        }
+        i += 1;
+    }
     i = 0;
-    while i < 100000 { m.insert(-i - 1, i); m.remove(-i - 1); i += 1; }
+    while i < 100000 {
+        m.insert(-i - 1, i);
+        m.remove(-i - 1);
+        i += 1;
+    }
     println("{} {}", m.len(), ok);
 }

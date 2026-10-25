@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: Unknown type 'Entry'
-   ╭─[ tests/ui/types/unknown_type_no_prefix_skip.zr:3:5 ]
+   ╭─[ tests/ui/types/unknown_type_no_prefix_skip.zr:5:5 ]
    │
- 3 │     var x: Entry = 10;
+ 5 │     var x: Entry = 10;
    │     ─────────┬────────
    │              ╰────────── Unknown type 'Entry'
 ───╯

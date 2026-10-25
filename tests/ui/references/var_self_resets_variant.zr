@@ -1,9 +1,17 @@
 struct S {
     o: (&i64)?,
-    fn reset(var self) { self.o = None; }
+    fn reset(var self) {
+        self.o = None;
+    }
 }
 fn main() {
     var k: i64 = 3;
     var s = S { o: &k };
-    match s.o { Some(r) => { s.reset(); println("{}", *r); } None => {} }
+    match s.o {
+        Some(r) => {
+            s.reset();
+            println("{}", *r);
+        }
+        None => {}
+    }
 }

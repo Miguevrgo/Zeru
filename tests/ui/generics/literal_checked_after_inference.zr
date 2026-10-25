@@ -1,5 +1,9 @@
-fn id<T>(x: T) T { return x; }
-fn pair<T>(a: T, b: T) T { return a + b; }
+fn id<T>(x: T) T {
+    return x;
+}
+fn pair<T>(a: T, b: T) T {
+    return a + b;
+}
 fn main() {
     var small: u8 = 1;
     var big: i64 = 5;

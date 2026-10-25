@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
 Error: Every arm must give i32, this one gives bool
-   ╭─[ tests/ui/match/arm_types_differ.zr:3:43 ]
+   ╭─[ tests/ui/match/arm_types_differ.zr:5:14 ]
    │
- 3 │     var result = match x { 0 => 100, 1 => true, default => 0 };
-   │                                           ──┬─
-   │                                             ╰─── Every arm must give i32, this one gives bool
+ 5 │         1 => true,
+   │              ──┬─
+   │                ╰─── Every arm must give i32, this one gives bool
 ───╯
 [-] Error: aborting due to previous error

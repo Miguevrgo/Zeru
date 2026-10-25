@@ -1,10 +1,21 @@
-trait Area { fn area(self) i64; }
-struct Sq { s: i64, fn area(self) i64 { return self.s * self.s; } }
+trait Area {
+    fn area(self) i64;
+}
+struct Sq {
+    s: i64,
+    fn area(self) i64 {
+        return self.s * self.s;
+    }
+}
 struct Wrap<T: Area> {
     inner: T,
-    fn doubled(self) i64 { return self.inner.area() * 2; }
+    fn doubled(self) i64 {
+        return self.inner.area() * 2;
+    }
 }
-fn measure<T: Area>(x: T) i64 { return x.area(); }
+fn measure<T: Area>(x: T) i64 {
+    return x.area();
+}
 fn main() {
     var w = Wrap { inner: Sq { s: 3 } };
     println("{} {}", w.doubled(), measure(Sq { s: 4 }));

@@ -1,4 +1,6 @@
-fn two<T>(x: T?, y: T) T { return y; }
+fn two<T>(x: T?, y: T) T {
+    return y;
+}
 fn main() {
     var n: i64 = 4;
     var r = two(None, n);

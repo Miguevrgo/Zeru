@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: Unknown type 'Nope'
-   ╭─[ tests/ui/generics/unknown_type_argument.zr:3:5 ]
+   ╭─[ tests/ui/generics/unknown_type_argument.zr:5:5 ]
    │
- 3 │     var p: Pair<Nope> = Pair { a: 1 };
+ 5 │     var p: Pair<Nope> = Pair { a: 1 };
    │     ─────────────────┬────────────────
    │                      ╰────────────────── Unknown type 'Nope'
 ───╯

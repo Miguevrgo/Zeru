@@ -1,16 +1,16 @@
 status: compile error
 -- stderr
 Error: A pattern binds names, as in Some(x); match the value inside again
-   ╭─[ tests/ui/match/payload_pattern_names_a_value.zr:6:14 ]
+   ╭─[ tests/ui/match/payload_pattern_names_a_value.zr:9:14 ]
    │
- 6 │         Some(LIMIT) => { println("limit"); }
+ 9 │         Some(LIMIT) => {
    │              ──┬──
    │                ╰──── A pattern binds names, as in Some(x); match the value inside again
 ───╯
 Error: A pattern binds names, as in Some(x); match the value inside again
-    ╭─[ tests/ui/match/payload_pattern_names_a_value.zr:11:14 ]
+    ╭─[ tests/ui/match/payload_pattern_names_a_value.zr:18:14 ]
     │
- 11 │         Some(E::A) => { println("A"); }
+ 18 │         Some(E::A) => {
     │              ──┬─
     │                ╰─── A pattern binds names, as in Some(x); match the value inside again
 ────╯

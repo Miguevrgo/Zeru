@@ -1,14 +1,37 @@
-enum State { Open, Frozen(i32) }
-struct Account { state: State, log: Vec<i64> }
+enum State {
+    Open,
+    Frozen(i32),
+}
+struct Account {
+    state: State,
+    log: Vec<i64>,
+}
 struct Bank {
     accounts: Vec<Account>,
-    fn slot(var self, i: usize) &var Account { return &var self.accounts[i]; }
+    fn slot(var self, i: usize) &var Account {
+        return &var self.accounts[i];
+    }
 }
-fn pick(v: &var Vec<Vec<i64>>) &var Vec<i64> { return &var v[0]; }
-fn first(v: &var Vec<i64?>) &var i64? { return &var v[0]; }
+fn pick(v: &var Vec<Vec<i64>>) &var Vec<i64> {
+    return &var v[0];
+}
+fn first(v: &var Vec<i64?>) &var i64? {
+    return &var v[0];
+}
 fn find(v: &var Vec<Account>, frozen: bool) (&var Account)? {
     for a in v {
-        match a.state { State::Frozen(_) => { if frozen { return &var a; } } State::Open => { if !frozen { return &var a; } } }
+        match a.state {
+            State::Frozen(_) => {
+                if frozen {
+                    return &var a;
+                }
+            }
+            State::Open => {
+                if !frozen {
+                    return &var a;
+                }
+            }
+        }
     }
     return None;
 }
@@ -36,6 +59,11 @@ fn main() {
 
     var a = find(&var b.accounts, true).unwrap();
     a.state = State::Open;
-    match find(&var b.accounts, false) { Some(c) => { c.log.push(5); } None => { } }
+    match find(&var b.accounts, false) {
+        Some(c) => {
+            c.log.push(5);
+        }
+        None => {}
+    }
     println("{}", b.accounts[0].log.len());
 }

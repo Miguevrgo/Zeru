@@ -1,5 +1,15 @@
-fn grow(vs: &var Vec<Vec<i64>>) usize { for i in 0..100 { vs.push(Vec[1]); } return 1; }
-fn grow_more(vs: &var Vec<Vec<i64>>) i64 { for i in 0..100 { vs.push(Vec[1]); } return 9; }
+fn grow(vs: &var Vec<Vec<i64>>) usize {
+    for i in 0..100 {
+        vs.push(Vec[1]);
+    }
+    return 1;
+}
+fn grow_more(vs: &var Vec<Vec<i64>>) i64 {
+    for i in 0..100 {
+        vs.push(Vec[1]);
+    }
+    return 9;
+}
 fn main() {
     var vs: Vec<Vec<i64>> = Vec[Vec[5, 6]];
     var x = vs[0][grow(&var vs)];

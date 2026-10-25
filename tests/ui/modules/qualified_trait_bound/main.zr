@@ -1,4 +1,11 @@
 import lib;
-struct S { n: i32, fn go(self) i32 { return 1; } }
-fn use_it<T: lib::Go>(t: T) i32 { return t.go(); }
-fn main() { }
+struct S {
+    n: i32,
+    fn go(self) i32 {
+        return 1;
+    }
+}
+fn use_it<T: lib::Go>(t: T) i32 {
+    return t.go();
+}
+fn main() {}

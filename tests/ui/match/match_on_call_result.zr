@@ -1,9 +1,17 @@
-enum Kind { Small, Large }
+enum Kind {
+    Small,
+    Large,
+}
 fn kind(n: i32) Kind {
-    if n > 10 { return Kind::Large; }
+    if n > 10 {
+        return Kind::Large;
+    }
     return Kind::Small;
 }
 fn main() {
-    var s = match kind(50) { Kind::Small => "s", Kind::Large => "L" };
+    var s = match kind(50) {
+        Kind::Small => "s",
+        Kind::Large => "L",
+    };
     println("{}", s);
 }

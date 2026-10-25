@@ -1,2 +1,4 @@
-fn f() i32! { return Err(true); }
-fn main() { }
+fn f() i32! {
+    return Err(true);
+}
+fn main() {}

@@ -1,4 +1,6 @@
-struct Pair<T> { a: T }
+struct Pair<T> {
+    a: T,
+}
 fn main() {
     var p: Pair<Nope> = Pair { a: 1 };
 }

@@ -1,1 +1,3 @@
-pub fn big<T>() T { return 5000000000; }
+pub fn big<T>() T {
+    return 5000000000;
+}

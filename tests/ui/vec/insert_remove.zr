@@ -3,6 +3,8 @@ fn main() {
     v.insert(0, 0);
     v.insert(4, 9);
     var second = v.remove(1);
-    for x in v { print("{} ", x); }
+    for x in v {
+        print("{} ", x);
+    }
     println("| {}", second);
 }

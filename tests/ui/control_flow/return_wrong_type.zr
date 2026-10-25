@@ -1,3 +1,7 @@
-fn f() i32 { return; }
-fn g() i32 { return true; }
-fn main() { }
+fn f() i32 {
+    return;
+}
+fn g() i32 {
+    return true;
+}
+fn main() {}

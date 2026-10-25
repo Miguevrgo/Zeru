@@ -1,17 +1,17 @@
 status: compile error
 -- stderr
 Error: Argument 1 type mismatch: expected &var &i32, got &var &var i32
-   ╭─[ tests/ui/references/mutable_reference_is_invariant.zr:8:9 ]
-   │
- 8 │     put(&var m, &k);
-   │         ───┬──
-   │            ╰──── Argument 1 type mismatch: expected &var &i32, got &var &var i32
-───╯
+    ╭─[ tests/ui/references/mutable_reference_is_invariant.zr:14:9 ]
+    │
+ 14 │     put(&var m, &k);
+    │         ───┬──
+    │            ╰──── Argument 1 type mismatch: expected &var &i32, got &var &var i32
+────╯
 Error: Argument 1 type mismatch: expected *&i32, got &var &var i32
-   ╭─[ tests/ui/references/mutable_reference_is_invariant.zr:9:13 ]
-   │
- 9 │     put_raw(&var m, &k);
-   │             ───┬──
-   │                ╰──── Argument 1 type mismatch: expected *&i32, got &var &var i32
-───╯
+    ╭─[ tests/ui/references/mutable_reference_is_invariant.zr:15:13 ]
+    │
+ 15 │     put_raw(&var m, &k);
+    │             ───┬──
+    │                ╰──── Argument 1 type mismatch: expected *&i32, got &var &var i32
+────╯
 [-] Error: aborting due to previous error

@@ -2,6 +2,8 @@ fn main() {
     var n: usize = 3;
     var arr: Array<i32, 3> = [1, 2, 3];
     var s = 0;
-    for i in 0..3 { s += arr[i as usize]; }
+    for i in 0..3 {
+        s += arr[i as usize];
+    }
     println("{}", s);
 }

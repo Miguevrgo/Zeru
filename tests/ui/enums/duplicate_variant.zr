@@ -1,2 +1,5 @@
-enum E { A, A }
-fn main() { }
+enum E {
+    A,
+    A,
+}
+fn main() {}

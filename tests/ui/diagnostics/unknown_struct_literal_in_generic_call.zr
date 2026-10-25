@@ -1,5 +1,12 @@
-struct Stack<T> { items: Vec<T> }
-fn pick<T>(c: bool, a: T, b: T) T { if c { return a; } return b; }
+struct Stack<T> {
+    items: Vec<T>,
+}
+fn pick<T>(c: bool, a: T, b: T) T {
+    if c {
+        return a;
+    }
+    return b;
+}
 fn main() {
     var s = pick(true, Stack { items: [7] }, Stack { items: [8] });
 }

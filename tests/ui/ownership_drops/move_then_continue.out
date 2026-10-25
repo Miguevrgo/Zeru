@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
 Error: Cannot move 'v' inside a loop: the next turn would use it again
-   ╭─[ tests/ui/ownership_drops/move_then_continue.zr:5:19 ]
+   ╭─[ tests/ui/ownership_drops/move_then_continue.zr:6:13 ]
    │
- 5 │     while c { eat(v); continue; }
-   │                   ┬
-   │                   ╰── Cannot move 'v' inside a loop: the next turn would use it again
+ 6 │         eat(v);
+   │             ┬
+   │             ╰── Cannot move 'v' inside a loop: the next turn would use it again
 ───╯
 [-] Error: aborting due to previous error

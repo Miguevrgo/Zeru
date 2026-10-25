@@ -1,5 +1,7 @@
-struct S { v: Vec<i64> }
-fn take(v: Vec<i64>) { }
+struct S {
+    v: Vec<i64>,
+}
+fn take(v: Vec<i64>) {}
 fn main() {
     var a: Vec<i64> = Vec.new();
     var row = [a];

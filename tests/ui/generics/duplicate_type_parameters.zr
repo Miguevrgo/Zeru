@@ -1,5 +1,9 @@
-fn f<T, T>(a: T) T { return a; }
-struct B<T, T> { v: T }
+fn f<T, T>(a: T) T {
+    return a;
+}
+struct B<T, T> {
+    v: T,
+}
 fn main() {
     println("{}", f(1));
 }
