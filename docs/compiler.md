@@ -16,7 +16,9 @@ source ─▶ lexer ─▶ parser ─▶ items ─▶ check ─▶ mir ─▶ lo
 | Items | `items.rs` | A `DefId` for every function, method, struct, enum, trait and constant, and a scope per module |
 | Check | `check/` | The typed IR of every function instance, or the errors |
 | MIR | `mir/` | Each function as a graph of basic blocks, borrow checked, its drops elaborated |
-| Lower | `lower/` | An LLVM module |
+| Lower | `lower/` | An LLVM module, with debug info from `lower/debug.rs` |
+| Errors | `errors.rs` | Every message with its span, printed with the source line, or as JSON for editors |
+| Formatter | `fmt.rs` | `zeru fmt`: the syntax tree printed back in one layout, comments kept |
 
 ## Names
 
@@ -46,7 +48,8 @@ error it reports carries a note pointing at the call that asked for it.
 
 `check/body.rs` checks one instance in a function context (`FnCx`). Locals are
 numbered `LocalId`s. Expressions are in `expr.rs`, calls and built-in methods
-in `call.rs`, `match` in `pattern.rs`, and constant evaluation, at the width of
+in `call.rs`, the type arguments of a generic call in `infer.rs`, `match`
+in `pattern.rs`, and constant evaluation, at the width of
 each integer type, in `consts.rs`. A global constant that calls functions is
 run by `eval.rs`, an interpreter over the typed IR of plain data, which
 checks the instances it reaches on the spot and gives the value back as

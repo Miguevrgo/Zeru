@@ -59,8 +59,9 @@ fn main() {
 
 A `match` must cover every variant. Leaving one out is a compile error,
 so adding a variant to an enum points at every `match` that needs a new
-arm. `default` covers everything not listed, and `|` joins patterns that
-share an arm:
+arm. `default`, the last arm, covers everything not listed, `|` joins
+patterns that share an arm, and an `if` after a pattern adds a condition,
+as in `Some(x) if x > 3 =>`:
 
 ```zeru
 enum Day {

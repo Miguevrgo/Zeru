@@ -32,7 +32,7 @@ fn main() {
 }
 ```
 
-A function that returns a value always ends with a `return`. Functions can
+Every path out of a function that returns a value ends in a `return`. Functions can
 be declared in any order and can call themselves:
 
 ```zeru

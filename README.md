@@ -88,7 +88,7 @@ Create a file with `.zr` extension and program some code, you may find useful to
 Now you can compile and run it:
 
 ```sh
-zeru build file_name.zr
+zeru run file_name.zr
 ```
 
 `zeru fmt file_name.zr` formats it.
@@ -109,8 +109,8 @@ To collaborate, you can fork the project, create a branch for the feature/improv
 { "Miguevrgo/zeru-editors", lazy = false, build = "cargo build --release --manifest-path server/Cargo.toml" }
 ```
 
-Emacs gets highlighting, indentation and the same language server through eglot; Vim and
-VS Code get highlighting. Setup for every editor:
+Emacs gets highlighting, indentation and the same language server through eglot, and
+Kakoune through kakoune-lsp; Vim and VS Code get highlighting. Setup for every editor:
 
 👉 **<https://github.com/Miguevrgo/zeru-editors>**
 

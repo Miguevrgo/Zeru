@@ -14,7 +14,8 @@ import std.math;
 | `is_power_of_two(n)` | whether `n` is 1, 2, 4, 8... |
 | `div_euclid(a, b)`, `mod_euclid(a, b)` | division and remainder that never give a negative remainder |
 
-They work for any number type the arguments share.
+They work for any number type the arguments share, except
+`is_power_of_two`, which takes a `u64`.
 
 ```zeru
 import std.math;

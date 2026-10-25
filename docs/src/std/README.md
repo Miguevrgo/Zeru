@@ -5,7 +5,7 @@ need, with one way to do each task.
 
 | Module | Import | For |
 |---|---|---|
-| prelude | none | printing, `assert`, `exit`, `Vec`, `String`, text methods, error codes |
+| prelude | none | printing, `assert`, `exit`, `replace`, `zip`, `Vec`, `String`, text methods, error codes |
 | [math](math.md) | `import std.math;` | min, max, powers and other number helpers |
 | [fs](fs.md) | `import std.fs;` | files and directories |
 | [os](os.md) | `import std.os;` | arguments, environment, time, processes, input |

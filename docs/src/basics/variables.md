@@ -13,8 +13,7 @@ println("{} {}", count, price); // 4 9.5
 ```
 
 `const` declares a value that never changes. Assigning to it again is an
-error. Constants can also live outside any function, where their type is
-always written:
+error. Constants can also live outside any function:
 
 ```zeru
 const LIMIT: i32 = 10;

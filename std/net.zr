@@ -173,21 +173,7 @@ fn unix_addr(path: str) Raw! {
 
 // `n` in `base` at the end of `out`, hex digits in lowercase.
 fn push_number(out: &var String, n: u64, base: u64) {
-    var digits: Array<u8, 20> = [0; 20];
-    var count: usize = 0;
-    var rest = n;
-    while true {
-        digits[count] = "0123456789abcdef"[(rest % base) as usize];
-        count += 1;
-        rest = rest / base;
-        if rest == 0 {
-            break;
-        }
-    }
-    while count > 0 {
-        count -= 1;
-        out.push(digits[count]);
-    }
+    out.push_str(__zeru_format_int(n as i64, true, base, false, ' ', '>', false, 0));
 }
 
 // `raw` as text: "1.2.3.4:80", "[::1]:80" with the longest run of zero
@@ -895,7 +881,7 @@ pub struct UnixListener {
     // # Errors
     //
     // `EADDRINUSE` when the path exists, `ENOENT` when its directory does
-    // not, `ENAMETOOLONG` for a path of 108 bytes or more.
+    // not, 36 (ENAMETOOLONG) for a path of 108 bytes or more.
     pub fn bind(path: str) UnixListener! {
         var raw = unix_addr(path)!;
         return UnixListener { fd: bound(&raw, SOCK_STREAM)!, addr: raw };

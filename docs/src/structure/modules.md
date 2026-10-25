@@ -80,5 +80,5 @@ fn main() {
 ```
 
 Some things are always there, without an import: `print` and its
-siblings, `assert`, `exit`, `Vec`, `String`, the methods of `str`,
+siblings, `assert`, `exit`, `replace`, `zip`, `Vec`, `String`, the methods of `str`,
 optionals and results, and the error codes like `ENOENT`.

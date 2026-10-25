@@ -534,8 +534,7 @@ fmodf:
     movss -4(%rsp), %xmm0
     ret
 
-# Raise SIGABRT, as libc's abort does; exit with its status if that
-# returns.
+# Raise SIGABRT; exit with status 134 if that returns.
     .globl abort
     .type abort, @function
 abort:

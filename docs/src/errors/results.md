@@ -100,7 +100,7 @@ fn main() {
 }
 ```
 
-## Results must be looked at
+## A result's value comes out checked
 
 A `T!` has to be taken apart before its value can be used: there is no
 way to read the value and forget the error by accident. A result is not a

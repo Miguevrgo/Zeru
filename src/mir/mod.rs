@@ -325,8 +325,6 @@ impl Body {
 }
 
 impl Program {
-    /// The type `projection` reaches from a `ty`, `variant` keeping the
-    /// variant a `Downcast` chose for the field after it.
     /// The type `projection` reaches from a value of `ty`.
     pub fn projected(&self, mut ty: Ty, projection: &[Projection]) -> Ty {
         let mut variant = None;
@@ -446,7 +444,6 @@ impl Program {
         }
         seen.push(ty);
         match self.types.kind(ty) {
-            TyKind::Vec(inner) | TyKind::Array(inner, _) if *inner == elem => true,
             TyKind::Ref(inner) | TyKind::RefMut(inner) => self.stores(*inner, elem, seen),
             _ => self
                 .parts(ty)

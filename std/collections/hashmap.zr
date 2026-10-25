@@ -1,7 +1,7 @@
 // Zeru Standard Library - HashMap
 // One control byte per slot, sixteen of them per group, compared all at
 // once with SSE2.
-// A key is an integer, a bool or an enum, hashed by its bits.
+// A key is hashed by its bits.
 
 // A control byte: a slot never used, one whose entry was removed, or else
 // the top seven bits of its key's hash.
@@ -49,10 +49,11 @@ fn lowest(bits: u32) usize {
 
 // A map from keys to values, growing on the heap as entries come.
 //
-// Keys are integers, bools, enums without data or tuples of those; each key
-// holds one value. Looking up, adding and removing a key take O(1) time on
-// average. `for (key, value) in map` walks the entries in the order they
-// went in, until a removal moves the last one into the gap it leaves;
+// Keys are integers, bools, enums without data, or tuples and structs of
+// those; each key holds one value. Looking up, adding and removing a key
+// take O(1) time on average. `for (key, value) in map` walks the entries
+// in the order they went in, until a removal moves the last one into the
+// gap it leaves;
 // `for (key, value) in &var map` can change the values.
 //
 // # Examples

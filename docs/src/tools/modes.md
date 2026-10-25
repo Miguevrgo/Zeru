@@ -50,7 +50,7 @@ reference.
 
 ## What gets built
 
-The executable goes to `build/`, named after the source file. `--emit-ir` also keeps the LLVM IR, the code just
+The executable goes to `build/`, named after the source file. `zeru build --emit-ir` also keeps the LLVM IR, the code just
 before it becomes machine code, in `build/`. `zeru clean` removes the
 folder.
 
