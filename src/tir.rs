@@ -21,6 +21,8 @@ pub struct Program {
     pub enums: HashMap<Ty, EnumLayout>,
     pub owning: HashSet<Ty>,
     pub runtime: Runtime,
+    /// The `test("...")` runners, in the order `zeru test` numbers them.
+    pub tests: Vec<FnId>,
 }
 
 /// The prelude functions the generated code calls by itself.
@@ -36,6 +38,7 @@ pub struct Runtime {
     pub realloc: FnId,
     pub str_cmp: FnId,
     pub string_cmp: FnId,
+    pub test_index: FnId,
 }
 
 pub struct StructLayout {

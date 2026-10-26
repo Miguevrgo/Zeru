@@ -59,16 +59,21 @@ fn resolve_import(import: &str, root: &Path) -> Option<PathBuf> {
     Some(base.join(relative.replace('.', "/")).with_extension("zr"))
 }
 
+/// Parse `source`, with what its `#test { }` holds when `tests`.
 fn parse_file(
     name: String,
     source: &str,
     sources: &mut Sources,
     errors: &mut Vec<ZeruError>,
+    tests: bool,
 ) -> Program {
     let start = sources.push(name, source);
     let mut parser = Parser::new(Lexer::at(source, start));
-    let program = parser.parse_program();
+    let mut program = parser.parse_program();
     errors.append(&mut parser.errors);
+    if tests {
+        program.statements.append(&mut program.tests);
+    }
     program
 }
 
@@ -77,9 +82,13 @@ type Analysis = Result<(crate::tir::Program, Vec<crate::mir::Body>), Vec<ZeruErr
 
 /// Everything before code generation: load and parse every file, collect the
 /// items, type check, and build the MIR and check its borrows.
-fn analyze(path: &Path, mode: SafetyMode) -> Result<(Sources, Analysis), CompileError> {
+fn analyze(
+    path: &Path,
+    mode: SafetyMode,
+    tests: bool,
+) -> Result<(Sources, Analysis), CompileError> {
     let user_code = std::fs::read_to_string(path)?;
-    let (sources, modules, errors) = load(path, &user_code);
+    let (sources, modules, errors) = load(path, &user_code, tests);
     if !errors.is_empty() {
         return Ok((sources, Err(errors)));
     }
@@ -94,7 +103,7 @@ fn analyze(path: &Path, mode: SafetyMode) -> Result<(Sources, Analysis), Compile
 /// Check `path` as `compile` would, without generating code, and report its
 /// errors as text or, for editors, as one JSON object per line.
 pub fn check(path: &Path, json: bool) -> Result<(), CompileError> {
-    let (sources, analysis) = analyze(path, SafetyMode::Debug)?;
+    let (sources, analysis) = analyze(path, SafetyMode::Debug, true)?;
     let Err(errors) = analysis else {
         return Ok(());
     };
@@ -158,14 +167,26 @@ extern "C" fn collect_error(info: LLVMDiagnosticInfoRef, errors: *mut c_void) {
     }
 }
 
-pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, CompileError> {
+/// Build `path` into `build/`, or with `tests` into a `-test` program that
+/// runs the test its first argument numbers. Gives the program's path and
+/// each test as its place and name.
+pub fn compile(
+    path: &Path,
+    mode: SafetyMode,
+    keep_ir: bool,
+    tests: bool,
+) -> Result<(PathBuf, Vec<(String, String)>), CompileError> {
     if !path.extension().is_some_and(|ext| ext == "zr") {
         status(YELLOW, '\u{ea6c}', "Warning", "Zeru extension is .zr");
     }
-    let name = path
+    let stem = path
         .file_stem()
         .and_then(|s| s.to_str())
         .ok_or(CompileError::InvalidPath)?;
+    let name = &match tests {
+        true => format!("{stem}-test"),
+        false => stem.to_string(),
+    };
     let build_dir = Path::new("build");
     std::fs::create_dir_all(build_dir)?;
     let ir_path = build_dir.join(format!("{name}.ll"));
@@ -179,11 +200,21 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
         format_args!("v{} ({})", env!("CARGO_PKG_VERSION"), path.display()),
     );
     let start = std::time::Instant::now();
-    let (sources, analysis) = analyze(path, mode)?;
+    let (sources, analysis) = analyze(path, mode, tests)?;
     let (program, bodies) = analysis.map_err(|errors| {
         report_errors(&errors, &sources);
         CompileError::Unknown
     })?;
+    let found = program
+        .tests
+        .iter()
+        .map(|&test| {
+            let function = &bodies[test.0 as usize];
+            let (file, line, _) = sources.position(function.span).unwrap_or_default();
+            let (_, name) = function.symbol.split_once('#').unwrap_or_default();
+            (format!("{file}:L{line}"), name.to_string())
+        })
+        .collect();
     let mut rejected: Vec<String> = Vec::new();
     let context = Context::create();
     unsafe {
@@ -233,12 +264,64 @@ pub fn compile(path: &Path, mode: SafetyMode, keep_ir: bool) -> Result<PathBuf, 
     if keep_ir {
         status(GREEN, '\u{eaf3}', "IR saved", ir_path.display());
     }
-    Ok(exe_path)
+    Ok((exe_path, found))
+}
+
+/// Run each test of `path` whose name holds `filter`, in a process of its
+/// own so a panic fails only that test: the passes as they finish, then the
+/// failures with what they printed. Gives whether every test passed.
+pub fn test(path: &Path, mode: SafetyMode, filter: Option<&str>) -> Result<bool, CompileError> {
+    let (exe_path, tests) = compile(path, mode, false, true)?;
+    let ((green, reset), (red, _)) = (crate::errors::paint(GREEN), crate::errors::paint(RED));
+    let start = std::time::Instant::now();
+    let (mut passed, mut failed, mut filtered) = (0, Vec::new(), 0);
+    for (index, (at, name)) in tests.iter().enumerate() {
+        if filter.is_some_and(|filter| !name.contains(filter)) {
+            filtered += 1;
+            continue;
+        }
+        let (mut reader, writer) = std::io::pipe()?;
+        let mut child = Command::new(&exe_path)
+            .arg(index.to_string())
+            .stdout(writer.try_clone()?)
+            .stderr(writer)
+            .spawn()?;
+        let mut output = String::new();
+        std::io::Read::read_to_string(&mut reader, &mut output)?;
+        match child.wait()? {
+            done if done.success() => {
+                println!("{green}[PASS]{reset} {at} {name}");
+                passed += 1;
+            }
+            done => failed.push((at, name, output, done)),
+        }
+    }
+    let end = start.elapsed().as_secs_f64();
+    for (at, name, output, done) in &failed {
+        println!("{red}[FAIL]{reset} {at} {name}");
+        for line in output.lines() {
+            println!("       {line}");
+        }
+        if output.trim().is_empty() {
+            println!("       {done}");
+        }
+    }
+    let filtered = match filtered {
+        0 => String::new(),
+        count => format!(", {count} filtered out"),
+    };
+    println!("{}", "-".repeat(27));
+    println!(
+        "{passed} passed, {} failed{filtered} in {end:.3}s",
+        failed.len()
+    );
+    Ok(failed.is_empty())
 }
 
 /// Parse the prelude, the root file and every module they import, each into
-/// a module of its own.
-fn load(path: &Path, user_code: &str) -> (Sources, Vec<SourceModule>, Vec<ZeruError>) {
+/// a module of its own; with `tests`, the root needs no `main` and the files
+/// outside std keep their tests.
+fn load(path: &Path, user_code: &str, tests: bool) -> (Sources, Vec<SourceModule>, Vec<ZeruError>) {
     let mut sources = Sources::default();
     let mut errors = Vec::new();
     let prelude = parse_file(
@@ -246,18 +329,20 @@ fn load(path: &Path, user_code: &str) -> (Sources, Vec<SourceModule>, Vec<ZeruEr
         include_str!("../std/builtin.zr"),
         &mut sources,
         &mut errors,
+        false,
     );
     let root = parse_file(
         path.display().to_string(),
         user_code,
         &mut sources,
         &mut errors,
+        tests,
     );
     let root_end = sources.end();
-    if !root
-        .statements
-        .iter()
-        .any(|stmt| matches!(&stmt.kind, StatementKind::Function { name, .. } if name == "main"))
+    if !tests
+        && !root.statements.iter().any(
+            |stmt| matches!(&stmt.kind, StatementKind::Function { name, .. } if name == "main"),
+        )
     {
         errors.push(ZeruError::syntax(
             "Missing 'fn main'",
@@ -312,6 +397,7 @@ fn load(path: &Path, user_code: &str) -> (Sources, Vec<SourceModule>, Vec<ZeruEr
                 &source,
                 &mut sources,
                 &mut errors,
+                tests && !import.starts_with("std."),
             );
             modules.push(SourceModule {
                 name: Some(short.clone()),

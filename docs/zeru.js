@@ -14,6 +14,7 @@ hljs.registerLanguage("zeru", function (hljs) {
     },
     contains: [
       hljs.C_LINE_COMMENT_MODE,
+      { className: "meta", begin: "#test\\b" },
       { className: "string", begin: '"', end: '"', contains: [hljs.BACKSLASH_ESCAPE] },
       { className: "string", begin: "`", end: "`" },
       { className: "string", begin: "'(\\\\.|[^'\\\\])'" },

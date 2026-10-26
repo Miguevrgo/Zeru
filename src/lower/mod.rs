@@ -186,8 +186,9 @@ fn fixed_locals(body: &Body) -> Vec<Option<&Constant>> {
         .collect()
 }
 
-/// Which functions the program can call: those `main` reaches, and the
-/// ones the generated code calls by itself, the runtime's and the `drop`s.
+/// Which functions the program can call: those `main` or the tests reach,
+/// and the ones the generated code calls by itself, the runtime's and the
+/// `drop`s.
 /// The others, most of the prelude's in a small program, are not built.
 fn reached(program: &Program, bodies: &[Body]) -> Vec<bool> {
     let runtime = &program.runtime;
@@ -204,6 +205,8 @@ fn reached(program: &Program, bodies: &[Body]) -> Vec<bool> {
     ]
     .into_iter()
     .chain(program.structs.values().filter_map(|layout| layout.drop))
+    .chain(program.tests.iter().copied())
+    .chain((!program.tests.is_empty()).then_some(runtime.test_index))
     .chain(
         bodies
             .iter()

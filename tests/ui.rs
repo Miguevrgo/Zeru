@@ -267,3 +267,48 @@ fn check_reports_json() {
     );
     assert!(!root().join("tests/ui/references/build").exists());
 }
+
+#[test]
+fn test_runs_each_test_alone() {
+    let scratch = std::env::temp_dir().join(format!("zeru-test-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_zeru"))
+        .arg("test")
+        .arg(root().join("tests/programs/unit_tests/main.zr"))
+        .current_dir(&scratch)
+        .env("ZERU_STD_PATH", root().join("std"))
+        .output()
+        .unwrap();
+    let _ = std::fs::remove_dir_all(&scratch);
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(!output.status.success());
+    let [passes, failures] = ["[PASS]", "[FAIL]"].map(|tag| {
+        stdout
+            .lines()
+            .filter_map(|line| line.strip_prefix(tag))
+            .map(|line| line.rsplit_once('/').map_or(line, |(_, file)| file))
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(
+        passes,
+        [
+            "main.zr:L14 add sums",
+            "main.zr:L27 helpers live in the block",
+            "shapes.zr:L6 area multiplies"
+        ],
+        "{stdout}"
+    );
+    assert_eq!(
+        failures,
+        [
+            "main.zr:L18 add fails on purpose",
+            "main.zr:L23 an error fails the test"
+        ],
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("       printed before failing\n"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("3 passed, 2 failed in "), "{stdout}");
+}

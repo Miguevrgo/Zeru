@@ -1,0 +1,9 @@
+fn main() {}
+
+test("outside the block") {}
+
+#test {
+    test("inside") {}
+}
+
+fn after_the_block() {}

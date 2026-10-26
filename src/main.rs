@@ -12,7 +12,7 @@ mod tir;
 mod token;
 mod ty;
 
-use crate::driver::{GREEN, RED, check, compile, format, status};
+use crate::driver::{GREEN, RED, check, compile, format, status, test};
 use crate::{errors::CompileError, lower::SafetyMode};
 use clap::{Parser, Subcommand};
 use std::os::unix::process::ExitStatusExt;
@@ -55,6 +55,20 @@ enum Commands {
         #[arg(last = true, help = "Arguments for the program, after --")]
         program_args: Vec<String>,
     },
+    #[command(about = "Run the tests in #test of a .zr file and the files it imports")]
+    Test {
+        file: PathBuf,
+        #[arg(help = "Run only the tests whose name holds this")]
+        filter: Option<String>,
+        #[arg(
+            long,
+            conflicts_with = "release_fast",
+            help = "Optimize, keep runtime checks"
+        )]
+        release_safe: bool,
+        #[arg(long, help = "Optimize, drop runtime checks")]
+        release_fast: bool,
+    },
     #[command(about = "Check a .zr file for errors without compiling it")]
     Check {
         file: PathBuf,
@@ -88,7 +102,7 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
             emit_ir,
         } => {
             let safety_mode = SafetyMode::from_flags(release_fast, release_safe);
-            compile(&file, safety_mode, emit_ir)?;
+            compile(&file, safety_mode, emit_ir, false)?;
         }
         Commands::Run {
             file,
@@ -97,7 +111,7 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
             program_args,
         } => {
             let safety_mode = SafetyMode::from_flags(release_fast, release_safe);
-            let executable_path = compile(&file, safety_mode, false)?;
+            let (executable_path, _) = compile(&file, safety_mode, false, false)?;
             status(GREEN, '\u{e7d5}', "Running", executable_path.display());
             let status = std::process::Command::new(&executable_path)
                 .args(program_args)
@@ -107,6 +121,17 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
                     .code()
                     .unwrap_or_else(|| status.signal().map(|s| 128 + s).unwrap_or(1)),
             );
+        }
+        Commands::Test {
+            file,
+            filter,
+            release_safe,
+            release_fast,
+        } => {
+            let safety_mode = SafetyMode::from_flags(release_fast, release_safe);
+            if !test(&file, safety_mode, filter.as_deref())? {
+                std::process::exit(1);
+            }
         }
         Commands::Check { file, json } => check(&file, json)?,
         Commands::Fmt { files, check } => format(&files, check)?,

@@ -4,13 +4,14 @@
 |---|---|
 | `zeru run file.zr [-- args]` | compiles and runs, passing what follows `--` to the program |
 | `zeru build file.zr` | compiles into `build/` |
+| `zeru test file.zr [filter]` | runs the tests of the file and the files it imports |
 | `zeru check file.zr` | looks for errors without generating code |
 | `zeru fmt files...` | formats files in place |
 | `zeru clean` | removes `build/` |
 | `zeru update` | installs the build of the latest commit of `main` |
 | `zeru update --stable` | installs the latest release |
 
-`run` and `build` take `--release-safe` or `--release-fast`, as the
+`run`, `build` and `test` take `--release-safe` or `--release-fast`, as the
 [Build Modes](modes.md) page explains. `zeru help <command>` shows each
 command's options.
 
@@ -32,6 +33,59 @@ Error: Use of moved value 'list'. Value was previously moved and is no longer va
 `zeru check` gives the same errors without building anything, which is
 faster. With `--json` it prints each error as one JSON object per line,
 for editors and other tools.
+
+## Tests
+
+Tests go in one `#test` block at the end of a file. Each `test("name")`
+holds one test, and the block may also hold functions, structs and imports
+only the tests use:
+
+```zeru,check
+fn add(a: i32, b: i32) i32 {
+    return a + b;
+}
+
+fn main() {
+    println("{}", add(1, 2));
+}
+
+#test {
+    test("add sums") {
+        assert(add(2, 3) == 5);
+    }
+
+    test("text becomes a number") {
+        var n = "42".parse_int()!;
+        assert(n == twice(20));
+    }
+
+    fn twice(n: i64) i64 {
+        return n * 2;
+    }
+}
+```
+
+A test fails when it panics, as a failed `assert` does, or when an error
+leaves it through `!`. It sees everything in its file, `pub` or not.
+`zeru run` and `zeru build` leave the block out.
+
+`zeru test main.zr` runs the tests of `main.zr` and of every file it
+imports, outside the standard library, each in a process of its own. It
+lists the passes as they finish, then each failure with what it printed.
+For the file above, whose second test is wrong:
+
+```text
+   Compiling v0.4.0 (main.zr)
+    Finished unoptimized + debug info in 0.012s
+[PASS] main.zr:L10 add sums
+[FAIL] main.zr:L14 text becomes a number
+       panic at main.zr:16:9: assertion failed: n == twice(20)
+---------------------------
+1 passed, 1 failed in 0.002s
+```
+
+`zeru test main.zr parse` runs only the tests whose name holds `parse`.
+The command exits with an error when a test fails.
 
 ## Formatting
 

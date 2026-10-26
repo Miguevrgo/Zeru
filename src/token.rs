@@ -17,6 +17,7 @@ pub enum Token {
     As,
     DoubleColon,
     Pub,
+    Tests,
 
     Identifier(String),
     Int(u64),
@@ -142,6 +143,7 @@ impl std::fmt::Display for Token {
             Token::Continue => "continue",
             Token::As => "as",
             Token::Pub => "pub",
+            Token::Tests => "#test",
             Token::DoubleColon => "::",
             Token::And => "&&",
             Token::Or => "||",

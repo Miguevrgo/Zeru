@@ -775,6 +775,13 @@ fn __zeru_c_text(text: *u8) str {
     return *((&parts) as *str);
 }
 
+// The test `zeru test` runs: the number its first argument holds.
+fn __zeru_test_index() i64 {
+    var stack: i64 = 0;
+    asm ("movq __zeru_stack(%rip), $0" : "=r" (stack));
+    return __zeru_str_parse_int(__zeru_c_text(*((stack as *i64) + 2) as *u8)).unwrap();
+}
+
 // `s.split(sep)`: the parts of `s` between each `sep`; an empty `sep` gives
 // `s` whole.
 fn __zeru_str_split(s: str, sep: str) Vec<str> {

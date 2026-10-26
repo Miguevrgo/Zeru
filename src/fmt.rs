@@ -207,7 +207,7 @@ pub fn format(source: &str) -> Result<String, Vec<ZeruError>> {
         parens: parens.into_iter().collect(),
         misplaced: None,
     };
-    let doc = printer.file(&program.statements);
+    let doc = printer.file(&program);
     if let Some(span) = printer.misplaced {
         let message = "A comment inside an expression has no place once formatted; move it above the statement";
         return Err(vec![ZeruError::syntax(message, span)]);
@@ -241,7 +241,7 @@ fn parse(source: &str) -> Result<(Program, Vec<Span>, Vec<Span>), Vec<ZeruError>
 
 /// `program` without its spans, to compare two parses of the same code.
 fn shape(program: &Program) -> String {
-    let debug = format!("{:?}", program.statements);
+    let debug = format!("{:?}{:?}", program.statements, program.tests);
     let mut out = String::new();
     let mut rest = debug.as_str();
     while let Some(at) = rest.find("span: Span {") {
@@ -266,8 +266,32 @@ impl<'s> Printer<'s> {
         &self.src[span.start..span.end]
     }
 
-    fn file(&mut self, statements: &[Statement]) -> Doc {
-        let mut lines = self.lines(statements, self.src.len(), Self::extent, Self::statement);
+    fn file(&mut self, program: &Program) -> Doc {
+        let tests = self.tokens.iter().find(|(token, _)| *token == Token::Tests);
+        let tests = tests.map(|&(_, span)| span);
+        let end = tests.map_or(self.src.len(), |span| span.start);
+        let mut lines = self.lines(&program.statements, end, Self::extent, Self::statement);
+        if let Some(span) = tests {
+            let close = self.braces(span.end).1.start;
+            let items: Vec<&Statement> = program
+                .tests
+                .iter()
+                .filter(
+                    |stmt| !matches!(&stmt.kind, S::Function { name, .. } if name.starts_with('#')),
+                )
+                .collect();
+            let inner = self.lines(
+                &items,
+                close,
+                |p, stmt| p.extent(stmt),
+                |p, stmt| p.statement(stmt),
+            );
+            if !lines.is_empty() {
+                lines.push(Doc::Hard);
+            }
+            lines.push(Doc::Hard);
+            lines.push(self.braced(text("#test "), inner));
+        }
         if lines.is_empty() {
             return text("");
         }
@@ -490,6 +514,14 @@ impl<'s> Printer<'s> {
                 body,
             } => {
                 let close = self.braces(stmt.span.end).1;
+                if name.starts_with('!') {
+                    let at = self.tokens.iter().find(|(token, span)| {
+                        span.start > stmt.span.start && matches!(token, Token::StringLit(_))
+                    });
+                    let at = at.expect("a test has a name").1;
+                    let head = text(format!("test({}) ", self.source(at)));
+                    return seq(vec![head, self.block(body, close.start)]);
+                }
                 let params = params.iter().map(|param| text(param_text(param))).collect();
                 let ret = return_type
                     .as_ref()

@@ -36,6 +36,8 @@ pub enum TypeSpec {
 #[derive(Debug, Clone, Default)]
 pub struct Program {
     pub statements: Vec<Statement>,
+    /// What `#test { }` holds, part of the program only for `zeru test`.
+    pub tests: Vec<Statement>,
 }
 
 #[derive(Debug, Clone)]

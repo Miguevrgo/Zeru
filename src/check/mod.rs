@@ -144,6 +144,7 @@ impl<'a> Checker<'a> {
                 ItemKind::Fn => _ = self.sig(def),
             }
         }
+        let mut tests = Vec::new();
         for &def in &defs {
             let item = self.items.item(def);
             if item.kind != ItemKind::Fn
@@ -151,7 +152,11 @@ impl<'a> Checker<'a> {
             {
                 continue;
             }
-            self.instance(def, Vec::new(), item.decl.span);
+            let id = self.instance(def, Vec::new(), item.decl.span);
+            if matches!(&item.decl.kind, StatementKind::Function { name, .. } if name.starts_with('#'))
+            {
+                tests.push(id);
+            }
         }
         self.check_recursive_types(&defs);
         self.drain();
@@ -185,6 +190,7 @@ impl<'a> Checker<'a> {
             enums,
             owning,
             runtime: runtime.expect("the prelude declares the runtime"),
+            tests,
         })
     }
 
@@ -900,6 +906,7 @@ impl<'a> Checker<'a> {
             realloc: method(self, heap, "realloc")?,
             str_cmp: self.prelude_fn("__zeru_str_cmp"),
             string_cmp: self.prelude_fn("__zeru_string_cmp"),
+            test_index: self.prelude_fn("__zeru_test_index"),
         };
         self.drain();
         Some(runtime)

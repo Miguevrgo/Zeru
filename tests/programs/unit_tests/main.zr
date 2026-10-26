@@ -1,0 +1,34 @@
+import shapes;
+
+fn add(a: i32, b: i32) i32 {
+    return a + b;
+}
+
+fn main() {
+    println("{}", shapes::area(add(1, 2), 4));
+}
+
+#test {
+    import std.fs;
+
+    test("add sums") {
+        assert(add(2, 3) == 5);
+    }
+
+    test("add fails on purpose") {
+        println("printed before failing");
+        assert(add(2, 2) == 5, "got {}", add(2, 2));
+    }
+
+    test("an error fails the test") {
+        fs::read_file("missing file")!;
+    }
+
+    test("helpers live in the block") {
+        assert(square(3) == 9);
+    }
+
+    fn square(x: i32) i32 {
+        return x * x;
+    }
+}

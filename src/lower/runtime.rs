@@ -676,19 +676,43 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     }
 
     /// `__zeru_start`, which `_start` in start.s calls with no libc under it:
-    /// `main`, then the flush, giving back the exit code 0.
+    /// `main`, or for `zeru test` the test its first argument numbers, then
+    /// the flush, giving back the exit code 0.
     pub(super) fn create_start(&mut self) {
         self.module.set_inline_assembly(START);
-        let Some(main) = self.bodies.iter().position(|body| body.symbol == "main") else {
-            return;
-        };
+        let main = self.bodies.iter().position(|body| body.symbol == "main");
         let flush = self.flush.expect("the flush comes first");
         let i32_type = self.context.i32_type();
         let function = self
             .module
             .add_function("__zeru_start", i32_type.fn_type(&[], false), None);
         self.in_helper(function, |this| {
-            this.call_fn(FnId(main as u32), &[]);
+            match main {
+                _ if !this.program.tests.is_empty() => {
+                    let index = this.call_fn(this.program.runtime.test_index, &[]);
+                    let index = index.expect("a number").into_int_value();
+                    let done = this.context.append_basic_block(function, "done");
+                    let cases: Vec<_> = this
+                        .program
+                        .tests
+                        .iter()
+                        .enumerate()
+                        .map(|(at, &test)| {
+                            let block = this.context.append_basic_block(function, "test");
+                            this.builder.position_at_end(block);
+                            this.call_fn(test, &[]);
+                            this.builder.build_unconditional_branch(done).unwrap();
+                            (index.get_type().const_int(at as u64, false), block)
+                        })
+                        .collect();
+                    let entry = function.get_first_basic_block().expect("an entry");
+                    this.builder.position_at_end(entry);
+                    this.builder.build_switch(index, done, &cases).unwrap();
+                    this.builder.position_at_end(done);
+                }
+                Some(main) => _ = this.call_fn(FnId(main as u32), &[]),
+                None => {}
+            }
             this.builder.build_call(flush, &[], "").unwrap();
             this.builder
                 .build_return(Some(&i32_type.const_zero()))

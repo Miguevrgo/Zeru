@@ -252,9 +252,27 @@ impl Parser {
     }
 
     pub fn parse_program(&mut self) -> Program {
-        let mut statements = Vec::new();
+        let statements = self.parse_items(false);
+        let mut tests = Vec::new();
+        if self.eat(&Token::Tests) {
+            self.code_seen = false;
+            if self.expect(&Token::LBrace).is_some() {
+                self.depth = 0;
+                tests = self.parse_items(true);
+                self.expect(&Token::RBrace);
+            }
+            if !self.at(&Token::Eof) {
+                self.error_here::<()>("'#test' goes once, at the end of the file");
+            }
+        }
+        Program { statements, tests }
+    }
 
-        while !self.at(&Token::Eof) {
+    /// The items up to the end of the file, or inside `#test { }` with
+    /// `tests`, up to its `}`.
+    fn parse_items(&mut self, tests: bool) -> Vec<Statement> {
+        let mut statements = Vec::new();
+        while !self.at_any(&[Token::Eof, Token::Tests]) && !(tests && self.at(&Token::RBrace)) {
             self.panic_mode = false;
             if !self.at_any(&[Token::Import, Token::Semicolon]) {
                 self.code_seen = true;
@@ -272,6 +290,13 @@ impl Parser {
                     self.bump();
                     continue;
                 }
+                Token::Identifier(name) if name == "test" => match tests {
+                    true => self.parse_test().map(|(body, runner)| {
+                        statements.push(body);
+                        runner
+                    }),
+                    false => self.error_here("Tests go inside '#test { }', at the end of the file"),
+                },
                 Token::Var => self.error_here("Global variables ('var') are not allowed. Use 'const' for constants or move 'var' inside a function"),
                 token => {
                     let message = format!("Unexpected '{token}' at top level, expected fn, struct, enum, trait, const or import");
@@ -289,7 +314,49 @@ impl Parser {
             }
         }
 
-        Program { statements }
+        statements
+    }
+
+    /// `test("name") { body }`: the body as a function `!name` returning `!`,
+    /// and `#name`, the one `zeru test` runs, unwrapping its result so an
+    /// error fails the test as a panic does.
+    fn parse_test(&mut self) -> Option<(Statement, Statement)> {
+        let start = self.span();
+        self.bump();
+        self.expect(&Token::LParen)?;
+        let name = self.string("the test's name")?;
+        self.expect(&Token::RParen)?;
+        let span = start.merge(self.prev_span());
+        let function = |name: String, return_type, body| {
+            let kind = StatementKind::Function {
+                name,
+                type_params: Vec::new(),
+                params: Vec::new(),
+                return_type,
+                body,
+            };
+            Statement::new(kind, span)
+        };
+        let result = TypeSpec::Result(Box::new(TypeSpec::Tuple(Vec::new())));
+        let body = function(
+            format!("!{name}"),
+            Some(result),
+            self.parse_block_statement()?,
+        );
+        let expression = |kind| Box::new(Expression::new(kind, span));
+        let call = |function| ExpressionKind::Call {
+            function,
+            type_args: Vec::new(),
+            arguments: Vec::new(),
+        };
+        let unwrap = call(expression(ExpressionKind::Get {
+            object: expression(call(expression(ExpressionKind::Identifier(format!(
+                "!{name}"
+            ))))),
+            name: "unwrap".to_string(),
+        }));
+        let run = Statement::new(StatementKind::Expression(*expression(unwrap)), span);
+        Some((body, function(format!("#{name}"), None, vec![run])))
     }
 
     fn parse_statement(&mut self) -> Option<Statement> {

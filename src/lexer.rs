@@ -196,6 +196,12 @@ impl<'a> Lexer<'a> {
                 dot => dot,
             },
             '?' => Token::Question,
+            '#' => match self.read_identifier(ch) {
+                Token::Identifier(word) => {
+                    Token::Illegal(format!("Unexpected '{word}', expected '#test'"))
+                }
+                tests => tests,
+            },
 
             '"' => self.read_string(),
             '\'' => self.read_char(),
@@ -240,6 +246,7 @@ impl<'a> Lexer<'a> {
             "continue" => Token::Continue,
             "as" => Token::As,
             "pub" => Token::Pub,
+            "#test" => Token::Tests,
             "struct" => Token::Struct,
             "enum" => Token::Enum,
             "trait" => Token::Trait,

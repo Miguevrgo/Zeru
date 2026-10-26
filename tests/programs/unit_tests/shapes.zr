@@ -1,0 +1,9 @@
+pub fn area(w: i32, h: i32) i32 {
+    return w * h;
+}
+
+#test {
+    test("area multiplies") {
+        assert(area(2, 3) == 6);
+    }
+}

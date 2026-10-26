@@ -130,6 +130,10 @@ impl<'a> Items<'a> {
         let key = (kind.namespace(), name.clone());
         if self.modules[module.0 as usize].scope.contains_key(&key) {
             let message = match kind {
+                _ if name.starts_with('#') => return,
+                ItemKind::Fn if name.starts_with('!') => {
+                    format!("Test '{}' is already defined", &name[1..])
+                }
                 ItemKind::Struct | ItemKind::Enum => format!("Type '{shown}' is already defined"),
                 ItemKind::Trait => format!("Trait '{shown}' is already defined"),
                 ItemKind::Fn => format!("Function '{shown}' is already defined"),

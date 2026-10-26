@@ -139,3 +139,9 @@ match r { Ok(v) => .., Err(code) => .. }
 match o { Some(v) => .., None => .. }
 assert(n > 0);  assert(n > 0, "n is {}", n);  exit(1);
 ```
+
+```zeru,ignore
+#test {                          // once, at the end of the file
+    test("name") { assert(f() == 1); }
+}
+```

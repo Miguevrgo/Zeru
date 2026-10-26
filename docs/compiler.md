@@ -188,6 +188,16 @@ live, not with the square of its size.
   caller passes first.
 - Each type gets its drop and copy functions once.
 
+## zeru test
+
+The parser keeps what `#test { }` holds in `Program::tests`, which the
+driver adds to a file only for `zeru test` and `zeru check`. Each
+`test("name") { body }` becomes two functions: `!name`, the body returning
+`!`, and `#name`, which unwraps its result. The checker lists the `#`
+functions in `tir::Program::tests`, and `__zeru_start` calls the one whose
+number the program's first argument holds, so the driver runs each test in
+a process of its own.
+
 ## Tests
 
 `tests/ui` holds snapshot tests. Each `.zr`
