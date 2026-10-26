@@ -64,9 +64,9 @@ values go afterwards:
   needs no flow. Whether a moved local is used again is the borrow
   checker's question.
 - As it walks, `FnCx::diverges` says whether control can reach the current
-  point: a `return`, `break` or `continue` sets it, an `if`
-  diverges when both branches do, a `match` when every arm does, and a
-  `while true` with no `break` out of it. It decides that a function can
+  point: a `return`, `break`, `continue`, `exit` or `assert(false)` sets
+  it, an `if` diverges when both branches do, a `match` when every arm
+  does, and a `while true` with no `break` out of it. It decides that a function can
   finish without returning a value, and which arms of a `match` leave, so
   their type does not count.
 

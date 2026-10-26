@@ -37,6 +37,7 @@ pub struct Runtime {
     pub heap: Ty,
     pub alloc: FnId,
     pub realloc: FnId,
+    pub exit: FnId,
     pub str_cmp: FnId,
     pub string_cmp: FnId,
     pub test_index: FnId,

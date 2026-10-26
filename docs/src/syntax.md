@@ -14,6 +14,7 @@ const LIMIT: i32 = 10;            // never changes; also at top level
 const TABLE: Array<u32, 256> = make_table();   // top level: computed while compiling
 var input = "42";
 var input = input.parse_int();    // a new variable hiding the old one
+var _ = list.pop();               // a value dropped on purpose
 
 i8 i16 i32 i64 u8 u16 u32 u64 usize f32 f64 bool str
 1_000  0xff  0b101  0o17  2.5e-3  'a'  "text"  `raw\text`

@@ -952,6 +952,7 @@ impl<'a> Checker<'a> {
             heap: heap_ty,
             alloc: method(self, heap, "alloc")?,
             realloc: method(self, heap, "realloc")?,
+            exit: self.prelude_fn("exit"),
             str_cmp: self.prelude_fn("__zeru_str_cmp"),
             string_cmp: self.prelude_fn("__zeru_string_cmp"),
             test_index: self.prelude_fn("__zeru_test_index"),

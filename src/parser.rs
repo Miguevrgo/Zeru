@@ -432,10 +432,7 @@ impl Parser {
                 return Some(self.statement(kind, start));
             }
             Names::One(name, ty) => (name, ty),
-            Names::Skip => {
-                return self
-                    .error_here("A variable needs a name; '_' only leaves out a part of a tuple");
-            }
+            Names::Skip => ("_".to_string(), None),
         };
         self.expect(&Token::Assign)?;
         let value = self.parse_expression(Precedence::Lowest)?;

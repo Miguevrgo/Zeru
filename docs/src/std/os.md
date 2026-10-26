@@ -78,4 +78,5 @@ println("{} {}", result.code, result.stdout.trim()); // 0 hello
 ## Ending
 
 `exit(code)` ends the program at once with that code. It is in the prelude,
-so it needs no import.
+so it needs no import. Control never goes past it, so a function may end
+with it instead of a `return`.

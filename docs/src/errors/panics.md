@@ -62,6 +62,9 @@ The message prints lists and tuples like `println` does.
 panic at main.zr:7:5: balance went negative: -20
 ```
 
+`assert(false, ..)` always panics, so control never goes past it, and a
+function may end with it where nothing sensible is left to return.
+
 ## Checks in release-fast
 
 The build mode `--release-fast` leaves every check above out, and every

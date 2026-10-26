@@ -267,6 +267,9 @@ impl<'a> Builder<'a> {
             target: next,
         });
         self.current = Some(next);
+        if matches!(cond.kind, ExprKind::Bool(false)) {
+            self.terminate(TerminatorKind::Unreachable);
+        }
     }
 
     fn switch(&mut self, discr: Operand, targets: Vec<(i128, BlockId)>, otherwise: BlockId) {
@@ -1058,6 +1061,9 @@ impl<'a> Builder<'a> {
             dest,
             target,
         });
+        if function == self.program.runtime.exit {
+            self.terminate(TerminatorKind::Unreachable);
+        }
     }
 
     /// `place = value`: the value first, then the place, then the old value

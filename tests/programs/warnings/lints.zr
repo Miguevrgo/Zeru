@@ -37,3 +37,9 @@ fn main() {
     return;
     println("never");
 }
+
+fn _stop(v: Vec<i32>) i32 {
+    var _ = v.get(0);
+    exit(1);
+    println("never");
+}

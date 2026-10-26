@@ -232,7 +232,11 @@ impl FnCx<'_, '_> {
             self.check_args_only(args);
             return self.error_expr(span);
         };
-        self.call_def(def, known, None, args, expected, span)
+        let call = self.call_def(def, known, None, args, expected, span);
+        if def == self.cx.prelude_def("exit") {
+            self.diverges = true;
+        }
+        call
     }
 
     fn method_call(
@@ -1333,6 +1337,9 @@ impl FnCx<'_, '_> {
                 None => return self.error_expr(span),
             },
         };
+        if matches!(cond.kind, ExprKind::Bool(false)) {
+            self.diverges = true;
+        }
         let kind = ExprKind::Assert {
             cond: Box::new(cond),
             message,

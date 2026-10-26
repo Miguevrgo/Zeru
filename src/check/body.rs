@@ -447,6 +447,12 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     self.cx.resolve_type(spec, &scope, span)
                 });
                 let checked = self.value(value, expected);
+                if name == "_" {
+                    return Some(Stmt {
+                        kind: StmtKind::Expr(checked),
+                        span,
+                    });
+                }
                 let ty = expected.unwrap_or(checked.ty);
                 let mut value = self.coerce_or(checked, ty, span, |want, got| {
                     format!(

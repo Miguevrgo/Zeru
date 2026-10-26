@@ -43,8 +43,8 @@ is likely a mistake. A warning never stops a build:
 |---|---|
 | a variable never read | `var count = 0;` and no read of `count` |
 | a private function or constant never used | `fn helper() { }` that nothing calls |
-| a returned value left unused | `v.pop();` |
-| code after `return`, `break` or `continue` | `return; println("done");` |
+| a returned value left unused | `v.pop();`; `var _ = v.pop();` drops it on purpose |
+| code after `return`, `break`, `continue`, `exit` or `assert(false)` | `return; println("done");` |
 | a comparison known before it runs | `x == x`, `n >= 0` with `n` unsigned |
 | a value assigned to itself | `x = x;` |
 | a function that calls itself on every path | `fn f() i32 { return f(); }` |
