@@ -419,6 +419,7 @@ impl FnCx<'_, '_> {
 
     fn identifier(&mut self, name: &str, span: Span) -> Expr {
         if let Some(local) = self.local(name) {
+            self.note_read(local);
             let ty = self.local_ty(local);
             return self.mk(ExprKind::Read(Place::Local(local)), ty, span);
         }
@@ -517,6 +518,7 @@ impl FnCx<'_, '_> {
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
+        self.lint_if(condition, then, otherwise);
         let cond = self.condition(condition, "If condition must be boolean, got ");
         let wraps = self.wrapper(expected);
         let before = self.diverges;
@@ -746,6 +748,9 @@ impl FnCx<'_, '_> {
             );
             self.expr(value, None);
             return self.error_expr(span);
+        }
+        if *operator == Token::Assign && same(target, value) {
+            self.warn("This assigns a value to where it already is", span);
         }
         let (place, target_ty) = self.target(target, span);
         let checked = self.expr(value, Some(target_ty));
@@ -1088,6 +1093,9 @@ impl FnCx<'_, '_> {
             );
             return self.error_expr(span);
         }
+        if comparison {
+            self.lint_comparison(left, operator, right, &l, l_ty, span);
+        }
         match operator {
             Token::And => self.mk(ExprKind::And(Box::new(l), Box::new(r)), Types::BOOL, span),
             Token::Or => self.mk(ExprKind::Or(Box::new(l), Box::new(r)), Types::BOOL, span),
@@ -1120,6 +1128,102 @@ impl FnCx<'_, '_> {
                 self.mk(ExprKind::Binary(op, Box::new(l), Box::new(r)), ty, span)
             }
         }
+    }
+
+    /// Warn about a comparison whose answer is known before it runs, or
+    /// that a shorter form says.
+    fn lint_comparison(
+        &mut self,
+        left: &Expression,
+        operator: &Token,
+        right: &Expression,
+        l: &Expr,
+        ty: Ty,
+        span: Span,
+    ) {
+        let zero = |e: &Expression| matches!(e.kind, ExpressionKind::Int(0));
+        let unsigned = self.cx.types.as_int(ty).is_some_and(|int| !int.signed());
+        let always = match operator {
+            _ if same(left, right) && !self.cx.types.is_float(ty) => {
+                Some(matches!(operator, Token::Eq | Token::Leq | Token::Geq))
+            }
+            Token::Lt if unsigned && zero(right) => Some(false),
+            Token::Gt if unsigned && zero(left) => Some(false),
+            Token::Geq if unsigned && zero(right) => Some(true),
+            Token::Leq if unsigned && zero(left) => Some(true),
+            _ => None,
+        };
+        let equality = matches!(operator, Token::Eq | Token::NotEq);
+        let flag = [left, right]
+            .iter()
+            .any(|e| matches!(e.kind, ExpressionKind::Boolean(_)));
+        let types = &self.cx.types;
+        let vec_len = match &l.kind {
+            ExprKind::Builtin(Builtin::Len, args) => match types.kind(args[0].ty) {
+                TyKind::Ref(held) | TyKind::RefMut(held) | TyKind::Ptr(held) => {
+                    matches!(types.kind(*held), TyKind::Vec(_))
+                }
+                kind => matches!(kind, TyKind::Vec(_)),
+            },
+            _ => false,
+        };
+        if let Some(holds) = always {
+            self.warn(format!("This comparison is always {holds}"), span);
+        } else if equality && flag {
+            self.warn(
+                "A bool compared with true or false is itself or its opposite; drop the comparison",
+                span,
+            );
+        } else if vec_len && zero(right) && (equality || *operator == Token::Gt) {
+            self.warn("Write .is_empty() to ask whether a Vec is empty", span);
+        }
+    }
+
+    /// Warn about an `if` giving a value that a shorter form says: the
+    /// condition itself, or `min`, `max` or `abs` from std.math.
+    fn lint_if(&mut self, condition: &Expression, then: &Expression, otherwise: &Expression) {
+        use ExpressionKind as E;
+        let negated = |e: &Expression, of: &Expression| matches!(&e.kind, E::Prefix { operator: Token::Minus, right } if same(right, of));
+        let message = match (&condition.kind, &then.kind, &otherwise.kind) {
+            (_, E::Boolean(true), E::Boolean(false)) => {
+                "This if gives its condition; write the condition alone"
+            }
+            (_, E::Boolean(false), E::Boolean(true)) => {
+                "This if gives the opposite of its condition; write !(condition)"
+            }
+            (
+                E::Infix {
+                    left,
+                    operator: operator @ (Token::Lt | Token::Gt | Token::Leq | Token::Geq),
+                    right,
+                },
+                _,
+                _,
+            ) => {
+                let greater = matches!(operator, Token::Gt | Token::Geq);
+                let zero = matches!(right.kind, E::Int(0));
+                if same(then, left) && same(otherwise, right) {
+                    match greater {
+                        true => "This if picks the larger value; write max(a, b) from std.math",
+                        false => "This if picks the smaller value; write min(a, b) from std.math",
+                    }
+                } else if same(then, right) && same(otherwise, left) {
+                    match greater {
+                        true => "This if picks the smaller value; write min(a, b) from std.math",
+                        false => "This if picks the larger value; write max(a, b) from std.math",
+                    }
+                } else if zero
+                    && (greater && same(then, left) && negated(otherwise, left)
+                        || !greater && negated(then, left) && same(otherwise, left))
+                {
+                    "This if gives the absolute value; write abs(x) from std.math"
+                } else {
+                    return;
+                }
+            }
+            _ => return,
+        };
+        self.warn(message, condition.span.merge(otherwise.span));
     }
 
     fn prefix(
@@ -1619,6 +1723,23 @@ pub(super) fn is_number_literal(expr: &Expression) -> bool {
             operator: Token::Minus,
             right,
         } => is_number_literal(right),
+        _ => false,
+    }
+}
+
+/// Whether `a` and `b` read the same value: the same variable, field,
+/// element or literal, written the same way.
+fn same(a: &Expression, b: &Expression) -> bool {
+    use ExpressionKind as E;
+    match (&a.kind, &b.kind) {
+        (E::Identifier(x), E::Identifier(y)) => x == y,
+        (E::Int(x), E::Int(y)) => x == y,
+        (E::Boolean(x), E::Boolean(y)) => x == y,
+        (E::Get { object: x, name: m }, E::Get { object: y, name: n }) => m == n && same(x, y),
+        (E::Index { left: x, index: i }, E::Index { left: y, index: j }) => {
+            same(x, y) && same(i, j)
+        }
+        (E::Dereference(x), E::Dereference(y)) => same(x, y),
         _ => false,
     }
 }

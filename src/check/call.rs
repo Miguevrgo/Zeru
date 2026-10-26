@@ -513,7 +513,7 @@ impl FnCx<'_, '_> {
     /// `.copy()` on a `(&T)?`: a `T?` holding a copy of what it refers to.
     fn copy_referent(&mut self, scrutinee: Place, reference: Ty, inner: Ty, span: Span) -> Expr {
         self.enter();
-        let binding = self.declare("", reference, false, true);
+        let binding = self.declare("", reference, false, true, span);
         self.leave();
         let pointer = self.mk(ExprKind::Read(Place::Local(binding)), reference, span);
         let referent = Place::Deref(Box::new(pointer));
@@ -1051,7 +1051,7 @@ impl FnCx<'_, '_> {
                 ExprKind::Read(place) if stable(&place) => place,
                 ExprKind::Read(place) => {
                     let address = self.address(place, ty, false, span);
-                    let held = self.declare("", address.ty, false, false);
+                    let held = self.declare("", address.ty, false, false, span);
                     let pointer = self.mk(ExprKind::Read(Place::Local(held)), address.ty, span);
                     stmts.push(Stmt {
                         kind: StmtKind::Let(held, address),
@@ -1060,7 +1060,7 @@ impl FnCx<'_, '_> {
                     Place::Deref(Box::new(pointer))
                 }
                 _ => {
-                    let held = self.declare("", ty, false, false);
+                    let held = self.declare("", ty, false, false, span);
                     stmts.push(Stmt {
                         kind: StmtKind::Let(held, value),
                         span,
@@ -1161,9 +1161,9 @@ impl FnCx<'_, '_> {
             | TyKind::Slice(item)
             | TyKind::SliceMut(item) => {
                 out.push(self.write(stderr, vec![text(b"[")], Vec::new(), span));
-                let index = self.declare("", Types::USIZE, false, false);
+                let index = self.declare("", Types::USIZE, false, false, span);
                 let view = self.cx.owns_heap(item);
-                let var = self.declare("", item, false, view);
+                let var = self.declare("", item, false, view, span);
                 let read = self.mk(ExprKind::Read(Place::Local(index)), Types::USIZE, span);
                 let zero = self.mk(ExprKind::Int(0), Types::USIZE, span);
                 let cond = self.mk(
@@ -1214,7 +1214,7 @@ impl FnCx<'_, '_> {
             }
             TyKind::Optional(inner) | TyKind::Result(inner, _) => {
                 let optional = matches!(self.cx.types.kind(ty), TyKind::Optional(_));
-                let value = self.declare("", inner, false, true);
+                let value = self.declare("", inner, false, true, span);
                 let mut stmts = Vec::new();
                 self.show(Place::Local(value), inner, quoted, stderr, &mut stmts, span);
                 let payload = match optional {
@@ -1235,7 +1235,7 @@ impl FnCx<'_, '_> {
                         (Vec::new(), Vec::new(), none)
                     }
                     false => {
-                        let code = self.declare("", Types::I32, false, true);
+                        let code = self.declare("", Types::I32, false, true, span);
                         let read = self.mk(ExprKind::Read(Place::Local(code)), Types::I32, span);
                         let pieces = vec![text(b"Err("), text(b")")];
                         let err = self.write(stderr, pieces, vec![read], span);

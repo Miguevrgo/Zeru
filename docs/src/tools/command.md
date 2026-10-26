@@ -34,6 +34,25 @@ Error: Use of moved value 'list'. Value was previously moved and is no longer va
 faster. With `--json` it prints each error as one JSON object per line,
 for editors and other tools.
 
+## Warnings
+
+A program with no errors may still get warnings, for code that builds but
+is likely a mistake. A warning never stops a build:
+
+| Warning | Example |
+|---|---|
+| a variable never read | `var count = 0;` and no read of `count` |
+| a private function or constant never used | `fn helper() { }` that nothing calls |
+| a returned value left unused | `v.pop();` |
+| code after `return`, `break` or `continue` | `return; println("done");` |
+| a comparison known before it runs | `x == x`, `n >= 0` with `n` unsigned |
+| a value assigned to itself | `x = x;` |
+| a function that calls itself on every path | `fn f() i32 { return f(); }` |
+| longer code for what the language or std has | `v.len() == 0`, `flag == true`, `if c { true } else { false }`, `if a < b { a } else { b }` |
+
+A variable, function or constant whose name starts with `_` gets no
+warning for being unused.
+
 ## Tests
 
 Tests go in one `#test` block at the end of a file. Each `test("name")`

@@ -23,6 +23,7 @@ pub struct Program {
     pub runtime: Runtime,
     /// The `test("...")` runners, in the order `zeru test` numbers them.
     pub tests: Vec<FnId>,
+    pub warnings: Vec<crate::errors::ZeruError>,
 }
 
 /// The prelude functions the generated code calls by itself.

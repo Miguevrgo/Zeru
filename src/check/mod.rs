@@ -81,6 +81,8 @@ pub struct Checker<'a> {
     items: &'a Items<'a>,
     pub types: Types,
     errors: Vec<ZeruError>,
+    warnings: Vec<ZeruError>,
+    used: HashSet<DefId>,
 
     sigs: HashMap<DefId, Option<Sig>>,
     structs: HashMap<DefId, StructDef>,
@@ -112,6 +114,8 @@ impl<'a> Checker<'a> {
             items,
             types: Types::new(),
             errors: items.errors.clone(),
+            warnings: Vec::new(),
+            used: HashSet::new(),
             sigs: HashMap::new(),
             structs: HashMap::new(),
             enums: HashMap::new(),
@@ -129,6 +133,47 @@ impl<'a> Checker<'a> {
 
     fn error(&mut self, message: impl Into<String>, span: Span) {
         self.errors.push(ZeruError::semantic(message, span));
+    }
+
+    fn warn(&mut self, message: impl Into<String>, span: Span) {
+        self.warnings.push(ZeruError::warning(message, span));
+    }
+
+    /// Note that `def` is named at `at`, unless `at` is its own declaration.
+    fn note_use(&mut self, def: DefId, at: Span) {
+        if at != self.items.item(def).decl.span {
+            self.used.insert(def);
+        }
+    }
+
+    /// Warn about each private function and constant nothing names. A name
+    /// that starts with `_` is left alone.
+    fn warn_unused_items(&mut self) {
+        for (at, item) in self.items.items.iter().enumerate() {
+            let def = DefId(at as u32);
+            let (StatementKind::Function { name, .. } | StatementKind::Var { name, .. }) =
+                &item.decl.kind
+            else {
+                continue;
+            };
+            if item.is_pub
+                || self.used.contains(&def)
+                || self.items.is_std(def)
+                || self.is_main(def)
+                || name.starts_with(['_', '#', '!'])
+                || item.owner.is_some() && name == "drop"
+            {
+                continue;
+            }
+            let what = match item.kind {
+                ItemKind::Fn => "Function",
+                _ => "Constant",
+            };
+            self.warn(
+                format!("{what} '{name}' is never used; remove it or name it '_{name}'"),
+                item.decl.span,
+            );
+        }
     }
 
     /// Check everything reachable and return the program, or the errors.
@@ -162,6 +207,7 @@ impl<'a> Checker<'a> {
         self.drain();
         let runtime = self.runtime();
         let (structs, enums) = self.layouts();
+        self.warn_unused_items();
         let owning = self
             .types
             .all()
@@ -191,6 +237,7 @@ impl<'a> Checker<'a> {
             owning,
             runtime: runtime.expect("the prelude declares the runtime"),
             tests,
+            warnings: self.warnings,
         })
     }
 
@@ -253,6 +300,7 @@ impl<'a> Checker<'a> {
 
     /// The function instance `def` at `args`, made and queued the first time.
     pub(crate) fn instance(&mut self, def: DefId, args: Vec<Ty>, from: Span) -> FnId {
+        self.note_use(def, from);
         if let Some(&id) = self.instances.get(&(def, args.clone())) {
             return id;
         }

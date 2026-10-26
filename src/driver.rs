@@ -66,8 +66,9 @@ fn parse_file(
     sources: &mut Sources,
     errors: &mut Vec<ZeruError>,
     tests: bool,
+    std: bool,
 ) -> Program {
-    let start = sources.push(name, source);
+    let start = sources.push(name, source, std);
     let mut parser = Parser::new(Lexer::at(source, start));
     let mut program = parser.parse_program();
     errors.append(&mut parser.errors);
@@ -95,17 +96,23 @@ fn analyze(
     let items = Items::collect(&modules);
     let analysis = Checker::new(&items).check().and_then(|mut program| {
         let bodies = crate::mir::build(&mut program, &sources, mode)?;
+        let warnings = &mut program.warnings;
+        warnings.retain(|warning| !sources.in_std(warning.span));
+        warnings.sort_by(|a, b| (a.span.start, &a.message).cmp(&(b.span.start, &b.message)));
+        warnings.dedup_by(|a, b| a.span == b.span && a.message == b.message);
         Ok((program, bodies))
     });
     Ok((sources, analysis))
 }
 
 /// Check `path` as `compile` would, without generating code, and report its
-/// errors as text or, for editors, as one JSON object per line.
+/// errors, or else its warnings, as text or, for editors, as one JSON object
+/// per line.
 pub fn check(path: &Path, json: bool) -> Result<(), CompileError> {
     let (sources, analysis) = analyze(path, SafetyMode::Debug, true)?;
-    let Err(errors) = analysis else {
-        return Ok(());
+    let (errors, failed) = match analysis {
+        Ok((program, _)) => (program.warnings, false),
+        Err(errors) => (errors, true),
     };
     match json {
         true => errors
@@ -113,7 +120,10 @@ pub fn check(path: &Path, json: bool) -> Result<(), CompileError> {
             .for_each(|error| println!("{}", error.json(&sources))),
         false => report_errors(&errors, &sources),
     }
-    Err(CompileError::Unknown)
+    match failed {
+        true => Err(CompileError::Unknown),
+        false => Ok(()),
+    }
 }
 
 /// Format each of `files` in place, or with `check` list those that are not
@@ -140,7 +150,7 @@ pub fn format(files: &[PathBuf], check: bool) -> Result<(), CompileError> {
             }
             Err(errors) => {
                 let mut sources = Sources::default();
-                sources.push(path.display().to_string(), &source);
+                sources.push(path.display().to_string(), &source, false);
                 report_errors(&errors, &sources);
                 failed = true;
             }
@@ -205,6 +215,7 @@ pub fn compile(
         report_errors(&errors, &sources);
         CompileError::Unknown
     })?;
+    report_errors(&program.warnings, &sources);
     let found = program
         .tests
         .iter()
@@ -330,6 +341,7 @@ fn load(path: &Path, user_code: &str, tests: bool) -> (Sources, Vec<SourceModule
         &mut sources,
         &mut errors,
         false,
+        true,
     );
     let root = parse_file(
         path.display().to_string(),
@@ -337,6 +349,7 @@ fn load(path: &Path, user_code: &str, tests: bool) -> (Sources, Vec<SourceModule
         &mut sources,
         &mut errors,
         tests,
+        false,
     );
     let root_end = sources.end();
     if !tests
@@ -398,6 +411,7 @@ fn load(path: &Path, user_code: &str, tests: bool) -> (Sources, Vec<SourceModule
                 &mut sources,
                 &mut errors,
                 tests && !import.starts_with("std."),
+                import.starts_with("std."),
             );
             modules.push(SourceModule {
                 name: Some(short.clone()),

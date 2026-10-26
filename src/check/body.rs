@@ -23,6 +23,8 @@ pub(super) struct FnCx<'c, 'a> {
     locals: Vec<tir::Local>,
     mutable: Vec<bool>,
     borrowed: Vec<bool>,
+    read: Vec<bool>,
+    declared: Vec<Span>,
     names: Vec<(String, LocalId)>,
     marks: Vec<usize>,
     pub(super) diverges: bool,
@@ -65,7 +67,7 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
         .zip(&param_tys)
         .map(|((param, _, mutable), &ty)| {
             let receiver = param == "self" && sig.receiver != Receiver::None;
-            fx.declare(param, ty, *mutable, receiver)
+            fx.declare(param, ty, *mutable, receiver, span)
         })
         .collect();
     let mut body_block = fx.block(body);
@@ -82,6 +84,7 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
             at,
         );
     }
+    fx.warn_unread(params.len());
     let locals = std::mem::take(&mut fx.locals);
 
     if !args.is_empty() {
@@ -117,6 +120,8 @@ impl<'c, 'a> FnCx<'c, 'a> {
             locals: Vec::new(),
             mutable: Vec::new(),
             borrowed: Vec::new(),
+            read: Vec::new(),
+            declared: Vec::new(),
             names: Vec::new(),
             marks: Vec::new(),
             diverges: false,
@@ -154,6 +159,24 @@ impl<'c, 'a> FnCx<'c, 'a> {
         self.cx.error(message, span);
     }
 
+    pub(super) fn warn(&mut self, message: impl Into<String>, span: Span) {
+        self.cx.warn(message, span);
+    }
+
+    /// Warn about each variable after the first `params` locals that is
+    /// never read. A name that starts with `_` is left alone.
+    fn warn_unread(&mut self, params: usize) {
+        for at in params..self.locals.len() {
+            let name = &self.locals[at].name;
+            if self.read[at] || name.is_empty() || name.starts_with('_') {
+                continue;
+            }
+            let message =
+                format!("Variable '{name}' is never read; remove it or name it '_{name}'");
+            self.warn(message, self.declared[at]);
+        }
+    }
+
     pub(super) fn enter(&mut self) {
         self.marks.push(self.names.len());
     }
@@ -163,9 +186,16 @@ impl<'c, 'a> FnCx<'c, 'a> {
         self.names.truncate(mark);
     }
 
-    /// A new local, which later statements see by `name`. A `view` is a
-    /// pointer into another place and owns nothing.
-    pub(super) fn declare(&mut self, name: &str, ty: Ty, mutable: bool, view: bool) -> LocalId {
+    /// A new local, which later statements see by `name`, declared at
+    /// `span`. A `view` is a pointer into another place and owns nothing.
+    pub(super) fn declare(
+        &mut self,
+        name: &str,
+        ty: Ty,
+        mutable: bool,
+        view: bool,
+        span: Span,
+    ) -> LocalId {
         let id = LocalId(self.locals.len() as u32);
         self.locals.push(tir::Local {
             name: name.to_string(),
@@ -174,6 +204,8 @@ impl<'c, 'a> FnCx<'c, 'a> {
         });
         self.mutable.push(mutable);
         self.borrowed.push(false);
+        self.read.push(false);
+        self.declared.push(span);
         self.names.push((name.to_string(), id));
         id
     }
@@ -206,6 +238,11 @@ impl<'c, 'a> FnCx<'c, 'a> {
             .rev()
             .find(|(local, _)| local == name)
             .map(|(_, id)| *id)
+    }
+
+    /// Note that local `id` is read.
+    pub(super) fn note_read(&mut self, id: LocalId) {
+        self.read[id.0 as usize] = true;
     }
 
     pub(super) fn local_ty(&self, id: LocalId) -> Ty {
@@ -371,9 +408,19 @@ impl<'c, 'a> FnCx<'c, 'a> {
         }
     }
 
+    /// A block, warning at the first statement control cannot reach.
     pub(super) fn block(&mut self, statements: &[Statement]) -> Block {
         self.enter();
-        let stmts = statements.iter().filter_map(|s| self.stmt(s)).collect();
+        let reached = !self.diverges;
+        let mut warned = false;
+        let mut stmts = Vec::new();
+        for statement in statements {
+            if reached && self.diverges && !warned {
+                self.warn("This code is never reached", statement.span);
+                warned = true;
+            }
+            stmts.extend(self.stmt(statement));
+        }
         self.leave();
         Block { stmts }
     }
@@ -408,7 +455,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 });
                 self.consume(&mut value);
                 self.cx.note_types_in(ty, span);
-                let local = self.declare(name, ty, !is_const, false);
+                let local = self.declare(name, ty, !is_const, false, span);
                 StmtKind::Let(local, value)
             }
             StatementKind::VarTuple {
@@ -503,6 +550,15 @@ impl<'c, 'a> FnCx<'c, 'a> {
                         "This result is ignored; propagate its error with !, unwrap() it or store it in a variable",
                         expr.span,
                     );
+                } else if value.ty != Types::VOID
+                    && !self.cx.types.is_error(value.ty)
+                    && *self.cx.types.kind(value.ty) != TyKind::Tuple(Vec::new())
+                    && matches!(
+                        expr.kind,
+                        ExpressionKind::Call { .. } | ExpressionKind::Try { .. }
+                    )
+                {
+                    self.warn("The value this call returns is never used", expr.span);
                 }
                 StmtKind::Expr(value)
             }
@@ -580,7 +636,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 }
             };
             self.enter();
-            let var = self.declare(name, ty, false, false);
+            let var = self.declare(name, ty, false, false, iterable.span);
             let (body, _) = self.loop_body(|this| this.branch(body));
             self.leave();
             return StmtKind::ForRange {
@@ -619,7 +675,8 @@ impl<'c, 'a> FnCx<'c, 'a> {
             .map(|(iterable, names)| (self.sequence(iterable), names.clone()))
             .collect();
         self.enter();
-        let index = index.map(|index| self.declare(index, Types::USIZE, false, false));
+        let index =
+            index.map(|index| self.declare(index, Types::USIZE, false, false, iterable.span));
         let walks = sequences
             .into_iter()
             .map(|((seq, item, writable, walked), names)| {
@@ -634,12 +691,15 @@ impl<'c, 'a> FnCx<'c, 'a> {
                             "A map's keys cannot change; write for (key, value) in &var map",
                             iterable.span,
                         );
-                        (self.declare("", item, false, view), None)
+                        (self.declare("", item, false, view, iterable.span), None)
                     }
-                    Names::One(name, _) => (self.declare(name, item, writable, view), None),
-                    Names::Skip => (self.declare("", item, writable, view), None),
+                    Names::One(name, _) => (
+                        self.declare(name, item, writable, view, iterable.span),
+                        None,
+                    ),
+                    Names::Skip => (self.declare("", item, writable, view, iterable.span), None),
                     Names::Tuple(parts) => {
-                        let var = self.declare("", item, writable, view);
+                        let var = self.declare("", item, writable, view, iterable.span);
                         let unpack = self.view_names(parts, item, writable, iterable.span);
                         if walked != Walked::List {
                             self.fix_key(&unpack);
@@ -847,7 +907,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                             span,
                         );
                     }
-                    Unpack::Declare(self.declare(name, part, mutable, false))
+                    Unpack::Declare(self.declare(name, part, mutable, false, span))
                 }
             })
             .collect();
@@ -866,7 +926,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 Names::Tuple(inner) => self.view_names(inner, part, writable, span),
                 Names::One(name, _) => {
                     let view = writable || self.cx.owns_heap(part);
-                    Unpack::Declare(self.declare(name, part, writable, view))
+                    Unpack::Declare(self.declare(name, part, writable, view, span))
                 }
             })
             .collect();

@@ -269,6 +269,33 @@ fn check_reports_json() {
 }
 
 #[test]
+fn check_warns_without_failing() {
+    let output = Command::new(env!("CARGO_BIN_EXE_zeru"))
+        .args(["check", "--json"])
+        .arg(root().join("tests/programs/warnings/lints.zr"))
+        .env("ZERU_STD_PATH", root().join("std"))
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(output.status.success(), "{stdout}");
+    let lines: Vec<&str> = stdout
+        .lines()
+        .map(|line| {
+            assert!(line.contains("\"severity\":\"warning\""), "{line}");
+            let at = line.find("\"line\":").unwrap() + 7;
+            &line[at..at + line[at..].find(',').unwrap()]
+        })
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "1", "4", "8", "20", "25", "26", "27", "28", "30", "31", "32", "33", "35", "38"
+        ],
+        "{stdout}"
+    );
+}
+
+#[test]
 fn test_runs_each_test_alone() {
     let scratch = std::env::temp_dir().join(format!("zeru-test-{}", std::process::id()));
     std::fs::create_dir_all(&scratch).unwrap();

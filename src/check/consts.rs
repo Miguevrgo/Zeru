@@ -14,6 +14,7 @@ impl Checker<'_> {
     /// The value of the constant `def`, checked the first time it is needed,
     /// at the type it declares.
     pub(super) fn const_value(&mut self, def: DefId, used: Span) -> Expr {
+        self.note_use(def, used);
         match self.consts.get(&def) {
             Some(ConstState::Done(value)) => return value.clone(),
             Some(ConstState::Checking) => {

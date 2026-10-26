@@ -28,8 +28,17 @@ pub fn build(
     let functions = std::mem::take(&mut program.functions);
     let mut errors: Vec<ZeruError> = Vec::new();
     let mut bodies = Vec::new();
-    for function in &functions {
+    for (at, function) in functions.iter().enumerate() {
         let mut body = Builder::new(program, sources, function, mode.emit_safety_checks()).build();
+        if body.recurses_forever(FnId(at as u32)) {
+            program.warnings.push(ZeruError::warning(
+                format!(
+                    "'{}' calls itself on every path, so it never returns",
+                    function.symbol
+                ),
+                function.span,
+            ));
+        }
         for error in super::borrowck::check(&body, program) {
             if !errors
                 .iter()

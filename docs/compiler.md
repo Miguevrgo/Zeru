@@ -188,6 +188,15 @@ live, not with the square of its size.
   caller passes first.
 - Each type gets its drop and copy functions once.
 
+## Warnings
+
+Warnings are found where the facts are: the checker sees which locals are
+read, which private items something names, which code `diverges` leaves
+behind, and which comparisons, assignments and `if`s say something
+shorter; the MIR sees a function whose every path calls itself again. They
+travel in `tir::Program::warnings`, and the driver drops those inside std
+and shows the rest only when there is no error.
+
 ## zeru test
 
 The parser keeps what `#test { }` holds in `Program::tests`, which the

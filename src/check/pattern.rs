@@ -61,7 +61,12 @@ impl FnCx<'_, '_> {
             let bindings: Vec<_> = shape
                 .binds
                 .into_iter()
-                .map(|(name, ty, payloads)| (self.declare(&name, ty, false, !take), payloads))
+                .map(|(name, ty, payloads)| {
+                    (
+                        self.declare(&name, ty, false, !take, pattern.span),
+                        payloads,
+                    )
+                })
                 .collect();
             let guard = arm
                 .guard

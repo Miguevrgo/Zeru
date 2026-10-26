@@ -274,6 +274,27 @@ impl Rvalue {
     }
 }
 
+impl Body {
+    /// Whether every path from the start calls function `me`, this body's
+    /// own, before it can return: a recursion that never ends.
+    pub fn recurses_forever(&self, me: FnId) -> bool {
+        let mut seen = vec![false; self.blocks.len()];
+        let mut stack = vec![BlockId(0)];
+        let mut recursed = false;
+        while let Some(block) = stack.pop() {
+            if std::mem::replace(&mut seen[block.0 as usize], true) {
+                continue;
+            }
+            match &self.blocks[block.0 as usize].terminator.kind {
+                TerminatorKind::Return | TerminatorKind::Unreachable => return false,
+                TerminatorKind::Call { function, .. } if *function == me => recursed = true,
+                kind => stack.extend(kind.successors()),
+            }
+        }
+        recursed
+    }
+}
+
 impl TerminatorKind {
     pub fn successors(&self) -> Vec<BlockId> {
         match self {

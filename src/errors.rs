@@ -33,6 +33,7 @@ impl From<Span> for std::ops::Range<usize> {
 pub enum ErrorKind {
     Syntax,
     Semantic,
+    Warning,
 }
 
 #[derive(Debug, Clone)]
@@ -62,10 +63,21 @@ impl ZeruError {
         }
     }
 
+    /// Something that builds but is likely a mistake. It never stops a build.
+    pub fn warning(message: impl Into<String>, span: Span) -> Self {
+        Self {
+            kind: ErrorKind::Warning,
+            message: message.into(),
+            span,
+            notes: Vec::new(),
+        }
+    }
+
     fn prefix(&self) -> &'static str {
         match self.kind {
             ErrorKind::Syntax => "Syntax Error",
             ErrorKind::Semantic => "Semantic Error",
+            ErrorKind::Warning => "Warning",
         }
     }
 
@@ -81,26 +93,25 @@ impl ZeruError {
             return;
         };
 
-        let color = match self.kind {
-            ErrorKind::Syntax => Color::Red,
-            ErrorKind::Semantic => Color::Magenta,
+        let (kind, color) = match self.kind {
+            ErrorKind::Syntax => (ReportKind::Error, Color::Red),
+            ErrorKind::Semantic => (ReportKind::Error, Color::Magenta),
+            ErrorKind::Warning => (ReportKind::Warning, Color::Yellow),
         };
         let mut files = vec![(name.to_string(), text.to_string())];
-        let mut report = Report::<(String, Range<usize>)>::build(
-            ReportKind::Error,
-            (name.to_string(), range.clone()),
-        )
-        .with_config(
-            ariadne::Config::default()
-                .with_color(colored())
-                .with_index_type(ariadne::IndexType::Byte),
-        )
-        .with_message(message)
-        .with_label(
-            Label::new((name.to_string(), range))
+        let mut report =
+            Report::<(String, Range<usize>)>::build(kind, (name.to_string(), range.clone()))
+                .with_config(
+                    ariadne::Config::default()
+                        .with_color(colored())
+                        .with_index_type(ariadne::IndexType::Byte),
+                )
                 .with_message(message)
-                .with_color(color),
-        );
+                .with_label(
+                    Label::new((name.to_string(), range))
+                        .with_message(message)
+                        .with_color(color),
+                );
         for (note, span) in &self.notes {
             let Some((name, text, range)) = sources.locate(*span) else {
                 continue;
@@ -128,6 +139,7 @@ pub struct Sources {
 
 struct SourceFile {
     name: String,
+    std: bool,
     start: usize,
     end: usize,
     lines: Vec<usize>,
@@ -136,7 +148,7 @@ struct SourceFile {
 impl Sources {
     /// Append a file and return where it starts, so it can be lexed on its own
     /// while still reporting spans as offsets into the whole program.
-    pub fn push(&mut self, name: impl Into<String>, source: &str) -> usize {
+    pub fn push(&mut self, name: impl Into<String>, source: &str, std: bool) -> usize {
         let start = self.text.len();
         self.text.push_str(source);
         self.text.push('\n');
@@ -145,6 +157,7 @@ impl Sources {
             .collect();
         self.files.push(SourceFile {
             name: name.into(),
+            std,
             start,
             end: self.text.len(),
             lines,
@@ -169,6 +182,11 @@ impl Sources {
         let line = file.lines.partition_point(|&start| start <= offset);
         let column = offset - file.lines[line - 1] + 1;
         Some((&file.name, line as u32, column as u32))
+    }
+
+    /// Whether a span points into the standard library.
+    pub fn in_std(&self, span: Span) -> bool {
+        self.file(span).is_some_and(|file| file.std)
     }
 
     fn file(&self, span: Span) -> Option<&SourceFile> {
@@ -209,7 +227,14 @@ impl ZeruError {
             .map(|(message, span)| format!("{{{}}}", json_at(sources, *span, message)))
             .collect();
         let at = json_at(sources, self.span, &self.message);
-        format!("{{{at},\"notes\":[{}]}}", notes.join(","))
+        let severity = match self.kind {
+            ErrorKind::Warning => "warning",
+            _ => "error",
+        };
+        format!(
+            "{{{at},\"severity\":\"{severity}\",\"notes\":[{}]}}",
+            notes.join(",")
+        )
     }
 }
 
@@ -270,8 +295,8 @@ mod tests {
     #[test]
     fn locates_a_span_in_the_file_it_came_from() {
         let mut sources = Sources::default();
-        sources.push("first.zr", "fn a() { }");
-        sources.push("second.zr", "fn bb() { }");
+        sources.push("first.zr", "fn a() { }", false);
+        sources.push("second.zr", "fn bb() { }", false);
 
         let (name, text, range) = sources.locate(Span::new(3, 4)).expect("inside first.zr");
         assert_eq!(name, "first.zr");
@@ -285,8 +310,8 @@ mod tests {
     #[test]
     fn positions_count_lines_and_columns_from_one() {
         let mut sources = Sources::default();
-        sources.push("first.zr", "ab\ncd\n");
-        sources.push("second.zr", "x\n  y");
+        sources.push("first.zr", "ab\ncd\n", false);
+        sources.push("second.zr", "x\n  y", false);
         assert_eq!(sources.position(Span::new(4, 5)), Some(("first.zr", 2, 2)));
         let y = sources.end() - 2;
         assert_eq!(
@@ -298,7 +323,7 @@ mod tests {
     #[test]
     fn a_span_past_every_file_has_no_home() {
         let mut sources = Sources::default();
-        sources.push("only.zr", "fn a() { }");
+        sources.push("only.zr", "fn a() { }", false);
 
         assert!(sources.locate(Span::new(999, 1000)).is_none());
     }
@@ -306,8 +331,8 @@ mod tests {
     #[test]
     fn a_span_running_past_its_file_is_clamped() {
         let mut sources = Sources::default();
-        sources.push("first.zr", "fn a() { }");
-        sources.push("second.zr", "fn bb() { }");
+        sources.push("first.zr", "fn a() { }", false);
+        sources.push("second.zr", "fn bb() { }", false);
 
         let (name, text, range) = sources.locate(Span::new(3, 500)).expect("inside first.zr");
         assert_eq!(name, "first.zr");

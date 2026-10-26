@@ -1,0 +1,39 @@
+const UNUSED: i32 = 1;
+const _KEPT: i32 = 2;
+
+fn unused() {}
+
+fn _kept() {}
+
+fn forever(n: i32) i32 {
+    return forever(n) + 1;
+}
+
+fn countdown(n: i32) i32 {
+    if n == 0 {
+        return 0;
+    }
+    return countdown(n - 1);
+}
+
+fn main() {
+    var idle = 1;
+    var _quiet = 2;
+    var x = 3;
+    var u: u32 = 4;
+    var v = Vec[1];
+    x = x;
+    assert(x == x);
+    assert(u >= 0);
+    assert(v.len() > 0);
+    var flag = x > 0;
+    assert(flag == true);
+    var low = if x < 4 { x } else { 4 };
+    var abs = if x < 0 { -x } else { x };
+    var big = if x > 1 { true } else { false };
+    println("{} {} {}", low, abs, big);
+    v.pop();
+    println("{}", countdown(forever(x)));
+    return;
+    println("never");
+}
