@@ -213,5 +213,4 @@ a process of its own.
 file is built in every safety mode, run, and its status, output and
 diagnostics compared against the `.out` file next to it. `BLESS=1 cargo test
 --test ui` rewrites the snapshots, and a review of their diff shows exactly
-what a change did to the language. `tests/ui/KNOWN_BUGS.md` lists the
-snapshots that pin a known bug.
+what a change did to the language.
