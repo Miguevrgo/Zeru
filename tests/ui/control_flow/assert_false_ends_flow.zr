@@ -1,0 +1,13 @@
+fn sign(x: i32) i32 {
+    if x > 0 {
+        return 1;
+    }
+    if x < 0 {
+        return -1;
+    }
+    assert(false, "zero has no sign");
+}
+
+fn main() {
+    println("{} {}", sign(5), sign(-5));
+}

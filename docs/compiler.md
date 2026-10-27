@@ -209,8 +209,12 @@ a process of its own.
 
 ## Tests
 
-`tests/ui` holds snapshot tests. Each `.zr`
-file is built in every safety mode, run, and its status, output and
-diagnostics compared against the `.out` file next to it. `BLESS=1 cargo test
---test ui` rewrites the snapshots, and a review of their diff shows exactly
-what a change did to the language.
+`tests/ui` holds snapshot tests. Each `.zr` file is built in every safety
+mode, run, and its status, output and diagnostics compared against the
+`.out` file next to it; a first line `//@ checked` skips release-fast, which
+drops the runtime checks. `BLESS=1 cargo test --test ui` rewrites the
+snapshots, and a review of their diff shows exactly what a change did to the
+language. The same harness runs every ```` ```zeru ```` example of the book and of
+std's doc comments, builds and runs `examples/`, and drives `zeru check` and
+`zeru test` over the files in `tests/cli`. Unit tests in `src` cover only
+what no program reaches: the formatter and where the compiler finds std.

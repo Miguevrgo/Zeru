@@ -1,0 +1,25 @@
+enum Color {
+    Red,
+    Blue,
+}
+
+struct P {
+    x: i32,
+}
+
+fn big(p: P) bool {
+    return p.x > 0;
+}
+
+fn main() {
+    var c = Color::Red;
+    if c == Color::Red {
+        println("red");
+    }
+    if big(P { x: 1 }) {
+        println("call");
+    }
+    if (P { x: 1 }).x == 1 {
+        println("parens");
+    }
+}

@@ -2,5 +2,6 @@ fn main() {
     var million = 1_000_000;
     var mask: u32 = 0b1111_0000;
     var f: f64 = 1_000.5;
-    println("{} {} {}", million, mask, f);
+    var hex = 0x_ff;
+    println("{} {} {} {}", million, mask, f, hex);
 }

@@ -1,0 +1,7 @@
+fn main() {
+    var x: i32 = -3;
+    var negative = x as i64 < 0;
+    var bytes: Array<u8, 4> = [1, 2, 3, 4];
+    var p = (&bytes) as *Array<u8, 4>;
+    println("{} {}", negative, (*p)[2]);
+}

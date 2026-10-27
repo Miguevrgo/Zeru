@@ -34,4 +34,11 @@ fn main() {
         }
     }
     println("{} {} {}", seen_low, seen_high, os::pid() > 0 && os::parent_pid() > 0);
+    var uid = os::output("id", Vec["-u"]).unwrap();
+    var gid = os::output("id", Vec["-g"]).unwrap();
+    println(
+        "{} {}",
+        uid.stdout.trim().parse_int().unwrap() == os::uid() as i64,
+        gid.stdout.trim().parse_int().unwrap() == os::gid() as i64,
+    );
 }

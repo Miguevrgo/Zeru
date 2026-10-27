@@ -6,5 +6,5 @@ Line 2 with "quotes"`;
     println("{}", path);
     println("{}", json);
     println("{}", lines);
-    println("{}", path.len());
+    println("{} {}", path.len(), ``.len());
 }

@@ -1,0 +1,20 @@
+struct Grid<T: Num> {
+    data: Vec<T>,
+
+    fn at(self, i: usize) T {
+        return self.data[i];
+    }
+}
+
+fn from_values<T: Num>(values: Vec<T>) Grid<T> {
+    return Grid { data: values };
+}
+
+fn main() {
+    var g: Grid<i64> = from_values(Vec[1, 2, 3]);
+    var c = g.copy();
+    c.data[0] = 9;
+    var i: usize = 2;
+    var w: i64 = from_values(Vec[g.data[i], 4]).at(0);
+    println("{} {} {}", g.at(0), c.at(0), w);
+}

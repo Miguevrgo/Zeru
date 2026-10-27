@@ -5,9 +5,12 @@ fn main() {
     h.push(1);
     h.push(9);
     h.push(3);
-    println("{}", *h.peek().unwrap());
+    println("{} {}", *h.peek().unwrap(), h.len());
     while !h.is_empty() {
         print("{} ", h.pop().unwrap());
     }
     println("");
+    h.push(1);
+    h.clear();
+    println("{} {}", h.len(), h.peek().is_none());
 }

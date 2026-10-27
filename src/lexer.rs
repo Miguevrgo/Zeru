@@ -11,11 +11,6 @@ pub struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a> {
-    #[cfg(test)]
-    pub fn new(input: &'a str) -> Self {
-        Self::at(input, 0)
-    }
-
     /// Lex a slice of a larger buffer, reporting spans as offsets into that
     /// buffer, so each file can be lexed on its own and still be located in
     /// the whole program.
@@ -449,111 +444,5 @@ impl<'a> Lexer<'a> {
         }
 
         Token::Illegal("Unterminated raw string".to_string())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_raw_strings() {
-        for (source, expected) in [
-            ("`hello world`", "hello world"),
-            ("`C:\\Users\\file.txt`", "C:\\Users\\file.txt"),
-            ("`{\"name\": \"value\"}`", "{\"name\": \"value\"}"),
-            ("`\\d+\\.\\d+`", "\\d+\\.\\d+"),
-            ("`Line 1\nLine 2\nLine 3`", "Line 1\nLine 2\nLine 3"),
-            ("``", ""),
-        ] {
-            let token = Lexer::new(source).next_token().0;
-            assert_eq!(token, Token::StringLit(expected.into()), "{source}");
-        }
-        assert_eq!(
-            Lexer::new("`unterminated").next_token().0,
-            Token::Illegal("Unterminated raw string".to_string())
-        );
-    }
-
-    #[test]
-    fn test_unterminated_block_comment_is_reported() {
-        let mut lexer = Lexer::new("fn /* never closed");
-        assert_eq!(lexer.next_token().0, Token::Fn);
-        let (token, span) = lexer.next_token();
-        assert_eq!(
-            token,
-            Token::Illegal("Unterminated block comment".to_string())
-        );
-        assert_eq!(span, Span::new(3, 5));
-        assert_eq!(lexer.next_token().0, Token::Eof);
-    }
-
-    #[test]
-    fn test_unknown_escape_is_reported_after_the_whole_string() {
-        let mut lexer = Lexer::new(r#""a\qb" x"#);
-        let Token::Illegal(message) = lexer.next_token().0 else {
-            panic!("Expected an Illegal token");
-        };
-        assert!(message.contains(r"'\q'"), "{message}");
-        assert_eq!(lexer.next_token().0, Token::Identifier("x".to_string()));
-    }
-
-    #[test]
-    fn test_non_ascii_strings_keep_their_utf8_bytes() {
-        for source in ["\"h\u{e9}llo\" x", "`h\u{e9}llo` x"] {
-            let mut lexer = Lexer::new(source);
-            assert_eq!(lexer.next_token().0, Token::StringLit("h\u{e9}llo".into()));
-            assert_eq!(lexer.next_token().0, Token::Identifier("x".to_string()));
-        }
-    }
-
-    #[test]
-    fn test_a_number_after_a_dot_is_a_tuple_index() {
-        let mut lexer = Lexer::new("t.1.0 1.5");
-        let tokens: Vec<Token> = std::iter::from_fn(|| match lexer.next_token().0 {
-            Token::Eof => None,
-            token => Some(token),
-        })
-        .collect();
-        assert_eq!(
-            tokens,
-            [
-                Token::Identifier("t".to_string()),
-                Token::Dot,
-                Token::Int(1),
-                Token::Dot,
-                Token::Int(0),
-                Token::Float(1.5),
-            ]
-        );
-    }
-
-    #[test]
-    fn test_numbers_and_characters() {
-        let mut lexer = Lexer::new("1_000 1e9 2.5E-3 0x_ff 'a' '\\x41' '\\0' 0..n");
-        let tokens: Vec<Token> = std::iter::from_fn(|| match lexer.next_token().0 {
-            Token::Eof => None,
-            token => Some(token),
-        })
-        .collect();
-        assert_eq!(
-            tokens[..8],
-            [
-                Token::Int(1000),
-                Token::Float(1e9),
-                Token::Float(2.5e-3),
-                Token::Int(255),
-                Token::Int(97),
-                Token::Int(65),
-                Token::Int(0),
-                Token::Int(0),
-            ]
-        );
-        for bad in ["'ab'", "''", "'\\x80'", "\"\\xZ1\"", "0x", "0b102", "1e400"] {
-            assert!(
-                matches!(Lexer::new(bad).next_token().0, Token::Illegal(_)),
-                "{bad}"
-            );
-        }
     }
 }

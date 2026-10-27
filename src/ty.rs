@@ -382,29 +382,3 @@ impl Types {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn interning_gives_one_id_per_type() {
-        let mut types = Types::new();
-        let a = types.intern(TyKind::Vec(Types::I32));
-        let b = types.intern(TyKind::Vec(Types::I32));
-        assert_eq!(a, b);
-        assert_eq!(types.show(a), "Vec<i32>");
-        assert_eq!(types.primitive("usize"), Some(Types::USIZE));
-        assert_eq!(types.show(Types::STR), "str");
-    }
-
-    #[test]
-    fn substitution_replaces_parameters_only() {
-        let mut types = Types::new();
-        let param = types.intern(TyKind::Param(0));
-        let optional = types.intern(TyKind::Optional(param));
-        let concrete = types.subst(optional, &[Types::I32]);
-        assert_eq!(types.show(concrete), "i32?");
-        assert_eq!(types.subst(Types::BOOL, &[Types::I32]), Types::BOOL);
-    }
-}

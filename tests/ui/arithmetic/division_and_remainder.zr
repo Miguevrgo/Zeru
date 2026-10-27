@@ -4,4 +4,5 @@ fn main() {
     var c: u32 = 7;
     var d: u32 = 2;
     println("{} {} {} {}", a / b, a % b, c / d, c % d);
+    println("{} {} {}", 7 / 2, 7 % 2, -7 / 2);
 }

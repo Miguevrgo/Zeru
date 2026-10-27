@@ -232,15 +232,3 @@ fn is_constant(expr: &Expression) -> bool {
         _ => false,
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn wrapping_keeps_the_low_bits_with_the_type_sign() {
-        assert_eq!(wrap(1 << 31, IntTy::I32), i128::from(i32::MIN));
-        assert_eq!(wrap(256 + 7, IntTy::U8), 7);
-        assert_eq!(wrap(-1, IntTy::U16), 65535);
-    }
-}

@@ -1,0 +1,8 @@
+status: exit 0
+-- stdout
+ui_net_unix.sock
+1
+ui_net_unix.sock ui_net_unix.sock []
+[1]
+pingping
+true

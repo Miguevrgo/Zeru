@@ -1,0 +1,22 @@
+import std.net;
+fn main() {
+    var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+    var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+    client.set_nodelay(true).unwrap();
+    client.set_nodelay(false).unwrap();
+
+    var a = net::UdpSocket.bind("127.0.0.1:0").unwrap();
+    var b = net::UdpSocket.bind("127.0.0.1:0").unwrap();
+    println("{}", a.peer_addr().unwrap_err());
+    a.connect(b.local_addr().unwrap()).unwrap();
+    println("{}", a.peer_addr().unwrap() == b.local_addr().unwrap());
+    a.set_broadcast(true).unwrap();
+    b.set_timeout(10).unwrap();
+    println("{}", b.recv().unwrap_err() == ETIMEDOUT);
+    var handles: Vec<net::Handle> = Vec.new();
+    handles.push(a.handle());
+    handles.push(b.handle());
+    a.send("hi").unwrap();
+    var ready = net::wait(&handles, None).unwrap();
+    println("{} {} {}", ready.len(), ready[0], b.recv().unwrap().data);
+}

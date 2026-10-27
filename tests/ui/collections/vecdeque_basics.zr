@@ -25,4 +25,6 @@ fn main() {
         words.push_back(u);
     }
     println("{} {} {}", sum, words.len(), words.at(4).unwrap().len());
+    words.clear();
+    println("{} {}", words.is_empty(), words.front().is_none());
 }

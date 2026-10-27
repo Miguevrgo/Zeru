@@ -1,0 +1,18 @@
+struct S {
+    a: i32,
+    b: i32,
+}
+
+fn add(a: i32, b: i32,) i32 {
+    return a + b;
+}
+
+fn first(t: (i32, i64,)) i32 {
+    return t.0;
+}
+
+fn main() {
+    var arr: Array<i32, 2> = [1, 2,];
+    var s = S { a: 3, b: 4, };
+    println("{} {} {}", add(arr[0], arr[1],), first((s.a, 5,)), s.b,);
+}

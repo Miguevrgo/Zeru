@@ -1,0 +1,10 @@
+struct Span {
+    range: (usize, usize),
+    label: str,
+}
+
+fn main() {
+    var span = Span { range: (2, 5), label: "word" };
+    span.range.1 = 7;
+    println("{} {} {}", span.range.0, span.range.1, span.label);
+}

@@ -2,7 +2,8 @@
 //! and each `main.zr` of a multi-file test, is built and run in every safety mode and
 //! must match `<name>.out`. `BLESS=1 cargo test --test ui` rewrites the snapshots.
 //! A first line `//@ checked` skips release-fast, which drops the runtime checks.
-//! Every example must also build and exit 0 in every mode.
+//! Every example must also build and exit 0 in every mode, and every example
+//! in the book and in std's docs must print what it shows.
 
 #![cfg(all(target_os = "linux", target_arch = "x86_64"))]
 
@@ -223,20 +224,17 @@ fn ui() {
     });
 }
 
-/// The examples and the whole programs in tests/programs, each run in every
-/// mode, must exit with 0; a directory's program is its `main.zr` or
-/// `*_test.zr`.
+/// Each example, run in every mode, must exit with 0; a directory's program
+/// is its `main.zr`.
 #[test]
 fn examples() {
     let mut programs = Vec::new();
-    for dir in ["examples", "tests/programs"] {
-        sources(
-            &root().join(dir),
-            1,
-            |name| name == "main.zr" || name.ends_with("_test.zr"),
-            &mut programs,
-        );
-    }
+    sources(
+        &root().join("examples"),
+        1,
+        |name| name == "main.zr",
+        &mut programs,
+    );
     programs.sort();
 
     run_all(&programs, |source, scratch| {
@@ -245,6 +243,143 @@ fn examples() {
             let seen = observe(source, mode, scratch);
             (!seen.starts_with("status: exit 0\n")).then(|| format!("{name} {mode}\n{seen}"))
         })
+    });
+}
+
+fn files(dir: &Path, found: &mut Vec<PathBuf>) {
+    for path in std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()) {
+        if path.is_dir() {
+            files(&path, found);
+        } else {
+            found.push(path);
+        }
+    }
+}
+
+struct Block {
+    name: String,
+    tag: String,
+    code: String,
+    text: Option<String>,
+}
+
+/// The ```zeru blocks of the book's pages and of std's doc comments.
+fn blocks() -> Vec<Block> {
+    let mut paths = Vec::new();
+    files(&root().join("docs/src"), &mut paths);
+    files(&root().join("std"), &mut paths);
+    paths.sort();
+    let mut blocks = Vec::new();
+    for path in paths {
+        let doc = match path.extension().and_then(|e| e.to_str()) {
+            Some("md") => false,
+            Some("zr") => true,
+            _ => continue,
+        };
+        let text = std::fs::read_to_string(&path).unwrap();
+        let lines: Vec<&str> = text
+            .lines()
+            .map(|line| match doc {
+                false => line,
+                true => line
+                    .trim_start()
+                    .strip_prefix("//")
+                    .map_or("", |l| l.strip_prefix(' ').unwrap_or(l)),
+            })
+            .collect();
+        let fence = |start: usize| {
+            let end = start + lines[start..].iter().position(|l| *l == "```").unwrap();
+            (lines[start..end].join("\n"), end + 1)
+        };
+        let mut i = 0;
+        while i < lines.len() {
+            let Some(tag) = lines[i].strip_prefix("```zeru") else {
+                i += 1;
+                continue;
+            };
+            let name = format!("{}:{}", path.strip_prefix(root()).unwrap().display(), i + 1);
+            let (code, end) = fence(i + 1);
+            i = end;
+            let next = i + lines[i..].iter().take_while(|l| l.is_empty()).count();
+            let text = (lines.get(next) == Some(&"```text")).then(|| {
+                let (text, end) = fence(next + 1);
+                i = end;
+                text
+            });
+            blocks.push(Block {
+                name,
+                tag: tag.to_string(),
+                code,
+                text,
+            });
+        }
+    }
+    blocks
+}
+
+/// Whether `wanted` shows up in `seen`'s lines in order, each inside one line.
+fn shows(seen: &str, wanted: &[&str]) -> bool {
+    let mut lines = seen.lines();
+    wanted
+        .iter()
+        .all(|want| lines.any(|line| line.contains(want)))
+}
+
+/// Every example in the book and in std's docs: a `zeru` block runs, wrapped
+/// in `main` when it has none, and prints each `); // X` it shows, or the
+/// ```text block after it; `zeru,check` only compiles; `zeru,fails` must not
+/// exit with 0; `zeru,ignore` is skipped.
+#[test]
+fn docs() {
+    let blocks: Vec<Block> = blocks()
+        .into_iter()
+        .filter(|b| b.tag != ",ignore")
+        .collect();
+    run_all(&blocks, |block, scratch| {
+        let _ = std::fs::remove_dir_all(scratch);
+        std::fs::create_dir_all(scratch).unwrap();
+        let source = if block.code.contains("fn main(") {
+            block.code.clone()
+        } else {
+            let (imports, body): (Vec<&str>, Vec<&str>) =
+                block.code.lines().partition(|l| l.starts_with("import "));
+            format!(
+                "{}\nfn main() {{\n{}\n}}\n",
+                imports.join("\n"),
+                body.join("\n")
+            )
+        };
+        std::fs::write(scratch.join("main.zr"), &source).unwrap();
+        if block.tag == ",check" {
+            let output = Command::new(env!("CARGO_BIN_EXE_zeru"))
+                .args(["check", "main.zr"])
+                .current_dir(scratch)
+                .env("ZERU_STD_PATH", root().join("std"))
+                .output()
+                .unwrap();
+            let stderr = clean(&String::from_utf8_lossy(&output.stderr));
+            return (!output.status.success()).then(|| format!("{}\n{stderr}", block.name));
+        }
+        let seen = observe(Path::new("main.zr"), "", scratch);
+        let exited = seen.starts_with("status: exit 0\n");
+        let text: Option<Vec<&str>> = block
+            .text
+            .as_ref()
+            .map(|text| text.lines().filter(|l| !l.is_empty()).collect());
+        let passed = match (block.tag.as_str(), text) {
+            (",fails", text) => !exited && text.is_none_or(|text| shows(&seen, &text)),
+            (_, Some(text)) => shows(&seen, &text),
+            _ => {
+                let wanted: Vec<&str> = block
+                    .code
+                    .lines()
+                    .filter_map(|l| l.split_once("); // ").or_else(|| l.split_once("), // ")))
+                    .map(|(_, out)| out)
+                    .collect();
+                exited && shows(&seen, &wanted)
+            }
+        };
+        (!passed).then(|| format!("{}\n{source}\n{seen}", block.name))
     });
 }
 
@@ -272,7 +407,7 @@ fn check_reports_json() {
 fn check_warns_without_failing() {
     let output = Command::new(env!("CARGO_BIN_EXE_zeru"))
         .args(["check", "--json"])
-        .arg(root().join("tests/programs/warnings/lints.zr"))
+        .arg(root().join("tests/cli/warnings/lints.zr"))
         .env("ZERU_STD_PATH", root().join("std"))
         .output()
         .unwrap();
@@ -301,7 +436,7 @@ fn test_runs_each_test_alone() {
     std::fs::create_dir_all(&scratch).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_zeru"))
         .arg("test")
-        .arg(root().join("tests/programs/unit_tests/main.zr"))
+        .arg(root().join("tests/cli/unit_tests/main.zr"))
         .current_dir(&scratch)
         .env("ZERU_STD_PATH", root().join("std"))
         .output()

@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: Imports must come before any other code
+   ╭─[ tests/ui/parser/import_inside_function.zr:2:5 ]
+   │
+ 2 │     import std.math;
+   │     ───┬──
+   │        ╰──── Imports must come before any other code
+───╯
+[-] Error: aborting due to previous error

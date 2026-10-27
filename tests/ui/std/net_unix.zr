@@ -1,0 +1,21 @@
+import std.net;
+fn main() {
+    var listener = net::UnixListener.bind("ui_net_unix.sock").unwrap();
+    println("{}", listener.local_addr().unwrap());
+    var client = net::UnixStream.connect("ui_net_unix.sock").unwrap();
+    var handles: Vec<net::Handle> = Vec.new();
+    handles.push(listener.handle());
+    println("{}", net::wait(&handles, 0).unwrap().len());
+    var server = listener.accept().unwrap();
+    println("{} {} [{}]", client.peer_addr().unwrap(), server.local_addr().unwrap(), client.local_addr().unwrap());
+    handles.push(server.handle());
+    handles.push(client.handle());
+    client.write("ping").unwrap();
+    println("{}", net::wait(&handles, None).unwrap());
+    var buf = String.new();
+    server.peek(&var buf, 64).unwrap();
+    server.read(&var buf, 64).unwrap();
+    println("{}", buf);
+    server.set_timeout(10).unwrap();
+    println("{}", server.read(&var buf, 64).unwrap_err() == ETIMEDOUT);
+}
