@@ -10,10 +10,11 @@ hljs.registerLanguage("zeru", function (hljs) {
       literal: "true false None",
       built_in:
         "Some Ok Err self print println eprint eprintln assert exit Vec String Array",
-      type: "i8 i16 i32 i64 u8 u16 u32 u64 usize f32 f64 bool str",
+      type: "i8 i16 i32 i64 isize u8 u16 u32 u64 usize f32 f64 bool void str",
     },
     contains: [
       hljs.C_LINE_COMMENT_MODE,
+      hljs.C_BLOCK_COMMENT_MODE,
       { className: "meta", begin: "#test\\b" },
       { className: "string", begin: '"', end: '"', contains: [hljs.BACKSLASH_ESCAPE] },
       { className: "string", begin: "`", end: "`" },
