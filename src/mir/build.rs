@@ -5,7 +5,7 @@
 
 use std::mem::replace;
 
-use crate::errors::{Sources, Span, ZeruError};
+use crate::errors::{Sources, Span, ZeruError, tidy};
 use crate::lower::SafetyMode;
 use crate::tir::{
     self, Arm, BinOp, Builtin, Expr, ExprKind, FnId, Payload, Program, Stmt, StmtKind, UnOp,
@@ -39,17 +39,11 @@ pub fn build(
                 function.span,
             ));
         }
-        for error in super::borrowck::check(&body, program) {
-            if !errors
-                .iter()
-                .any(|e| e.span == error.span && e.message == error.message)
-            {
-                errors.push(error);
-            }
-        }
+        errors.extend(super::borrowck::check(&body, program));
         super::elaborate::elaborate(&mut body, program);
         bodies.push(body);
     }
+    tidy(&mut errors);
     match errors.is_empty() {
         true => Ok(bodies),
         false => Err(errors),

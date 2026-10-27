@@ -16,7 +16,7 @@ use std::cell::Cell;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{Statement, StatementKind, TypeParameter, TypeSpec};
-use crate::errors::{Span, ZeruError};
+use crate::errors::{Span, ZeruError, tidy};
 use crate::items::{DefId, ItemKind, Items, ModuleId};
 use crate::tir::{self, FnId};
 use crate::token::Token;
@@ -225,8 +225,7 @@ impl<'a> Checker<'a> {
             ));
         }
         if !errors.is_empty() {
-            errors.sort_by(|a, b| (a.span.start, &a.message).cmp(&(b.span.start, &b.message)));
-            errors.dedup_by(|a, b| a.span == b.span && a.message == b.message);
+            tidy(&mut errors);
             return Err(errors);
         }
         Ok(tir::Program {
@@ -960,6 +959,12 @@ impl<'a> Checker<'a> {
         self.drain();
         Some(runtime)
     }
+
+    /// Whether `def` is the program's entry point: `main` in the root file.
+    fn is_main(&self, def: DefId) -> bool {
+        let item = self.items.item(def);
+        item.owner.is_none() && item.module == ModuleId::ROOT && item.name == "main"
+    }
 }
 
 fn generics_of(decl: &Statement) -> &[TypeParameter] {
@@ -968,14 +973,6 @@ fn generics_of(decl: &Statement) -> &[TypeParameter] {
             type_params
         }
         _ => &[],
-    }
-}
-
-impl Checker<'_> {
-    /// Whether `def` is the program's entry point: `main` in the root file.
-    fn is_main(&self, def: DefId) -> bool {
-        let item = self.items.item(def);
-        item.owner.is_none() && item.module == ModuleId::ROOT && item.name == "main"
     }
 }
 

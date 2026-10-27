@@ -18,7 +18,7 @@ use std::process::Command;
 
 use crate::ast::{Program, StatementKind};
 use crate::check::Checker;
-use crate::errors::{CompileError, Sources, Span, ZeruError, report_errors};
+use crate::errors::{CompileError, Sources, Span, ZeruError, report_errors, tidy};
 use crate::items::{Items, SourceModule};
 use crate::lower::SafetyMode;
 use crate::{lexer::Lexer, parser::Parser};
@@ -98,8 +98,7 @@ fn analyze(
         let bodies = crate::mir::build(&mut program, &sources, mode)?;
         let warnings = &mut program.warnings;
         warnings.retain(|warning| !sources.in_std(warning.span));
-        warnings.sort_by(|a, b| (a.span.start, &a.message).cmp(&(b.span.start, &b.message)));
-        warnings.dedup_by(|a, b| a.span == b.span && a.message == b.message);
+        tidy(warnings);
         Ok((program, bodies))
     });
     Ok((sources, analysis))

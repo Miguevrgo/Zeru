@@ -15,7 +15,7 @@ use crate::tir::{
 use crate::ty::{IntTy, Ty, TyKind, Types};
 
 use super::Checker;
-use super::consts::wrap;
+use super::consts::{arith, wrap};
 
 /// How many statements and loop turns a constant may take, and how deep its
 /// calls may go, before it is taken to never end.
@@ -807,34 +807,21 @@ impl Eval<'_, '_> {
         Ok(match (l, r) {
             (Value::Int(a), Value::Int(b)) => {
                 let int = self.int_ty(operand);
-                let bits = i128::from(int.bits());
                 match op {
-                    BinOp::Add => self.fit(a.checked_add(b), ty, span)?,
-                    BinOp::Sub => self.fit(a.checked_sub(b), ty, span)?,
-                    BinOp::Mul => self.fit(a.checked_mul(b), ty, span)?,
                     BinOp::Div | BinOp::Rem if b == 0 => {
                         return fail("Division by zero while computing a constant", span);
                     }
-                    BinOp::Div => self.fit(a.checked_div(b), ty, span)?,
                     BinOp::Rem if int.signed() && a == int.min() && b == -1 => {
                         return fail("Division of MIN by -1 while computing a constant", span);
                     }
-                    BinOp::Rem => self.fit(a.checked_rem(b), ty, span)?,
-                    BinOp::AddWrap => Value::Int(wrap(a.wrapping_add(b), int)),
-                    BinOp::SubWrap => Value::Int(wrap(a.wrapping_sub(b), int)),
-                    BinOp::MulWrap => Value::Int(wrap(a.wrapping_mul(b), int)),
-                    BinOp::BitAnd => Value::Int(a & b),
-                    BinOp::BitOr => Value::Int(a | b),
-                    BinOp::BitXor => Value::Int(a ^ b),
-                    BinOp::Shl | BinOp::Shr if !(0..bits).contains(&b) => {
+                    BinOp::Shl | BinOp::Shr if !(0..i128::from(int.bits())).contains(&b) => {
                         return fail(
                             format!("Shift by {b} is out of range while computing a constant"),
                             span,
                         );
                     }
-                    BinOp::Shl => Value::Int(wrap(a << b, int)),
-                    BinOp::Shr => Value::Int(a >> b),
-                    _ => return cannot("do pointer arithmetic", span),
+                    BinOp::PtrAdd | BinOp::PtrSub => return cannot("do pointer arithmetic", span),
+                    _ => self.fit(arith(op, a, b, Some(int)), ty, span)?,
                 }
             }
             (Value::Float(a), Value::Float(b)) => Value::Float(round(

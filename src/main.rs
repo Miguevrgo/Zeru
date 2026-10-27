@@ -25,33 +25,43 @@ struct Cli {
     command: Commands,
 }
 
+#[derive(clap::Args)]
+struct Mode {
+    #[arg(
+        long,
+        conflicts_with = "release_fast",
+        help = "Optimize, keep runtime checks"
+    )]
+    release_safe: bool,
+    #[arg(long, help = "Optimize, drop runtime checks")]
+    release_fast: bool,
+}
+
+impl Mode {
+    fn safety(&self) -> SafetyMode {
+        match (self.release_fast, self.release_safe) {
+            (true, _) => SafetyMode::ReleaseFast,
+            (_, true) => SafetyMode::ReleaseSafe,
+            _ => SafetyMode::Debug,
+        }
+    }
+}
+
 #[derive(Subcommand)]
 enum Commands {
     #[command(about = "Compile a .zr file into build/")]
     Build {
         file: PathBuf,
-        #[arg(
-            long,
-            conflicts_with = "release_fast",
-            help = "Optimize, keep runtime checks"
-        )]
-        release_safe: bool,
-        #[arg(long, help = "Optimize, drop runtime checks")]
-        release_fast: bool,
+        #[command(flatten)]
+        mode: Mode,
         #[arg(long, help = "Keep the LLVM IR in build/")]
         emit_ir: bool,
     },
     #[command(about = "Compile a .zr file and run it")]
     Run {
         file: PathBuf,
-        #[arg(
-            long,
-            conflicts_with = "release_fast",
-            help = "Optimize, keep runtime checks"
-        )]
-        release_safe: bool,
-        #[arg(long, help = "Optimize, drop runtime checks")]
-        release_fast: bool,
+        #[command(flatten)]
+        mode: Mode,
         #[arg(last = true, help = "Arguments for the program, after --")]
         program_args: Vec<String>,
     },
@@ -60,14 +70,8 @@ enum Commands {
         file: PathBuf,
         #[arg(help = "Run only the tests whose name holds this")]
         filter: Option<String>,
-        #[arg(
-            long,
-            conflicts_with = "release_fast",
-            help = "Optimize, keep runtime checks"
-        )]
-        release_safe: bool,
-        #[arg(long, help = "Optimize, drop runtime checks")]
-        release_fast: bool,
+        #[command(flatten)]
+        mode: Mode,
     },
     #[command(about = "Check a .zr file for errors without compiling it")]
     Check {
@@ -97,21 +101,17 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
     match args.command {
         Commands::Build {
             file,
-            release_safe,
-            release_fast,
+            mode,
             emit_ir,
         } => {
-            let safety_mode = SafetyMode::from_flags(release_fast, release_safe);
-            compile(&file, safety_mode, emit_ir, false)?;
+            compile(&file, mode.safety(), emit_ir, false)?;
         }
         Commands::Run {
             file,
-            release_safe,
-            release_fast,
+            mode,
             program_args,
         } => {
-            let safety_mode = SafetyMode::from_flags(release_fast, release_safe);
-            let (executable_path, _) = compile(&file, safety_mode, false, false)?;
+            let (executable_path, _) = compile(&file, mode.safety(), false, false)?;
             status(GREEN, '\u{e7d5}', "Running", executable_path.display());
             let status = std::process::Command::new(&executable_path)
                 .args(program_args)
@@ -122,14 +122,8 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
                     .unwrap_or_else(|| status.signal().map(|s| 128 + s).unwrap_or(1)),
             );
         }
-        Commands::Test {
-            file,
-            filter,
-            release_safe,
-            release_fast,
-        } => {
-            let safety_mode = SafetyMode::from_flags(release_fast, release_safe);
-            if !test(&file, safety_mode, filter.as_deref())? {
+        Commands::Test { file, filter, mode } => {
+            if !test(&file, mode.safety(), filter.as_deref())? {
                 std::process::exit(1);
             }
         }

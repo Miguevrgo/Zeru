@@ -621,10 +621,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         let old = self.bytes_for(elem, cap);
         let new = self.bytes_for(elem, current);
         let resized = self.resize_buffer(data, old, new);
-        let ptr_field = self.field_ptr(vec, ty, 0);
-        self.builder.build_store(ptr_field, resized).unwrap();
-        let cap_field = self.field_ptr(vec, ty, 2);
-        self.builder.build_store(cap_field, current).unwrap();
+        self.store_vec(vec, ty, resized, current, current);
     }
 
     /// The stdout and stderr `OutStream` globals, empty with their fd set,

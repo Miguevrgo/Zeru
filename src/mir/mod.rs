@@ -293,6 +293,18 @@ impl Body {
         }
         recursed
     }
+
+    /// The type of what `place` holds.
+    pub fn place_ty(&self, program: &Program, place: &Place) -> Ty {
+        program.projected(self.locals[place.local.0 as usize].ty, &place.projection)
+    }
+
+    pub fn operand_ty(&self, program: &Program, operand: &Operand) -> Ty {
+        match operand {
+            Operand::Copy(place) | Operand::Move(place) => self.place_ty(program, place),
+            Operand::Constant(constant) => constant.ty,
+        }
+    }
 }
 
 impl TerminatorKind {
@@ -327,20 +339,6 @@ impl TerminatorKind {
                 .chain([otherwise])
                 .collect(),
             TerminatorKind::Return | TerminatorKind::Unreachable => Vec::new(),
-        }
-    }
-}
-
-impl Body {
-    /// The type of what `place` holds.
-    pub fn place_ty(&self, program: &Program, place: &Place) -> Ty {
-        program.projected(self.locals[place.local.0 as usize].ty, &place.projection)
-    }
-
-    pub fn operand_ty(&self, program: &Program, operand: &Operand) -> Ty {
-        match operand {
-            Operand::Copy(place) | Operand::Move(place) => self.place_ty(program, place),
-            Operand::Constant(constant) => constant.ty,
         }
     }
 }

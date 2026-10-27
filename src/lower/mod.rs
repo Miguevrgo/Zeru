@@ -1,7 +1,7 @@
 //! Lowering of the MIR to LLVM, one block at a time, deciding nothing the
 //! MIR has not. Scalars are SSA values; every other value lives in memory
 //! and is handled through a pointer to it, copied with `memcpy`. Every
-//! function but `main` is internal, so the calling convention is ours: an
+//! function is internal, so the calling convention is ours: an
 //! aggregate argument is a pointer to a copy the callee owns, and an
 //! aggregate result is written through a pointer passed first.
 
@@ -671,16 +671,6 @@ pub enum SafetyMode {
 impl SafetyMode {
     pub const fn emit_safety_checks(&self) -> bool {
         matches!(self, SafetyMode::Debug | SafetyMode::ReleaseSafe)
-    }
-
-    pub const fn from_flags(release_fast: bool, release_safe: bool) -> Self {
-        if release_fast {
-            Self::ReleaseFast
-        } else if release_safe {
-            Self::ReleaseSafe
-        } else {
-            Self::Debug
-        }
     }
 
     pub const fn opt_level(&self) -> OptimizationLevel {

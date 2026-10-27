@@ -20,6 +20,9 @@ const PRINTS: &[&str] = &["print", "println", "eprint", "eprintln"];
 /// Copies a count of bytes from a source to a destination; the compiler
 /// emits it.
 const COPY_FN: &str = "__zeru_copy_bytes";
+
+/// The bits a hash map hashes for a key; the compiler computes them.
+const HASH_BITS_FN: &str = "__zeru_hash_bits";
 /// str methods, each the prelude's `__zeru_str_<name>` with the str first.
 const STR_METHODS: &[&str] = &[
     "split",
@@ -142,7 +145,7 @@ impl FnCx<'_, '_> {
             self.check_args_only(args);
             return self.error_expr(span);
         }
-        if name == crate::tir::HASH_BITS_FN && self.local(name).is_none() {
+        if name == HASH_BITS_FN && self.local(name).is_none() {
             let [key] = args else {
                 self.error(format!("{name} takes one key"), span);
                 return self.error_expr(span);

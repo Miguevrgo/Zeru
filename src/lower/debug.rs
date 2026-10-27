@@ -12,10 +12,8 @@ use inkwell::{
     values::FunctionValue,
 };
 
-use super::SafetyMode;
+use super::{Lower, SafetyMode};
 use crate::errors::Span;
-
-use super::Lower;
 
 pub(super) struct Debug<'ctx> {
     builder: DebugInfoBuilder<'ctx>,

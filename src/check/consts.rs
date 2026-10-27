@@ -108,24 +108,7 @@ impl Checker<'_> {
             }
             ExprKind::Unary(UnOp::Not, operand) => wrap(!self.eval(operand)?, int?),
             ExprKind::Binary(op, left, right) => {
-                let (l, r) = (self.eval(left)?, self.eval(right)?);
-                match op {
-                    BinOp::Add => l.checked_add(r)?,
-                    BinOp::Sub => l.checked_sub(r)?,
-                    BinOp::Mul => l.checked_mul(r)?,
-                    BinOp::Div => l.checked_div(r)?,
-                    BinOp::Rem if r == 0 => return None,
-                    BinOp::Rem => l.checked_rem(r)?,
-                    BinOp::AddWrap => wrap(l.wrapping_add(r), int?),
-                    BinOp::SubWrap => wrap(l.wrapping_sub(r), int?),
-                    BinOp::MulWrap => wrap(l.wrapping_mul(r), int?),
-                    BinOp::BitAnd => l & r,
-                    BinOp::BitOr => l | r,
-                    BinOp::BitXor => l ^ r,
-                    BinOp::Shl if (0..i128::from(int?.bits())).contains(&r) => wrap(l << r, int?),
-                    BinOp::Shr if (0..i128::from(int?.bits())).contains(&r) => l >> r,
-                    _ => return None,
-                }
+                arith(*op, self.eval(left)?, self.eval(right)?, int)?
             }
             ExprKind::Cast(operand) if self.types.as_int(operand.ty).is_some() => {
                 wrap(self.eval(operand)?, int?)
@@ -146,6 +129,29 @@ pub(super) fn wrap(value: i128, int: IntTy) -> i128 {
     } else {
         low
     }
+}
+
+/// `l op r` on integers of type `int`, or on bools without one; none when it
+/// overflows, divides by zero, shifts by the width or more, or is no such
+/// operation.
+pub(super) fn arith(op: BinOp, l: i128, r: i128, int: Option<IntTy>) -> Option<i128> {
+    let shift = || int.filter(|int| (0..i128::from(int.bits())).contains(&r));
+    Some(match op {
+        BinOp::Add => l.checked_add(r)?,
+        BinOp::Sub => l.checked_sub(r)?,
+        BinOp::Mul => l.checked_mul(r)?,
+        BinOp::Div => l.checked_div(r)?,
+        BinOp::Rem => l.checked_rem(r)?,
+        BinOp::AddWrap => wrap(l.wrapping_add(r), int?),
+        BinOp::SubWrap => wrap(l.wrapping_sub(r), int?),
+        BinOp::MulWrap => wrap(l.wrapping_mul(r), int?),
+        BinOp::BitAnd => l & r,
+        BinOp::BitOr => l | r,
+        BinOp::BitXor => l ^ r,
+        BinOp::Shl => wrap(l << r, shift()?),
+        BinOp::Shr => shift().map(|_| l >> r)?,
+        _ => return None,
+    })
 }
 
 impl FnCx<'_, '_> {
@@ -176,16 +182,12 @@ impl FnCx<'_, '_> {
                     return;
                 };
                 let result = match op {
-                    BinOp::Add => l.checked_add(r),
-                    BinOp::Sub => l.checked_sub(r),
-                    BinOp::Mul => l.checked_mul(r),
-                    _ if r == 0 => {
+                    BinOp::Div | BinOp::Rem if r == 0 => {
                         self.error("Division by zero in a constant expression", expr.span);
                         return;
                     }
-                    _ if !int.contains(l / r) => None,
-                    BinOp::Div => Some(l / r),
-                    _ => Some(l % r),
+                    BinOp::Rem if !int.contains(l / r) => None,
+                    _ => arith(*op, l, r, Some(int)),
                 };
                 self.report_overflow(result, int, &shown, expr.span);
             }

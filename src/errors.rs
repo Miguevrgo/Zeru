@@ -44,6 +44,12 @@ pub struct ZeruError {
     pub notes: Vec<(String, Span)>,
 }
 
+/// Sort `errors` by where they point and drop the repeats.
+pub fn tidy(errors: &mut Vec<ZeruError>) {
+    errors.sort_by(|a, b| (a.span.start, &a.message).cmp(&(b.span.start, &b.message)));
+    errors.dedup_by(|a, b| a.span == b.span && a.message == b.message);
+}
+
 impl ZeruError {
     pub fn syntax(message: impl Into<String>, span: Span) -> Self {
         Self {

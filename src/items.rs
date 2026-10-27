@@ -39,6 +39,8 @@ enum Namespace {
     Value,
 }
 
+const NAMESPACES: [Namespace; 3] = [Namespace::Type, Namespace::Trait, Namespace::Value];
+
 impl ItemKind {
     fn namespace(self) -> Namespace {
         match self {
@@ -207,7 +209,7 @@ impl<'a> Items<'a> {
                 .modules
                 .insert(short.clone(), target);
             for symbol in symbols.iter().flatten() {
-                let found: Vec<DefId> = [Namespace::Type, Namespace::Trait, Namespace::Value]
+                let found: Vec<DefId> = NAMESPACES
                     .into_iter()
                     .filter_map(|ns| {
                         self.modules[target.0 as usize]
@@ -223,13 +225,11 @@ impl<'a> Items<'a> {
                     ));
                     continue;
                 }
-                let declared_here = [Namespace::Type, Namespace::Trait, Namespace::Value]
-                    .into_iter()
-                    .any(|ns| {
-                        self.modules[module.0 as usize]
-                            .scope
-                            .contains_key(&(ns, symbol.clone()))
-                    });
+                let declared_here = NAMESPACES.into_iter().any(|ns| {
+                    self.modules[module.0 as usize]
+                        .scope
+                        .contains_key(&(ns, symbol.clone()))
+                });
                 if declared_here {
                     self.errors.push(ZeruError::semantic(
                         format!("'{symbol}' is imported from '{short}' and also declared here"),

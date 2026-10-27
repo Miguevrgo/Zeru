@@ -355,12 +355,9 @@ pub enum BinOp {
     PtrSub,
 }
 
-/// The prelude function that writes out what `print` buffered, which the
-/// program calls by name and code generation defines.
+/// The function that writes out what `print` buffered, which the program
+/// calls by name and code generation defines.
 pub const FLUSH_FN: &str = "__zeru_flush";
-
-/// The bits a hash map hashes for a key; the compiler computes them.
-pub const HASH_BITS_FN: &str = "__zeru_hash_bits";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Builtin {
