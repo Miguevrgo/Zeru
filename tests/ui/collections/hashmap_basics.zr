@@ -4,8 +4,8 @@ fn main() {
     m.insert(1, 10);
     m.insert(2, 20);
     m.insert(1, 11);
-    println("{} {} {} {}", m.len(), m.get(1).unwrap(), m.get(3).is_none(), m.contains(2));
-    println("{} {} {}", m.remove(2), m.remove(2), m.len());
+    println("{} {} {} {}", m.len(), m.get(&1).unwrap(), m.get(&3).is_none(), m.contains(&2));
+    println("{} {} {}", m.remove(&2), m.remove(&2), m.len());
     m.clear();
     println("{}", m.is_empty());
 }

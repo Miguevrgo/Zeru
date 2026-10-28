@@ -72,6 +72,8 @@ impl Program {
 pub struct Function {
     pub symbol: String,
     pub params: Vec<LocalId>,
+    /// Whether the first parameter is `self`.
+    pub method: bool,
     pub ret: Ty,
     pub locals: Vec<Local>,
     pub body: Block,

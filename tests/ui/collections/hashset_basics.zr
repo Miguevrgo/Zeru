@@ -3,8 +3,8 @@ fn main() {
     var s: HashSet<i64> = HashSet.new();
     println("{} {}", s.insert(3), s.insert(3));
     s.insert(4);
-    println("{} {} {}", s.contains(3), s.contains(5), s.len());
-    println("{} {}", s.remove(3), s.len());
+    println("{} {} {}", s.contains(&3), s.contains(&5), s.len());
+    println("{} {}", s.remove(&3), s.len());
     s.clear();
-    println("{} {}", s.is_empty(), s.contains(4));
+    println("{} {}", s.is_empty(), s.contains(&4));
 }

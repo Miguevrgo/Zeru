@@ -31,10 +31,22 @@ var stock: HashMap<i32, i32> = HashMap.new();
 stock.insert(101, 5);
 stock.insert(202, 0);
 stock.insert(101, 7);
-println("{} {}", stock.len(), *stock.get(101).unwrap()); // 2 7
-println("{}", stock.get(303).is_none()); // true
-println("{}", stock.remove(202)); // 0
-println("{}", stock.contains(202)); // false
+println("{} {}", stock.len(), *stock.get(&101).unwrap()); // 2 7
+println("{}", stock.get(&303).is_none()); // true
+println("{}", stock.remove(&202)); // 0
+println("{}", stock.contains(&202)); // false
+```
+
+`get`, `contains` and `remove` borrow the key, `&101`, so a key that owns
+memory is not given away to look it up. A map with `String` keys also takes
+a `str`, with no copy:
+
+```zeru
+import std.collections.hashmap::{HashMap};
+
+var ages: HashMap<String, i32> = HashMap.new();
+ages.insert(String.from("Ada"), 36);
+println("{}", *ages.get("Ada").unwrap()); // 36
 ```
 
 `remove` gives back the value it takes out, as a `V?`, so a value that owns
@@ -45,7 +57,7 @@ import std.collections.hashmap::{HashMap};
 
 var names: HashMap<i32, String> = HashMap.new();
 names.insert(1, String.from("Ada"));
-match names.remove(1) {
+match names.remove(&1) {
     Some(name) => println("bye {}", name), // bye Ada
     None => println("nobody"),
 }
@@ -88,7 +100,7 @@ import std.collections.hashmap::{HashMap};
 
 var grid: HashMap<(i32, i32), u8> = HashMap.new();
 grid.insert((2, 3), '#');
-println("{}", *grid.get((2, 3)).unwrap() == '#'); // true
+println("{}", *grid.get(&(2, 3)).unwrap() == '#'); // true
 ```
 
 ## VecDeque

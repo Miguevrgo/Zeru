@@ -3,7 +3,7 @@ fn main() {
     var counts: HashMap<i64, i64> = HashMap.new();
     var words: Vec<i64> = Vec[1, 2, 1, 3, 1];
     for w in words {
-        match counts.get(w) {
+        match counts.get(&w) {
             Some(c) => {
                 counts.insert(w, *c + 1);
             }
@@ -12,7 +12,7 @@ fn main() {
             }
         }
     }
-    println("{} {} {}", counts.get(1).unwrap(), counts.get(2).unwrap(), counts.get(3).unwrap());
+    println("{} {} {}", counts.get(&1).unwrap(), counts.get(&2).unwrap(), counts.get(&3).unwrap());
     var v: Vec<i64> = Vec[1, 2];
     var e = &v[0];
     v.push(*e);

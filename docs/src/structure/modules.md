@@ -75,7 +75,7 @@ import std.collections.hashmap::{HashMap};
 fn main() {
     var ages: HashMap<i32, i32> = HashMap.new();
     ages.insert(1, 30);
-    println("{} {}", math::max(3, 7), *ages.get(1).unwrap()); // 7 30
+    println("{} {}", math::max(3, 7), *ages.get(&1).unwrap()); // 7 30
 }
 ```
 

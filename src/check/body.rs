@@ -103,6 +103,7 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
     tir::Function {
         symbol,
         params,
+        method: sig.receiver != Receiver::None,
         ret,
         locals,
         body: body_block,
@@ -330,6 +331,12 @@ impl<'c, 'a> FnCx<'c, 'a> {
         }
         if value.ty == Types::STRING && target == Types::STR {
             return Ok(self.view(value));
+        }
+        if value.ty == Types::STR && *types.kind(target) == TyKind::Ref(Types::STRING) {
+            let span = value.span;
+            let function = self.cx.prelude_fn("__zeru_borrowed_string");
+            let shown = self.mk(ExprKind::Call(function, vec![value]), Types::STRING, span);
+            return Ok(self.address(Place::Temp(Box::new(shown)), Types::STRING, false, span));
         }
         if let (TyKind::Slice(wanted), TyKind::Ref(held) | TyKind::RefMut(held))
         | (TyKind::SliceMut(wanted), TyKind::RefMut(held)) =

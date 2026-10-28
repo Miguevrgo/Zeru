@@ -17,7 +17,7 @@ import std.collections.hashmap::{HashMap};
 // for n in [4, 7, 4, 9, 7] {
 //     seen.insert(n);
 // }
-// println("{} {}", seen.len(), seen.contains(9)); // 3 true
+// println("{} {}", seen.len(), seen.contains(&9)); // 3 true
 // ```
 pub struct HashSet<K: Hash> {
     members: HashMap<K, bool>,
@@ -47,7 +47,7 @@ pub struct HashSet<K: Hash> {
     }
 
     // Returns whether `key` is a member.
-    pub fn contains(self, key: K) bool {
+    pub fn contains(self, key: &K) bool {
         return self.members.contains(key);
     }
 
@@ -60,10 +60,10 @@ pub struct HashSet<K: Hash> {
     //
     // var ids: HashSet<i64> = HashSet.new();
     // ids.insert(42);
-    // println("{}", ids.remove(42)); // true
-    // println("{}", ids.remove(42)); // false
+    // println("{}", ids.remove(&42)); // true
+    // println("{}", ids.remove(&42)); // false
     // ```
-    pub fn remove(var self, key: K) bool {
+    pub fn remove(var self, key: &K) bool {
         return self.members.remove(key).is_some();
     }
 

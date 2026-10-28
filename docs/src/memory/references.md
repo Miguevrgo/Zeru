@@ -126,6 +126,40 @@ fn main() {
 Error: Cannot return a reference into 'x', which ends with this function
 ```
 
+A method returns references into `self` only. Its other `&` parameters
+are lent for the call alone, so what it returns can be kept after them,
+as with a key a map looks up:
+
+```zeru
+import std.collections.hashmap::{HashMap};
+
+fn main() {
+    var ages: HashMap<String, i32> = HashMap.new();
+    ages.insert(String.from("Ada"), 36);
+    var age = ages.get("Ada").unwrap();
+    println("{}", *age); // 36
+}
+```
+
+```zeru,fails
+struct Pair {
+    left: i32,
+
+    fn pick(self, other: &i32) &i32 {
+        return other;
+    }
+}
+
+fn main() {
+    var pair = Pair { left: 1 };
+    println("{}", *pair.pick(&2));
+}
+```
+
+```text
+Error: A method returns references into 'self' only, not into 'other'
+```
+
 There are no lifetime annotations to write: these rules are all the
 compiler needs.
 

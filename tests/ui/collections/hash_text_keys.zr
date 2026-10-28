@@ -5,7 +5,7 @@ fn main() {
     ages.insert("ann", 31);
     ages.insert("bob", 40);
     ages.insert("ann", 32);
-    println("{} {} {}", ages.len(), *ages.get("ann").unwrap(), ages.contains("eve"));
+    println("{} {} {}", ages.len(), *ages.get(&"ann").unwrap(), ages.contains(&"eve"));
     var owned: HashMap<String, i32> = HashMap.new();
     for i in 0..1000 {
         var key = String.from("k");
@@ -15,9 +15,11 @@ fn main() {
         owned.insert(key, i);
     }
     var probe = String.from("k777");
-    println("{} {}", owned.len(), *owned.get(probe).unwrap());
-    println("{}", owned.remove(String.from("k5")));
+    println("{} {} {}", owned.len(), *owned.get(&probe).unwrap(), *owned.get("k123").unwrap());
+    var kept = owned.get("k042").unwrap();
+    println("{}", *kept);
+    println("{}", owned.remove("k5"));
     var pairs: HashSet<(str, i32)> = HashSet.new();
     var _ = pairs.insert(("a", 1));
-    println("{} {}", pairs.contains(("a", 1)), pairs.contains(("a", 2)));
+    println("{} {}", pairs.contains(&("a", 1)), pairs.contains(&("a", 2)));
 }

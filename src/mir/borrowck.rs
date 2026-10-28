@@ -120,8 +120,10 @@ impl BitSet {
 
 const EXACT: usize = 16;
 
-pub(super) fn check(body: &Body, program: &Program) -> Vec<ZeruError> {
-    let mut cx = Cx::new(body, program);
+/// `methods` tells, for each function, whether its first parameter is
+/// `self`.
+pub(super) fn check(body: &Body, program: &Program, methods: &[bool]) -> Vec<ZeruError> {
+    let mut cx = Cx::new(body, program, methods);
     cx.run();
     cx.errors
         .sort_by_key(|error| (error.span.start, error.span.end));
@@ -138,6 +140,7 @@ pub(super) fn check(body: &Body, program: &Program) -> Vec<ZeruError> {
 struct Cx<'a> {
     body: &'a Body,
     program: &'a Program,
+    methods: &'a [bool],
     loans: Vec<Loan>,
     made: HashMap<(usize, usize), usize>,
     moves: Vec<(Local, Span)>,
@@ -154,10 +157,11 @@ struct Cx<'a> {
 }
 
 impl<'a> Cx<'a> {
-    fn new(body: &'a Body, program: &'a Program) -> Self {
+    fn new(body: &'a Body, program: &'a Program, methods: &'a [bool]) -> Self {
         let mut cx = Self {
             body,
             program,
+            methods,
             loans: Vec::new(),
             made: HashMap::new(),
             moves: Vec::new(),
@@ -678,14 +682,28 @@ impl<'a> Cx<'a> {
         let body = self.body;
         let block = &body.blocks[b];
         let Some(statement) = block.statements.get(at) else {
-            let TerminatorKind::Call { args, dest, .. } = &block.terminator.kind else {
+            let TerminatorKind::Call {
+                function,
+                args,
+                dest,
+                ..
+            } = &block.terminator.kind
+            else {
                 return Vec::new();
             };
-            let carried: Vec<(usize, bool)> = args
-                .iter()
-                .flat_map(|arg| self.carried_operand(arg, facts))
-                .map(|(loan, _)| (loan, true))
-                .collect();
+            let method = self.methods[function.0 as usize];
+            let mut returnable = Vec::new();
+            let mut carried = Vec::new();
+            for (at, arg) in args.iter().enumerate() {
+                let loans = self.carried_operand(arg, facts);
+                let lent = self.lends_nothing(method, at, self.body.operand_ty(self.program, arg));
+                for (loan, _) in loans {
+                    carried.push((loan, true));
+                    if !lent {
+                        returnable.push((loan, true));
+                    }
+                }
+            }
             let mut escaped = Vec::new();
             for &(loan, _) in carried
                 .iter()
@@ -701,7 +719,7 @@ impl<'a> Cx<'a> {
                 escaped.extend(self.hold(facts, paths, flowing));
             }
             if let Some(dest) = dest {
-                let returned = self.derive(b, &carried, facts, dest);
+                let returned = self.derive(b, &returnable, facts, dest);
                 escaped.extend(self.store(facts, dest, returned));
             }
             return escaped;
@@ -880,11 +898,15 @@ impl<'a> Cx<'a> {
                     self.check_moved(place.local, &moved, span);
                 }
             }
-            if let (None, TerminatorKind::Call { args, .. }) = (
+            match (
                 self.body.blocks[b].statements.get(at),
                 &self.body.blocks[b].terminator.kind,
             ) {
-                self.check_call(args, &facts, &live_facts, (b, at));
+                (None, TerminatorKind::Call { args, .. }) => {
+                    self.check_call(args, &facts, &live_facts, (b, at))
+                }
+                (None, TerminatorKind::Return) => self.check_return(&facts),
+                _ => {}
             }
             for (loan, _) in self.transfer(&mut facts, b, at) {
                 self.escaped(loan);
@@ -1065,6 +1087,46 @@ impl<'a> Cx<'a> {
         };
         let next = &self.body.blocks[target.0 as usize].statements;
         matches!(next.first().map(|s| &s.kind), Some(StatementKind::Assign(dest, _)) if dest == place)
+    }
+
+    /// Whether argument `at`, of type `ty`, of a call to a function that is
+    /// a `method` or not, lends nothing to what it returns: a method
+    /// returns references into `self` only, so its other arguments that
+    /// are a `&T` to a value holding no reference are lent for the call.
+    fn lends_nothing(&self, method: bool, at: usize, ty: Ty) -> bool {
+        match self.program.types.kind(ty) {
+            TyKind::Ref(inner) | TyKind::RefMut(inner) => {
+                method && at > 0 && !self.has(*inner, Part::Ref)
+            }
+            _ => false,
+        }
+    }
+
+    /// A method returning a reference into an argument other than `self`
+    /// that its callers lend for the call only.
+    fn check_return(&mut self, facts: &BTreeSet<Fact>) {
+        for &(_, loan, _) in facts.iter().filter(|fact| fact.0 == RETURN) {
+            let lent = self.loans[loan]
+                .paths
+                .iter()
+                .map(|path| path.root)
+                .find(|root| {
+                    let at = root.0 as usize;
+                    (1..=self.body.arg_count).contains(&at)
+                        && self.lends_nothing(self.body.method, at - 1, self.body.locals[at].ty)
+                });
+            let Some(param) = lent else {
+                continue;
+            };
+            if !self.reported.insert(loan) {
+                continue;
+            }
+            let name = self.name(param).unwrap_or_default();
+            let message =
+                format!("A method returns references into 'self' only, not into '{name}'");
+            let span = self.loans[loan].span;
+            self.error(message, span, Vec::new());
+        }
     }
 
     /// A local that ends while a loan into its own storage is live.

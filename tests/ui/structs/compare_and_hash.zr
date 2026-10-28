@@ -45,10 +45,10 @@ fn main() {
     seen.insert(p);
     seen.insert(Point { x: 1, y: 2 });
     seen.insert(q);
-    println("{} {}", seen.len(), seen.contains(Point { x: 1, y: 3 }));
+    println("{} {}", seen.len(), seen.contains(&Point { x: 1, y: 3 }));
     var grid: HashMap<Pair<i64>, str> = HashMap.new();
     grid.insert(Pair { a: 4, b: 5 }, "four-five");
-    println("{}", *grid.get(Pair { a: 4, b: 5 }).unwrap());
+    println("{}", *grid.get(&Pair { a: 4, b: 5 }).unwrap());
     var heap: BinaryHeap<Point> = BinaryHeap.new();
     heap.push(Point { x: 0, y: 9 });
     heap.push(Point { x: 5, y: 1 });

@@ -7,5 +7,5 @@ fn main() {
     var m: HashMap<Tone, i32> = HashMap.new();
     m.insert(Tone::Low, 1);
     m.insert(Tone::High, 2);
-    println("{} {}", m.get(Tone::Low).unwrap(), m.get(Tone::High).unwrap());
+    println("{} {}", m.get(&Tone::Low).unwrap(), m.get(&Tone::High).unwrap());
 }

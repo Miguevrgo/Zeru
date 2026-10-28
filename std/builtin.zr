@@ -1348,6 +1348,17 @@ fn __zeru_filled<T>(v: &var Vec<T>, count: usize) {
     *(header + 1) += count;
 }
 
+// A String showing the bytes of `text` without owning them, for a str
+// given where a &String is wanted: with no capacity, dropping it frees
+// nothing.
+fn __zeru_borrowed_string(text: str) String {
+    var shown = String.new();
+    var header = &var shown as *usize;
+    *(header as **u8) = text as *u8;
+    *(header + 1) = text.len();
+    return shown;
+}
+
 // How two Strings order, for comparing tuples holding them.
 fn __zeru_string_cmp(a: &String, b: &String) i32 {
     return __zeru_str_cmp(*a, *b);

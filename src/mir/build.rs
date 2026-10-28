@@ -26,6 +26,7 @@ pub fn build(
     mode: SafetyMode,
 ) -> Result<Vec<Body>, Vec<ZeruError>> {
     let functions = std::mem::take(&mut program.functions);
+    let methods: Vec<bool> = functions.iter().map(|function| function.method).collect();
     let mut errors: Vec<ZeruError> = Vec::new();
     let mut bodies = Vec::new();
     for (at, function) in functions.iter().enumerate() {
@@ -39,7 +40,7 @@ pub fn build(
                 function.span,
             ));
         }
-        errors.extend(super::borrowck::check(&body, program));
+        errors.extend(super::borrowck::check(&body, program, &methods));
         super::elaborate::elaborate(&mut body, program);
         bodies.push(body);
     }
@@ -145,6 +146,7 @@ impl<'a> Builder<'a> {
             symbol: function.symbol.clone(),
             span: function.span,
             arg_count: function.params.len(),
+            method: function.method,
             locals: self.locals,
             blocks,
         }

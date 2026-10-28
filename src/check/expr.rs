@@ -285,13 +285,13 @@ impl FnCx<'_, '_> {
                     expected.map(|t| self.cx.types.kind(t)),
                     Some(TyKind::Ptr(_))
                 );
-                self.borrow(place, mutable, span)
+                self.borrow(place, mutable, expected, span)
             }
             ExpressionKind::BorrowRefMut(inner) => match &inner.kind {
                 ExpressionKind::Slice { left, start, end } => {
                     self.slice(left, start, end, true, span)
                 }
-                _ => self.borrow(inner, true, span),
+                _ => self.borrow(inner, true, expected, span),
             },
             ExpressionKind::InlineAsm {
                 template,
@@ -583,6 +583,11 @@ impl FnCx<'_, '_> {
     /// Where `e` lives: a local, a field, an element, what a pointer points
     /// at, or, for a value with no place of its own, a temporary.
     pub(super) fn place(&mut self, e: &Expression) -> (Place, Ty) {
+        self.place_expecting(e, None)
+    }
+
+    /// The same, a temporary taking the type `expected` when it can.
+    fn place_expecting(&mut self, e: &Expression, expected: Option<Ty>) -> (Place, Ty) {
         let span = e.span;
         match &e.kind {
             ExpressionKind::Identifier(name) if self.local(name).is_some() => {
@@ -608,7 +613,7 @@ impl FnCx<'_, '_> {
                 (Place::Deref(Box::new(pointer)), pointee)
             }
             _ => {
-                let value = self.expr(e, None);
+                let value = self.expr(e, expected);
                 let ty = value.ty;
                 (Place::Temp(Box::new(value)), ty)
             }
@@ -710,8 +715,18 @@ impl FnCx<'_, '_> {
         }
     }
 
-    fn borrow(&mut self, inner: &Expression, mutable: bool, span: Span) -> Expr {
-        let (place, ty) = self.place(inner);
+    fn borrow(
+        &mut self,
+        inner: &Expression,
+        mutable: bool,
+        expected: Option<Ty>,
+        span: Span,
+    ) -> Expr {
+        let pointee = expected.and_then(|ty| match self.cx.types.kind(ty) {
+            TyKind::Ptr(inner) | TyKind::Ref(inner) | TyKind::RefMut(inner) => Some(*inner),
+            _ => None,
+        });
+        let (place, ty) = self.place_expecting(inner, pointee);
         if mutable {
             self.require_mutable(&place, inner, span);
         }

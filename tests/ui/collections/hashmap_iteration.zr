@@ -13,7 +13,7 @@ fn main() {
     for (_, times) in &var counts {
         times *= 10;
     }
-    counts.remove(4);
+    counts.remove(&4);
     for (n, times) in counts {
         print("{}x{} ", n, times);
     }

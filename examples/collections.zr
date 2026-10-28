@@ -30,11 +30,11 @@ fn main() {
     ages.insert(1, 30);
     ages.insert(2, 41);
     ages.insert(1, 31);
-    match ages.get(1) {
+    match ages.get(&1) {
         Some(age) => println("id 1 is {}", *age),
         None => println("no id 1"),
     }
-    println("{} {}", ages.len(), ages.contains(3));
+    println("{} {}", ages.len(), ages.contains(&3));
 
     var seen: HashSet<i32> = HashSet.new();
     for n in [4, 7, 4, 4, 9] {

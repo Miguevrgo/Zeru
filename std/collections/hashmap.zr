@@ -66,11 +66,11 @@ fn lowest(bits: u32) usize {
 // stock.insert(1002, 0);
 // stock.insert(1001, 4);
 // println("{}", stock.len()); // 2
-// match stock.get(1001) {
+// match stock.get(&1001) {
 //     Some(count) => println("{}", *count), // 4
 //     None => println("unknown item"),
 // }
-// println("{}", stock.contains(1003)); // false
+// println("{}", stock.contains(&1003)); // false
 // var total = 0;
 // for (_, count) in stock {
 //     total += count;
@@ -109,7 +109,7 @@ pub struct HashMap<K: Hash, V> {
     // var scores: HashMap<i32, i32> = HashMap.new();
     // scores.insert(7, 10);
     // scores.insert(7, 25);
-    // println("{} {}", scores.len(), *scores.get(7).unwrap()); // 1 25
+    // println("{} {}", scores.len(), *scores.get(&7).unwrap()); // 1 25
     // ```
     pub fn insert(var self, key: K, value: V) {
         var found = self.find(&key);
@@ -132,7 +132,7 @@ pub struct HashMap<K: Hash, V> {
     // for n in [3, 1, 3] {
     //     *counts.get_or_insert(n, 0) += 1;
     // }
-    // println("{} {}", *counts.get(3).unwrap(), *counts.get(1).unwrap()); // 2 1
+    // println("{} {}", *counts.get(&3).unwrap(), *counts.get(&1).unwrap()); // 2 1
     // ```
     pub fn get_or_insert(var self, key: K, value: V) &var V {
         var found = self.find(&key);
@@ -185,11 +185,11 @@ pub struct HashMap<K: Hash, V> {
     //
     // var names: HashMap<i32, str> = HashMap.new();
     // names.insert(1, "ann");
-    // println("{}", *names.get(1).unwrap()); // ann
-    // println("{}", names.get(2).is_none()); // true
+    // println("{}", *names.get(&1).unwrap()); // ann
+    // println("{}", names.get(&2).is_none()); // true
     // ```
-    pub fn get(self, key: K) (&V)? {
-        var found = self.find(&key);
+    pub fn get(self, key: &K) (&V)? {
+        var found = self.find(key);
         if found.is_none() {
             return None;
         }
@@ -205,10 +205,10 @@ pub struct HashMap<K: Hash, V> {
     //
     // var seen: HashMap<i32, bool> = HashMap.new();
     // seen.insert(3, true);
-    // println("{} {}", seen.contains(3), seen.contains(4)); // true false
+    // println("{} {}", seen.contains(&3), seen.contains(&4)); // true false
     // ```
-    pub fn contains(self, key: K) bool {
-        return self.find(&key).is_some();
+    pub fn contains(self, key: &K) bool {
+        return self.find(key).is_some();
     }
 
     // Removes the entry under `key` and returns its value, or None when
@@ -221,14 +221,14 @@ pub struct HashMap<K: Hash, V> {
     //
     // var ages: HashMap<i32, i32> = HashMap.new();
     // ages.insert(5, 40);
-    // println("{}", ages.remove(5)); // 40
-    // println("{}", ages.remove(5).is_none()); // true
+    // println("{}", ages.remove(&5)); // 40
+    // println("{}", ages.remove(&5).is_none()); // true
     // ```
     //
     // A removed slot goes back to never used only when its group still has
     // one, since then no search ever went past that group.
-    pub fn remove(var self, key: K) V? {
-        var found = self.find(&key);
+    pub fn remove(var self, key: &K) V? {
+        var found = self.find(key);
         if found.is_none() {
             return None;
         }

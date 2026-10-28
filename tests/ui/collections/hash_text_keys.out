@@ -1,6 +1,7 @@
 status: exit 0
 -- stdout
 2 32 false
-1000 777
+1000 777 123
+42
 None
 true false

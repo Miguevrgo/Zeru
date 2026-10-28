@@ -13,13 +13,13 @@ fn main() {
             grid.insert((x, y), x * 1000 + y);
         }
     }
-    println("{} {}", grid.len(), *grid.get((42, 7)).unwrap());
-    println("{}", grid.contains((-1, 0)));
-    grid.remove((42, 7));
-    println("{}", grid.get((42, 7)).is_none());
+    println("{} {}", grid.len(), *grid.get(&(42, 7)).unwrap());
+    println("{}", grid.contains(&(-1, 0)));
+    grid.remove(&(42, 7));
+    println("{}", grid.get(&(42, 7)).is_none());
     var seen: HashSet<((i64, bool), Dir)> = HashSet.new();
     println("{} {}", seen.insert(((1, true), Dir::Up)), seen.insert(((1, true), Dir::Up)));
-    println("{}", seen.contains(((1, true), Dir::Down)));
+    println("{}", seen.contains(&((1, true), Dir::Down)));
     println("{} {}", (1, "a") == (1, "a"), (1, "a") != (1, "b"));
     var p = (3, (4, 5));
     var q = (3, (4, 6));

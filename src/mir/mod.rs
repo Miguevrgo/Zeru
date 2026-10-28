@@ -40,6 +40,7 @@ pub struct Body {
     pub symbol: String,
     pub span: Span,
     pub arg_count: usize,
+    pub method: bool,
     pub locals: Vec<LocalDecl>,
     pub blocks: Vec<BlockData>,
 }

@@ -19,5 +19,5 @@ fn main() {
     println("{} {} {}", q.x, q.twice(), q.copy().x);
     var m: HashMap<i64, Vec<i64>> = HashMap.new();
     m.insert(1, Vec[4, 5, 6]);
-    println("{} {}", m.get(1).unwrap().len(), m.get(2).is_none());
+    println("{} {}", m.get(&1).unwrap().len(), m.get(&2).is_none());
 }

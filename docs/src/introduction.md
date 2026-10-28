@@ -44,7 +44,7 @@ fn main() {
     for i, account in accounts {
         by_balance.insert(account.balance, i);
     }
-    var richest = *by_balance.get(25).unwrap();
+    var richest = *by_balance.get(&25).unwrap();
     println("{} has 25", accounts[richest].owner); // bob has 25
 }
 ```

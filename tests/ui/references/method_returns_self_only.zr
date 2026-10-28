@@ -1,0 +1,20 @@
+struct S {
+    v: Vec<i32>,
+
+    fn pick(self, other: &i32) &i32 {
+        return other;
+    }
+
+    fn field(self, other: &S) &i32 {
+        return &other.v[0];
+    }
+
+    fn mine(self, at: &usize) &i32 {
+        return &self.v[*at];
+    }
+}
+fn main() {
+    var s = S { v: Vec[7, 8] };
+    var x = s.mine(&1);
+    println("{} {} {}", *x, *s.pick(&2), *s.field(&s));
+}
