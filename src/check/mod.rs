@@ -772,6 +772,8 @@ impl<'a> Checker<'a> {
         }
         self.types.as_int(ty).is_some()
             || ty == Types::BOOL
+            || ty == Types::STR
+            || ty == Types::STRING
             || self.is_enum(ty).is_some_and(|def| !self.enum_has_data(def))
     }
 
@@ -954,6 +956,8 @@ impl<'a> Checker<'a> {
             exit: self.prelude_fn("exit"),
             str_cmp: self.prelude_fn("__zeru_str_cmp"),
             string_cmp: self.prelude_fn("__zeru_string_cmp"),
+            str_hash: self.prelude_fn("__zeru_str_hash"),
+            string_hash: self.prelude_fn("__zeru_string_hash"),
             test_index: self.prelude_fn("__zeru_test_index"),
         };
         self.drain();

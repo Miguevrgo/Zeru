@@ -1353,6 +1353,19 @@ fn __zeru_string_cmp(a: &String, b: &String) i32 {
     return __zeru_str_cmp(*a, *b);
 }
 
+// The hash of the bytes of `text`, for map keys holding text.
+fn __zeru_str_hash(text: str) u64 {
+    var bits: u64 = 14695981039346656037;
+    for byte in text {
+        bits = (bits ^ byte as u64) *% 1099511628211;
+    }
+    return bits;
+}
+
+fn __zeru_string_hash(text: &String) u64 {
+    return __zeru_str_hash(*text);
+}
+
 // `v.contains(value)`: whether an element equals `value`.
 fn __zeru_vec_contains<T: Eq>(v: &[T], value: T) bool {
     for x in v {

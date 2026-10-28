@@ -40,6 +40,8 @@ pub struct Runtime {
     pub exit: FnId,
     pub str_cmp: FnId,
     pub string_cmp: FnId,
+    pub str_hash: FnId,
+    pub string_hash: FnId,
     pub test_index: FnId,
 }
 

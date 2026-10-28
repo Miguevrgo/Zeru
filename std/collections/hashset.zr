@@ -5,7 +5,7 @@ import std.collections.hashmap::{HashMap};
 
 // A set of distinct keys, growing on the heap as members come.
 //
-// Keys are integers, bools, enums without data, or tuples and structs of
+// Keys are integers, bools, text, enums without data, or tuples and structs of
 // those. Adding, finding and removing a key take O(1) time on average.
 //
 // # Examples

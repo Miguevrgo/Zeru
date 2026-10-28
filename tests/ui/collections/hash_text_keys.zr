@@ -1,0 +1,23 @@
+import std.collections.hashmap::{HashMap};
+import std.collections.hashset::{HashSet};
+fn main() {
+    var ages: HashMap<str, i32> = HashMap.new();
+    ages.insert("ann", 31);
+    ages.insert("bob", 40);
+    ages.insert("ann", 32);
+    println("{} {} {}", ages.len(), *ages.get("ann").unwrap(), ages.contains("eve"));
+    var owned: HashMap<String, i32> = HashMap.new();
+    for i in 0..1000 {
+        var key = String.from("k");
+        key.push('0' + (i / 100) as u8);
+        key.push('0' + (i / 10 % 10) as u8);
+        key.push('0' + (i % 10) as u8);
+        owned.insert(key, i);
+    }
+    var probe = String.from("k777");
+    println("{} {}", owned.len(), *owned.get(probe).unwrap());
+    println("{}", owned.remove(String.from("k5")));
+    var pairs: HashSet<(str, i32)> = HashSet.new();
+    var _ = pairs.insert(("a", 1));
+    println("{} {}", pairs.contains(("a", 1)), pairs.contains(("a", 2)));
+}

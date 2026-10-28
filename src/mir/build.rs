@@ -723,29 +723,9 @@ impl<'a> Builder<'a> {
             return self.tuple_order(l, r, ty);
         }
         if ty == Types::STR || ty == Types::STRING {
-            let (function, args) = match ty == Types::STR {
-                true => (
-                    self.program.runtime.str_cmp,
-                    [Operand::Copy(l), Operand::Copy(r)],
-                ),
-                false => {
-                    let pointer = self.program.types.intern(TyKind::Ref(ty));
-                    let [a, b] = [l, r].map(|place| {
-                        let held = self.temp(pointer);
-                        self.assign(Place::local(held), Rvalue::AddressOf(place));
-                        Operand::Move(Place::local(held))
-                    });
-                    (self.program.runtime.string_cmp, [a, b])
-                }
-            };
-            let result = self.temp(Types::I32);
-            self.then(|target| TerminatorKind::Call {
-                function,
-                args: args.to_vec(),
-                dest: Some(Place::local(result)),
-                target,
-            });
-            return Operand::Move(Place::local(result));
+            let runtime = &self.program.runtime;
+            let (on_str, on_string) = (runtime.str_cmp, runtime.string_cmp);
+            return self.text_call(on_str, on_string, vec![l, r], ty, Types::I32);
         }
         let greater = self.binary(
             BinOp::Gt,
@@ -775,6 +755,11 @@ impl<'a> Builder<'a> {
     /// The bits a hash map hashes for the key at `key`: the key as a `u64`,
     /// or for a tuple or struct the bits of its parts mixed in turn.
     fn hash_bits(&mut self, key: Place, ty: Ty) -> Operand {
+        if ty == Types::STR || ty == Types::STRING {
+            let runtime = &self.program.runtime;
+            let (on_str, on_string) = (runtime.str_hash, runtime.string_hash);
+            return self.text_call(on_str, on_string, vec![key], ty, Types::U64);
+        }
         let Some(parts) = self.parts_of(ty) else {
             let cast = Rvalue::Cast {
                 value: Operand::Copy(key),
@@ -791,6 +776,42 @@ impl<'a> Builder<'a> {
             bits = self.computed(Types::U64, unchecked(BinOp::BitXor, mixed, part_bits));
         }
         bits
+    }
+
+    /// The result, of type `result`, of `on_str` given the texts at
+    /// `places`, or of `on_string` given their addresses when they are
+    /// Strings.
+    fn text_call(
+        &mut self,
+        on_str: FnId,
+        on_string: FnId,
+        places: Vec<Place>,
+        ty: Ty,
+        result: Ty,
+    ) -> Operand {
+        let (function, args) = match ty == Types::STR {
+            true => (on_str, places.into_iter().map(Operand::Copy).collect()),
+            false => {
+                let pointer = self.program.types.intern(TyKind::Ref(ty));
+                let args = places
+                    .into_iter()
+                    .map(|place| {
+                        let held = self.temp(pointer);
+                        self.assign(Place::local(held), Rvalue::AddressOf(place));
+                        Operand::Move(Place::local(held))
+                    })
+                    .collect();
+                (on_string, args)
+            }
+        };
+        let value = self.temp(result);
+        self.then(|target| TerminatorKind::Call {
+            function,
+            args,
+            dest: Some(Place::local(value)),
+            target,
+        });
+        Operand::Move(Place::local(value))
     }
 
     fn binary(&mut self, op: BinOp, left: Operand, right: Operand) -> Operand {

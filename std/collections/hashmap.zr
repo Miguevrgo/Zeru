@@ -49,7 +49,7 @@ fn lowest(bits: u32) usize {
 
 // A map from keys to values, growing on the heap as entries come.
 //
-// Keys are integers, bools, enums without data, or tuples and structs of
+// Keys are integers, bools, text, enums without data, or tuples and structs of
 // those; each key holds one value. Looking up, adding and removing a key
 // take O(1) time on average. `for (key, value) in map` walks the entries
 // in the order they went in, until a removal moves the last one into the
@@ -112,7 +112,7 @@ pub struct HashMap<K: Hash, V> {
     // println("{} {}", scores.len(), *scores.get(7).unwrap()); // 1 25
     // ```
     pub fn insert(var self, key: K, value: V) {
-        var found = self.find(key);
+        var found = self.find(&key);
         if found.is_some() {
             self.entries[self.slots[found.unwrap()] as usize] = (key, value);
             return;
@@ -135,7 +135,7 @@ pub struct HashMap<K: Hash, V> {
     // println("{} {}", *counts.get(3).unwrap(), *counts.get(1).unwrap()); // 2 1
     // ```
     pub fn get_or_insert(var self, key: K, value: V) &var V {
-        var found = self.find(key);
+        var found = self.find(&key);
         if found.is_none() {
             self.add((key, value));
             return &var self.entries[self.entries.len() - 1].1;
@@ -189,7 +189,7 @@ pub struct HashMap<K: Hash, V> {
     // println("{}", names.get(2).is_none()); // true
     // ```
     pub fn get(self, key: K) (&V)? {
-        var found = self.find(key);
+        var found = self.find(&key);
         if found.is_none() {
             return None;
         }
@@ -208,7 +208,7 @@ pub struct HashMap<K: Hash, V> {
     // println("{} {}", seen.contains(3), seen.contains(4)); // true false
     // ```
     pub fn contains(self, key: K) bool {
-        return self.find(key).is_some();
+        return self.find(&key).is_some();
     }
 
     // Removes the entry under `key` and returns its value, or None when
@@ -228,7 +228,7 @@ pub struct HashMap<K: Hash, V> {
     // A removed slot goes back to never used only when its group still has
     // one, since then no search ever went past that group.
     pub fn remove(var self, key: K) V? {
-        var found = self.find(key);
+        var found = self.find(&key);
         if found.is_none() {
             return None;
         }
@@ -242,7 +242,7 @@ pub struct HashMap<K: Hash, V> {
         }
         var last = self.entries.len() - 1;
         if index != last {
-            var moved = self.find(self.entries[last].0).unwrap();
+            var moved = self.find(&self.entries[last].0).unwrap();
             self.slots[moved] = index as u32;
             self.entries.swap(index, last);
         }
@@ -281,11 +281,11 @@ pub struct HashMap<K: Hash, V> {
 
     // The slot holding `key`: groups are searched in a triangular sequence
     // until one has a slot never used.
-    fn find(self, key: K) usize? {
+    fn find(self, key: &K) usize? {
         if self.groups.is_empty() {
             return None;
         }
-        var bits = hash(__zeru_hash_bits(key));
+        var bits = hash(__zeru_hash_bits(*key));
         var top = (bits >> 57) as u32;
         var mask = self.groups.len() / 2 - 1;
         var at = (bits >> 32) as usize & mask;
@@ -295,7 +295,7 @@ pub struct HashMap<K: Hash, V> {
             var hits = found.0;
             while hits != 0 {
                 var slot = at * 16 + lowest(hits);
-                if self.entries[self.slots[slot] as usize].0 == key {
+                if self.entries[self.slots[slot] as usize].0 == *key {
                     return slot;
                 }
                 hits = hits & (hits - 1);

@@ -6,6 +6,5 @@ enum Color {
 }
 fn main() {
     var floats: HashMap<f64, i32> = HashMap.new();
-    var names: HashMap<str, i32> = HashMap.new();
     var set: HashSet<f32> = HashSet.new();
 }
