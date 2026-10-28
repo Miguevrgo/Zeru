@@ -674,6 +674,28 @@ impl<'a> Builder<'a> {
         }
     }
 
+    /// Where a move takes its value from. A field of a temporary gives the
+    /// whole temporary up, its other parts that own memory dropped.
+    fn move_from(&mut self, place: &tir::Place) -> Place {
+        let moved = self.as_place(place);
+        if matches!(place, tir::Place::Field(..)) {
+            let mut base = Place::local(moved.local);
+            for &projection in &moved.projection {
+                let Projection::Field(at) = projection else {
+                    unreachable!("only fields are moved out of a temporary")
+                };
+                let parts = self.parts_of(self.place_ty(&base)).unwrap_or_default();
+                for (other, part) in parts.into_iter().enumerate() {
+                    if other != at as usize && self.program.needs_drop(part) {
+                        self.drop(base.clone().project(Projection::Field(other as u32)));
+                    }
+                }
+                base = base.project(projection);
+            }
+        }
+        moved
+    }
+
     /// An index, as a usize in a local of its own.
     fn index(&mut self, index: &Expr) -> Local {
         let at = self.temp(Types::USIZE);
@@ -911,7 +933,7 @@ impl<'a> Builder<'a> {
         }
         let rvalue = match &expr.kind {
             ExprKind::Read(place) => Rvalue::Use(Operand::Copy(self.as_place(place))),
-            ExprKind::Move(place) => Rvalue::Use(Operand::Move(self.as_place(place))),
+            ExprKind::Move(place) => Rvalue::Use(Operand::Move(self.move_from(place))),
             ExprKind::Copy(place) => Rvalue::DeepCopy(self.as_place(place)),
             ExprKind::AddressOf(place) => Rvalue::AddressOf(self.as_place(place)),
             ExprKind::Unary(op, value) => {
@@ -1360,7 +1382,7 @@ impl<'a> Builder<'a> {
                 (Place::local(pointer).project(Projection::Deref), false)
             }
             ExprKind::AddressOf(place) | ExprKind::Read(place) => (self.as_place(place), false),
-            ExprKind::Move(place) => (self.as_place(place), true),
+            ExprKind::Move(place) => (self.move_from(place), true),
             _ => (Place::local(self.as_temp(arg)), true),
         };
         self.span = outer;

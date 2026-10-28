@@ -260,9 +260,10 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// `expr` is given away by value: to a variable, a call, a field, a
     /// collection or the caller. What `Some(..)` wraps is given away with it.
     /// A temporary gives its value up and is then not dropped. A local is
-    /// moved, and the borrow checker sees that it is not used again; a value
-    /// inside a field, an element, a view or behind a pointer cannot be
-    /// moved out at all, since what holds it would keep a second owner of it.
+    /// moved, and the borrow checker sees that it is not used again; so is a
+    /// field of a temporary. Any other value inside a field, an element, a
+    /// view or behind a pointer cannot be moved out at all, since what holds
+    /// it would keep a second owner of it.
     pub(super) fn consume(&mut self, expr: &mut Expr) {
         if !self.cx.owns_heap(expr.ty) {
             return;
@@ -290,6 +291,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 return;
             }
             ExprKind::Read(Place::Local(_)) => {}
+            ExprKind::Read(place @ Place::Field(..)) if self.field_of_temporary(place) => {}
             ExprKind::Read(Place::Field(..) | Place::Index(..) | Place::Deref(_)) => {
                 self.error(
                     "Cannot move a value out of a field, an element or a pointer; call .copy() on it",
@@ -303,6 +305,19 @@ impl<'c, 'a> FnCx<'c, 'a> {
             unreachable!()
         };
         expr.kind = ExprKind::Move(place);
+    }
+
+    /// Whether `place` is a field, or a field of one, of a temporary value,
+    /// with no `drop` of its own on the way.
+    fn field_of_temporary(&mut self, place: &Place) -> bool {
+        let Place::Field(base, _) = place else {
+            return false;
+        };
+        let custom = match self.place_ty(base).map(|ty| self.cx.types.kind(ty).clone()) {
+            Some(TyKind::Adt(def, _)) => self.cx.items.method(def, "drop").is_some(),
+            _ => false,
+        };
+        !custom && (matches!(**base, Place::Temp(_)) || self.field_of_temporary(base))
     }
 
     /// Whether `value` of type `actual` can go where `target` is wanted, and

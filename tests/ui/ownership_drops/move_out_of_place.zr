@@ -1,6 +1,17 @@
 struct S {
     v: Vec<i64>,
 }
+struct Guard {
+    v: Vec<i64>,
+
+    fn drop(var self) {}
+}
+fn make() Vec<S> {
+    return Vec.new();
+}
+fn guard() Guard {
+    return Guard { v: Vec.new() };
+}
 fn move_out_of_element() {
     var vs: Vec<S> = Vec.new();
     var s = vs[0];
@@ -9,6 +20,14 @@ fn move_out_of_element() {
 fn move_out_of_field() {
     var s = S { v: Vec.new() };
     var v = s.v;
+}
+
+fn move_out_of_temporary_element() {
+    var s = make()[0];
+}
+
+fn move_out_of_temporary_with_drop() {
+    var v = guard().v;
 }
 
 fn main() {}

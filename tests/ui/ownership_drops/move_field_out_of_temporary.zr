@@ -1,0 +1,29 @@
+struct Pair {
+    name: String,
+    tags: Vec<String>,
+    n: i32,
+}
+struct Outer {
+    pair: Pair,
+    note: String,
+}
+fn make() Pair {
+    return Pair { name: String.from("ann"), tags: Vec[String.from("t")], n: 3 };
+}
+fn outer() Outer {
+    return Outer { pair: make(), note: String.from("note") };
+}
+fn found() Pair! {
+    return make();
+}
+fn pair() (String, Vec<i32>) {
+    return (String.from("x"), Vec[1, 2]);
+}
+fn main() {
+    var name = make().name;
+    var tags = make().tags;
+    var deep = outer().pair.tags;
+    var first = pair().0;
+    var kept = found().unwrap().tags;
+    println("{} {} {} {} {}", name, tags, deep, first, kept);
+}

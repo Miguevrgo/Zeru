@@ -91,8 +91,27 @@ fn main() {
 }
 ```
 
-A `match` on a value that has no variable of its own, as one a function
-just returned, moves the parts it names into its bindings. On a variable,
+A field of a value that has no variable of its own, as one a function just
+returned, can be moved out, unless its struct has a `drop` of its own. The
+rest of that value is dropped:
+
+```zeru
+struct Job {
+    name: String,
+    log: Vec<str>,
+}
+
+fn start() Job {
+    return Job { name: String.from("build"), log: Vec["start"] };
+}
+
+fn main() {
+    var name = start().name;
+    println("{}", name); // build
+}
+```
+
+A `match` on such a value moves the parts it names into its bindings. On a variable,
 its bindings only borrow, so `replace` takes the value out first:
 
 ```zeru
