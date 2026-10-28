@@ -86,9 +86,6 @@ impl FnCx<'_, '_> {
                 ),
                 _ => self.require_mutable(&place, left, span),
             }
-            if self.temporary(&place, ty, left) {
-                self.error("Cannot create reference to a temporary value", span);
-            }
         }
         let elem = match self.cx.types.elem(ty) {
             Some(elem) => elem,
@@ -717,9 +714,6 @@ impl FnCx<'_, '_> {
         let (place, ty) = self.place(inner);
         if mutable {
             self.require_mutable(&place, inner, span);
-        }
-        if self.temporary(&place, ty, inner) {
-            self.error("Cannot create reference to a temporary value", span);
         }
         let kind = if mutable {
             TyKind::RefMut(ty)

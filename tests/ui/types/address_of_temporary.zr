@@ -1,3 +1,0 @@
-fn main() {
-    var ptr: *i32 = &42;
-}

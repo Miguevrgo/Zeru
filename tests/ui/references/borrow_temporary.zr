@@ -1,0 +1,24 @@
+fn total(v: &Vec<i64>) i64 {
+    return v.sum();
+}
+fn process(v: &[i32]) {
+    for e in v {
+        println("{}", e);
+    }
+}
+fn bump(v: &var Vec<i64>) {
+    v.push(9);
+    println("{}", v.len());
+}
+fn make() Vec<i64> {
+    return Vec[1, 2];
+}
+fn main() {
+    println("{}", total(&make()));
+    process(&[3, 4]);
+    bump(&var make());
+    for x in &var make() {
+        x += 1;
+        println("{}", x);
+    }
+}

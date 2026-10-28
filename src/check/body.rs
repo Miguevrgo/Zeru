@@ -815,12 +815,6 @@ impl<'c, 'a> FnCx<'c, 'a> {
             writable = true;
         } else if writable && !through_var {
             self.require_mutable(&seq.0, inner, iterable.span);
-            if self.temporary(&seq.0, seq.1, inner) {
-                self.error(
-                    "Cannot create reference to a temporary value",
-                    iterable.span,
-                );
-            }
         }
         let walked = self.walked(seq.1);
         let seq = match walked {

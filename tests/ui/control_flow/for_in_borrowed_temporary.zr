@@ -1,9 +1,0 @@
-fn make() Vec<i32> {
-    return Vec[1];
-}
-fn main() {
-    for x in &var make() {
-        x = 2;
-    }
-    println("ok");
-}
