@@ -3,7 +3,7 @@ fn parse(s: str) i64! {
 }
 
 fn make() Vec<str> {
-    return Vec["x", "y"];
+    return Vec["x\\", "y\t\r\0"];
 }
 
 fn main() {
@@ -11,7 +11,7 @@ fn main() {
     var empty: Vec<i32> = Vec.new();
     var a: Array<f64, 2> = [1.5, 2.0];
     var nested: Vec<Vec<i32>> = Vec[Vec[1], Vec[2, 3]];
-    var t = (1, "two", (3.5, true));
+    var t = (1, "tw\"o\n", (3.5, true));
     var o: i32? = 5;
     var n: i32? = None;
     var names: Vec<String> = Vec.new();

@@ -1160,8 +1160,16 @@ impl FnCx<'_, '_> {
                     true => self.view(read),
                     false => read,
                 };
-                let quote = if quoted { text(b"\"") } else { Vec::new() };
-                out.push(self.write(stderr, vec![quote.clone(), quote], vec![value], span));
+                let value = match quoted {
+                    true => {
+                        let function = self.cx.prelude_fn("__zeru_quoted");
+                        let quoted =
+                            self.mk(ExprKind::Call(function, vec![value]), Types::STRING, span);
+                        self.view(quoted)
+                    }
+                    false => value,
+                };
+                out.push(self.write(stderr, vec![Vec::new(), Vec::new()], vec![value], span));
             }
             TyKind::Vec(item)
             | TyKind::Array(item, _)

@@ -81,12 +81,12 @@ println("{}", v.get(10).is_none()); // true
 ```
 
 `println` writes a whole list, nested ones too, with any text inside in
-quotes:
+quotes and escaped as it is written in code:
 
 ```zeru
 var grid: Vec<Vec<i32>> = Vec[Vec[1, 2], Vec[3]];
-var words: Vec<str> = Vec["a", ""];
-println("{} {}", grid, words); // [[1, 2], [3]] ["a", ""]
+var words: Vec<str> = Vec["a \"b\"", ""];
+println("{} {}", grid, words); // [[1, 2], [3]] ["a \"b\"", ""]
 ```
 
 Unlike an array, a `Vec` owns memory on the heap, so assigning it moves it

@@ -680,6 +680,25 @@ fn __zeru_format_float(
     return __zeru_pad(out.buffer[..out.index], fill, align, zero, width);
 }
 
+// `text` in quotes, written as a literal would be: `"`, `\\` and line
+// breaks, tabs, returns and zero bytes escaped.
+fn __zeru_quoted(text: str) String {
+    var out = String.from("\"");
+    for byte in text {
+        match byte {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            0 => out.push_str("\\0"),
+            default => out.push(byte),
+        }
+    }
+    out.push('"');
+    return out;
+}
+
 // `text` padded to `width` characters with `fill`, before it when `align`
 // is '>', after it when '<', on both sides when '^'; or with zeros after
 // its sign when `zero`.
