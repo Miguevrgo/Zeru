@@ -46,6 +46,7 @@ The methods:
 | `contains(t)` | whether `t` appears in the text |
 | `find(t)` | the byte where `t` first starts, or `None` |
 | `parse_int()`, `parse_float()` | the number the text spells, or an error (`i64!`, `f64!`) |
+| `map(f)`, `filter(keep)`, `any(f)`, `all(f)` | run a [closure](closures.md#vec-methods) on each byte |
 
 ```zeru
 var line = "  width = 80 ";

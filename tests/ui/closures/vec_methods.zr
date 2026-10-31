@@ -32,4 +32,15 @@ fn main() {
     };
     var kept = String.from("ab");
     println("{} {} {}", size(String.from("xyz")), size(kept), kept);
+
+    var marks: Array<i32, 4> = [7, 3, 9, 5];
+    println("{} {} {}", marks.sum(), marks.max().unwrap(), marks.contains(9));
+    println("{} {}", marks.map(fn(m) m * 10), marks.any(fn(m) m > 8));
+    marks.sort_by(fn(a, b) b - a);
+    marks.rotate_left(1);
+    println("{}", marks);
+
+    var text = "a-b-c";
+    println("{} {}", text.filter(fn(c) c != '-'), text.map(fn(c) c == '-'));
+    println("{} {}", text.any(fn(c) c == 'b'), text.all(fn(c) c != ' '));
 }

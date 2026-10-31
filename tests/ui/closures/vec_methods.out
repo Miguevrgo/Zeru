@@ -11,3 +11,8 @@ true false
 ["abc", "c", "de"]
 ["Luis", "Ana"]
 3 2 ab
+24 9 true
+[70, 30, 90, 50] true
+[7, 5, 3, 9]
+abc [false, true, false, true, false]
+true true

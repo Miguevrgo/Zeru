@@ -66,6 +66,9 @@ const SLICE_METHODS: &[&str] = &[
     "contains", "sum", "min", "max", "windows", "chunks", "map", "filter", "any", "all",
 ];
 
+/// The prelude's methods that take a closure, which a str has too.
+const CLOSURE_METHODS: &[&str] = &["map", "filter", "any", "all"];
+
 /// The prelude's methods that move the elements around: a `&var [T]` has
 /// them, and a Vec reaches them through one of all of it.
 const SLICE_MUT_METHODS: &[&str] = &[
@@ -425,18 +428,29 @@ impl FnCx<'_, '_> {
                         _ => None,
                     };
                     let receiver = match whole {
-                        Some(kind) => {
-                            let from = self.mk(ExprKind::Int(0), Types::USIZE, span);
-                            let slice = self.cx.types.intern(kind);
-                            let all = ExprKind::Builtin(Builtin::Slice, vec![receiver, from]);
-                            self.mk(all, slice, object.span)
-                        }
+                        Some(kind) => self.whole(receiver, kind, object.span),
                         None => receiver,
                     };
                     let def = self.cx.prelude_def(&format!("__zeru_vec_{name}"));
                     return self.call_def(def, vec![elem], Some(receiver), args, expected, span);
                 }
                 self.vec_method(name, elem, receiver, args, name_at, span)
+            }
+            TyKind::Array(elem, _)
+                if SLICE_METHODS.contains(&name) || SLICE_MUT_METHODS.contains(&name) =>
+            {
+                let mutable = SLICE_MUT_METHODS.contains(&name);
+                if mutable {
+                    self.require_mutable(&place, object, span);
+                }
+                let receiver = self.address(place, ty, mutable, object.span);
+                let kind = match mutable {
+                    true => TyKind::SliceMut(elem),
+                    false => TyKind::Slice(elem),
+                };
+                let slice = self.whole(receiver, kind, object.span);
+                let def = self.cx.prelude_def(&format!("__zeru_vec_{name}"));
+                self.call_def(def, vec![elem], Some(slice), args, expected, span)
             }
             TyKind::SliceMut(elem) => {
                 let slice = self.mk(ExprKind::Read(place), ty, object.span);
@@ -460,7 +474,7 @@ impl FnCx<'_, '_> {
                     return self.str_method(text, name, args, expected, span);
                 }
                 if let TyKind::Slice(elem) = *self.cx.types.kind(ty)
-                    && ty != Types::STR
+                    && (ty != Types::STR || CLOSURE_METHODS.contains(&name))
                     && SLICE_METHODS.contains(&name)
                 {
                     let slice = self.mk(ExprKind::Read(place), ty, object.span);
@@ -660,9 +674,17 @@ impl FnCx<'_, '_> {
                 let strs = STR_METHODS.iter().filter(|_| text);
                 VEC_METHODS.iter().chain(std).chain(strs).copied().collect()
             }
-            TyKind::Slice(_) if ty == Types::STR => {
-                STR_METHODS.iter().chain(&["len"]).copied().collect()
-            }
+            TyKind::Slice(_) if ty == Types::STR => STR_METHODS
+                .iter()
+                .chain(CLOSURE_METHODS)
+                .chain(&["len"])
+                .copied()
+                .collect(),
+            TyKind::Array(..) => SLICE_METHODS
+                .iter()
+                .chain(SLICE_MUT_METHODS)
+                .copied()
+                .collect(),
             TyKind::Slice(_) => SLICE_METHODS.iter().chain(&["len"]).copied().collect(),
             TyKind::SliceMut(_) => SLICE_METHODS
                 .iter()
@@ -696,10 +718,8 @@ impl FnCx<'_, '_> {
             TyKind::Slice(_) | TyKind::SliceMut(_)
         ) && ["push", "insert", "pop", "remove", "clear", "reserve"]
             .contains(&name);
-        let kind = self.cx.types.kind(ty).clone();
-        let reads = SLICE_METHODS.contains(&name) && matches!(kind, TyKind::Array(..));
         let writes = SLICE_MUT_METHODS.contains(&name)
-            && matches!(kind, TyKind::Array(..) | TyKind::Slice(_))
+            && matches!(self.cx.types.kind(ty), TyKind::Slice(_))
             && ty != Types::STR;
         let object = name_at.map(|at| Span::new(span.start, at.start - 1));
         let text = object.map(|at| self.cx.sources.text(at).to_string());
@@ -707,25 +727,14 @@ impl FnCx<'_, '_> {
             format!("{what} has no method '{name}'"),
             name_at.unwrap_or(span),
         );
-        if let (true, Some(at), Some(text)) = (reads, object, &text) {
-            error
-                .help(format!(
-                    "an array has it through a slice of all of it, {text}[..]"
-                ))
-                .fix(Span::new(at.end, at.end), "[..]");
-        } else if let (true, Some(at), Some(text)) = (writes, object, text) {
-            let whole = match kind {
-                TyKind::Array(..) => Some(format!("{text}[..]")),
-                _ if text.ends_with(']') => Some(text.clone()),
-                _ => None,
-            };
-            match whole {
-                Some(whole) => {
+        if let (true, Some(at), Some(text)) = (writes, object, text) {
+            match text.ends_with(']') {
+                true => {
                     error
-                        .help(format!("{name} changes the elements, so it needs a slice that writes, (&var {whole})"))
-                        .fix(at, format!("(&var {whole})"));
+                        .help(format!("{name} changes the elements, so it needs a slice that writes, (&var {text})"))
+                        .fix(at, format!("(&var {text})"));
                 }
-                None => {
+                false => {
                     error.help(format!(
                         "{name} changes the elements, and '{text}' only reads them; make it with &var, as in &var v[..]"
                     ));
@@ -847,6 +856,17 @@ impl FnCx<'_, '_> {
         };
         let def = self.cx.prelude_def(&format!("__zeru_str_{name}"));
         self.call_def(def, Vec::new(), Some(text), args, expected, span)
+    }
+
+    /// A slice of `kind` over all of what `receiver` points at.
+    fn whole(&mut self, receiver: Expr, kind: TyKind, span: Span) -> Expr {
+        let from = self.mk(ExprKind::Int(0), Types::USIZE, span);
+        let slice = self.cx.types.intern(kind);
+        self.mk(
+            ExprKind::Builtin(Builtin::Slice, vec![receiver, from]),
+            slice,
+            span,
+        )
     }
 
     pub(super) fn address(&mut self, place: Place, ty: Ty, mutable: bool, span: Span) -> Expr {

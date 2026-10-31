@@ -30,7 +30,14 @@ println("{} {}", a[0], b[0]); // 1 9
 ```
 
 The length is part of the type, so an array has no `len()`: it is the `N`
-you wrote.
+you wrote. It has the `Vec` methods that read or reorder the elements
+without changing how many there are, from `sum` to `sort`, listed below:
+
+```zeru
+var marks: Array<i32, 4> = [7, 3, 9, 5];
+marks.sort();
+println("{} {}", marks, marks.sum()); // [3, 5, 7, 9] 24
+```
 
 ## Vec
 
@@ -108,12 +115,11 @@ println("{} {} {}", middle.len(), middle[0], tail[1]); // 2 20 40
 ```
 
 A slice has the `Vec` methods that only read: `len`, `contains`, `sum`,
-`min`, `max`, `windows` and `chunks`. `a[..]` gives an array them too:
+`min`, `max`, `windows`, `chunks`, `map`, `filter`, `any` and `all`:
 
 ```zeru
 var v: Vec<i32> = Vec[9, 4, 7, 1];
-var fixed: Array<i32, 3> = [2, 5, 3];
-println("{} {}", v[1..].sum(), fixed[..].max().unwrap()); // 12 5
+println("{} {}", v[1..].sum(), v[..2].max().unwrap()); // 12 9
 ```
 
 `&[T]` is the type of a slice. A function that takes one works with arrays

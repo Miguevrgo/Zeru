@@ -14,8 +14,6 @@ fn main() {
     var s = &var q[..];
     s.push(3);
     var arr: Array<i32, 3> = [3, 1, 2];
-    var total = arr.sum();
-    arr.sort();
     arr[..].sort();
     ro.reverse();
 }

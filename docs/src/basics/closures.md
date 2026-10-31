@@ -61,8 +61,8 @@ than calling a function.
 
 ## Vec methods
 
-A Vec, and a slice, takes a closure in `map`, `filter`, `any` and `all`;
-a Vec, and a `&var [T]`, in `sort_by`:
+A Vec, an array, a slice and a `str` take a closure in `map`, `filter`,
+`any` and `all`; a Vec, a `var` array and a `&var [T]`, in `sort_by`:
 
 ```zeru
 var v: Vec<i32> = Vec[3, 1, 4, 1, 5];
