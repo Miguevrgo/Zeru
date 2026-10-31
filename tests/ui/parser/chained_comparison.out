@@ -6,6 +6,8 @@ Error: Comparison operators cannot be chained
  6 │     var p = a < b == c;
    │                   ─┬
    │                    ╰── Comparison operators cannot be chained
+   │
+   │ Help: compare twice and join them, as in a < b && b < c
 ───╯
 Error: Comparison operators cannot be chained
    ╭─[ tests/ui/parser/chained_comparison.zr:7:20 ]
@@ -13,6 +15,8 @@ Error: Comparison operators cannot be chained
  7 │     var q = a == b == c;
    │                    ─┬
    │                     ╰── Comparison operators cannot be chained
+   │
+   │ Help: compare twice and join them, as in a < b && b < c
 ───╯
 Error: Comparison operators cannot be chained
    ╭─[ tests/ui/parser/chained_comparison.zr:8:20 ]
@@ -20,6 +24,8 @@ Error: Comparison operators cannot be chained
  8 │     var r = 3 == 3 == true;
    │                    ─┬
    │                     ╰── Comparison operators cannot be chained
+   │
+   │ Help: compare twice and join them, as in a < b && b < c
 ───╯
 Error: Comparison operators cannot be chained
    ╭─[ tests/ui/parser/chained_comparison.zr:9:19 ]
@@ -27,5 +33,7 @@ Error: Comparison operators cannot be chained
  9 │     var s = 0 < x < 10;
    │                   ┬
    │                   ╰── Comparison operators cannot be chained
+   │
+   │ Help: compare twice and join them, as in a < b && b < c
 ───╯
 [-] Error: aborting due to previous error

@@ -6,6 +6,9 @@ Error: Write the value itself, not Ok(..): it becomes a T! wherever one is wante
  2 │     return Ok(n / 2);
    │            ────┬────
    │                ╰────── Write the value itself, not Ok(..): it becomes a T! wherever one is wanted
+   │
+   │ Help: drop the Ok
+   │           return n / 2;
 ───╯
 Error: Ok() is the success of a ! function, which has no value to give
    ╭─[ tests/ui/optionals_results/ok_takes_no_value.zr:5:12 ]
@@ -20,5 +23,8 @@ Error: Write the value itself, not Ok(..): it becomes a T! wherever one is wante
  8 │     var r: i32! = Ok(1);
    │                   ──┬──
    │                     ╰──── Write the value itself, not Ok(..): it becomes a T! wherever one is wanted
+   │
+   │ Help: drop the Ok
+   │           var r: i32! = 1;
 ───╯
 [-] Error: aborting due to previous error

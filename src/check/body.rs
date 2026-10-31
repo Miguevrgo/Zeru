@@ -723,7 +723,12 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 body,
             } => self.for_in(index.as_deref(), variable, iterable, body),
             StatementKind::Break | StatementKind::Continue if self.breaks.is_empty() => {
-                self.error("Break/Continue can only be used inside loops", span);
+                let word = match statement.kind {
+                    StatementKind::Break => "break",
+                    _ => "continue",
+                };
+                self.error(format!("'{word}' is only allowed inside a loop"), span)
+                    .help("to leave a function early, write return");
                 return None;
             }
             StatementKind::Break | StatementKind::Continue => {
@@ -739,10 +744,16 @@ impl<'c, 'a> FnCx<'c, 'a> {
             StatementKind::Expression(expr) => {
                 let value = self.expr(expr, None);
                 if matches!(self.cx.types.kind(value.ty), TyKind::Result(..)) {
-                    self.error(
-                        "This result is ignored; propagate its error with !, unwrap() it or store it in a variable",
-                        expr.span,
-                    );
+                    let fallible = matches!(self.cx.types.kind(self.ret), TyKind::Result(..));
+                    let end = Span::new(expr.span.end, expr.span.end);
+                    let error =
+                        self.error("This result is ignored, and with it any error", expr.span);
+                    match fallible {
+                        true => error.help("pass its error on with !").fix(end, "!"),
+                        false => error
+                            .help("stop the program on an error with .unwrap(), or keep it in a variable")
+                            .fix(end, ".unwrap()"),
+                    };
                 } else if value.ty != Types::VOID
                     && !self.cx.types.is_error(value.ty)
                     && *self.cx.types.kind(value.ty) != TyKind::Tuple(Vec::new())

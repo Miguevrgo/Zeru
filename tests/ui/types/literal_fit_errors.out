@@ -6,6 +6,8 @@ Error: Literal -1 does not fit in u64
  2 │     var a: u64 = -1;
    │                  ─┬
    │                   ╰── Literal -1 does not fit in u64
+   │
+   │ Help: u64 holds no negative numbers
 ───╯
 Error: Literal -129 does not fit in i8
    ╭─[ tests/ui/types/literal_fit_errors.zr:3:17 ]
@@ -13,6 +15,8 @@ Error: Literal -129 does not fit in i8
  3 │     var b: i8 = -129;
    │                 ──┬─
    │                   ╰─── Literal -129 does not fit in i8
+   │
+   │ Help: i8 holds -128 to 127
 ───╯
 Error: Literal 128 does not fit in i8
    ╭─[ tests/ui/types/literal_fit_errors.zr:4:17 ]
@@ -20,6 +24,8 @@ Error: Literal 128 does not fit in i8
  4 │     var c: i8 = 128;
    │                 ─┬─
    │                  ╰─── Literal 128 does not fit in i8
+   │
+   │ Help: i8 holds -128 to 127
 ───╯
 Error: Literal 256 does not fit in u8
    ╭─[ tests/ui/types/literal_fit_errors.zr:5:17 ]
@@ -27,6 +33,8 @@ Error: Literal 256 does not fit in u8
  5 │     var d: u8 = 256;
    │                 ─┬─
    │                  ╰─── Literal 256 does not fit in u8
+   │
+   │ Help: u8 holds 0 to 255
 ───╯
 Error: Literal 32768 does not fit in i16
    ╭─[ tests/ui/types/literal_fit_errors.zr:6:18 ]
@@ -34,6 +42,8 @@ Error: Literal 32768 does not fit in i16
  6 │     var e: i16 = 32768;
    │                  ──┬──
    │                    ╰──── Literal 32768 does not fit in i16
+   │
+   │ Help: i16 holds -32768 to 32767
 ───╯
 Error: Literal 65536 does not fit in u16
    ╭─[ tests/ui/types/literal_fit_errors.zr:7:18 ]
@@ -41,6 +51,8 @@ Error: Literal 65536 does not fit in u16
  7 │     var f: u16 = 65536;
    │                  ──┬──
    │                    ╰──── Literal 65536 does not fit in u16
+   │
+   │ Help: u16 holds 0 to 65535
 ───╯
 Error: Literal 18446744073709551615 does not fit in i64
    ╭─[ tests/ui/types/literal_fit_errors.zr:8:18 ]
@@ -48,12 +60,16 @@ Error: Literal 18446744073709551615 does not fit in i64
  8 │     var g: i64 = 18446744073709551615;
    │                  ──────────┬─────────
    │                            ╰─────────── Literal 18446744073709551615 does not fit in i64
+   │
+   │ Help: i64 holds -9223372036854775808 to 9223372036854775807
 ───╯
-Error: Literal 3000000000 does not fit in i32, the type a literal takes when nothing says otherwise; annotate a wider type
+Error: Literal 3000000000 does not fit in i32
    ╭─[ tests/ui/types/literal_fit_errors.zr:9:13 ]
    │
  9 │     var h = 3000000000;
    │             ─────┬────
-   │                  ╰────── Literal 3000000000 does not fit in i32, the type a literal takes when nothing says otherwise; annotate a wider type
+   │                  ╰────── Literal 3000000000 does not fit in i32
+   │
+   │ Help: a number written alone is i32; give it a wider type, as in var x: i64 = ...
 ───╯
 [-] Error: aborting due to previous error

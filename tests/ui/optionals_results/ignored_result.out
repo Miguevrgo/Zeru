@@ -1,24 +1,33 @@
 status: compile error
 -- stderr
-Error: This result is ignored; propagate its error with !, unwrap() it or store it in a variable
+Error: This result is ignored, and with it any error
     ╭─[ tests/ui/optionals_results/ignored_result.zr:15:5 ]
     │
  15 │     half(3);
     │     ───┬───
-    │        ╰───── This result is ignored; propagate its error with !, unwrap() it or store it in a variable
+    │        ╰───── This result is ignored, and with it any error
+    │
+    │ Help: stop the program on an error with .unwrap(), or keep it in a variable
+    │           half(3).unwrap();
 ────╯
-Error: This result is ignored; propagate its error with !, unwrap() it or store it in a variable
+Error: This result is ignored, and with it any error
     ╭─[ tests/ui/optionals_results/ignored_result.zr:16:5 ]
     │
  16 │     save();
     │     ───┬──
-    │        ╰──── This result is ignored; propagate its error with !, unwrap() it or store it in a variable
+    │        ╰──── This result is ignored, and with it any error
+    │
+    │ Help: stop the program on an error with .unwrap(), or keep it in a variable
+    │           save().unwrap();
 ────╯
-Error: This result is ignored; propagate its error with !, unwrap() it or store it in a variable
+Error: This result is ignored, and with it any error
     ╭─[ tests/ui/optionals_results/ignored_result.zr:17:5 ]
     │
  17 │     fs::write_file("ignored.txt", "y");
     │     ─────────────────┬────────────────
-    │                      ╰────────────────── This result is ignored; propagate its error with !, unwrap() it or store it in a variable
+    │                      ╰────────────────── This result is ignored, and with it any error
+    │
+    │ Help: stop the program on an error with .unwrap(), or keep it in a variable
+    │           fs::write_file("ignored.txt", "y").unwrap();
 ────╯
 [-] Error: aborting due to previous error

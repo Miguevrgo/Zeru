@@ -48,12 +48,14 @@ Error: Cannot index type i32
     │             ──┬─
     │               ╰─── Cannot index type i32
 ────╯
-Error: Cannot tell the type of Vec[] here; annotate it
+Error: Cannot tell what this Vec holds
     ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:13:13 ]
     │
  13 │     var v = Vec[];
     │             ──┬──
-    │               ╰──── Cannot tell the type of Vec[] here; annotate it
+    │               ╰──── Cannot tell what this Vec holds
+    │
+    │ Help: give the variable a type, as in var v: Vec<i32> = Vec[]
 ────╯
 Error: Cannot add void and i32
     ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:14:25 ]

@@ -6,6 +6,8 @@ Error: Literal 300 does not fit in u8
  10 │     println("{}", pair(id(300), small));
     │                           ─┬─
     │                            ╰─── Literal 300 does not fit in u8
+    │
+    │ Help: u8 holds 0 to 255
 ────╯
 Error: Literal -1 does not fit in u8
     ╭─[ tests/ui/generics/literal_checked_after_inference.zr:11:27 ]
@@ -13,6 +15,8 @@ Error: Literal -1 does not fit in u8
  11 │     println("{}", pair(id(-1), small));
     │                           ─┬
     │                            ╰── Literal -1 does not fit in u8
+    │
+    │ Help: u8 holds no negative numbers
 ────╯
 Error: Literal 2.5 is not i64
     ╭─[ tests/ui/generics/literal_checked_after_inference.zr:12:27 ]

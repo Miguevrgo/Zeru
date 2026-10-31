@@ -38,6 +38,9 @@ Error: Write the value itself, not Some(..): it becomes a T? wherever one is wan
  10 │     var o: i32? = Some(3);
     │                   ───┬───
     │                      ╰───── Write the value itself, not Some(..): it becomes a T? wherever one is wanted
+    │
+    │ Help: drop the Some
+    │           var o: i32? = 3;
 ────╯
 Error: Struct 'P' has no field 'sum'
     ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:22:19 ]

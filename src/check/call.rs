@@ -237,10 +237,16 @@ impl FnCx<'_, '_> {
             .filter(|&def| self.cx.items.item(def).kind == ItemKind::Fn)
         else {
             if name == "Some" {
-                self.error(
+                let sources = self.cx.sources;
+                let error = self.error(
                     "Write the value itself, not Some(..): it becomes a T? wherever one is wanted",
                     span,
                 );
+                if let [inner] = args {
+                    error
+                        .help("drop the Some")
+                        .fix(span, sources.text(inner.span));
+                }
                 return self.error_expr(span);
             }
             self.no_function(name, function_span, args, span);
@@ -330,10 +336,13 @@ impl FnCx<'_, '_> {
             }
             if !through && !self.in_instance {
                 let shown = self.ty(ty);
+                let object = self.cx.sources.text(object.span).to_string();
                 self.error(
-                    format!("{shown} holds no memory of its own, so it is copied already; drop the .copy()"),
+                    format!("{shown} holds no memory of its own, so it is copied already"),
                     span,
-                );
+                )
+                .help("drop the .copy()")
+                .fix(span, object);
             }
             return self.mk(ExprKind::Read(place), ty, span);
         }
@@ -1057,7 +1066,13 @@ impl FnCx<'_, '_> {
             [] => "Ok() is the success of a ! function, which has no value to give",
             _ => "Write the value itself, not Ok(..): it becomes a T! wherever one is wanted",
         };
-        self.error(message, span);
+        let sources = self.cx.sources;
+        let error = self.error(message, span);
+        if let [inner] = args {
+            error
+                .help("drop the Ok")
+                .fix(span, sources.text(inner.span));
+        }
         self.check_args_only(args);
         self.error_expr(span)
     }

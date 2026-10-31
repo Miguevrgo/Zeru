@@ -1,10 +1,13 @@
 status: compile error
 -- stderr
-Error: P holds no memory of its own, so it is copied already; drop the .copy()
+Error: P holds no memory of its own, so it is copied already
    ╭─[ tests/ui/ownership_drops/copy_of_plain_rejected.zr:6:13 ]
    │
  6 │     var q = p.copy();
    │             ────┬───
-   │                 ╰───── P holds no memory of its own, so it is copied already; drop the .copy()
+   │                 ╰───── P holds no memory of its own, so it is copied already
+   │
+   │ Help: drop the .copy()
+   │           var q = p;
 ───╯
 [-] Error: aborting due to previous error

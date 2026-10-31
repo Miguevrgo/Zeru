@@ -6,5 +6,7 @@ Error: Function 'main' must return void, not i32
  1 │ fn main() i32 {
    │ ──────┬──────
    │       ╰──────── Function 'main' must return void, not i32
+   │
+   │ Help: end the program with a status code by calling exit(code)
 ───╯
 [-] Error: aborting due to previous error

@@ -194,7 +194,8 @@ impl FnCx<'_, '_> {
                     self.error_expr(span)
                 }
                 _ => {
-                    self.error("Cannot tell the type of None here; annotate it", span);
+                    self.error("Cannot tell the type of None here", span)
+                        .help("give the variable a type, as in var x: i32? = None");
                     self.error_expr(span)
                 }
             },
@@ -402,16 +403,19 @@ impl FnCx<'_, '_> {
         let int = self.cx.types.as_int(ty).unwrap();
         if !int.contains(signed) {
             let sign = if negative { "-" } else { "" };
-            let hint = if by_default {
-                ", the type a literal takes when nothing says otherwise; annotate a wider type"
-            } else {
-                ""
-            };
             let shown = self.ty(ty);
+            let help = match by_default {
+                true => format!(
+                    "a number written alone is {shown}; give it a wider type, as in var x: i64 = ..."
+                ),
+                false if negative && !int.signed() => format!("{shown} holds no negative numbers"),
+                false => format!("{shown} holds {} to {}", int.min(), int.max()),
+            };
             self.error(
-                format!("Literal {sign}{value} does not fit in {shown}{hint}"),
+                format!("Literal {sign}{value} does not fit in {shown}"),
                 span,
-            );
+            )
+            .help(help);
         }
         self.mk(ExprKind::Int(signed), ty, span)
     }
@@ -1415,8 +1419,33 @@ impl FnCx<'_, '_> {
             .is_enum(value.ty)
             .is_some_and(|def| self.cx.enum_has_data(def));
         if carries_data || !self.castable(value.ty, to) {
-            let (from, to) = (self.ty(value.ty), self.ty(to));
-            self.error(format!("Cannot cast {from} to {to}"), span);
+            let text = self.cx.sources.text(value.span).to_string();
+            let types = &self.cx.types;
+            let (got, target) = (value.ty, to);
+            let text_like = got == Types::STR || got == Types::STRING;
+            let number = types.is_number(got);
+            let to_number = types.is_number(target);
+            let zero = match types.is_float(got) {
+                true => "0.0",
+                false => "0",
+            };
+            let to_float = types.is_float(target);
+            let enum_target = self.cx.is_enum(target).is_some();
+            let (from, to) = (self.ty(got), self.ty(target));
+            let error = self.error(format!("Cannot cast {from} to {to}"), span);
+            if text_like && to_number {
+                error.help("read a number out of text with .parse_int() or .parse_float()");
+            } else if number && target == Types::BOOL {
+                error
+                    .help("compare it to get a bool")
+                    .fix(span, format!("{text} != {zero}"));
+            } else if got == Types::BOOL && to_float {
+                error.help("pick the number with if, as in if b { 1.0 } else { 0.0 }");
+            } else if number && enum_target {
+                error.help("a number does not become an enum; match it to pick a variant");
+            } else if carries_data {
+                error.help("only an enum whose variants carry no values casts to a number");
+            }
             return self.error_expr(span);
         }
         self.mk(ExprKind::Cast(Box::new(value)), to, span)
@@ -1645,7 +1674,8 @@ impl FnCx<'_, '_> {
                     self.mk(ExprKind::VecLiteral(Vec::new()), ty, span)
                 }
                 None => {
-                    self.error("Cannot tell the type of Vec[] here; annotate it", span);
+                    self.error("Cannot tell what this Vec holds", span)
+                        .help("give the variable a type, as in var v: Vec<i32> = Vec[]");
                     self.error_expr(span)
                 }
             };
@@ -1719,7 +1749,8 @@ impl FnCx<'_, '_> {
                 }
                 Some(ty) if self.cx.types.is_error(ty) => self.error_expr(span),
                 _ => {
-                    self.error("Cannot tell the type of [] here; annotate it", span);
+                    self.error("Cannot tell what this array holds", span)
+                        .help("give the variable a type, as in var a: Array<i32, 0> = []");
                     self.error_expr(span)
                 }
             };

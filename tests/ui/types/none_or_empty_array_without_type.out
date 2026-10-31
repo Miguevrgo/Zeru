@@ -1,45 +1,57 @@
 status: compile error
 -- stderr
-Error: Cannot tell the type of None here; annotate it
+Error: Cannot tell the type of None here
    ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:3:14 ]
    │
  3 │     var a = [None, 5];
    │              ──┬─
-   │                ╰─── Cannot tell the type of None here; annotate it
+   │                ╰─── Cannot tell the type of None here
+   │
+   │ Help: give the variable a type, as in var x: i32? = None
 ───╯
-Error: Cannot tell the type of None here; annotate it
+Error: Cannot tell the type of None here
    ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:4:14 ]
    │
  4 │     var t = (None, 1);
    │              ──┬─
-   │                ╰─── Cannot tell the type of None here; annotate it
+   │                ╰─── Cannot tell the type of None here
+   │
+   │ Help: give the variable a type, as in var x: i32? = None
 ───╯
-Error: Cannot tell the type of None here; annotate it
+Error: Cannot tell the type of None here
    ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:5:17 ]
    │
  5 │     print("{}", None);
    │                 ──┬─
-   │                   ╰─── Cannot tell the type of None here; annotate it
+   │                   ╰─── Cannot tell the type of None here
+   │
+   │ Help: give the variable a type, as in var x: i32? = None
 ───╯
-Error: Cannot tell the type of [] here; annotate it
+Error: Cannot tell what this array holds
    ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:6:13 ]
    │
  6 │     var e = [];
    │             ─┬
-   │              ╰── Cannot tell the type of [] here; annotate it
+   │              ╰── Cannot tell what this array holds
+   │
+   │ Help: give the variable a type, as in var a: Array<i32, 0> = []
 ───╯
-Error: Cannot tell the type of None here; annotate it
+Error: Cannot tell the type of None here
    ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:7:13 ]
    │
  7 │     var b = None == x;
    │             ──┬─
-   │               ╰─── Cannot tell the type of None here; annotate it
+   │               ╰─── Cannot tell the type of None here
+   │
+   │ Help: give the variable a type, as in var x: i32? = None
 ───╯
-Error: Cannot tell the type of None here; annotate it
+Error: Cannot tell the type of None here
     ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:11:13 ]
     │
  11 │     var x = None;
     │             ──┬─
-    │               ╰─── Cannot tell the type of None here; annotate it
+    │               ╰─── Cannot tell the type of None here
+    │
+    │ Help: give the variable a type, as in var x: i32? = None
 ────╯
 [-] Error: aborting due to previous error

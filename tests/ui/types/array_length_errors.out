@@ -62,5 +62,7 @@ Error: Literal -1 does not fit in usize
  19 │     var d = [0; -1];
     │                 ─┬
     │                  ╰── Literal -1 does not fit in usize
+    │
+    │ Help: usize holds no negative numbers
 ────╯
 [-] Error: aborting due to previous error

@@ -6,6 +6,8 @@ Error: Literal 300 does not fit in u8
  4 │         300 => 2,
    │         ─┬─
    │          ╰─── Literal 300 does not fit in u8
+   │
+   │ Help: u8 holds 0 to 255
 ───╯
 Error: Literal -1 does not fit in u8
    ╭─[ tests/ui/match/pattern_literal_out_of_range.zr:5:9 ]
@@ -13,5 +15,7 @@ Error: Literal -1 does not fit in u8
  5 │         -1 => 4,
    │         ─┬
    │          ╰── Literal -1 does not fit in u8
+   │
+   │ Help: u8 holds no negative numbers
 ───╯
 [-] Error: aborting due to previous error

@@ -6,6 +6,8 @@ Error: Cannot cast bool to f64
  2 │     var f = true as f64;
    │             ─────┬─────
    │                  ╰─────── Cannot cast bool to f64
+   │
+   │ Help: pick the number with if, as in if b { 1.0 } else { 0.0 }
 ───╯
 Error: Cannot cast f64 to bool
    ╭─[ tests/ui/casts/invalid_casts.zr:6:13 ]
@@ -13,6 +15,9 @@ Error: Cannot cast f64 to bool
  6 │     var b = 2.5 as bool;
    │             ─────┬─────
    │                  ╰─────── Cannot cast f64 to bool
+   │
+   │ Help: compare it to get a bool
+   │           var b = 2.5 != 0.0;
 ───╯
 Error: Cannot cast i32 to bool
     ╭─[ tests/ui/casts/invalid_casts.zr:11:13 ]
@@ -20,6 +25,9 @@ Error: Cannot cast i32 to bool
  11 │     var b = n as bool;
     │             ────┬────
     │                 ╰────── Cannot cast i32 to bool
+    │
+    │ Help: compare it to get a bool
+    │           var b = n != 0;
 ────╯
 Error: Cannot cast str to u64
     ╭─[ tests/ui/casts/invalid_casts.zr:16:13 ]
@@ -27,6 +35,8 @@ Error: Cannot cast str to u64
  16 │     var n = s as u64;
     │             ────┬───
     │                 ╰───── Cannot cast str to u64
+    │
+    │ Help: read a number out of text with .parse_int() or .parse_float()
 ────╯
 Error: Cannot cast i32 to Color
     ╭─[ tests/ui/casts/invalid_casts.zr:23:13 ]
@@ -34,6 +44,8 @@ Error: Cannot cast i32 to Color
  23 │     var c = 1 as Color;
     │             ─────┬────
     │                  ╰────── Cannot cast i32 to Color
+    │
+    │ Help: a number does not become an enum; match it to pick a variant
 ────╯
 Error: Cannot cast f64 to Color
     ╭─[ tests/ui/casts/invalid_casts.zr:24:13 ]
@@ -41,6 +53,8 @@ Error: Cannot cast f64 to Color
  24 │     var d = 2.5 as Color;
     │             ──────┬─────
     │                   ╰─────── Cannot cast f64 to Color
+    │
+    │ Help: a number does not become an enum; match it to pick a variant
 ────╯
 Error: Cannot cast P to i32
     ╭─[ tests/ui/casts/invalid_casts.zr:32:13 ]

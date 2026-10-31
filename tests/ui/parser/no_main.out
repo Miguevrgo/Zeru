@@ -6,5 +6,10 @@ Error: Missing 'fn main'
  4 │
    │ ┬
    │ ╰── Missing 'fn main'
+   │
+   │ Help: a program starts at fn main(); add one
+   │
+   │           fn main() {
+   │           }
 ───╯
 [-] Error: aborting due to previous error

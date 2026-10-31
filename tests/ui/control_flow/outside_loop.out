@@ -1,17 +1,21 @@
 status: compile error
 -- stderr
-Error: Break/Continue can only be used inside loops
+Error: 'break' is only allowed inside a loop
    ╭─[ tests/ui/control_flow/outside_loop.zr:2:5 ]
    │
  2 │     break;
    │     ───┬──
-   │        ╰──── Break/Continue can only be used inside loops
+   │        ╰──── 'break' is only allowed inside a loop
+   │
+   │ Help: to leave a function early, write return
 ───╯
-Error: Break/Continue can only be used inside loops
+Error: 'continue' is only allowed inside a loop
    ╭─[ tests/ui/control_flow/outside_loop.zr:6:5 ]
    │
  6 │     continue;
    │     ────┬────
-   │         ╰────── Break/Continue can only be used inside loops
+   │         ╰────── 'continue' is only allowed inside a loop
+   │
+   │ Help: to leave a function early, write return
 ───╯
 [-] Error: aborting due to previous error

@@ -460,8 +460,9 @@ impl<'a> Checker<'a> {
                 let shown = self.types.show(ret);
                 self.error(
                     format!("Function 'main' must return void, not {shown}"),
-                    span,
-                );
+                    self.sources.first_line(span),
+                )
+                .help("end the program with a status code by calling exit(code)");
             }
         }
         if item.owner.is_some()

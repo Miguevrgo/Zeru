@@ -358,10 +358,12 @@ fn load(path: &Path, user_code: &str, tests: bool) -> (Sources, Vec<SourceModule
             |stmt| matches!(&stmt.kind, StatementKind::Function { name, .. } if name == "main"),
         )
     {
-        errors.push(ZeruError::syntax(
-            "Missing 'fn main'",
-            Span::new(root_end - 1, root_end),
-        ));
+        let end = Span::new(root_end - 1, root_end);
+        let mut error = ZeruError::syntax("Missing 'fn main'", end);
+        error
+            .help("a program starts at fn main(); add one")
+            .fix(Span::new(end.start, end.start), "\nfn main() {\n}\n");
+        errors.push(error);
     }
     let mut modules = vec![
         SourceModule {

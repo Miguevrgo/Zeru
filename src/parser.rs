@@ -1139,8 +1139,11 @@ impl Parser {
 
     fn parse_import_statement(&mut self) -> Option<Statement> {
         let start = self.span();
-        if self.code_seen {
-            self.error_here::<()>("Imports must come before any other code");
+        let here = self.span();
+        if self.code_seen
+            && let Some(error) = self.error("Imports must come before any other code", here)
+        {
+            error.help("move this import to the top of the file");
         }
         self.bump();
         let path = self.parse_path(&Token::Dot)?;
@@ -1224,7 +1227,9 @@ impl Parser {
                 Precedence::Equals | Precedence::LessGreater
             );
             if comparison && (compared || precedence == Precedence::Equals) {
-                return self.error_here("Comparison operators cannot be chained");
+                let error = self.error("Comparison operators cannot be chained", self.span())?;
+                error.help("compare twice and join them, as in a < b && b < c");
+                return None;
             }
             compared = comparison;
             left = self.parse_infix_expression(left)?;
