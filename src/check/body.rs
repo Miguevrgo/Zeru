@@ -84,10 +84,16 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
         });
     } else if ret != Types::VOID && !fx.diverges {
         let at = body.last().map_or(span, |stmt| stmt.span);
-        fx.cx.error(
-            format!("Function '{name}' can finish without returning a value"),
-            at,
-        );
+        let shown = fx.cx.types.show(ret);
+        fx.cx
+            .error(
+                format!("Function '{name}' can finish without returning a value"),
+                at,
+            )
+            .label("it can end after this")
+            .help(format!(
+                "return a {shown} on every path, or end it with a return after this"
+            ));
     }
     fx.warn_unread(params.len());
     let locals = std::mem::take(&mut fx.locals);
@@ -295,18 +301,18 @@ impl<'c, 'a> FnCx<'c, 'a> {
             }
             ExprKind::Read(Place::Local(local)) if self.locals[local.0 as usize].view => {
                 let name = self.local_name(*local).to_string();
-                self.error(
-                    format!("Cannot move '{name}', which is borrowed; call .copy() on it"),
-                    expr.span,
-                );
+                let message = format!("Cannot move '{name}', which is borrowed");
+                self.cannot_move(message, "what it borrows from keeps it", expr);
                 return;
             }
             ExprKind::Read(Place::Local(_)) => {}
             ExprKind::Read(place @ Place::Field(..)) if self.field_of_temporary(place) => {}
             ExprKind::Read(Place::Field(..) | Place::Index(..) | Place::Deref(_)) => {
-                self.error(
-                    "Cannot move a value out of a field, an element or a pointer; call .copy() on it",
-                    expr.span,
+                let message = "Cannot move a value out of a field, an element or a pointer";
+                self.cannot_move(
+                    message.to_string(),
+                    "what holds it would be left without it",
+                    expr,
                 );
                 return;
             }
@@ -316,6 +322,20 @@ impl<'c, 'a> FnCx<'c, 'a> {
             unreachable!()
         };
         expr.kind = ExprKind::Move(place);
+    }
+
+    /// Report that `expr` cannot be moved, suggesting a copy of it when the
+    /// value can be copied, and `replace` otherwise.
+    fn cannot_move(&mut self, message: String, why: &str, expr: &Expr) {
+        let copyable = !self.cx.runs_drop(expr.ty);
+        let text = self.cx.sources.text(expr.span).to_string();
+        let error = self.error(message, expr.span).label(why);
+        match copyable {
+            true => error.help("move a copy of it instead").fix(expr.span, format!("{text}.copy()")),
+            false => error.help(
+                "it runs a drop, so it cannot be copied; take it out with replace(&var place, new value)",
+            ),
+        };
     }
 
     /// Whether `place` is a field, or a field of one, of a temporary value,
@@ -509,37 +529,79 @@ impl<'c, 'a> FnCx<'c, 'a> {
     pub(super) fn require_mutable(&mut self, place: &Place, ast: &Expression, span: Span) {
         match self.constant_written(place, ast) {
             Some(name) => {
-                self.error(format!("Cannot modify constant '{name}'"), span);
+                let decl = self
+                    .cx
+                    .items
+                    .lookup_value(self.scope.module, &name)
+                    .map(|def| {
+                        self.cx
+                            .sources
+                            .first_line(self.cx.items.item(def).decl.span)
+                    });
+                let error = self.error(format!("Cannot modify constant '{name}'"), span);
+                error.help(
+                    "a const never changes; keep the value in a var inside the function instead",
+                );
+                if let Some(decl) = decl {
+                    error.note("declared here", decl);
+                }
             }
             None => self.require_var_root(place, span),
         }
     }
 
-    /// Report a write to `local` when it cannot be assigned, saying why.
+    /// Report a write to `local` when it cannot be assigned, saying why,
+    /// with the change to its declaration that lets it be when there is one.
     pub(super) fn require_var(&mut self, local: LocalId, span: Span) {
         let Some(why) = self.fixed[local.0 as usize] else {
             return;
         };
         let name = self.local_name(local).to_string();
-        let message = match why {
-            Fixed::Const => format!(
-                "Cannot change '{name}', declared with const; declare it with var to change it"
+        let declared = self.declared[local.0 as usize];
+        let sources = self.cx.sources;
+        let text = sources.text(declared);
+        let at = |offset: usize| Span::new(declared.start + offset, declared.start + offset);
+        let (message, help, fix) = match why {
+            Fixed::Const => (
+                format!("Cannot change '{name}', which is declared with const"),
+                "declare it with var to change it".to_string(),
+                text.starts_with("const")
+                    .then(|| (Span::new(declared.start, declared.start + 5), "var".to_string())),
             ),
-            Fixed::Param => format!(
-                "Cannot change the parameter '{name}'; declare it as var {name} to change it"
+            Fixed::Param => (
+                format!("Cannot change the parameter '{name}'"),
+                format!("declare it as var {name} to change it"),
+                sources.word_in(declared, &name).map(|named| (Span::new(named.start, named.start), "var ".to_string())),
             ),
-            Fixed::Counter => format!("Cannot change the loop counter '{name}'"),
-            Fixed::Element => format!(
-                "Cannot change '{name}', which reads each element; walk the sequence with &var to change its elements"
+            Fixed::Counter => (
+                format!("Cannot change the loop counter '{name}'"),
+                "count with a var of your own and while, to change it as it goes".to_string(),
+                None,
             ),
-            Fixed::Key => format!(
-                "Cannot change the key '{name}': a key of a map or set is fixed, since where it is kept depends on its value"
+            Fixed::Element => (
+                format!("Cannot change '{name}', which reads each element"),
+                "walk the sequence with &var to change its elements".to_string(),
+                match text.strip_prefix('&') {
+                    Some(rest) if !rest.starts_with("var ") => Some((at(1), "var ".to_string())),
+                    Some(_) => None,
+                    None => Some((at(0), "&var ".to_string())),
+                },
             ),
-            Fixed::Binding => format!(
-                "Cannot change '{name}', which this match arm binds; assign a whole new value to what the match looks at instead"
+            Fixed::Key => (
+                format!("Cannot change the key '{name}'"),
+                "a key of a map or set is fixed, since where it is kept depends on its value; remove it and insert the new one".to_string(),
+                None,
+            ),
+            Fixed::Binding => (
+                format!("Cannot change '{name}', which this match arm binds"),
+                "assign a whole new value to what the match looks at instead".to_string(),
+                None,
             ),
         };
-        self.error(message, span);
+        let error = self.error(message, span).help(help);
+        if let Some((at, written)) = fix {
+            error.fix(at, written);
+        }
     }
 
     fn require_var_root(&mut self, place: &Place, span: Span) {

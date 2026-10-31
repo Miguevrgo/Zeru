@@ -851,7 +851,8 @@ impl FnCx<'_, '_> {
             None => self.place(target),
         };
         if self.temporary(&place, target_ty, target) {
-            self.error("Cannot assign to a temporary value", target.span);
+            self.error("Cannot assign to a temporary value", target.span)
+                .help("store the value in a variable first, then change the variable");
         }
         match revived {
             Some(local) => self.require_var(local, span),
@@ -1371,7 +1372,8 @@ impl FnCx<'_, '_> {
                 match types.as_int(operand.ty) {
                     Some(int) if !int.signed() => {
                         let shown = self.ty(operand.ty);
-                        self.error(format!("Cannot negate unsigned type {shown}"), span);
+                        self.error(format!("Cannot negate unsigned type {shown}"), span)
+                            .help(format!("{shown} holds no negative numbers; convert it to a signed type first, as in -(x as i64)"));
                         self.error_expr(span)
                     }
                     _ if types.is_number(operand.ty) => {

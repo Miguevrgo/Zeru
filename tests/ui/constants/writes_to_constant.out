@@ -3,36 +3,66 @@ status: compile error
 Error: Cannot modify constant 'ARR'
     ╭─[ tests/ui/constants/writes_to_constant.zr:16:5 ]
     │
+  7 │ const ARR: Array<i32, 3> = [1, 2, 3];
+    │ ──────────────────┬──────────────────
+    │                   ╰──────────────────── declared here
+    │
  16 │     ARR[0] = 9;
     │     ─────┬────
     │          ╰────── Cannot modify constant 'ARR'
+    │
+    │ Help: a const never changes; keep the value in a var inside the function instead
 ────╯
 Error: Cannot modify constant 'K'
     ╭─[ tests/ui/constants/writes_to_constant.zr:17:10 ]
     │
+  8 │ const K: i32 = 5;
+    │ ────────┬────────
+    │         ╰────────── declared here
+    │
  17 │     bump(&var K);
     │          ───┬──
     │             ╰──── Cannot modify constant 'K'
+    │
+    │ Help: a const never changes; keep the value in a var inside the function instead
 ────╯
 Error: Cannot modify constant 'K'
     ╭─[ tests/ui/constants/writes_to_constant.zr:18:5 ]
     │
+  8 │ const K: i32 = 5;
+    │ ────────┬────────
+    │         ╰────────── declared here
+    │
  18 │     K = 6;
     │     ──┬──
     │       ╰──── Cannot modify constant 'K'
+    │
+    │ Help: a const never changes; keep the value in a var inside the function instead
 ────╯
 Error: Cannot modify constant 'K'
     ╭─[ tests/ui/constants/writes_to_constant.zr:19:5 ]
     │
+  8 │ const K: i32 = 5;
+    │ ────────┬────────
+    │         ╰────────── declared here
+    │
  19 │     K += 1;
     │     ───┬──
     │        ╰──── Cannot modify constant 'K'
+    │
+    │ Help: a const never changes; keep the value in a var inside the function instead
 ────╯
 Error: Cannot modify constant 'ARR'
     ╭─[ tests/ui/constants/writes_to_constant.zr:20:14 ]
     │
+  7 │ const ARR: Array<i32, 3> = [1, 2, 3];
+    │ ──────────────────┬──────────────────
+    │                   ╰──────────────────── declared here
+    │
  20 │     for x in &var ARR {
     │              ────┬───
     │                  ╰───── Cannot modify constant 'ARR'
+    │
+    │ Help: a const never changes; keep the value in a var inside the function instead
 ────╯
 [-] Error: aborting due to previous error

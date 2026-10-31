@@ -894,7 +894,9 @@ impl<'a> Checker<'a> {
             }
             if self.stores_by_value(def, def, &mut HashSet::new()) {
                 let message = format!("'{}' stores itself, so it has no finite size", item.name);
-                self.error(message, item.decl.span);
+                let head = self.sources.first_line(item.decl.span);
+                self.error(message, head)
+                    .help("keep the inner one in a Vec, which holds it apart on the heap");
             }
         }
     }

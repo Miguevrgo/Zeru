@@ -1,24 +1,36 @@
 status: compile error
 -- stderr
-Error: Cannot change 'x', declared with const; declare it with var to change it
+Error: Cannot change 'x', which is declared with const
    ╭─[ tests/ui/constants/cannot_reassign.zr:4:5 ]
    │
  4 │     x = 20;
    │     ───┬──
-   │        ╰──── Cannot change 'x', declared with const; declare it with var to change it
+   │        ╰──── Cannot change 'x', which is declared with const
+   │
+   │ Help: declare it with var to change it
+   │           var x = 10;
 ───╯
 Error: Cannot modify constant 'G'
    ╭─[ tests/ui/constants/cannot_reassign.zr:5:5 ]
    │
+ 1 │ const G: i32 = 100;
+   │ ─────────┬─────────
+   │          ╰─────────── declared here
+   │
  5 │     G = 200;
    │     ───┬───
    │        ╰───── Cannot modify constant 'G'
+   │
+   │ Help: a const never changes; keep the value in a var inside the function instead
 ───╯
-Error: Cannot change the parameter 'x'; declare it as var x to change it
+Error: Cannot change the parameter 'x'
    ╭─[ tests/ui/constants/cannot_reassign.zr:9:5 ]
    │
  9 │     x += 1;
    │     ───┬──
-   │        ╰──── Cannot change the parameter 'x'; declare it as var x to change it
+   │        ╰──── Cannot change the parameter 'x'
+   │
+   │ Help: declare it as var x to change it
+   │           fn f(var x: i32) i32 {
 ───╯
 [-] Error: aborting due to previous error

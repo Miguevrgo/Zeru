@@ -6,6 +6,8 @@ Error: Cannot assign to a temporary value
  11 │     make().a = 5;
     │     ────┬───
     │         ╰───── Cannot assign to a temporary value
+    │
+    │ Help: store the value in a variable first, then change the variable
 ────╯
 Error: Cannot assign to a temporary value
     ╭─[ tests/ui/structs/assign_to_temporary.zr:12:5 ]
@@ -13,6 +15,8 @@ Error: Cannot assign to a temporary value
  12 │     arr()[0] = 5;
     │     ────┬───
     │         ╰───── Cannot assign to a temporary value
+    │
+    │ Help: store the value in a variable first, then change the variable
 ────╯
 Error: Cannot assign to a temporary value
     ╭─[ tests/ui/structs/assign_to_temporary.zr:13:5 ]
@@ -20,6 +24,8 @@ Error: Cannot assign to a temporary value
  13 │     S { a: 1 }.a = 5;
     │     ──────┬─────
     │           ╰─────── Cannot assign to a temporary value
+    │
+    │ Help: store the value in a variable first, then change the variable
 ────╯
 Error: Cannot assign to a temporary value
     ╭─[ tests/ui/structs/assign_to_temporary.zr:14:5 ]
@@ -27,5 +33,7 @@ Error: Cannot assign to a temporary value
  14 │     1 + 2 = 3;
     │     ──┬──
     │       ╰──── Cannot assign to a temporary value
+    │
+    │ Help: store the value in a variable first, then change the variable
 ────╯
 [-] Error: aborting due to previous error

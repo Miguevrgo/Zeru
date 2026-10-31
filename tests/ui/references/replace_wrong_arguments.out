@@ -21,12 +21,15 @@ Error: replace puts i32 in the place, got bool
    │                     ──┬─
    │                       ╰─── this is bool
 ───╯
-Error: Cannot change 'c', declared with const; declare it with var to change it
+Error: Cannot change 'c', which is declared with const
    ╭─[ tests/ui/references/replace_wrong_arguments.zr:8:13 ]
    │
  8 │     replace(&var c, 3);
    │             ───┬──
-   │                ╰──── Cannot change 'c', declared with const; declare it with var to change it
+   │                ╰──── Cannot change 'c', which is declared with const
+   │
+   │ Help: declare it with var to change it
+   │           var c = 2;
 ───╯
 Error: replace takes a &var to a place and the value to put there
    ╭─[ tests/ui/references/replace_wrong_arguments.zr:9:5 ]

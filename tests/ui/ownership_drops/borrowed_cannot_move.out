@@ -1,17 +1,23 @@
 status: compile error
 -- stderr
-Error: Cannot move 'v', which is borrowed; call .copy() on it
+Error: Cannot move 'v', which is borrowed
    ╭─[ tests/ui/ownership_drops/borrowed_cannot_move.zr:5:13 ]
    │
  5 │         eat(v);
    │             ┬
-   │             ╰── Cannot move 'v', which is borrowed; call .copy() on it
+   │             ╰── what it borrows from keeps it
+   │
+   │ Help: move a copy of it instead
+   │           eat(v.copy());
 ───╯
-Error: Cannot move 'self', which is borrowed; call .copy() on it
+Error: Cannot move 'self', which is borrowed
     ╭─[ tests/ui/ownership_drops/borrowed_cannot_move.zr:12:16 ]
     │
  12 │         return self;
     │                ──┬─
-    │                  ╰─── Cannot move 'self', which is borrowed; call .copy() on it
+    │                  ╰─── what it borrows from keeps it
+    │
+    │ Help: move a copy of it instead
+    │           return self.copy();
 ────╯
 [-] Error: aborting due to previous error

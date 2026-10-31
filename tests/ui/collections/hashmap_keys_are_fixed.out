@@ -7,11 +7,13 @@ Error: A map's keys cannot change; write for (key, value) in &var map
    │                  ───┬──
    │                     ╰──── A map's keys cannot change; write for (key, value) in &var map
 ───╯
-Error: Cannot change the key 'k': a key of a map or set is fixed, since where it is kept depends on its value
+Error: Cannot change the key 'k'
    ╭─[ tests/ui/collections/hashmap_keys_are_fixed.zr:8:9 ]
    │
  8 │         k += 1;
    │         ───┬──
-   │            ╰──── Cannot change the key 'k': a key of a map or set is fixed, since where it is kept depends on its value
+   │            ╰──── Cannot change the key 'k'
+   │
+   │ Help: a key of a map or set is fixed, since where it is kept depends on its value; remove it and insert the new one
 ───╯
 [-] Error: aborting due to previous error

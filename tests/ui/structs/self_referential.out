@@ -3,37 +3,37 @@ status: compile error
 Error: 'S' stores itself, so it has no finite size
    ╭─[ tests/ui/structs/self_referential.zr:1:1 ]
    │
- 1 │ ╭─▶ struct S {
-   ┆ ┆
- 3 │ ├─▶ }
-   │ │
-   │ ╰─────── 'S' stores itself, so it has no finite size
+ 1 │ struct S {
+   │ ─────┬────
+   │      ╰────── 'S' stores itself, so it has no finite size
+   │
+   │ Help: keep the inner one in a Vec, which holds it apart on the heap
 ───╯
 Error: 'A' stores itself, so it has no finite size
    ╭─[ tests/ui/structs/self_referential.zr:4:1 ]
    │
- 4 │ ╭─▶ struct A {
-   ┆ ┆
- 6 │ ├─▶ }
-   │ │
-   │ ╰─────── 'A' stores itself, so it has no finite size
+ 4 │ struct A {
+   │ ─────┬────
+   │      ╰────── 'A' stores itself, so it has no finite size
+   │
+   │ Help: keep the inner one in a Vec, which holds it apart on the heap
 ───╯
 Error: 'B' stores itself, so it has no finite size
    ╭─[ tests/ui/structs/self_referential.zr:7:1 ]
    │
- 7 │ ╭─▶ struct B {
-   ┆ ┆
- 9 │ ├─▶ }
-   │ │
-   │ ╰─────── 'B' stores itself, so it has no finite size
+ 7 │ struct B {
+   │ ─────┬────
+   │      ╰────── 'B' stores itself, so it has no finite size
+   │
+   │ Help: keep the inner one in a Vec, which holds it apart on the heap
 ───╯
 Error: 'K' stores itself, so it has no finite size
     ╭─[ tests/ui/structs/self_referential.zr:10:1 ]
     │
- 10 │ ╭─▶ struct K {
-    ┆ ┆
- 12 │ ├─▶ }
-    │ │
-    │ ╰─────── 'K' stores itself, so it has no finite size
+ 10 │ struct K {
+    │ ─────┬────
+    │      ╰────── 'K' stores itself, so it has no finite size
+    │
+    │ Help: keep the inner one in a Vec, which holds it apart on the heap
 ────╯
 [-] Error: aborting due to previous error

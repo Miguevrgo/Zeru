@@ -6,5 +6,7 @@ Error: Cannot negate unsigned type u32
  3 │     var y = -x;
    │             ─┬
    │              ╰── Cannot negate unsigned type u32
+   │
+   │ Help: u32 holds no negative numbers; convert it to a signed type first, as in -(x as i64)
 ───╯
 [-] Error: aborting due to previous error

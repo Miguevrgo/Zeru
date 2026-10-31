@@ -1,10 +1,13 @@
 status: compile error
 -- stderr
-Error: Cannot change 'item', which reads each element; walk the sequence with &var to change its elements
+Error: Cannot change 'item', which reads each element
    ╭─[ tests/ui/control_flow/for_in_element_is_constant.zr:4:9 ]
    │
  4 │         item = 9;
    │         ────┬───
-   │             ╰───── Cannot change 'item', which reads each element; walk the sequence with &var to change its elements
+   │             ╰───── Cannot change 'item', which reads each element
+   │
+   │ Help: walk the sequence with &var to change its elements
+   │           for item in &var a {
 ───╯
 [-] Error: aborting due to previous error

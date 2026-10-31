@@ -1,17 +1,23 @@
 status: compile error
 -- stderr
-Error: Cannot change the parameter 'self'; declare it as var self to change it
+Error: Cannot change the parameter 'self'
    ╭─[ tests/ui/structs/self_must_be_var.zr:4:9 ]
    │
  4 │         self.v = self.v + 1;
    │         ─────────┬─────────
-   │                  ╰─────────── Cannot change the parameter 'self'; declare it as var self to change it
+   │                  ╰─────────── Cannot change the parameter 'self'
+   │
+   │ Help: declare it as var self to change it
+   │           fn t(var self) {
 ───╯
-Error: Cannot change the parameter 'self'; declare it as var self to change it
+Error: Cannot change the parameter 'self'
    ╭─[ tests/ui/structs/self_must_be_var.zr:7:9 ]
    │
  7 │         self.v += 1;
    │         ─────┬─────
-   │              ╰─────── Cannot change the parameter 'self'; declare it as var self to change it
+   │              ╰─────── Cannot change the parameter 'self'
+   │
+   │ Help: declare it as var self to change it
+   │           fn u(var self) {
 ───╯
 [-] Error: aborting due to previous error

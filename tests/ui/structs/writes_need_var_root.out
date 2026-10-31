@@ -1,38 +1,43 @@
 status: compile error
 -- stderr
-Error: Cannot change 'p', declared with const; declare it with var to change it
+Error: Cannot change 'p', which is declared with const
     ╭─[ tests/ui/structs/writes_need_var_root.zr:12:5 ]
     │
  12 │     p.x = 2;
     │     ───┬───
-    │        ╰───── Cannot change 'p', declared with const; declare it with var to change it
+    │        ╰───── Cannot change 'p', which is declared with const
+    │
+    │ Help: declare it with var to change it
+    │           var p = P { x: 1 };
 ────╯
-Error: Cannot change 'a', declared with const; declare it with var to change it
+Error: Cannot change 'a', which is declared with const
     ╭─[ tests/ui/structs/writes_need_var_root.zr:14:5 ]
     │
  14 │     a[0] = 3;
     │     ────┬───
-    │         ╰───── Cannot change 'a', declared with const; declare it with var to change it
+    │         ╰───── Cannot change 'a', which is declared with const
+    │
+    │ Help: declare it with var to change it
+    │           var a: Array<i32, 2> = [1, 2];
 ────╯
-Error: Cannot change 'v', declared with const; declare it with var to change it
+Error: Cannot change 'v', which is declared with const
     ╭─[ tests/ui/structs/writes_need_var_root.zr:16:5 ]
     │
  16 │     v.push(1);
     │     ────┬────
-    │         ╰────── Cannot change 'v', declared with const; declare it with var to change it
-────╯
-Error: Cannot change 'p', declared with const; declare it with var to change it
-    ╭─[ tests/ui/structs/writes_need_var_root.zr:17:5 ]
+    │         ╰────── Cannot change 'v', which is declared with const
     │
- 17 │     p.bump();
-    │     ────┬───
-    │         ╰───── Cannot change 'p', declared with const; declare it with var to change it
+    │ Help: declare it with var to change it
+    │           var v: Vec<i32> = Vec.new();
 ────╯
-Error: Cannot change 'n', declared with const; declare it with var to change it
+Error: Cannot change 'n', which is declared with const
     ╭─[ tests/ui/structs/writes_need_var_root.zr:19:9 ]
     │
  19 │     set(&n);
     │         ─┬
-    │          ╰── Cannot change 'n', declared with const; declare it with var to change it
+    │          ╰── Cannot change 'n', which is declared with const
+    │
+    │ Help: declare it with var to change it
+    │           var n: i32 = 1;
 ────╯
 [-] Error: aborting due to previous error

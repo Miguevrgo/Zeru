@@ -7,12 +7,15 @@ Error: Cannot take i32 apart into 2 names
    │     ───────┬───────
    │            ╰───────── Cannot take i32 apart into 2 names
 ───╯
-Error: Cannot change 'c', declared with const; declare it with var to change it
+Error: Cannot change 'c', which is declared with const
    ╭─[ tests/ui/destructuring/errors.zr:8:5 ]
    │
  8 │     c = 3;
    │     ──┬──
-   │       ╰──── Cannot change 'c', declared with const; declare it with var to change it
+   │       ╰──── Cannot change 'c', which is declared with const
+   │
+   │ Help: declare it with var to change it
+   │           var (c, d) = (1, 2);
 ───╯
 Error: Type mismatch for variable 'e'. Annotated as i64 but got i32
    ╭─[ tests/ui/destructuring/errors.zr:9:5 ]

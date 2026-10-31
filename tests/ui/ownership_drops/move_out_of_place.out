@@ -1,31 +1,43 @@
 status: compile error
 -- stderr
-Error: Cannot move a value out of a field, an element or a pointer; call .copy() on it
+Error: Cannot move a value out of a field, an element or a pointer
     ╭─[ tests/ui/ownership_drops/move_out_of_place.zr:17:13 ]
     │
  17 │     var s = vs[0];
     │             ──┬──
-    │               ╰──── Cannot move a value out of a field, an element or a pointer; call .copy() on it
+    │               ╰──── what holds it would be left without it
+    │
+    │ Help: move a copy of it instead
+    │           var s = vs[0].copy();
 ────╯
-Error: Cannot move a value out of a field, an element or a pointer; call .copy() on it
+Error: Cannot move a value out of a field, an element or a pointer
     ╭─[ tests/ui/ownership_drops/move_out_of_place.zr:22:13 ]
     │
  22 │     var v = s.v;
     │             ─┬─
-    │              ╰─── Cannot move a value out of a field, an element or a pointer; call .copy() on it
+    │              ╰─── what holds it would be left without it
+    │
+    │ Help: move a copy of it instead
+    │           var v = s.v.copy();
 ────╯
-Error: Cannot move a value out of a field, an element or a pointer; call .copy() on it
+Error: Cannot move a value out of a field, an element or a pointer
     ╭─[ tests/ui/ownership_drops/move_out_of_place.zr:26:13 ]
     │
  26 │     var s = make()[0];
     │             ────┬────
-    │                 ╰────── Cannot move a value out of a field, an element or a pointer; call .copy() on it
+    │                 ╰────── what holds it would be left without it
+    │
+    │ Help: move a copy of it instead
+    │           var s = make()[0].copy();
 ────╯
-Error: Cannot move a value out of a field, an element or a pointer; call .copy() on it
+Error: Cannot move a value out of a field, an element or a pointer
     ╭─[ tests/ui/ownership_drops/move_out_of_place.zr:30:13 ]
     │
  30 │     var v = guard().v;
     │             ────┬────
-    │                 ╰────── Cannot move a value out of a field, an element or a pointer; call .copy() on it
+    │                 ╰────── what holds it would be left without it
+    │
+    │ Help: move a copy of it instead
+    │           var v = guard().v.copy();
 ────╯
 [-] Error: aborting due to previous error
