@@ -1,0 +1,11 @@
+status: exit 0
+-- stdout
+0 loop
+drop loop
+1 loop
+drop loop
+inner
+drop inner
+3 4 2 a 1
+drop b
+drop a

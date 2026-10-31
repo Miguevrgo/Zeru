@@ -329,7 +329,18 @@ impl<'a> Builder<'a> {
         match &stmt.kind {
             StmtKind::Let(local, value) => {
                 let mir = self.declare(*local);
+                let mark = self.temps.len();
                 self.expr_into(Some(Place::local(mir)), value);
+                for ty in borrowed_temps(value) {
+                    let made = &self.temps[mark..];
+                    if let Some(at) = made
+                        .iter()
+                        .rposition(|t| self.locals[t.0.0 as usize].ty == ty)
+                    {
+                        let kept = self.temps.remove(mark + at);
+                        self.scopes.last_mut().unwrap().push(kept);
+                    }
+                }
                 self.own(mir);
             }
             StmtKind::Expr(expr) => self.effect(expr),
@@ -1626,5 +1637,30 @@ fn unchecked(op: BinOp, left: Operand, right: Operand) -> Rvalue {
         left,
         right,
         checked: false,
+    }
+}
+
+/// The types of the temporaries `value` borrows, directly or through a
+/// slice or a view of one, outermost first: `var r = &make();` keeps them
+/// until the block ends.
+fn borrowed_temps(value: &Expr) -> Vec<Ty> {
+    let mut place = match &value.kind {
+        ExprKind::AddressOf(place) => place,
+        ExprKind::Builtin(Builtin::Slice, args) => match &args[0].kind {
+            ExprKind::AddressOf(place) => place,
+            _ => return Vec::new(),
+        },
+        _ => return Vec::new(),
+    };
+    loop {
+        match place {
+            tir::Place::Temp(value) => {
+                let mut temps = vec![value.ty];
+                temps.extend(borrowed_temps(value));
+                return temps;
+            }
+            tir::Place::Field(base, _) | tir::Place::Index(base, _) => place = base,
+            tir::Place::Local(_) | tir::Place::Deref(_) => return Vec::new(),
+        }
     }
 }

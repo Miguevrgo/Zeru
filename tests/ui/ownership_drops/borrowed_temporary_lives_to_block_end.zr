@@ -1,0 +1,31 @@
+struct Job {
+    name: String,
+    tags: Vec<String>,
+
+    fn drop(var self) {
+        println("drop {}", self.name);
+    }
+}
+fn job(name: str) Job {
+    return Job { name: String.from(name), tags: Vec[String.from("t")] };
+}
+fn make() Vec<i32> {
+    return Vec[1, 2, 3];
+}
+fn main() {
+    var r = &make();
+    var w = &var make();
+    w.push(4);
+    var e = &make()[1];
+    var j = &job("a");
+    var t = &job("b").tags;
+    for i in 0..2 {
+        var k = &job("loop");
+        println("{} {}", i, k.name);
+    }
+    if !r.is_empty() {
+        var inner = &job("inner");
+        println("{}", inner.name);
+    }
+    println("{} {} {} {} {}", r.len(), w.len(), *e, j.name, t.len());
+}

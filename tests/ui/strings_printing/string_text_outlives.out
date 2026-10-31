@@ -26,17 +26,6 @@ Error: Cannot keep a reference into a temporary value past its statement; store 
     │                            ╰── used later here
 ────╯
 Error: Cannot keep a reference into a temporary value past its statement; store the value in a variable first
-    ╭─[ tests/ui/strings_printing/string_text_outlives.zr:27:18 ]
-    │
- 27 │     var b: str = make();
-    │                  ───┬──
-    │                     ╰──── Cannot keep a reference into a temporary value past its statement; store the value in a variable first
-    │
- 32 │     println("{} {} {} {}", a, b, c, x[0]);
-    │                               ┬
-    │                               ╰── used later here
-────╯
-Error: Cannot keep a reference into a temporary value past its statement; store the value in a variable first
     ╭─[ tests/ui/strings_printing/string_text_outlives.zr:28:18 ]
     │
  28 │     var c = take(make());
@@ -46,16 +35,5 @@ Error: Cannot keep a reference into a temporary value past its statement; store 
  32 │     println("{} {} {} {}", a, b, c, x[0]);
     │                                  ┬
     │                                  ╰── used later here
-────╯
-Error: Cannot keep a reference into a temporary value past its statement; store the value in a variable first
-    ╭─[ tests/ui/strings_printing/string_text_outlives.zr:29:13 ]
-    │
- 29 │     var x = make_vec()[1..];
-    │             ───────┬───────
-    │                    ╰───────── Cannot keep a reference into a temporary value past its statement; store the value in a variable first
-    │
- 32 │     println("{} {} {} {}", a, b, c, x[0]);
-    │                                     ──┬─
-    │                                       ╰─── used later here
 ────╯
 [-] Error: aborting due to previous error

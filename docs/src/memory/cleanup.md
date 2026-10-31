@@ -19,6 +19,23 @@ fn main() {
 of `main`. A value moved somewhere else is freed by its new owner instead,
 and assigning a new value to a variable frees the old one first.
 
+A value no variable holds, as one a function just returned, is freed at
+the end of its statement. When a variable is made a reference to it, as
+`var r = &make();`, or a slice or view of it, the value lives until the
+end of the block instead:
+
+```zeru
+fn make() Vec<i32> {
+    return Vec[1, 2, 3];
+}
+
+fn main() {
+    var all = &make();
+    var tail = make()[1..];
+    println("{} {}", all.len(), tail); // 3 [2, 3]
+}
+```
+
 ## drop
 
 A struct can run code of its own as it goes away, by having a method named
