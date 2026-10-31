@@ -3,18 +3,17 @@ status: compile error
 Error: Cannot change 'env' while 'refs' still refers into it
     ╭─[ tests/ui/references/call_refs_collected_then_changed.zr:12:5 ]
     │
- 12 │     env.push(String.from("c"));
-    │     ─────────────┬────────────
-    │                  ╰────────────── Cannot change 'env' while 'refs' still refers into it
-    │
-    ├─[ tests/ui/references/call_refs_collected_then_changed.zr:12:5 ]
-    │
  10 │         refs.push(at(&env, i));
     │                      ──┬─
-    │                        ╰─── borrowed here
+    │                        ╰─── 'refs' borrows here
     │
+ 12 │     env.push(String.from("c"));
+    │     ─────────────┬────────────
+    │                  ╰────────────── this can free or move what 'refs' points at
  13 │     println("{}", *refs[0]);
     │                    ───┬───
-    │                       ╰───── used later here
+    │                       ╰───── 'refs' is used later here
+    │
+    │ Help: finish with 'refs' before this, or keep a copy of the value instead of a reference into 'env'
 ────╯
 [-] Error: aborting due to previous error

@@ -1,10 +1,16 @@
 status: compile error
 -- stderr
-Error: Use of moved value 'v'. Value was previously moved and is no longer valid
+Error: 'v' is used after it was moved
    ╭─[ tests/ui/ownership_drops/error_does_not_echo_moves.zr:4:5 ]
    │
+ 3 │     var w = v;
+   │             ┬
+   │             ╰── 'v' is moved here
  4 │     v.push(1);
    │     ────┬────
-   │         ╰────── Use of moved value 'v'. Value was previously moved and is no longer valid
+   │         ╰────── used here after the move
+   │
+   │ Help: to keep 'v', move a copy of it instead
+   │           var w = v.copy();
 ───╯
 [-] Error: aborting due to previous error

@@ -5,10 +5,12 @@ Error: 'r' refers into 'x', which ends with its block first
    │
  6 │         r = &x;
    │             ─┬
-   │              ╰── 'r' refers into 'x', which ends with its block first
+   │              ╰── this refers into 'x'
    │
  8 │     println("{}", *r);
    │                    ┬
-   │                    ╰── used later here
+   │                    ╰── 'r' is used later here
+   │
+   │ Help: declare 'x' before the block, so that it lives as long as what refers into it
 ───╯
 [-] Error: aborting due to previous error

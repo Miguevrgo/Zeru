@@ -3,35 +3,31 @@ status: compile error
 Error: Cannot change 'v' while 'e' still refers into it
    ╭─[ tests/ui/references/reference_param_then_push.zr:3:5 ]
    │
- 3 │     v.push(2);
-   │     ────┬────
-   │         ╰────── Cannot change 'v' while 'e' still refers into it
-   │
-   ├─[ tests/ui/references/reference_param_then_push.zr:3:5 ]
-   │
  2 │     var e = &v[0];
    │             ──┬──
-   │               ╰──── borrowed here
-   │
+   │               ╰──── 'e' borrows here
+ 3 │     v.push(2);
+   │     ────┬────
+   │         ╰────── this can free or move what 'e' points at
  4 │     println("{}", *e);
    │                    ┬
-   │                    ╰── used later here
+   │                    ╰── 'e' is used later here
+   │
+   │ Help: finish with 'e' before this, or keep a copy of the value instead of a reference into 'v'
 ───╯
 Error: Cannot change 'v' while 'e' still refers into it
     ╭─[ tests/ui/references/reference_param_then_push.zr:15:5 ]
     │
- 15 │     m.push(1);
-    │     ────┬────
-    │         ╰────── Cannot change 'v' while 'e' still refers into it
-    │
-    ├─[ tests/ui/references/reference_param_then_push.zr:15:5 ]
-    │
  14 │     var e = &m[0];
     │             ──┬──
-    │               ╰──── borrowed here
-    │
+    │               ╰──── 'e' borrows here
+ 15 │     m.push(1);
+    │     ────┬────
+    │         ╰────── this can free or move what 'e' points at
  16 │     println("{}", *e);
     │                    ┬
-    │                    ╰── used later here
+    │                    ╰── 'e' is used later here
+    │
+    │ Help: finish with 'e' before this, or keep a copy of the value instead of a reference into 'v'
 ────╯
 [-] Error: aborting due to previous error

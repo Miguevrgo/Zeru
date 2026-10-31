@@ -1,10 +1,13 @@
 status: compile error
 -- stderr
-Error: Undeclared variable 'countr'. Did you mean 'counter'?
+Error: Undeclared variable 'countr'
    ╭─[ tests/ui/diagnostics/did_you_mean.zr:3:13 ]
    │
  3 │     var x = countr;
    │             ───┬──
-   │                ╰──── Undeclared variable 'countr'. Did you mean 'counter'?
+   │                ╰──── Undeclared variable 'countr'
+   │
+   │ Help: did you mean 'counter'?
+   │           var x = counter;
 ───╯
 [-] Error: aborting due to previous error

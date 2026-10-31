@@ -2,7 +2,7 @@
 //! can reach each point, and its statements.
 
 use crate::ast::{Expression, ExpressionKind, Names, Statement, StatementKind};
-use crate::errors::Span;
+use crate::errors::{Span, ZeruError};
 use crate::items::DefId;
 use crate::tir::{self, Block, Expr, ExprKind, LocalId, Place, Stmt, StmtKind, Unpack, Walk};
 use crate::ty::{Ty, TyKind, Types};
@@ -160,12 +160,12 @@ impl<'c, 'a> FnCx<'c, 'a> {
         self.cx.types.show(ty)
     }
 
-    pub(super) fn error(&mut self, message: impl Into<String>, span: Span) {
-        self.cx.error(message, span);
+    pub(super) fn error(&mut self, message: impl Into<String>, span: Span) -> &mut ZeruError {
+        self.cx.error(message, span)
     }
 
-    pub(super) fn warn(&mut self, message: impl Into<String>, span: Span) {
-        self.cx.warn(message, span);
+    pub(super) fn warn(&mut self, message: impl Into<String>, span: Span) -> &mut ZeruError {
+        self.cx.warn(message, span)
     }
 
     /// Warn about each variable after the first `params` locals that is
@@ -400,7 +400,9 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// `*T` or `&var T` may write and a `&T` may not.
     pub(super) fn require_mutable(&mut self, place: &Place, ast: &Expression, span: Span) {
         match self.constant_written(place, ast) {
-            Some(name) => self.error(format!("Cannot modify constant '{name}'"), span),
+            Some(name) => {
+                self.error(format!("Cannot modify constant '{name}'"), span);
+            }
             None => self.require_var_root(place, span),
         }
     }
@@ -436,10 +438,12 @@ impl<'c, 'a> FnCx<'c, 'a> {
         match place {
             Place::Local(local) => self.require_var(*local, span),
             Place::Index(base, _) => match self.place_ty(base).map(|ty| self.cx.types.kind(ty)) {
-                Some(TyKind::Slice(_)) => self.error(
-                    "Cannot write through a slice, which may point at read-only memory",
-                    span,
-                ),
+                Some(TyKind::Slice(_)) => {
+                    self.error(
+                        "Cannot write through a slice, which may point at read-only memory",
+                        span,
+                    );
+                }
                 Some(TyKind::SliceMut(_)) => {}
                 _ => self.require_var_root(base, span),
             },

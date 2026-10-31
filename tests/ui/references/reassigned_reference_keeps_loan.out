@@ -3,18 +3,18 @@ status: compile error
 Error: Cannot change 'v' while 'r' still refers into it
     ╭─[ tests/ui/references/reassigned_reference_keeps_loan.zr:11:9 ]
     │
- 11 │         v.push(i);
-    │         ────┬────
-    │             ╰────── Cannot change 'v' while 'r' still refers into it
-    │
-    ├─[ tests/ui/references/reassigned_reference_keeps_loan.zr:11:9 ]
-    │
   7 │     var r = v.get(0).unwrap();
     │             ────┬───
-    │                 ╰───── borrowed here
+    │                 ╰───── 'r' borrows here
+    │
+ 11 │         v.push(i);
+    │         ────┬────
+    │             ╰────── this can free or move what 'r' points at
     │
  14 │     println("{}", *r);
     │                    ┬
-    │                    ╰── used later here
+    │                    ╰── 'r' is used later here
+    │
+    │ Help: finish with 'r' before this, or keep a copy of the value instead of a reference into 'v'
 ────╯
 [-] Error: aborting due to previous error

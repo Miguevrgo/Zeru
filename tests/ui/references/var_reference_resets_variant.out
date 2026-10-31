@@ -3,35 +3,31 @@ status: compile error
 Error: Cannot change 'o' while 'r' still refers into it
     ╭─[ tests/ui/references/var_reference_resets_variant.zr:9:13 ]
     │
-  9 │             reset(&var o);
-    │             ──────┬──────
-    │                   ╰──────── Cannot change 'o' while 'r' still refers into it
-    │
-    ├─[ tests/ui/references/var_reference_resets_variant.zr:9:13 ]
-    │
   8 │         Some(r) => {
     │         ───┬───
-    │            ╰───── borrowed here
-    │
+    │            ╰───── 'r' borrows here
+  9 │             reset(&var o);
+    │             ──────┬──────
+    │                   ╰──────── this can free or move what 'r' points at
  10 │             println("{}", *r);
     │                            ┬
-    │                            ╰── used later here
+    │                            ╰── 'r' is used later here
+    │
+    │ Help: finish with 'r' before this, or keep a copy of the value instead of a reference into 'o'
 ────╯
 Error: Cannot change 's' while 'r' still refers into it
     ╭─[ tests/ui/references/var_reference_resets_variant.zr:27:13 ]
     │
- 27 │             s.reset();
-    │             ────┬────
-    │                 ╰────── Cannot change 's' while 'r' still refers into it
-    │
-    ├─[ tests/ui/references/var_reference_resets_variant.zr:27:13 ]
-    │
  26 │         Some(r) => {
     │         ───┬───
-    │            ╰───── borrowed here
-    │
+    │            ╰───── 'r' borrows here
+ 27 │             s.reset();
+    │             ────┬────
+    │                 ╰────── this can free or move what 'r' points at
  28 │             println("{}", *r);
     │                            ┬
-    │                            ╰── used later here
+    │                            ╰── 'r' is used later here
+    │
+    │ Help: finish with 'r' before this, or keep a copy of the value instead of a reference into 's'
 ────╯
 [-] Error: aborting due to previous error

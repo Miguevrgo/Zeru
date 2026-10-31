@@ -1,10 +1,17 @@
 status: compile error
 -- stderr
-Error: Use of moved value 'v'. Value was previously moved and is no longer valid
+Error: 'v' is used after it was moved
    ╭─[ tests/ui/ownership_drops/conditional_move.zr:8:9 ]
+   │
+ 6 │         eat(v);
+   │             ┬
+   │             ╰── 'v' is moved here
    │
  8 │     eat(v);
    │         ┬
-   │         ╰── Use of moved value 'v'. Value was previously moved and is no longer valid
+   │         ╰── used here after the move
+   │
+   │ Help: to keep 'v', move a copy of it instead
+   │           eat(v.copy());
 ───╯
 [-] Error: aborting due to previous error

@@ -40,7 +40,7 @@ pub fn build(
                 function.span,
             ));
         }
-        errors.extend(super::borrowck::check(&body, program, &methods));
+        errors.extend(super::borrowck::check(&body, program, sources, &methods));
         super::elaborate::elaborate(&mut body, program);
         bodies.push(body);
     }

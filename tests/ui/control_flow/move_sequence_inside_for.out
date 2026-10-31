@@ -3,14 +3,13 @@ status: compile error
 Error: Cannot move 'v' while the loop still refers into it
    ╭─[ tests/ui/control_flow/move_sequence_inside_for.zr:5:14 ]
    │
- 5 │         take(v);
-   │              ┬
-   │              ╰── Cannot move 'v' while the loop still refers into it
-   │
-   ├─[ tests/ui/control_flow/move_sequence_inside_for.zr:5:14 ]
-   │
  4 │     for x in v {
    │              ┬
    │              ╰── borrowed here
+ 5 │         take(v);
+   │              ┬
+   │              ╰── this moves 'v' away
+   │
+   │ Help: the loop walks 'v'; collect the changes in another variable and make them after the loop
 ───╯
 [-] Error: aborting due to previous error

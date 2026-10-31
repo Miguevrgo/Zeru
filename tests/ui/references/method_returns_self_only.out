@@ -5,54 +5,58 @@ Error: A method returns references into 'self' only, not into 'other'
    │
  4 │     fn pick(self, other: &i32) &i32 {
    │     ───────────────┬───────────────
-   │                    ╰───────────────── A method returns references into 'self' only, not into 'other'
+   │                    ╰───────────────── this refers into 'other'
+   │
+   │ Help: return a reference into self, or make this a function, which may return references into any argument
 ───╯
 Error: A method returns references into 'self' only, not into 'other'
    ╭─[ tests/ui/references/method_returns_self_only.zr:9:16 ]
    │
  9 │         return &other.v[0];
    │                ─────┬─────
-   │                     ╰─────── A method returns references into 'self' only, not into 'other'
+   │                     ╰─────── this refers into 'other'
+   │
+   │ Help: return a reference into self, or make this a function, which may return references into any argument
 ───╯
 Error: A method returns references into 'self' only, not into 'k'
     ╭─[ tests/ui/references/method_returns_self_only.zr:12:5 ]
     │
  12 │     fn pointer(self, k: &str) &str {
     │     ───────────────┬──────────────
-    │                    ╰──────────────── A method returns references into 'self' only, not into 'k'
+    │                    ╰──────────────── this refers into 'k'
+    │
+    │ Help: return a reference into self, or make this a function, which may return references into any argument
 ────╯
 Error: Cannot change 'owner' while 'r' still refers into it
     ╭─[ tests/ui/references/method_returns_self_only.zr:31:5 ]
     │
- 31 │     owner.push('d');
-    │     ───────┬───────
-    │            ╰───────── Cannot change 'owner' while 'r' still refers into it
-    │
-    ├─[ tests/ui/references/method_returns_self_only.zr:31:5 ]
-    │
  29 │     var view: str = owner;
     │                     ──┬──
-    │                       ╰──── borrowed here
+    │                       ╰──── 'r' borrows here
     │
+ 31 │     owner.push('d');
+    │     ───────┬───────
+    │            ╰───────── this can free or move what 'r' points at
  32 │     println("{} {}", r, s.pointer(&view));
     │                      ┬
-    │                      ╰── used later here
+    │                      ╰── 'r' is used later here
+    │
+    │ Help: finish with 'r' before this, or keep a copy of the value instead of a reference into 'owner'
 ────╯
 Error: Cannot change 'owner' while 'view' still refers into it
     ╭─[ tests/ui/references/method_returns_self_only.zr:31:5 ]
     │
- 31 │     owner.push('d');
-    │     ───────┬───────
-    │            ╰───────── Cannot change 'owner' while 'view' still refers into it
-    │
-    ├─[ tests/ui/references/method_returns_self_only.zr:31:5 ]
-    │
  29 │     var view: str = owner;
     │                     ──┬──
-    │                       ╰──── borrowed here
+    │                       ╰──── 'view' borrows here
     │
+ 31 │     owner.push('d');
+    │     ───────┬───────
+    │            ╰───────── this can free or move what 'view' points at
  32 │     println("{} {}", r, s.pointer(&view));
     │                                   ──┬──
-    │                                     ╰──── used later here
+    │                                     ╰──── 'view' is used later here
+    │
+    │ Help: finish with 'view' before this, or keep a copy of the value instead of a reference into 'owner'
 ────╯
 [-] Error: aborting due to previous error

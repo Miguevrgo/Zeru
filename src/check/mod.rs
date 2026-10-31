@@ -131,12 +131,14 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn error(&mut self, message: impl Into<String>, span: Span) {
+    fn error(&mut self, message: impl Into<String>, span: Span) -> &mut ZeruError {
         self.errors.push(ZeruError::semantic(message, span));
+        self.errors.last_mut().expect("pushed above")
     }
 
-    fn warn(&mut self, message: impl Into<String>, span: Span) {
+    fn warn(&mut self, message: impl Into<String>, span: Span) -> &mut ZeruError {
         self.warnings.push(ZeruError::warning(message, span));
+        self.warnings.last_mut().expect("pushed above")
     }
 
     /// Note that `def` is named at `at`, unless `at` is its own declaration.
@@ -603,7 +605,9 @@ impl<'a> Checker<'a> {
             match self.items.lookup_trait(module, bound) {
                 Some(def) if bound.contains("::") => self.check_visible(def, module, span),
                 Some(_) => {}
-                None => self.error(format!("Unknown trait '{bound}' in a bound"), span),
+                None => {
+                    self.error(format!("Unknown trait '{bound}' in a bound"), span);
+                }
             }
         }
     }

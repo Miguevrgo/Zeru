@@ -3,18 +3,16 @@ status: compile error
 Error: Cannot change 'vv' while 'e' still refers into it
    ╭─[ tests/ui/references/reference_into_loop_element.zr:5:9 ]
    │
- 5 │         x.push(2);
-   │         ────┬────
-   │             ╰────── Cannot change 'vv' while 'e' still refers into it
-   │
-   ├─[ tests/ui/references/reference_into_loop_element.zr:5:9 ]
-   │
  4 │         var e = &x[0];
    │                 ──┬──
-   │                   ╰──── borrowed here
-   │
+   │                   ╰──── 'e' borrows here
+ 5 │         x.push(2);
+   │         ────┬────
+   │             ╰────── this can free or move what 'e' points at
  6 │         println("{}", *e);
    │                        ┬
-   │                        ╰── used later here
+   │                        ╰── 'e' is used later here
+   │
+   │ Help: finish with 'e' before this, or keep a copy of the value instead of a reference into 'vv'
 ───╯
 [-] Error: aborting due to previous error

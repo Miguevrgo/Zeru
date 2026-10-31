@@ -5,35 +5,43 @@ Error: Cannot return a reference into 's', which ends with this function
     │
  12 │     return s;
     │            ┬
-    │            ╰── Cannot return a reference into 's', which ends with this function
+    │            ╰── this refers into 's'
+    │
+    │ Help: return the String itself, by value, instead of a reference into it
 ────╯
 Error: Cannot return a reference into 'v', which ends with this function
     ╭─[ tests/ui/strings_printing/string_text_outlives.zr:16:12 ]
     │
  16 │     return v[..];
     │            ──┬──
-    │              ╰──── Cannot return a reference into 'v', which ends with this function
+    │              ╰──── this refers into 'v'
+    │
+    │ Help: return the Vec<i32> itself, by value, instead of a reference into it
 ────╯
-Error: Cannot keep a reference into a temporary value past its statement; store the value in a variable first
+Error: Cannot keep a reference into a temporary value past its statement
     ╭─[ tests/ui/strings_printing/string_text_outlives.zr:26:13 ]
     │
  26 │     var a = make().trim();
     │             ───┬──
-    │                ╰──── Cannot keep a reference into a temporary value past its statement; store the value in a variable first
+    │                ╰──── this refers into a value that is freed when the statement ends
     │
  32 │     println("{} {} {} {}", a, b, c, x[0]);
     │                            ┬
-    │                            ╰── used later here
+    │                            ╰── 'a' is used later here
+    │
+    │ Help: store the value in a variable first, and take the reference from that variable
 ────╯
-Error: Cannot keep a reference into a temporary value past its statement; store the value in a variable first
+Error: Cannot keep a reference into a temporary value past its statement
     ╭─[ tests/ui/strings_printing/string_text_outlives.zr:28:18 ]
     │
  28 │     var c = take(make());
     │                  ───┬──
-    │                     ╰──── Cannot keep a reference into a temporary value past its statement; store the value in a variable first
+    │                     ╰──── this refers into a value that is freed when the statement ends
     │
  32 │     println("{} {} {} {}", a, b, c, x[0]);
     │                                  ┬
-    │                                  ╰── used later here
+    │                                  ╰── 'c' is used later here
+    │
+    │ Help: store the value in a variable first, and take the reference from that variable
 ────╯
 [-] Error: aborting due to previous error

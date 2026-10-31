@@ -5,6 +5,8 @@ Error: Cannot store a reference into 'x', which ends with this function
    │
  3 │     *p = &x;
    │          ─┬
-   │           ╰── Cannot store a reference into 'x', which ends with this function
+   │           ╰── this refers into 'x'
+   │
+   │ Help: store a copy of the value, or a reference into something that outlives the function
 ───╯
 [-] Error: aborting due to previous error

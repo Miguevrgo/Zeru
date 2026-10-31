@@ -1,7 +1,7 @@
 //! Types as written, resolved to interned [`Ty`]s.
 
 use crate::ast::{PRIMITIVES, TypeSpec};
-use crate::errors::Span;
+use crate::errors::{Span, ZeruError};
 use crate::items::{DefId, ItemKind};
 use crate::ty::{Ty, TyKind, Types};
 
@@ -151,13 +151,8 @@ impl Checker<'_> {
                 .filter(|item| self.items.lookup_type(scope.module, &item.name).is_some())
                 .map(|item| item.name.clone()),
         );
-        match closest(name, &candidates) {
-            Some(similar) => self.error(
-                format!("Unknown type '{name}'. Did you mean '{similar}'?"),
-                span,
-            ),
-            None => self.error(format!("Unknown type '{name}'"), span),
-        }
+        let error = self.error(format!("Unknown type '{name}'"), span);
+        did_you_mean(error, name, &candidates, span);
         Types::ERROR
     }
 
@@ -183,6 +178,15 @@ impl Checker<'_> {
             return Types::ERROR;
         }
         self.types.intern(TyKind::Adt(def, args))
+    }
+}
+
+/// Suggest in `error` the candidate closest to `name`, which `span` writes.
+pub(super) fn did_you_mean(error: &mut ZeruError, name: &str, candidates: &[String], span: Span) {
+    if let Some(similar) = closest(name, candidates) {
+        error
+            .help(format!("did you mean '{similar}'?"))
+            .fix(span, similar);
     }
 }
 

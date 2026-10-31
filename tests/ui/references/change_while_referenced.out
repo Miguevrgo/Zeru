@@ -3,35 +3,31 @@ status: compile error
 Error: Cannot change 'v' while 'r' still refers into it
    ╭─[ tests/ui/references/change_while_referenced.zr:4:5 ]
    │
- 4 │     v.push(3);
-   │     ────┬────
-   │         ╰────── Cannot change 'v' while 'r' still refers into it
-   │
-   ├─[ tests/ui/references/change_while_referenced.zr:4:5 ]
-   │
  3 │     var r = v.get(0);
    │             ────┬───
-   │                 ╰───── borrowed here
-   │
+   │                 ╰───── 'r' borrows here
+ 4 │     v.push(3);
+   │     ────┬────
+   │         ╰────── this can free or move what 'r' points at
  5 │     println("{}", *r.unwrap());
    │                    ─────┬────
-   │                         ╰────── used later here
+   │                         ╰────── 'r' is used later here
+   │
+   │ Help: finish with 'r' before this, or keep a copy of the value instead of a reference into 'v'
 ───╯
 Error: Cannot change 'v' while 'e' still refers into it
    ╭─[ tests/ui/references/change_while_referenced.zr:7:5 ]
    │
- 7 │     v = Vec[9];
-   │     ─────┬────
-   │          ╰────── Cannot change 'v' while 'e' still refers into it
-   │
-   ├─[ tests/ui/references/change_while_referenced.zr:7:5 ]
-   │
  6 │     var e = &v[1];
    │             ──┬──
-   │               ╰──── borrowed here
-   │
+   │               ╰──── 'e' borrows here
+ 7 │     v = Vec[9];
+   │     ─────┬────
+   │          ╰────── this can free or move what 'e' points at
  8 │     println("{}", *e);
    │                    ┬
-   │                    ╰── used later here
+   │                    ╰── 'e' is used later here
+   │
+   │ Help: finish with 'e' before this, or keep a copy of the value instead of a reference into 'v'
 ───╯
 [-] Error: aborting due to previous error

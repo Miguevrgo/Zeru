@@ -7,7 +7,9 @@ Error: Cannot change 'vs' while a reference into it is still in use
     │     ────────────┬────┬───────
     │                 ╰────────────── borrowed here
     │                      │
-    │                      ╰───────── Cannot change 'vs' while a reference into it is still in use
+    │                      ╰───────── this can free or move what a reference points at
+    │
+    │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'vs'
 ────╯
 Error: Cannot change 'vs' while a reference into it is still in use
     ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:18:25 ]
@@ -16,7 +18,9 @@ Error: Cannot change 'vs' while a reference into it is still in use
     │                   ──────────┬─┬───────
     │                             ╰─────────── borrowed here
     │                               │
-    │                               ╰───────── Cannot change 'vs' while a reference into it is still in use
+    │                               ╰───────── this can free or move what a reference points at
+    │
+    │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'vs'
 ────╯
 Error: Cannot change 'cs' while a reference into it is still in use
     ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:20:15 ]
@@ -25,25 +29,25 @@ Error: Cannot change 'cs' while a reference into it is still in use
     │     ──┬──────────┬────┬────────
     │       ╰────────────────────────── borrowed here
     │                  │    │
-    │                  ╰─────────────── used later here
+    │                  ╰─────────────── it is used later here
     │                       │
-    │                       ╰────────── Cannot change 'cs' while a reference into it is still in use
+    │                       ╰────────── this can free or move what a reference points at
+    │
+    │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'cs'
 ────╯
 Error: Cannot change 'v' while 'e' still refers into it
     ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:23:5 ]
     │
- 23 │     v.push(1);
-    │     ────┬────
-    │         ╰────── Cannot change 'v' while 'e' still refers into it
-    │
-    ├─[ tests/ui/vec/two_phase_receiver_errors.zr:23:5 ]
-    │
  22 │     var e = &v[0];
     │             ──┬──
-    │               ╰──── borrowed here
-    │
+    │               ╰──── 'e' borrows here
+ 23 │     v.push(1);
+    │     ────┬────
+    │         ╰────── this can free or move what 'e' points at
  24 │     println("{}", *e);
     │                    ┬
-    │                    ╰── used later here
+    │                    ╰── 'e' is used later here
+    │
+    │ Help: finish with 'e' before this, or keep a copy of the value instead of a reference into 'v'
 ────╯
 [-] Error: aborting due to previous error

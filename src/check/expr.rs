@@ -80,10 +80,12 @@ impl FnCx<'_, '_> {
         if mutable {
             match self.cx.types.kind(ty) {
                 TyKind::SliceMut(_) => {}
-                TyKind::Slice(_) => self.error(
-                    "Cannot write through a slice, which may point at read-only memory",
-                    span,
-                ),
+                TyKind::Slice(_) => {
+                    self.error(
+                        "Cannot write through a slice, which may point at read-only memory",
+                        span,
+                    );
+                }
                 _ => self.require_mutable(&place, left, span),
             }
         }
@@ -462,13 +464,8 @@ impl FnCx<'_, '_> {
                         .filter(|item| item.kind == ItemKind::Const)
                         .map(|item| item.name.clone()),
                 );
-                match super::types::closest(name, &candidates) {
-                    Some(similar) => self.error(
-                        format!("Undeclared variable '{name}'. Did you mean '{similar}'?"),
-                        span,
-                    ),
-                    None => self.error(format!("Undeclared variable '{name}'"), span),
-                }
+                let error = self.error(format!("Undeclared variable '{name}'"), span);
+                super::types::did_you_mean(error, name, &candidates, span);
                 self.error_expr(span)
             }
         }

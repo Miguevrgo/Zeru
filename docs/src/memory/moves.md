@@ -29,7 +29,7 @@ fn main() {
 ```
 
 ```text
-Error: Use of moved value 'first'. Value was previously moved and is no longer valid
+Error: 'first' is used after it was moved
 ```
 
 Passing a value to a function moves it into the function the same way,

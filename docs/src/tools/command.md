@@ -17,22 +17,29 @@ command's options.
 
 ## Errors
 
-The compiler reports every error it finds, each with the line it is on and
-a hint where it can guess the fix:
+The compiler reports every error it finds: what is wrong, the line it is
+on, the other lines that explain it, and how to fix it, with the fixed
+code when it is one change:
 
 ```text
-Error: Use of moved value 'list'. Value was previously moved and is no longer valid
-   ╭─[ main.zr:4:19 ]
+Error: 'list' is used after it was moved
+   ╭─[ main.zr:8:19 ]
    │
- 4 │     println("{}", list.len());
+ 7 │     consume(list);
+   │             ──┬─
+   │               ╰─── 'list' is moved here
+ 8 │     println("{}", list.len());
    │                   ─────┬────
-   │                        ╰────── Use of moved value 'list'. Value was previously moved and is no longer valid
+   │                        ╰────── used here after the move
+   │
+   │ Help: to keep 'list', move a copy of it instead
+   │           consume(list.copy());
 ───╯
 ```
 
 `zeru check` gives the same errors without building anything, which is
 faster. With `--json` it prints each error as one JSON object per line,
-for editors and other tools.
+for editors and other tools, with the fix as an edit they can apply.
 
 ## Warnings
 

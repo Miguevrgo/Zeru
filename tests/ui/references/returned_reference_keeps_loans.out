@@ -3,69 +3,63 @@ status: compile error
 Error: Cannot change 'v' while 's' still refers into it
     ╭─[ tests/ui/references/returned_reference_keeps_loans.zr:13:5 ]
     │
- 13 │     v.push(Vec[2]);
-    │     ───────┬──────
-    │            ╰──────── Cannot change 'v' while 's' still refers into it
-    │
-    ├─[ tests/ui/references/returned_reference_keeps_loans.zr:13:5 ]
-    │
  12 │     var s = pick(&var v);
     │                  ───┬──
-    │                     ╰──── borrowed here
-    │
+    │                     ╰──── 's' borrows here
+ 13 │     v.push(Vec[2]);
+    │     ───────┬──────
+    │            ╰──────── this can free or move what 's' points at
  14 │     s.push(3);
     │     ┬
-    │     ╰── used later here
+    │     ╰── 's' is used later here
+    │
+    │ Help: finish with 's' before this, or keep a copy of the value instead of a reference into 'v'
 ────╯
 Error: Cannot change 'v' while 'e' still refers into it
     ╭─[ tests/ui/references/returned_reference_keeps_loans.zr:20:5 ]
     │
- 20 │     *s = Vec[2, 3];
-    │     ───────┬──────
-    │            ╰──────── Cannot change 'v' while 'e' still refers into it
-    │
-    ├─[ tests/ui/references/returned_reference_keeps_loans.zr:20:5 ]
-    │
  18 │     var s = pick(&var v);
     │                  ───┬──
-    │                     ╰──── borrowed here
+    │                     ╰──── 'e' borrows here
     │
+ 20 │     *s = Vec[2, 3];
+    │     ───────┬──────
+    │            ╰──────── this can free or move what 'e' points at
  21 │     println("{}", *e);
     │                    ┬
-    │                    ╰── used later here
+    │                    ╰── 'e' is used later here
+    │
+    │ Help: finish with 'e' before this, or keep a copy of the value instead of a reference into 'v'
 ────╯
 Error: Cannot change 'v' while 'e' still refers into it
     ╭─[ tests/ui/references/returned_reference_keeps_loans.zr:27:5 ]
     │
- 27 │     s.push(4);
-    │     ────┬────
-    │         ╰────── Cannot change 'v' while 'e' still refers into it
-    │
-    ├─[ tests/ui/references/returned_reference_keeps_loans.zr:27:5 ]
-    │
  26 │     var e = &s[0];
     │             ──┬──
-    │               ╰──── borrowed here
-    │
+    │               ╰──── 'e' borrows here
+ 27 │     s.push(4);
+    │     ────┬────
+    │         ╰────── this can free or move what 'e' points at
  28 │     println("{}", *e);
     │                    ┬
-    │                    ╰── used later here
+    │                    ╰── 'e' is used later here
+    │
+    │ Help: finish with 'e' before this, or keep a copy of the value instead of a reference into 'v'
 ────╯
 Error: Cannot change 'v' while 'slot' still refers into it
     ╭─[ tests/ui/references/returned_reference_keeps_loans.zr:35:5 ]
     │
- 35 │     s.clear();
-    │     ────┬────
-    │         ╰────── Cannot change 'v' while 'slot' still refers into it
-    │
-    ├─[ tests/ui/references/returned_reference_keeps_loans.zr:35:5 ]
-    │
  32 │     var s = pick(&var v);
     │                  ───┬──
-    │                     ╰──── borrowed here
+    │                     ╰──── 'slot' borrows here
     │
+ 35 │     s.clear();
+    │     ────┬────
+    │         ╰────── this can free or move what 'slot' points at
  36 │     println("{}", *slot.unwrap());
     │                    ──────┬──────
-    │                          ╰──────── used later here
+    │                          ╰──────── 'slot' is used later here
+    │
+    │ Help: finish with 'slot' before this, or keep a copy of the value instead of a reference into 'v'
 ────╯
 [-] Error: aborting due to previous error

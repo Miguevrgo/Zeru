@@ -3,52 +3,46 @@ status: compile error
 Error: Cannot change 'a' while 'e' still refers into it
     ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:22:5 ]
     │
- 22 │     grow(w);
-    │     ───┬───
-    │        ╰───── Cannot change 'a' while 'e' still refers into it
-    │
-    ├─[ tests/ui/references/call_reallocates_through_held_reference.zr:22:5 ]
-    │
  21 │     var e = &a[0];
     │             ──┬──
-    │               ╰──── borrowed here
-    │
+    │               ╰──── 'e' borrows here
+ 22 │     grow(w);
+    │     ───┬───
+    │        ╰───── this can free or move what 'e' points at
  23 │     println("{}", *e);
     │                    ┬
-    │                    ╰── used later here
+    │                    ╰── 'e' is used later here
+    │
+    │ Help: finish with 'e' before this, or keep a copy of the value instead of a reference into 'a'
 ────╯
 Error: Cannot change 'b' while 'f' still refers into it
     ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:28:5 ]
     │
- 28 │     grow_some(o);
-    │     ──────┬─────
-    │           ╰─────── Cannot change 'b' while 'f' still refers into it
-    │
-    ├─[ tests/ui/references/call_reallocates_through_held_reference.zr:28:5 ]
-    │
  27 │     var f = &b[0];
     │             ──┬──
-    │               ╰──── borrowed here
-    │
+    │               ╰──── 'f' borrows here
+ 28 │     grow_some(o);
+    │     ──────┬─────
+    │           ╰─────── this can free or move what 'f' points at
  29 │     println("{}", *f);
     │                    ┬
-    │                    ╰── used later here
+    │                    ╰── 'f' is used later here
+    │
+    │ Help: finish with 'f' before this, or keep a copy of the value instead of a reference into 'b'
 ────╯
 Error: Cannot change 'c' while 'g' still refers into it
     ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:34:5 ]
     │
- 34 │     x.grow();
-    │     ────┬───
-    │         ╰───── Cannot change 'c' while 'g' still refers into it
-    │
-    ├─[ tests/ui/references/call_reallocates_through_held_reference.zr:34:5 ]
-    │
  33 │     var g = &c[0];
     │             ──┬──
-    │               ╰──── borrowed here
-    │
+    │               ╰──── 'g' borrows here
+ 34 │     x.grow();
+    │     ────┬───
+    │         ╰───── this can free or move what 'g' points at
  35 │     println("{}", *g);
     │                    ┬
-    │                    ╰── used later here
+    │                    ╰── 'g' is used later here
+    │
+    │ Help: finish with 'g' before this, or keep a copy of the value instead of a reference into 'c'
 ────╯
 [-] Error: aborting due to previous error

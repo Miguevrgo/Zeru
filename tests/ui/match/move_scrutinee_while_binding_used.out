@@ -3,18 +3,16 @@ status: compile error
 Error: Cannot move 'o' while 'x' still refers into it
    ╭─[ tests/ui/match/move_scrutinee_while_binding_used.zr:6:18 ]
    │
- 6 │             take(o);
-   │                  ┬
-   │                  ╰── Cannot move 'o' while 'x' still refers into it
-   │
-   ├─[ tests/ui/match/move_scrutinee_while_binding_used.zr:6:18 ]
-   │
  5 │         Some(x) => {
    │         ───┬───
-   │            ╰───── borrowed here
-   │
+   │            ╰───── 'x' borrows here
+ 6 │             take(o);
+   │                  ┬
+   │                  ╰── this moves 'o' away
  7 │             println("{}", x[0]);
    │                           ──┬─
-   │                             ╰─── used later here
+   │                             ╰─── 'x' is used later here
+   │
+   │ Help: finish with 'x' before moving 'o', or move a copy of it
 ───╯
 [-] Error: aborting due to previous error

@@ -5,23 +5,23 @@ Error: Cannot return a reference into 'v', which ends with this function
    │
  3 │     return &var v[..];
    │            ─────┬────
-   │                 ╰────── Cannot return a reference into 'v', which ends with this function
+   │                 ╰────── this refers into 'v'
+   │
+   │ Help: return the Vec<i32> itself, by value, instead of a reference into it
 ───╯
 Error: Cannot move 'v' while 's' still refers into it
     ╭─[ tests/ui/references/mutable_slice_outlives.zr:9:10 ]
     │
-  9 │     take(v);
-    │          ┬
-    │          ╰── Cannot move 'v' while 's' still refers into it
-    │
-    ├─[ tests/ui/references/mutable_slice_outlives.zr:9:10 ]
-    │
   8 │     var s = &var v[0..2];
     │             ──────┬─────
-    │                   ╰─────── borrowed here
-    │
+    │                   ╰─────── 's' borrows here
+  9 │     take(v);
+    │          ┬
+    │          ╰── this moves 'v' away
  10 │     s[1] = 0;
     │     ────┬───
-    │         ╰───── used later here
+    │         ╰───── 's' is used later here
+    │
+    │ Help: finish with 's' before moving 'v', or move a copy of it
 ────╯
 [-] Error: aborting due to previous error

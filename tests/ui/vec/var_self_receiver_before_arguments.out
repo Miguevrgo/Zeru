@@ -7,9 +7,11 @@ Error: Cannot change 'cs' while a reference into it is still in use
     │     ──┬─────────┬───┬───────
     │       ╰─────────────────────── borrowed here
     │                 │   │
-    │                 ╰───────────── used later here
+    │                 ╰───────────── it is used later here
     │                     │
-    │                     ╰───────── Cannot change 'cs' while a reference into it is still in use
+    │                     ╰───────── this can free or move what a reference points at
+    │
+    │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'cs'
 ────╯
 Error: Cannot change 'cs' while a reference into it is still in use
     ╭─[ tests/ui/vec/var_self_receiver_before_arguments.zr:17:30 ]
@@ -18,8 +20,10 @@ Error: Cannot change 'cs' while a reference into it is still in use
     │                   ──┬─────────┬────┬───────
     │                     ╰──────────────────────── borrowed here
     │                               │    │
-    │                               ╰────────────── used later here
+    │                               ╰────────────── it is used later here
     │                                    │
-    │                                    ╰───────── Cannot change 'cs' while a reference into it is still in use
+    │                                    ╰───────── this can free or move what a reference points at
+    │
+    │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'cs'
 ────╯
 [-] Error: aborting due to previous error

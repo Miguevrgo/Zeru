@@ -5,6 +5,8 @@ Error: Cannot return a reference into 'v', which ends with this function
    │
  3 │     return &v;
    │            ─┬
-   │             ╰── Cannot return a reference into 'v', which ends with this function
+   │             ╰── this refers into 'v'
+   │
+   │ Help: return the Vec<i64> itself, by value, instead of a reference into it
 ───╯
 [-] Error: aborting due to previous error

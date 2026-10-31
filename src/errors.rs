@@ -36,12 +36,18 @@ pub enum ErrorKind {
     Warning,
 }
 
+/// A problem found in the program: what is wrong, where, what the spot
+/// itself shows when that says more, other spots that explain it, and how
+/// to fix it, with the edit that does when it is a single one.
 #[derive(Debug, Clone)]
 pub struct ZeruError {
     pub kind: ErrorKind,
     pub message: String,
     pub span: Span,
+    pub label: Option<String>,
     pub notes: Vec<(String, Span)>,
+    pub help: Option<String>,
+    pub fix: Option<(Span, String)>,
 }
 
 /// Sort `errors` by where they point and drop the repeats.
@@ -51,32 +57,53 @@ pub fn tidy(errors: &mut Vec<ZeruError>) {
 }
 
 impl ZeruError {
-    pub fn syntax(message: impl Into<String>, span: Span) -> Self {
+    fn new(kind: ErrorKind, message: impl Into<String>, span: Span) -> Self {
         Self {
-            kind: ErrorKind::Syntax,
+            kind,
             message: message.into(),
             span,
+            label: None,
             notes: Vec::new(),
+            help: None,
+            fix: None,
         }
     }
 
+    pub fn syntax(message: impl Into<String>, span: Span) -> Self {
+        Self::new(ErrorKind::Syntax, message, span)
+    }
+
     pub fn semantic(message: impl Into<String>, span: Span) -> Self {
-        Self {
-            kind: ErrorKind::Semantic,
-            message: message.into(),
-            span,
-            notes: Vec::new(),
-        }
+        Self::new(ErrorKind::Semantic, message, span)
     }
 
     /// Something that builds but is likely a mistake. It never stops a build.
     pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Self {
-            kind: ErrorKind::Warning,
-            message: message.into(),
-            span,
-            notes: Vec::new(),
+        Self::new(ErrorKind::Warning, message, span)
+    }
+
+    pub fn label(&mut self, label: impl Into<String>) -> &mut Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    pub fn note(&mut self, note: impl Into<String>, span: Span) -> &mut Self {
+        if span != self.span && self.notes.iter().all(|(_, at)| *at != span) {
+            self.notes.push((note.into(), span));
         }
+        self
+    }
+
+    pub fn help(&mut self, help: impl Into<String>) -> &mut Self {
+        self.help = Some(help.into());
+        self
+    }
+
+    /// The edit `help` describes: `replacement` in place of what `span`
+    /// covers, which may be nothing, to insert it.
+    pub fn fix(&mut self, span: Span, replacement: impl Into<String>) -> &mut Self {
+        self.fix = Some((span, replacement.into()));
+        self
     }
 
     fn prefix(&self) -> &'static str {
@@ -112,12 +139,13 @@ impl ZeruError {
                         .with_color(colored())
                         .with_index_type(ariadne::IndexType::Byte),
                 )
-                .with_message(message)
-                .with_label(
-                    Label::new((name.to_string(), range))
-                        .with_message(message)
-                        .with_color(color),
-                );
+                .with_message(message);
+        report = report.with_label(
+            Label::new((name.to_string(), range))
+                .with_message(self.label.as_ref().unwrap_or(message))
+                .with_color(color)
+                .with_order(self.span.start as i32),
+        );
         for (note, span) in &self.notes {
             let Some((name, text, range)) = sources.locate(*span) else {
                 continue;
@@ -128,10 +156,44 @@ impl ZeruError {
             report = report.with_label(
                 Label::new((name.to_string(), range))
                     .with_message(note)
-                    .with_color(Color::Blue),
+                    .with_color(Color::Blue)
+                    .with_order(span.start as i32),
             );
         }
+        if let Some(help) = &self.help {
+            report = report.with_help(match self.fixed(sources) {
+                Some(code) => format!("{help}\n{code}"),
+                None => help.clone(),
+            });
+        }
         report.finish().eprint(ariadne::sources(files)).unwrap();
+    }
+
+    /// The lines the fix touches as they read once it is made, indented
+    /// under the help that describes it.
+    fn fixed(&self, sources: &Sources) -> Option<String> {
+        let (span, replacement) = self.fix.as_ref()?;
+        let (_, text, range) = sources.locate(*span)?;
+        let start = text[..range.start].rfind('\n').map_or(0, |at| at + 1);
+        let end = text[range.end..]
+            .find('\n')
+            .map_or(text.len(), |at| range.end + at);
+        let lines = format!(
+            "{}{replacement}{}",
+            &text[start..range.start],
+            &text[range.end..end]
+        );
+        let indent = lines
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| line.len() - line.trim_start().len())
+            .min()
+            .unwrap_or(0);
+        let shown: Vec<String> = lines
+            .lines()
+            .map(|line| format!("    {}", line.get(indent..).unwrap_or("").trim_end()))
+            .collect();
+        Some(shown.join("\n"))
     }
 }
 
@@ -226,6 +288,8 @@ pub fn paint(code: &str) -> (&str, &str) {
 impl ZeruError {
     /// The error as one JSON object: where it is, with 1-based lines and
     /// byte columns, the end exclusive, its message and its notes alike.
+    /// The fix, when there is one, says where its replacement goes, the end
+    /// exclusive so that an insertion starts and ends at the same place.
     pub fn json(&self, sources: &Sources) -> String {
         let notes: Vec<String> = self
             .notes
@@ -237,9 +301,22 @@ impl ZeruError {
             ErrorKind::Warning => "warning",
             _ => "error",
         };
+        let text = |text: &Option<String>| text.as_deref().map_or("null".into(), json_string);
+        let fix = self.fix.as_ref().map_or("null".into(), |(span, replacement)| {
+            let (file, line, column) = sources.position(*span).unwrap_or(("", 0, 0));
+            let end = Span::new(span.end, span.end);
+            let (_, end_line, end_column) = sources.position(end).unwrap_or((file, line, column));
+            format!(
+                "{{\"file\":{},\"line\":{line},\"column\":{column},\"end_line\":{end_line},\"end_column\":{end_column},\"text\":{}}}",
+                json_string(file),
+                json_string(replacement)
+            )
+        });
         format!(
-            "{{{at},\"severity\":\"{severity}\",\"notes\":[{}]}}",
-            notes.join(",")
+            "{{{at},\"severity\":\"{severity}\",\"label\":{},\"notes\":[{}],\"help\":{},\"fix\":{fix}}}",
+            text(&self.label),
+            notes.join(","),
+            text(&self.help)
         )
     }
 }

@@ -205,7 +205,9 @@ impl FnCx<'_, '_> {
             Some(value) if !int.contains(value) => {
                 self.error(format!("Constant {value} does not fit in {shown}"), span);
             }
-            None => self.error(format!("Constant expression overflows {shown}"), span),
+            None => {
+                self.error(format!("Constant expression overflows {shown}"), span);
+            }
             Some(_) => {}
         }
     }

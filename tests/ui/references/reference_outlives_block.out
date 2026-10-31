@@ -5,21 +5,25 @@ Error: 'r' refers into 'w', which ends with its block first
    │
  6 │         r = w.get(0);
    │             ────┬───
-   │                 ╰───── 'r' refers into 'w', which ends with its block first
+   │                 ╰───── this refers into 'w'
    │
  8 │     println("{}", r.is_some());
    │                   ─────┬─────
-   │                        ╰─────── used later here
+   │                        ╰─────── 'r' is used later here
+   │
+   │ Help: declare 'w' before the block, so that it lives as long as what refers into it
 ───╯
 Error: 'r' refers into 'x', which ends with its block first
     ╭─[ tests/ui/references/reference_outlives_block.zr:17:17 ]
     │
  17 │             r = &x;
     │                 ─┬
-    │                  ╰── 'r' refers into 'x', which ends with its block first
+    │                  ╰── this refers into 'x'
     │
  19 │         println("{}", *r);
     │                        ┬
-    │                        ╰── used later here
+    │                        ╰── 'r' is used later here
+    │
+    │ Help: declare 'x' before the block, so that it lives as long as what refers into it
 ────╯
 [-] Error: aborting due to previous error

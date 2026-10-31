@@ -1,10 +1,16 @@
 status: compile error
 -- stderr
-Error: Use of moved value 's'. Value was previously moved and is no longer valid
+Error: 's' is used after it was moved
    ╭─[ tests/ui/optionals_results/ok_wraps_owner.zr:8:10 ]
    │
+ 7 │     var r: S! = s;
+   │                 ┬
+   │                 ╰── 's' is moved here
  8 │     keep(s);
    │          ┬
-   │          ╰── Use of moved value 's'. Value was previously moved and is no longer valid
+   │          ╰── used here after the move
+   │
+   │ Help: to keep 's', move a copy of it instead
+   │           var r: S! = s.copy();
 ───╯
 [-] Error: aborting due to previous error

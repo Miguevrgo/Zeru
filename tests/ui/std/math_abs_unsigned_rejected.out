@@ -1,16 +1,16 @@
 status: compile error
 -- stderr
 Error: Cannot negate unsigned type u32
-    ╭─[ std/math.zr:92:16 ]
-    │
- 92 │         return -num;
-    │                ──┬─
-    │                  ╰─── Cannot negate unsigned type u32
-    │
-    ├─[ tests/ui/std/math_abs_unsigned_rejected.zr:4:13 ]
+    ╭─[ tests/ui/std/math_abs_unsigned_rejected.zr:4:13 ]
     │
   4 │     var b = math::abs(a);
     │             ──────┬─────
     │                   ╰─────── in 'math::abs<u32>', instantiated here
+    │
+    ├─[ std/math.zr:92:16 ]
+    │
+ 92 │         return -num;
+    │                ──┬─
+    │                  ╰─── Cannot negate unsigned type u32
 ────╯
 [-] Error: aborting due to previous error

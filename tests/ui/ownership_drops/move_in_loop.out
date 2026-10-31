@@ -5,13 +5,19 @@ Error: Cannot move 'v' inside a loop: the next turn would use it again
    │
  5 │         eat(v);
    │             ┬
-   │             ╰── Cannot move 'v' inside a loop: the next turn would use it again
+   │             ╰── moved here, once in every turn
+   │
+   │ Help: to keep 'v', move a copy of it instead
+   │           eat(v.copy());
 ───╯
 Error: Cannot move 'v' inside a loop: the next turn would use it again
     ╭─[ tests/ui/ownership_drops/move_in_loop.zr:13:13 ]
     │
  13 │         eat(v);
     │             ┬
-    │             ╰── Cannot move 'v' inside a loop: the next turn would use it again
+    │             ╰── moved here, once in every turn
+    │
+    │ Help: to keep 'v', move a copy of it instead
+    │           eat(v.copy());
 ────╯
 [-] Error: aborting due to previous error

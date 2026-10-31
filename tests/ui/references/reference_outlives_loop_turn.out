@@ -3,27 +3,27 @@ status: compile error
 Error: 'r' refers into 'x', which ends with its block first
     ╭─[ tests/ui/references/reference_outlives_loop_turn.zr:11:17 ]
     │
- 11 │             r = &x;
-    │                 ─┬
-    │                  ╰── 'r' refers into 'x', which ends with its block first
-    │
-    ├─[ tests/ui/references/reference_outlives_loop_turn.zr:11:17 ]
-    │
   7 │             println("{}", *r);
     │                            ┬
-    │                            ╰── used here in the next turn of the loop
+    │                            ╰── 'r' is used here in the next turn of the loop
+    │
+ 11 │             r = &x;
+    │                 ─┬
+    │                  ╰── this refers into 'x'
+    │
+    │ Help: declare 'x' before the block, so that it lives as long as what refers into it
 ────╯
 Error: 'r' refers into 'w', which ends with its block first
     ╭─[ tests/ui/references/reference_outlives_loop_turn.zr:26:13 ]
     │
- 26 │         r = w.get(0).unwrap();
-    │             ────┬───
-    │                 ╰───── 'r' refers into 'w', which ends with its block first
-    │
-    ├─[ tests/ui/references/reference_outlives_loop_turn.zr:26:13 ]
-    │
  23 │             println("{}", *r);
     │                            ┬
-    │                            ╰── used here in the next turn of the loop
+    │                            ╰── 'r' is used here in the next turn of the loop
+    │
+ 26 │         r = w.get(0).unwrap();
+    │             ────┬───
+    │                 ╰───── this refers into 'w'
+    │
+    │ Help: declare 'w' before the block, so that it lives as long as what refers into it
 ────╯
 [-] Error: aborting due to previous error

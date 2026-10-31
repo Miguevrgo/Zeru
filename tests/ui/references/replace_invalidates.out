@@ -3,18 +3,17 @@ status: compile error
 Error: Cannot change 'w' while 'r' still refers into it
    ╭─[ tests/ui/references/replace_invalidates.zr:6:13 ]
    │
- 6 │     var x = replace(&var w, Vec[3]);
-   │             ───────────┬───────────
-   │                        ╰───────────── Cannot change 'w' while 'r' still refers into it
-   │
-   ├─[ tests/ui/references/replace_invalidates.zr:6:13 ]
-   │
  5 │     var r = &w[0];
    │             ──┬──
-   │               ╰──── borrowed here
+   │               ╰──── 'r' borrows here
+ 6 │     var x = replace(&var w, Vec[3]);
+   │             ───────────┬───────────
+   │                        ╰───────────── this can free or move what 'r' points at
    │
  9 │     println("{} {}", *r, junk.len());
    │                       ┬
-   │                       ╰── used later here
+   │                       ╰── 'r' is used later here
+   │
+   │ Help: finish with 'r' before this, or keep a copy of the value instead of a reference into 'w'
 ───╯
 [-] Error: aborting due to previous error

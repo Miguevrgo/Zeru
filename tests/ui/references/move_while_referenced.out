@@ -3,18 +3,16 @@ status: compile error
 Error: Cannot move 'v' while 'r' still refers into it
    ╭─[ tests/ui/references/move_while_referenced.zr:5:10 ]
    │
- 5 │     take(v);
-   │          ┬
-   │          ╰── Cannot move 'v' while 'r' still refers into it
-   │
-   ├─[ tests/ui/references/move_while_referenced.zr:5:10 ]
-   │
  4 │     var r = v.get(0);
    │             ────┬───
-   │                 ╰───── borrowed here
-   │
+   │                 ╰───── 'r' borrows here
+ 5 │     take(v);
+   │          ┬
+   │          ╰── this moves 'v' away
  6 │     println("{}", r.is_some());
    │                   ─────┬─────
-   │                        ╰─────── used later here
+   │                        ╰─────── 'r' is used later here
+   │
+   │ Help: finish with 'r' before moving 'v', or move a copy of it
 ───╯
 [-] Error: aborting due to previous error

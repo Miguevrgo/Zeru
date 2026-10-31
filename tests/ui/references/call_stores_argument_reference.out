@@ -3,50 +3,48 @@ status: compile error
 Error: Cannot change 'v' while 'slot' still refers into it
     ╭─[ tests/ui/references/call_stores_argument_reference.zr:14:5 ]
     │
- 14 │     v.push(2);
-    │     ────┬────
-    │         ╰────── Cannot change 'v' while 'slot' still refers into it
-    │
-    ├─[ tests/ui/references/call_stores_argument_reference.zr:14:5 ]
-    │
  13 │         set(&var slot, &v[0]);
     │                        ──┬──
-    │                          ╰──── borrowed here
-    │
+    │                          ╰──── 'slot' borrows here
+ 14 │         v.push(2);
+    │         ────┬────
+    │             ╰────── this can free or move what 'slot' points at
  15 │ ╭─▶     match slot {
     ┆ ┆
  20 │ ├─▶     }
     │ │
-    │ ╰─────────── used later here
+    │ ╰─────────── 'slot' is used later here
+    │
+    │     Help: finish with 'slot' before this, or keep a copy of the value instead of a reference into 'v'
 ────╯
 Error: Cannot change 'w' while 'bag' still refers into it
     ╭─[ tests/ui/references/call_stores_argument_reference.zr:25:5 ]
     │
- 25 │     w.push(2);
-    │     ────┬────
-    │         ╰────── Cannot change 'w' while 'bag' still refers into it
-    │
-    ├─[ tests/ui/references/call_stores_argument_reference.zr:25:5 ]
-    │
  24 │     bag.add(&w[0]);
     │             ──┬──
-    │               ╰──── borrowed here
-    │
+    │               ╰──── 'bag' borrows here
+ 25 │     w.push(2);
+    │     ────┬────
+    │         ╰────── this can free or move what 'bag' points at
  26 │     println("{}", *bag.items[0]);
     │                    ──────┬─────
-    │                          ╰─────── used later here
+    │                          ╰─────── 'bag' is used later here
+    │
+    │ Help: finish with 'bag' before this, or keep a copy of the value instead of a reference into 'w'
 ────╯
 Error: 'kept' refers into 'x', which ends with its block first
     ╭─[ tests/ui/references/call_stores_argument_reference.zr:31:24 ]
     │
  31 │             set(&var kept, &x);
     │                            ─┬
-    │                             ╰── 'kept' refers into 'x', which ends with its block first
+    │                             ╰── this refers into 'x'
     │
  33 │ ╭─▶     match kept {
     ┆ ┆
  38 │ ├─▶     }
     │ │
-    │ ╰─────────── used later here
+    │ ╰─────────── 'kept' is used later here
+    │
+    │     Help: declare 'x' before the block, so that it lives as long as what refers into it
 ────╯
 [-] Error: aborting due to previous error

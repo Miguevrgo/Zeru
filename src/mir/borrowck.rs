@@ -18,7 +18,7 @@
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
-use crate::errors::{Span, ZeruError};
+use crate::errors::{Sources, Span, ZeruError};
 use crate::tir::{BinOp, Program};
 use crate::ty::{Ty, TyKind};
 
@@ -122,8 +122,13 @@ const EXACT: usize = 16;
 
 /// `methods` tells, for each function, whether its first parameter is
 /// `self`.
-pub(super) fn check(body: &Body, program: &Program, methods: &[bool]) -> Vec<ZeruError> {
-    let mut cx = Cx::new(body, program, methods);
+pub(super) fn check(
+    body: &Body,
+    program: &Program,
+    sources: &Sources,
+    methods: &[bool],
+) -> Vec<ZeruError> {
+    let mut cx = Cx::new(body, program, sources, methods);
     cx.run();
     cx.errors
         .sort_by_key(|error| (error.span.start, error.span.end));
@@ -140,6 +145,7 @@ pub(super) fn check(body: &Body, program: &Program, methods: &[bool]) -> Vec<Zer
 struct Cx<'a> {
     body: &'a Body,
     program: &'a Program,
+    sources: &'a Sources,
     methods: &'a [bool],
     loans: Vec<Loan>,
     made: HashMap<(usize, usize), usize>,
@@ -157,10 +163,16 @@ struct Cx<'a> {
 }
 
 impl<'a> Cx<'a> {
-    fn new(body: &'a Body, program: &'a Program, methods: &'a [bool]) -> Self {
+    fn new(
+        body: &'a Body,
+        program: &'a Program,
+        sources: &'a Sources,
+        methods: &'a [bool],
+    ) -> Self {
         let mut cx = Self {
             body,
             program,
+            sources,
             methods,
             loans: Vec::new(),
             made: HashMap::new(),
@@ -925,17 +937,36 @@ impl<'a> Cx<'a> {
         let Some(first) = sites.next() else {
             return;
         };
-        let name = self.name(local).unwrap_or_default();
+        let name = self.name(local).unwrap_or_default().to_string();
         let again = std::iter::once(first)
             .chain(sites)
             .any(|site| self.moves[site].1 == span);
-        let message = match again {
-            true => format!("Cannot move '{name}' inside a loop: the next turn would use it again"),
-            false => format!(
-                "Use of moved value '{name}'. Value was previously moved and is no longer valid"
-            ),
+        let moved_at = self.moves[first].1;
+        let copyable = !self.has(self.body.locals[local.0 as usize].ty, Part::Drop);
+        let fixed = self.sources.text(moved_at) == name;
+        let error = match again {
+            true => self
+                .error(
+                    format!("Cannot move '{name}' inside a loop: the next turn would use it again"),
+                    span,
+                )
+                .label("moved here, once in every turn"),
+            false => self
+                .error(format!("'{name}' is used after it was moved"), span)
+                .label("used here after the move")
+                .note(format!("'{name}' is moved here"), moved_at),
         };
-        self.error(message, span, Vec::new());
+        match copyable {
+            true if fixed => error
+                .help(format!("to keep '{name}', move a copy of it instead"))
+                .fix(moved_at, format!("{name}.copy()")),
+            true => error.help(format!(
+                "to keep '{name}', move a copy of it instead: {name}.copy()"
+            )),
+            false => error.help(format!(
+                "'{name}' runs a drop, so it cannot be copied; use it before it is moved"
+            )),
+        };
     }
 
     fn check_access(
@@ -1028,21 +1059,51 @@ impl<'a> Cx<'a> {
             };
             let holder = self.best_holder(loan, holder, root, live);
             let what = self.describe(root, "a temporary value");
-            let verb = match rule {
-                Rule::Move => "move",
-                _ => "change",
+            let by = match self.name(holder) {
+                Some(_) => self.describe(holder, ""),
+                None => "a reference".to_string(),
             };
-            let message = match self.name(holder) {
-                Some(_) => {
-                    let holder = self.describe(holder, "");
-                    format!("Cannot {verb} {what} while {holder} still refers into it")
+            let message = match (rule, self.name(holder)) {
+                (Rule::Move, Some(_)) => {
+                    format!("Cannot move {what} while {by} still refers into it")
                 }
-                None => format!("Cannot {verb} {what} while a reference into it is still in use"),
+                (Rule::Move, None) => {
+                    format!("Cannot move {what} while a reference into it is still in use")
+                }
+                (_, Some(_)) => format!("Cannot change {what} while {by} still refers into it"),
+                (_, None) => {
+                    format!("Cannot change {what} while a reference into it is still in use")
+                }
             };
-            let mut notes = vec![("borrowed here".to_string(), self.loans[loan].span)];
-            notes.extend(self.later_use(at, holder, self.span(at.0, at.1)));
+            let label = match rule {
+                Rule::Move => format!("this moves {what} away"),
+                Rule::Variant => format!("this can change which variant {by} points into"),
+                Rule::Owning => format!("this can free or move what {by} points at"),
+            };
+            let help = match (rule, by == "the loop") {
+                (_, true) => format!(
+                    "the loop walks {what}; collect the changes in another variable and make them after the loop"
+                ),
+                (Rule::Move, _) => {
+                    format!("finish with {by} before moving {what}, or move a copy of it")
+                }
+                _ => format!(
+                    "finish with {by} before this, or keep a copy of the value instead of a reference into {what}"
+                ),
+            };
+            let span = self.span(at.0, at.1);
+            let later = self.later_use(at, holder, span);
+            let borrowed = match by.as_str() {
+                "a reference" | "the loop" => "borrowed here".to_string(),
+                _ => format!("{by} borrows here"),
+            };
             self.reported.insert(loan);
-            self.error(message, self.span(at.0, at.1), notes);
+            let taken = self.loans[loan].span;
+            let error = self.error(message, span).label(label).help(help);
+            error.note(borrowed, taken);
+            if let Some((note, at)) = later {
+                error.note(note, at);
+            }
         }
     }
 
@@ -1124,11 +1185,13 @@ impl<'a> Cx<'a> {
             if !self.reported.insert(loan) {
                 continue;
             }
-            let name = self.name(param).unwrap_or_default();
+            let name = self.name(param).unwrap_or_default().to_string();
             let message =
                 format!("A method returns references into 'self' only, not into '{name}'");
             let span = self.loans[loan].span;
-            self.error(message, span, Vec::new());
+            self.error(message, span)
+                .label(format!("this refers into '{name}'"))
+                .help("return a reference into self, or make this a function, which may return references into any argument");
         }
     }
 
@@ -1144,19 +1207,40 @@ impl<'a> Cx<'a> {
             }
             let holder = self.best_holder(loan, holder, local, live);
             let what = self.describe(local, "a temporary value");
-            let message = match (holder == RETURN, self.name(local), self.name(holder)) {
-                (true, ..) => format!("Cannot return a reference into {what}, which ends with this function"),
-                (false, None, _) => "Cannot keep a reference into a temporary value past its statement; store the value in a variable first".to_string(),
-                (false, Some(name), Some(holder)) => format!("'{holder}' refers into '{name}', which ends with its block first"),
-                (false, Some(name), None) => format!("A reference refers into '{name}', which ends with its block first"),
+            let ty = self
+                .program
+                .types
+                .show(self.body.locals[local.0 as usize].ty);
+            let (message, label, help) = match (holder == RETURN, self.name(local), self.name(holder)) {
+                (true, ..) => (
+                    format!("Cannot return a reference into {what}, which ends with this function"),
+                    format!("this refers into {what}"),
+                    format!("return the {ty} itself, by value, instead of a reference into it"),
+                ),
+                (false, None, _) => (
+                    "Cannot keep a reference into a temporary value past its statement".to_string(),
+                    "this refers into a value that is freed when the statement ends".to_string(),
+                    "store the value in a variable first, and take the reference from that variable".to_string(),
+                ),
+                (false, Some(name), holder) => (
+                    match holder {
+                        Some(holder) => format!("'{holder}' refers into '{name}', which ends with its block first"),
+                        None => format!("A reference refers into '{name}', which ends with its block first"),
+                    },
+                    format!("this refers into '{name}'"),
+                    format!("declare '{name}' before the block, so that it lives as long as what refers into it"),
+                ),
             };
-            let notes = match holder {
+            let later = match holder {
                 RETURN => None,
                 _ => self.later_use(at, holder, self.loans[loan].span),
             };
             self.reported.insert(loan);
             let span = self.loans[loan].span;
-            self.error(message, span, notes.into_iter().collect());
+            let error = self.error(message, span).label(label).help(help);
+            if let Some((note, at)) = later {
+                error.note(note, at);
+            }
         }
     }
 
@@ -1176,7 +1260,9 @@ impl<'a> Cx<'a> {
         let what = self.describe(path.root, "a temporary value");
         let message =
             format!("Cannot store a reference into {what}, which ends with this function");
-        self.error(message, self.loans[loan].span, Vec::new());
+        self.error(message, self.loans[loan].span)
+            .label(format!("this refers into {what}"))
+            .help("store a copy of the value, or a reference into something that outlives the function");
     }
 
     /// The local to name as holding `loan`: `holder`, or a named one live
@@ -1202,11 +1288,15 @@ impl<'a> Cx<'a> {
     /// is in the next turn of a loop when it comes before `error` does.
     fn later_use(&self, at: (usize, usize), holder: Local, error: Span) -> Option<(String, Span)> {
         let span = self.next_use(at, holder)?;
-        let note = match span.end <= error.start {
-            true => "used here in the next turn of the loop",
-            false => "used later here",
+        let who = match self.name(holder) {
+            Some(name) if name != "for" => format!("'{name}' is"),
+            _ => "it is".to_string(),
         };
-        Some((note.to_string(), span))
+        let note = match span.end <= error.start {
+            true => format!("{who} used here in the next turn of the loop"),
+            false => format!("{who} used later here"),
+        };
+        Some((note, span))
     }
 
     fn next_use(&self, at: (usize, usize), holder: Local) -> Option<Span> {
@@ -1242,14 +1332,9 @@ impl<'a> Cx<'a> {
         None
     }
 
-    fn error(&mut self, message: String, span: Span, notes: Vec<(String, Span)>) {
-        let mut error = ZeruError::semantic(message, span);
-        for (note, at) in notes {
-            if at != span && error.notes.iter().all(|(_, other)| *other != at) {
-                error.notes.push((note, at));
-            }
-        }
-        self.errors.push(error);
+    fn error(&mut self, message: impl Into<String>, span: Span) -> &mut ZeruError {
+        self.errors.push(ZeruError::semantic(message, span));
+        self.errors.last_mut().expect("pushed above")
     }
 }
 

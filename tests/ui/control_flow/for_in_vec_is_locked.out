@@ -3,14 +3,13 @@ status: compile error
 Error: Cannot change 'v' while the loop still refers into it
    ╭─[ tests/ui/control_flow/for_in_vec_is_locked.zr:4:9 ]
    │
- 4 │         v.push(x);
-   │         ────┬────
-   │             ╰────── Cannot change 'v' while the loop still refers into it
-   │
-   ├─[ tests/ui/control_flow/for_in_vec_is_locked.zr:4:9 ]
-   │
  3 │     for x in v {
    │              ┬
    │              ╰── borrowed here
+ 4 │         v.push(x);
+   │         ────┬────
+   │             ╰────── this can free or move what the loop points at
+   │
+   │ Help: the loop walks 'v'; collect the changes in another variable and make them after the loop
 ───╯
 [-] Error: aborting due to previous error

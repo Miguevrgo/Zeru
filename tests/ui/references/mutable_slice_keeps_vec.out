@@ -3,18 +3,16 @@ status: compile error
 Error: Cannot change 'v' while 's' still refers into it
    ╭─[ tests/ui/references/mutable_slice_keeps_vec.zr:4:5 ]
    │
- 4 │     v.push(4);
-   │     ────┬────
-   │         ╰────── Cannot change 'v' while 's' still refers into it
-   │
-   ├─[ tests/ui/references/mutable_slice_keeps_vec.zr:4:5 ]
-   │
  3 │     var s = &var v[0..2];
    │             ──────┬─────
-   │                   ╰─────── borrowed here
-   │
+   │                   ╰─────── 's' borrows here
+ 4 │     v.push(4);
+   │     ────┬────
+   │         ╰────── this can free or move what 's' points at
  5 │     s[0] = 5;
    │     ────┬───
-   │         ╰───── used later here
+   │         ╰───── 's' is used later here
+   │
+   │ Help: finish with 's' before this, or keep a copy of the value instead of a reference into 'v'
 ───╯
 [-] Error: aborting due to previous error

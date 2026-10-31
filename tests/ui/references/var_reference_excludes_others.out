@@ -5,71 +5,73 @@ Error: Cannot change 'v' while a reference into it is still in use
    │
  5 │     drain(&var v, &v);
    │     ────────┬──────┬─
-   │             ╰────────── Cannot change 'v' while a reference into it is still in use
+   │             ╰────────── this can free or move what a reference points at
    │                    │
    │                    ╰─── borrowed here
+   │
+   │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'v'
 ───╯
 Error: Cannot change 'v' while a reference into it is still in use
    ╭─[ tests/ui/references/var_reference_excludes_others.zr:6:20 ]
    │
  6 │     pair(v.get(0), v.pop());
    │     ─────────┬─┬──────┬────
+   │              │ ╰───────────── it is used later here
+   │              │        │
    │              ╰─────────────── borrowed here
-   │                │      │
-   │                ╰───────────── used later here
    │                       │
-   │                       ╰────── Cannot change 'v' while a reference into it is still in use
+   │                       ╰────── this can free or move what a reference points at
+   │
+   │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'v'
 ───╯
 Error: Cannot change 'v' while 'g' still refers into it
     ╭─[ tests/ui/references/var_reference_excludes_others.zr:9:5 ]
     │
-  9 │     r.push(1);
-    │     ────┬────
-    │         ╰────── Cannot change 'v' while 'g' still refers into it
-    │
-    ├─[ tests/ui/references/var_reference_excludes_others.zr:9:5 ]
-    │
   8 │     var g = v.get(0);
     │             ────┬───
-    │                 ╰───── borrowed here
-    │
+    │                 ╰───── 'g' borrows here
+  9 │     r.push(1);
+    │     ────┬────
+    │         ╰────── this can free or move what 'g' points at
  10 │     println("{}", g.is_some());
     │                   ─────┬─────
-    │                        ╰─────── used later here
+    │                        ╰─────── 'g' is used later here
+    │
+    │ Help: finish with 'g' before this, or keep a copy of the value instead of a reference into 'v'
 ────╯
 Error: Cannot change 'v' while the loop still refers into it
     ╭─[ tests/ui/references/var_reference_excludes_others.zr:12:9 ]
     │
- 12 │         r.push(x);
-    │         ────┬────
-    │             ╰────── Cannot change 'v' while the loop still refers into it
-    │
-    ├─[ tests/ui/references/var_reference_excludes_others.zr:12:9 ]
-    │
  11 │     for x in v {
     │              ┬
     │              ╰── borrowed here
+ 12 │         r.push(x);
+    │         ────┬────
+    │             ╰────── this can free or move what the loop points at
+    │
+    │ Help: the loop walks 'v'; collect the changes in another variable and make them after the loop
 ────╯
 Error: Cannot change 'v' while a reference into it is still in use
     ╭─[ tests/ui/references/var_reference_excludes_others.zr:31:19 ]
     │
  31 │     println("{}", first_after_push(&var v, &v));
     │                   ──────────────┬───────────┬─
-    │                                 ╰─────────────── Cannot change 'v' while a reference into it is still in use
+    │                                 ╰─────────────── this can free or move what a reference points at
     │                                             │
     │                                             ╰─── borrowed here
+    │
+    │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'v'
 ────╯
 Error: Cannot change 'v' while a reference into it is still in use
     ╭─[ tests/ui/references/var_reference_excludes_others.zr:33:5 ]
     │
- 33 │     both(r, r);
-    │     ─────┬────
-    │          ╰────── Cannot change 'v' while a reference into it is still in use
-    │
-    ├─[ tests/ui/references/var_reference_excludes_others.zr:33:5 ]
-    │
  32 │     var r = &var v;
     │             ───┬──
     │                ╰──── borrowed here
+ 33 │     both(r, r);
+    │     ─────┬────
+    │          ╰────── this can free or move what a reference points at
+    │
+    │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'v'
 ────╯
 [-] Error: aborting due to previous error

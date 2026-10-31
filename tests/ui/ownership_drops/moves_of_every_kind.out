@@ -1,38 +1,68 @@
 status: compile error
 -- stderr
-Error: Use of moved value 'a'. Value was previously moved and is no longer valid
+Error: 'a' is used after it was moved
    ╭─[ tests/ui/ownership_drops/moves_of_every_kind.zr:8:10 ]
    │
+ 7 │     var row = [a];
+   │                ┬
+   │                ╰── 'a' is moved here
  8 │     take(a);
    │          ┬
-   │          ╰── Use of moved value 'a'. Value was previously moved and is no longer valid
+   │          ╰── used here after the move
+   │
+   │ Help: to keep 'a', move a copy of it instead
+   │           var row = [a.copy()];
 ───╯
-Error: Use of moved value 'b'. Value was previously moved and is no longer valid
+Error: 'b' is used after it was moved
     ╭─[ tests/ui/ownership_drops/moves_of_every_kind.zr:11:10 ]
     │
+ 10 │     var pair = (b, 1);
+    │                 ┬
+    │                 ╰── 'b' is moved here
  11 │     take(b);
     │          ┬
-    │          ╰── Use of moved value 'b'. Value was previously moved and is no longer valid
+    │          ╰── used here after the move
+    │
+    │ Help: to keep 'b', move a copy of it instead
+    │           var pair = (b.copy(), 1);
 ────╯
-Error: Use of moved value 'c'. Value was previously moved and is no longer valid
+Error: 'c' is used after it was moved
     ╭─[ tests/ui/ownership_drops/moves_of_every_kind.zr:15:10 ]
     │
+ 14 │     outer.push(c);
+    │                ┬
+    │                ╰── 'c' is moved here
  15 │     take(c);
     │          ┬
-    │          ╰── Use of moved value 'c'. Value was previously moved and is no longer valid
+    │          ╰── used here after the move
+    │
+    │ Help: to keep 'c', move a copy of it instead
+    │           outer.push(c.copy());
 ────╯
-Error: Use of moved value 'd'. Value was previously moved and is no longer valid
+Error: 'd' is used after it was moved
     ╭─[ tests/ui/ownership_drops/moves_of_every_kind.zr:19:10 ]
     │
+ 18 │     e = d;
+    │         ┬
+    │         ╰── 'd' is moved here
  19 │     take(d);
     │          ┬
-    │          ╰── Use of moved value 'd'. Value was previously moved and is no longer valid
+    │          ╰── used here after the move
+    │
+    │ Help: to keep 'd', move a copy of it instead
+    │           e = d.copy();
 ────╯
-Error: Use of moved value 'a'. Value was previously moved and is no longer valid
+Error: 'a' is used after it was moved
     ╭─[ tests/ui/ownership_drops/moves_of_every_kind.zr:25:10 ]
     │
+ 24 │     var s = S { v: a };
+    │                    ┬
+    │                    ╰── 'a' is moved here
  25 │     take(a);
     │          ┬
-    │          ╰── Use of moved value 'a'. Value was previously moved and is no longer valid
+    │          ╰── used here after the move
+    │
+    │ Help: to keep 'a', move a copy of it instead
+    │           var s = S { v: a.copy() };
 ────╯
 [-] Error: aborting due to previous error

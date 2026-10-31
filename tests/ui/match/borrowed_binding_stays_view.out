@@ -3,35 +3,31 @@ status: compile error
 Error: Cannot change 's' while 'at' still refers into it
     ╭─[ tests/ui/match/borrowed_binding_stays_view.zr:10:13 ]
     │
- 10 │             s = Shape::Circle(1);
-    │             ──────────┬─────────
-    │                       ╰─────────── Cannot change 's' while 'at' still refers into it
-    │
-    ├─[ tests/ui/match/borrowed_binding_stays_view.zr:10:13 ]
-    │
   9 │             var at = &r;
     │                      ─┬
-    │                       ╰── borrowed here
-    │
+    │                       ╰── 'at' borrows here
+ 10 │             s = Shape::Circle(1);
+    │             ──────────┬─────────
+    │                       ╰─────────── this can free or move what 'at' points at
  11 │             println("{}", *at);
     │                            ─┬
-    │                             ╰── used later here
+    │                             ╰── 'at' is used later here
+    │
+    │ Help: finish with 'at' before this, or keep a copy of the value instead of a reference into 's'
 ────╯
 Error: Cannot change 's' while 'v' still refers into it
     ╭─[ tests/ui/match/borrowed_binding_stays_view.zr:14:13 ]
     │
- 14 │             s = Shape::Circle(1);
-    │             ──────────┬─────────
-    │                       ╰─────────── Cannot change 's' while 'v' still refers into it
-    │
-    ├─[ tests/ui/match/borrowed_binding_stays_view.zr:14:13 ]
-    │
  13 │         Shape::Many(v) => {
     │         ───────┬──────
-    │                ╰──────── borrowed here
-    │
+    │                ╰──────── 'v' borrows here
+ 14 │             s = Shape::Circle(1);
+    │             ──────────┬─────────
+    │                       ╰─────────── this can free or move what 'v' points at
  15 │             println("{}", v.len());
     │                           ───┬───
-    │                              ╰───── used later here
+    │                              ╰───── 'v' is used later here
+    │
+    │ Help: finish with 'v' before this, or keep a copy of the value instead of a reference into 's'
 ────╯
 [-] Error: aborting due to previous error

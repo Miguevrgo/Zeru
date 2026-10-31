@@ -1,10 +1,15 @@
 status: compile error
 -- stderr
-Error: Use of moved value 'o'. Value was previously moved and is no longer valid
+Error: 'o' is used after it was moved
    ╭─[ tests/ui/optionals_results/unwrap_moves_owner.zr:4:13 ]
    │
+ 3 │     var a = o.unwrap();
+   │             ─────┬────
+   │                  ╰────── 'o' is moved here
  4 │     var b = o.is_some();
    │             ─────┬─────
-   │                  ╰─────── Use of moved value 'o'. Value was previously moved and is no longer valid
+   │                  ╰─────── used here after the move
+   │
+   │ Help: to keep 'o', move a copy of it instead: o.copy()
 ───╯
 [-] Error: aborting due to previous error
