@@ -5,7 +5,7 @@ Error: assert takes a bool, got i32
    │
  2 │     assert(1);
    │            ┬
-   │            ╰── assert takes a bool, got i32
+   │            ╰── this is i32
 ───╯
 Error: assert takes a condition, then maybe a message
    ╭─[ tests/ui/diagnostics/assert_takes_bool_and_format.zr:3:5 ]

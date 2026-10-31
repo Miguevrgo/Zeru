@@ -1,17 +1,27 @@
 status: compile error
 -- stderr
-Error: Binary operation '+' requires operands of same type. Got i32 and f32
-   ╭─[ tests/ui/arithmetic/mixed_operand_types.zr:4:13 ]
+Error: Cannot add i32 and f32
+   ╭─[ tests/ui/arithmetic/mixed_operand_types.zr:4:17 ]
    │
  4 │     var c = a + b;
-   │             ──┬──
-   │               ╰──── Binary operation '+' requires operands of same type. Got i32 and f32
+   │             ┬   ┬
+   │             ╰────── this is i32
+   │                 │
+   │                 ╰── this is f32
+   │
+   │ Help: make them one type: convert one with as
+   │           var c = a as f32 + b;
 ───╯
-Error: Binary operation '+' requires operands of same type. Got i32 and u32
-    ╭─[ tests/ui/arithmetic/mixed_operand_types.zr:10:13 ]
+Error: Cannot add i32 and u32
+    ╭─[ tests/ui/arithmetic/mixed_operand_types.zr:10:17 ]
     │
  10 │     var c = a + b;
-    │             ──┬──
-    │               ╰──── Binary operation '+' requires operands of same type. Got i32 and u32
+    │             ┬   ┬
+    │             ╰────── this is i32
+    │                 │
+    │                 ╰── this is u32
+    │
+    │ Help: make them one type: convert one with as
+    │           var c = a + b as i32;
 ────╯
 [-] Error: aborting due to previous error

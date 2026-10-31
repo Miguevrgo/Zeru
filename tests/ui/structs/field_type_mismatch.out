@@ -1,17 +1,17 @@
 status: compile error
 -- stderr
-Error: Type mismatch: Field 'x' in struct 'Point' expected f32, got bool
+Error: Field 'x' of 'Point' is f32, but this is bool
    ╭─[ tests/ui/structs/field_type_mismatch.zr:6:24 ]
    │
  6 │     var p = Point { x: true, y: 2.0 };
    │                        ──┬─
-   │                          ╰─── Type mismatch: Field 'x' in struct 'Point' expected f32, got bool
+   │                          ╰─── this is bool
 ───╯
-Error: Type mismatch in assignment. Expected f32, got bool
-   ╭─[ tests/ui/structs/field_type_mismatch.zr:7:5 ]
+Error: 'p.x' holds f32, but this is bool
+   ╭─[ tests/ui/structs/field_type_mismatch.zr:7:11 ]
    │
  7 │     p.x = false;
-   │     ─────┬─────
-   │          ╰─────── Type mismatch in assignment. Expected f32, got bool
+   │           ──┬──
+   │             ╰──── this is bool
 ───╯
 [-] Error: aborting due to previous error

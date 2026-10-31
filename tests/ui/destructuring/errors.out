@@ -28,12 +28,12 @@ Error: A range gives one number at a time
     │                   ──┬─
     │                     ╰─── A range gives one number at a time
 ────╯
-Error: Type mismatch in assignment. Expected Vec<i32>, got i32
+Error: This place holds Vec<i32>, but its part of the value is i32
     ╭─[ tests/ui/destructuring/errors.zr:13:5 ]
     │
  13 │     (m, xs) = (2, 3);
     │     ────────┬───────
-    │             ╰───────── Type mismatch in assignment. Expected Vec<i32>, got i32
+    │             ╰───────── This place holds Vec<i32>, but its part of the value is i32
 ────╯
 Error: zip walks two sequences side by side: for (a, b) in zip(xs, ys)
     ╭─[ tests/ui/destructuring/errors.zr:14:19 ]

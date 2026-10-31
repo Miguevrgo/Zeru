@@ -19,7 +19,7 @@ Error: replace puts i32 in the place, got bool
    │
  7 │     replace(&var a, true);
    │                     ──┬─
-   │                       ╰─── replace puts i32 in the place, got bool
+   │                       ╰─── this is bool
 ───╯
 Error: Cannot change 'c', declared with const; declare it with var to change it
    ╭─[ tests/ui/references/replace_wrong_arguments.zr:8:13 ]

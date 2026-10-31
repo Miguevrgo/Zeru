@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: Type mismatch: Field 'v' in struct 'Box<i64>' expected i64, got bool
+Error: Field 'v' of 'Box<i64>' is i64, but this is bool
    ╭─[ tests/ui/generics/mangled_name_in_message.zr:5:32 ]
    │
  5 │     var b: Box<i64> = Box { v: true };
    │                                ──┬─
-   │                                  ╰─── Type mismatch: Field 'v' in struct 'Box<i64>' expected i64, got bool
+   │                                  ╰─── this is bool
 ───╯
 [-] Error: aborting due to previous error

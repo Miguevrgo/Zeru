@@ -5,6 +5,9 @@ Error: While condition must be boolean, got i32
    │
  3 │     while i {}
    │           ┬
-   │           ╰── While condition must be boolean, got i32
+   │           ╰── this is i32
+   │
+   │ Help: compare it to get a bool
+   │           while i != 0 {}
 ───╯
 [-] Error: aborting due to previous error

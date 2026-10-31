@@ -5,6 +5,7 @@ use crate::ast::{Expression, ExpressionKind, Names, Statement, StatementKind};
 use crate::errors::{Span, ZeruError};
 use crate::items::DefId;
 use crate::tir::{self, Block, Expr, ExprKind, LocalId, Place, Stmt, StmtKind, Unpack, Walk};
+use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
 use super::infer::{DeferredCall, Var};
@@ -388,11 +389,113 @@ impl<'c, 'a> FnCx<'c, 'a> {
         match self.coerce(value, target) {
             Ok(value) => value,
             Err(value) => {
-                let (target, actual) = (self.ty(target), self.ty(value.ty));
-                self.error(message(&target, &actual), span);
+                self.mismatch(&value, target, span, message);
                 value
             }
         }
+    }
+
+    /// Report that `value` is not the `target` it should be, at the value
+    /// itself when `span` holds it, with the conversion that fixes it.
+    pub(super) fn mismatch(
+        &mut self,
+        value: &Expr,
+        target: Ty,
+        span: Span,
+        message: impl FnOnce(&str, &str) -> String,
+    ) -> &mut ZeruError {
+        let (want, got) = (self.ty(target), self.ty(value.ty));
+        let inside = span.start <= value.span.start && value.span.end <= span.end;
+        let at = match inside && value.span.start < value.span.end {
+            true => value.span,
+            false => span,
+        };
+        let conversion = self.conversion(value, target);
+        let error = self
+            .error(message(&want, &got), at)
+            .label(format!("this is {got}"));
+        if let Some((help, fix)) = conversion {
+            error.help(help);
+            if let Some(fix) = fix {
+                error.fix(value.span, fix);
+            }
+        }
+        error
+    }
+
+    /// How to turn `value` into a `target`, and the code to write in its
+    /// place.
+    fn conversion(&mut self, value: &Expr, target: Ty) -> Option<(&'static str, Option<String>)> {
+        let (got, target) = (self.resolve(value.ty), self.resolve(target));
+        let text = self.cx.sources.text(value.span).to_string();
+        let simple = text
+            .chars()
+            .all(|c| c.is_alphanumeric() || "_.[]()".contains(c));
+        let operand = match simple {
+            true => text.clone(),
+            false => format!("({text})"),
+        };
+        let shown = self.ty(target);
+        let owns = self.cx.owns_heap(target);
+        let types = &self.cx.types;
+        let int = |ty| types.as_int(ty).is_some();
+        let literal = matches!(
+            value.kind,
+            ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_)
+        );
+        Some(
+            match (types.kind(got).clone(), types.kind(target).clone()) {
+                _ if literal && (types.is_number(target) || target == Types::BOOL) => return None,
+                _ if types.is_number(got) && types.is_number(target) => {
+                    ("convert it with as", Some(format!("{operand} as {shown}")))
+                }
+                (TyKind::Optional(inner), _) if inner == target => (
+                    "take the value out: .unwrap() stops the program when there is none, and ? passes the None on",
+                    Some(format!("{operand}.unwrap()")),
+                ),
+                (TyKind::Result(inner, _), _) if inner == target => (
+                    "take the value out: .unwrap() stops the program on an error, and ! passes the error on",
+                    Some(format!("{operand}.unwrap()")),
+                ),
+                (_, TyKind::Ref(inner)) if inner == got => {
+                    ("pass a reference to it", Some(format!("&{text}")))
+                }
+                (_, TyKind::RefMut(inner)) if inner == got => (
+                    "pass a reference through which it can change",
+                    Some(format!("&var {text}")),
+                ),
+                (TyKind::Ref(a), TyKind::RefMut(b)) if a == b && text.starts_with('&') => (
+                    "lend it with &var, so that it can change",
+                    Some(format!("&var {}", text[1..].trim_start())),
+                ),
+                (TyKind::Ref(a), TyKind::RefMut(b)) if a == b => (
+                    "a & reference only reads; get a &var reference where this one comes from",
+                    None,
+                ),
+                (TyKind::Ref(inner) | TyKind::RefMut(inner), _) if inner == target && owns => (
+                    "copy the value it refers to",
+                    Some(format!("{operand}.copy()")),
+                ),
+                (TyKind::Ref(inner) | TyKind::RefMut(inner), _) if inner == target => {
+                    ("read the value it refers to", Some(format!("*{operand}")))
+                }
+                _ if got == Types::STR && target == Types::STRING => {
+                    ("make a String of it", Some(format!("String.from({text})")))
+                }
+                _ if int(got) && target == Types::BOOL => {
+                    ("compare it to get a bool", Some(format!("{operand} != 0")))
+                }
+                _ if target == Types::U8
+                    && matches!(&value.kind, ExprKind::Str(b) if b.len() == 1) =>
+                {
+                    (
+                        "a character is written in single quotes",
+                        Some(format!("'{}'", &text[1..text.len() - 1])),
+                    )
+                }
+                _ => return None,
+            },
+        )
     }
 
     /// Report a write into `place` when the local it belongs to is not
@@ -450,11 +553,43 @@ impl<'c, 'a> FnCx<'c, 'a> {
             Place::Field(base, _) => self.require_var_root(base, span),
             Place::Deref(pointer) => {
                 if matches!(self.cx.types.kind(pointer.ty), TyKind::Ref(_)) {
-                    self.error("Cannot write through a '&' reference", span);
+                    let lent = match &pointer.kind {
+                        ExprKind::Read(Place::Local(local)) => self.ampersand_of(*local),
+                        _ => None,
+                    };
+                    let error = self.error("Cannot write through a '&' reference", span);
+                    error.label("this changes what a & reference points at");
+                    if let Some((name, at)) = lent {
+                        error
+                            .note(format!("'{name}' is a & reference, which only reads"), at)
+                            .help(format!(
+                                "make '{name}' a &var reference, which may change it"
+                            ))
+                            .fix(Span::new(at.end, at.end), "var ");
+                    }
                 }
             }
             Place::Temp(_) => {}
         }
+    }
+
+    /// The name of `local` and the `&` that makes it a reference where it
+    /// is declared, as in `var r = &v;` or `r: &T`.
+    fn ampersand_of(&self, local: LocalId) -> Option<(String, Span)> {
+        let name = self.local_name(local);
+        let declared = self.declared[local.0 as usize];
+        let sources = self.cx.sources;
+        let named = sources.word_in(declared, name)?;
+        let after = Span::new(named.end, declared.end);
+        let at = sources.text(after).find('&')?;
+        let rest = &sources.text(after)[at + 1..];
+        if rest.starts_with("var ") {
+            return None;
+        }
+        Some((
+            name.to_string(),
+            Span::new(after.start + at, after.start + at + 1),
+        ))
     }
 
     /// A block, warning at the first statement control cannot reach.
@@ -504,9 +639,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 }
                 let ty = expected.unwrap_or(checked.ty);
                 let mut value = self.coerce_or(checked, ty, span, |want, got| {
-                    format!(
-                        "Type mismatch for variable '{name}'. Annotated as {want} but got {got}"
-                    )
+                    format!("'{name}' is declared as {want}, but its value is {got}")
                 });
                 self.consume(&mut value);
                 self.cx.note_types_in(ty, span);
@@ -536,7 +669,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 let value = value.as_ref().map(|value| {
                     let checked = self.expr(value, Some(ret));
                     let mut value = self.coerce_or(checked, ret, span, |want, got| {
-                        format!("Invalid return type. Function expects {want}, returning {got}")
+                        format!("This function returns {want}, but this value is {got}")
                     });
                     self.consume(&mut value);
                     value
@@ -632,15 +765,35 @@ impl<'c, 'a> FnCx<'c, 'a> {
         Some(Stmt { kind, span })
     }
 
+    /// A condition, which must be a bool: `message` says what it is for.
+    /// One written `x = 2` is taken for the comparison it most likely is.
     pub(super) fn condition(&mut self, condition: &Expression, message: &str) -> Expr {
         let cond = self.expr(condition, Some(Types::BOOL));
         if cond.ty != Types::BOOL && !self.cx.types.is_error(cond.ty) {
-            let shown = self.ty(cond.ty);
-            let hint = match &condition.kind {
-                ExpressionKind::Assign { .. } => "; to compare, write ==",
-                _ => "",
+            let sources = self.cx.sources;
+            let equals = match &condition.kind {
+                ExpressionKind::Assign {
+                    target,
+                    operator: Token::Assign,
+                    value,
+                } => {
+                    let between = Span::new(target.span.end, value.span.start);
+                    sources
+                        .text(between)
+                        .find('=')
+                        .map(|at| Span::new(between.start + at, between.start + at + 1))
+                }
+                _ => None,
             };
-            self.error(format!("{message}{shown}{hint}"), condition.span);
+            let error = self.mismatch(&cond, Types::BOOL, condition.span, |_, got| {
+                format!("{message}{got}")
+            });
+            if let Some(at) = equals {
+                error
+                    .label("this assigns, and gives nothing")
+                    .help("to compare, write ==")
+                    .fix(at, "==");
+            }
         }
         cond
     }

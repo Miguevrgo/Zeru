@@ -12,6 +12,6 @@ Error: A slice bound must be usize, got bool
    │
  8 │     var z = "abc"[true..];
    │                   ──┬─
-   │                     ╰─── A slice bound must be usize, got bool
+   │                     ╰─── this is bool
 ───╯
 [-] Error: aborting due to previous error

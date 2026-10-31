@@ -15,10 +15,13 @@ Error: [x; n] is an array; a Vec is written Vec[x; n]
    │                          ╰──── [x; n] is an array; a Vec is written Vec[x; n]
 ───╯
 Error: Vec[x; n] takes n as usize, not i32
-   ╭─[ tests/ui/vec/brackets_are_arrays.zr:4:13 ]
+   ╭─[ tests/ui/vec/brackets_are_arrays.zr:4:20 ]
    │
  4 │     var c = Vec[0; 4 as i32];
-   │             ────────┬───────
-   │                     ╰───────── Vec[x; n] takes n as usize, not i32
+   │                    ────┬───
+   │                        ╰───── this is i32
+   │
+   │ Help: convert it with as
+   │           var c = Vec[0; (4 as i32) as usize];
 ───╯
 [-] Error: aborting due to previous error

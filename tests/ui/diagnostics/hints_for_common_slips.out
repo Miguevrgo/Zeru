@@ -1,11 +1,16 @@
 status: compile error
 -- stderr
-Error: Binary operation '+' requires operands of same type. Got i32! and i32; take the value out first, with !, ? or .unwrap()
-   ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:5:13 ]
+Error: Cannot add i32! and i32
+   ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:5:20 ]
    │
  5 │     var a = f(1) + 1;
-   │             ────┬───
-   │                 ╰───── Binary operation '+' requires operands of same type. Got i32! and i32; take the value out first, with !, ? or .unwrap()
+   │             ──┬─   ┬
+   │               ╰─────── this is i32!
+   │                    │
+   │                    ╰── this is i32
+   │
+   │ Help: take the value out first, with !, ? or .unwrap()
+   │           var a = f(1).unwrap() + 1;
 ───╯
 Error: Array<i32, 3> has no method 'len'
    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:7:17 ]
@@ -17,12 +22,15 @@ Error: Array<i32, 3> has no method 'len'
    │ Help: its length is part of its type: 3
    │           var n = 3;
 ───╯
-Error: If condition must be boolean, got void; to compare, write ==
+Error: If condition must be boolean, got void
    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:9:8 ]
    │
  9 │     if x = 2 {}
    │        ──┬──
-   │          ╰──── If condition must be boolean, got void; to compare, write ==
+   │          ╰──── this assigns, and gives nothing
+   │
+   │ Help: to compare, write ==
+   │           if x == 2 {}
 ───╯
 Error: Write the value itself, not Some(..): it becomes a T? wherever one is wanted
     ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:10:19 ]

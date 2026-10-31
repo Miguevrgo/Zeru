@@ -1,0 +1,159 @@
+status: compile error
+-- stderr
+Error: This function returns String, but this value is str
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:11:12 ]
+    │
+ 11 │     return "n";
+    │            ─┬─
+    │             ╰─── this is str
+    │
+    │ Help: make a String of it
+    │           return String.from("n");
+────╯
+Error: 'add' takes 'a' as i64, but this is i32
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:16:17 ]
+    │
+  4 │ fn add(a: i64, b: i64) i64 {
+    │ ─────────────┬────────────
+    │              ╰────────────── 'a' is declared here
+    │
+ 16 │     var a = add(small, wide);
+    │                 ──┬──
+    │                   ╰──── this is i32
+    │
+    │ Help: convert it with as
+    │           var a = add(small as i64, wide);
+────╯
+Error: 'b' is declared as i64, but its value is i32
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:17:18 ]
+    │
+ 17 │     var b: i64 = small;
+    │                  ──┬──
+    │                    ╰──── this is i32
+    │
+    │ Help: convert it with as
+    │           var b: i64 = small as i64;
+────╯
+Error: 'c' is declared as i32, but its value is i32?
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:19:18 ]
+    │
+ 19 │     var c: i32 = o;
+    │                  ┬
+    │                  ╰── this is i32?
+    │
+    │ Help: take the value out: .unwrap() stops the program when there is none, and ? passes the None on
+    │           var c: i32 = o.unwrap();
+────╯
+Error: 'first' takes 'v' as &Vec<i32>, but this is Vec<i32>
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:21:19 ]
+    │
+  7 │ fn first(v: &Vec<i32>) i32 {
+    │ ─────────────┬────────────
+    │              ╰────────────── 'v' is declared here
+    │
+ 21 │     var d = first(v);
+    │                   ┬
+    │                   ╰── this is Vec<i32>
+    │
+    │ Help: pass a reference to it
+    │           var d = first(&v);
+────╯
+Error: 'e' is declared as bool, but its value is i32
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:22:19 ]
+    │
+ 22 │     var e: bool = small;
+    │                   ──┬──
+    │                     ╰──── this is i32
+    │
+    │ Help: compare it to get a bool
+    │           var e: bool = small != 0;
+────╯
+Error: If condition must be boolean, got void
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:23:8 ]
+    │
+ 23 │     if small = 2 {}
+    │        ────┬────
+    │            ╰────── this assigns, and gives nothing
+    │
+    │ Help: to compare, write ==
+    │           if small == 2 {}
+────╯
+Error: Cannot add i32 and i64
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:24:21 ]
+    │
+ 24 │     var f = small + wide;
+    │             ──┬──   ──┬─
+    │               ╰─────────── this is i32
+    │                       │
+    │                       ╰─── this is i64
+    │
+    │ Help: make them one type: convert one with as
+    │           var f = small as i64 + wide;
+────╯
+Error: 'g' is declared as u8, but its value is str
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:25:17 ]
+    │
+ 25 │     var g: u8 = "a";
+    │                 ─┬─
+    │                  ╰─── this is str
+    │
+    │ Help: a character is written in single quotes
+    │           var g: u8 = 'a';
+────╯
+Error: Field 'x' of 'P' is i32, but this is i64
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:26:20 ]
+    │
+ 26 │     var p = P { x: wide };
+    │                    ──┬─
+    │                      ╰─── this is i64
+    │
+    │ Help: convert it with as
+    │           var p = P { x: wide as i32 };
+────╯
+Error: 'h' is declared as Vec<i32>, but its value is &Vec<i32>
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:28:23 ]
+    │
+ 28 │     var h: Vec<i32> = r;
+    │                       ┬
+    │                       ╰── this is &Vec<i32>
+    │
+    │ Help: copy the value it refers to
+    │           var h: Vec<i32> = r.copy();
+────╯
+Error: Cannot dereference type (&i32)?
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:29:18 ]
+    │
+ 29 │     var n: i32 = *v.get(0);
+    │                  ────┬────
+    │                      ╰────── Cannot dereference type (&i32)?
+    │
+    │ Help: take the reference out first, then read through it
+    │           var n: i32 = *v.get(0).unwrap();
+────╯
+Error: Cannot write through a '&' reference
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:31:5 ]
+    │
+ 30 │     var m = &v;
+    │             ┬
+    │             ╰── 'm' is a & reference, which only reads
+ 31 │     m.push(2);
+    │     ────┬────
+    │         ╰────── this changes what a & reference points at
+    │
+    │ Help: make 'm' a &var reference, which may change it
+    │           var m = &var v;
+────╯
+Error: 'take' takes 'v' as &var Vec<i32>, but this is &Vec<i32>
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:35:10 ]
+    │
+ 33 │ fn take(v: &var Vec<i32>) {}
+    │ ────────────┬────────────
+    │             ╰────────────── 'v' is declared here
+    │
+ 35 │     take(v);
+    │          ┬
+    │          ╰── this is &Vec<i32>
+    │
+    │ Help: a & reference only reads; get a &var reference where this one comes from
+────╯
+[-] Error: aborting due to previous error

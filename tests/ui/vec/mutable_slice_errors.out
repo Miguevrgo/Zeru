@@ -14,19 +14,27 @@ Error: Cannot write through a slice, which may point at read-only memory
    │            ─────┬─────
    │                 ╰─────── Cannot write through a slice, which may point at read-only memory
 ───╯
-Error: Argument 1 type mismatch: expected &var [i32], got &Vec<i32>
+Error: 'change' takes 'xs' as &var [i32], but this is &Vec<i32>
    ╭─[ tests/ui/vec/mutable_slice_errors.zr:9:12 ]
+   │
+ 1 │ fn change(xs: &var [i32]) {
+   │ ────────────┬────────────
+   │             ╰────────────── 'xs' is declared here
    │
  9 │     change(&v);
    │            ─┬
-   │             ╰── Argument 1 type mismatch: expected &var [i32], got &Vec<i32>
+   │             ╰── this is &Vec<i32>
 ───╯
-Error: Argument 1 type mismatch: expected &var [i32], got &[i32]
+Error: 'change' takes 'xs' as &var [i32], but this is &[i32]
     ╭─[ tests/ui/vec/mutable_slice_errors.zr:10:12 ]
+    │
+  1 │ fn change(xs: &var [i32]) {
+    │ ────────────┬────────────
+    │             ╰────────────── 'xs' is declared here
     │
  10 │     change(v[0..1]);
     │            ───┬───
-    │               ╰───── Argument 1 type mismatch: expected &var [i32], got &[i32]
+    │               ╰───── this is &[i32]
 ────╯
 Error: Cannot write through a slice, which may point at read-only memory
     ╭─[ tests/ui/vec/mutable_slice_errors.zr:12:17 ]

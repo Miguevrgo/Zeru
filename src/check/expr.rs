@@ -621,12 +621,22 @@ impl FnCx<'_, '_> {
             ExpressionKind::Index { left, index } => self.index(left, index, span),
             ExpressionKind::Dereference(pointer) => {
                 let pointer = self.expr(pointer, None);
-                let pointee = match self.cx.types.kind(pointer.ty) {
-                    TyKind::Ptr(inner) | TyKind::Ref(inner) | TyKind::RefMut(inner) => *inner,
+                let pointee = match self.cx.types.kind(pointer.ty).clone() {
+                    TyKind::Ptr(inner) | TyKind::Ref(inner) | TyKind::RefMut(inner) => inner,
                     TyKind::Error => Types::ERROR,
-                    _ => {
+                    kind => {
                         let shown = self.ty(pointer.ty);
-                        self.error(format!("Cannot dereference type {shown}"), span);
+                        let inner = self.cx.sources.text(pointer.span).to_string();
+                        let wrapped = matches!(kind, TyKind::Optional(_) | TyKind::Result(..));
+                        let error = self.error(format!("Cannot dereference type {shown}"), span);
+                        match wrapped {
+                            true => error
+                                .help("take the reference out first, then read through it")
+                                .fix(span, format!("*{inner}.unwrap()")),
+                            false => error
+                                .help("only a reference or a pointer is read through with *")
+                                .fix(span, inner),
+                        };
                         Types::ERROR
                     }
                 };
@@ -803,11 +813,10 @@ impl FnCx<'_, '_> {
                 value
             }
             Err(value) => {
-                let (want, got) = (self.ty(target_ty), self.ty(value.ty));
-                self.error(
-                    format!("Type mismatch in assignment. Expected {want}, got {got}"),
-                    span,
-                );
+                let written = self.cx.sources.text(target.span).to_string();
+                self.mismatch(&value, target_ty, span, |want, got| {
+                    format!("'{written}' holds {want}, but this is {got}")
+                });
                 value
             }
         };
@@ -945,7 +954,7 @@ impl FnCx<'_, '_> {
                 if want != ty && !self.cx.types.is_error(ty) && !self.cx.types.is_error(want) {
                     let (want, got) = (self.ty(want), self.ty(ty));
                     self.error(
-                        format!("Type mismatch in assignment. Expected {want}, got {got}"),
+                        format!("This place holds {want}, but its part of the value is {got}"),
                         span,
                     );
                 }
@@ -1092,15 +1101,59 @@ impl FnCx<'_, '_> {
                         TyKind::Optional(_) | TyKind::Result(..)
                     )
                 });
-                let hint = match wrapped {
-                    true => "; take the value out first, with !, ? or .unwrap()",
-                    false => "",
-                };
                 let (lt, rt) = (self.ty(l.ty), self.ty(r_ty));
-                self.error(
-                    format!("Binary operation '{operator}' requires operands of same type. Got {lt} and {rt}{hint}"),
-                    span,
-                );
+                let verb = match operator.to_string().trim_end_matches('%') {
+                    "+" => "add",
+                    "-" => "subtract",
+                    "*" => "multiply",
+                    "/" => "divide",
+                    "" => "take the remainder of",
+                    "==" | "!=" | "<" | ">" | "<=" | ">=" => "compare",
+                    _ => "combine",
+                };
+                let types = &self.cx.types;
+                let numbers = types.is_number(l.ty) && types.is_number(r_ty);
+                let width = |ty| match types.as_int(ty) {
+                    Some(int) => int.bits(),
+                    None if ty == Types::F32 => 100,
+                    None => 200,
+                };
+                let (convert, into) = match width(r_ty) > width(l.ty) {
+                    true => (&l, rt.clone()),
+                    false => (&r, lt.clone()),
+                };
+                let sources = self.cx.sources;
+                let text = sources.text(convert.span);
+                let operand = match text
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || "_.[]()".contains(c))
+                {
+                    true => text.to_string(),
+                    false => format!("({text})"),
+                };
+                let fix = format!("{operand} as {into}");
+                let convert_span = convert.span;
+                let wrapped_side = [(&l, l.ty), (&r, r_ty)].into_iter().find(|(_, ty)| {
+                    matches!(types.kind(*ty), TyKind::Optional(_) | TyKind::Result(..))
+                });
+                let unwrapped = wrapped_side.map(|(side, _)| {
+                    let text = sources.text(side.span);
+                    (side.span, format!("{text}.unwrap()"))
+                });
+                let error = self
+                    .error(format!("Cannot {verb} {lt} and {rt}"), r.span)
+                    .label(format!("this is {rt}"));
+                error.note(format!("this is {lt}"), l.span);
+                if wrapped {
+                    error.help("take the value out first, with !, ? or .unwrap()");
+                    if let Some((at, fix)) = unwrapped {
+                        error.fix(at, fix);
+                    }
+                } else if numbers {
+                    error
+                        .help("make them one type: convert one with as")
+                        .fix(convert_span, fix);
+                }
                 return self.error_expr(span);
             }
         };
@@ -1465,9 +1518,7 @@ impl FnCx<'_, '_> {
                 .remove(&at)
                 .unwrap_or_else(|| self.value(value, Some(field_ty)));
             let mut checked = self.coerce_or(checked, field_ty, value.span, |want, got| {
-                format!(
-                    "Type mismatch: Field '{field}' in struct '{shown}' expected {want}, got {got}"
-                )
+                format!("Field '{field}' of '{shown}' is {want}, but this is {got}")
             });
             self.consume(&mut checked);
             values.push((position as u32, checked));
@@ -1589,7 +1640,7 @@ impl FnCx<'_, '_> {
         let mut element = self.value(value, hint);
         if let Some(hint) = hint {
             element = self.coerce_or(element, hint, value.span, |want, got| {
-                format!("Vec element type mismatch. Expected {want}, got {got}")
+                format!("This element is {got}, but the Vec holds {want}")
             });
         }
         let elem = element.ty;
@@ -1654,10 +1705,7 @@ impl FnCx<'_, '_> {
         for (at, element) in rest.iter().enumerate() {
             let value = self.value(element, Some(elem));
             let mut value = self.coerce_or(value, elem, element.span, |want, got| {
-                format!(
-                    "Array element at index {} type mismatch. Expected {want}, got {got}",
-                    at + 1
-                )
+                format!("Element {} is {got}, but the array holds {want}", at + 1)
             });
             self.consume(&mut value);
             values.push(value);
@@ -1679,7 +1727,7 @@ impl FnCx<'_, '_> {
         let mut element = self.value(value, hint);
         if let Some(hint) = hint {
             element = self.coerce_or(element, hint, value.span, |want, got| {
-                format!("Array element at index 0 type mismatch. Expected {want}, got {got}")
+                format!("This element is {got}, but the array holds {want}")
             });
         }
         self.consume(&mut element);

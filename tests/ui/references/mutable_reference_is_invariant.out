@@ -1,17 +1,25 @@
 status: compile error
 -- stderr
-Error: Argument 1 type mismatch: expected &var &i32, got &var &var i32
+Error: 'put' takes 'slot' as &var &i32, but this is &var &var i32
     ╭─[ tests/ui/references/mutable_reference_is_invariant.zr:14:9 ]
+    │
+  1 │ fn put(slot: &var &i32, r: &i32) {
+    │ ────────────────┬───────────────
+    │                 ╰───────────────── 'slot' is declared here
     │
  14 │     put(&var m, &k);
     │         ───┬──
-    │            ╰──── Argument 1 type mismatch: expected &var &i32, got &var &var i32
+    │            ╰──── this is &var &var i32
 ────╯
-Error: Argument 1 type mismatch: expected *&i32, got &var &var i32
+Error: 'put_raw' takes 'slot' as *&i32, but this is &var &var i32
     ╭─[ tests/ui/references/mutable_reference_is_invariant.zr:15:13 ]
+    │
+  4 │ fn put_raw(slot: *&i32, r: &i32) {
+    │ ────────────────┬───────────────
+    │                 ╰───────────────── 'slot' is declared here
     │
  15 │     put_raw(&var m, &k);
     │             ───┬──
-    │                ╰──── Argument 1 type mismatch: expected *&i32, got &var &var i32
+    │                ╰──── this is &var &var i32
 ────╯
 [-] Error: aborting due to previous error

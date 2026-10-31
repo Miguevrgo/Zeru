@@ -14,11 +14,11 @@ Error: Undeclared variable 'bool'
    │             ──┬─
    │               ╰─── Undeclared variable 'bool'
 ───╯
-Error: Type mismatch for variable 'c'. Annotated as u8 but got i32
-   ╭─[ tests/ui/types/number_limits_errors.zr:4:5 ]
+Error: 'c' is declared as u8, but its value is i32
+   ╭─[ tests/ui/types/number_limits_errors.zr:4:17 ]
    │
  4 │     var c: u8 = i32.MAX;
-   │     ──────────┬─────────
-   │               ╰─────────── Type mismatch for variable 'c'. Annotated as u8 but got i32
+   │                 ───┬───
+   │                    ╰───── this is i32
 ───╯
 [-] Error: aborting due to previous error

@@ -1,10 +1,14 @@
 status: compile error
 -- stderr
-Error: Argument 2 type mismatch: expected i32, got bool
+Error: 'eat' takes 'n' as i32, but this is bool
    ╭─[ tests/ui/diagnostics/wrong_argument_then_moved.zr:4:12 ]
+   │
+ 1 │ fn eat(v: Vec<i64>, n: i32) {}
+   │ ─────────────┬─────────────
+   │              ╰─────────────── 'n' is declared here
    │
  4 │     eat(v, true);
    │            ──┬─
-   │              ╰─── Argument 2 type mismatch: expected i32, got bool
+   │              ╰─── this is bool
 ───╯
 [-] Error: aborting due to previous error

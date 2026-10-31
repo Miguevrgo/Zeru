@@ -1,7 +1,7 @@
 //! Calls: functions, methods, generic inference, the constructors of enums,
 //! results and Vecs, the built-in methods, and `print`.
 
-use crate::ast::{Expression, ExpressionKind, Spec, TypeSpec, format_pieces};
+use crate::ast::{Expression, ExpressionKind, Spec, StatementKind, TypeSpec, format_pieces};
 use crate::errors::Span;
 use crate::items::{DefId, ItemKind};
 use crate::tir::{
@@ -887,13 +887,13 @@ impl FnCx<'_, '_> {
             (0..args.len()).partition(|&at| written_value(&args[at]));
         let mut checked: Vec<Option<Expr>> = (0..args.len()).map(|_| None).collect();
         for at in early {
-            checked[at] = Some(self.argument(&args[at], params[at], at));
+            checked[at] = Some(self.argument(&args[at], params[at], def, at + skip));
         }
         if let Some(expected) = expected {
             self.fits(expected, ret, false);
         }
         for at in late {
-            checked[at] = Some(self.argument(&args[at], params[at], at));
+            checked[at] = Some(self.argument(&args[at], params[at], def, at + skip));
         }
 
         let Some(id) = self.call_instance(def, generics, span) else {
@@ -904,13 +904,32 @@ impl FnCx<'_, '_> {
         self.mk(ExprKind::Call(id, values), ret, span)
     }
 
-    /// Argument `at` of a call, going where `param` is wanted.
-    fn argument(&mut self, arg: &Expression, param: Ty, at: usize) -> Expr {
+    /// The argument for parameter `at` of `def`, going where `param` is
+    /// wanted.
+    fn argument(&mut self, arg: &Expression, param: Ty, def: DefId, at: usize) -> Expr {
         let value = self.value(arg, Some(param));
-        let index = at + 1;
-        let mut value = self.coerce_or(value, param, arg.span, |want, got| {
-            format!("Argument {index} type mismatch: expected {want}, got {got}")
-        });
+        let value = match self.coerce(value, param) {
+            Ok(value) => value,
+            Err(value) => {
+                let items = self.cx.items;
+                let item = items.item(def);
+                let callee = items.shown(def);
+                let StatementKind::Function { params, .. } = &item.decl.kind else {
+                    unreachable!("a call is to a function")
+                };
+                let name = params.get(at).map_or("", |(name, ..)| name.as_str());
+                let decl = self.cx.sources.first_line(item.decl.span);
+                let in_std = self.cx.sources.in_std(decl);
+                let error = self.mismatch(&value, param, arg.span, |want, got| {
+                    format!("'{callee}' takes '{name}' as {want}, but this is {got}")
+                });
+                if !in_std {
+                    error.note(format!("'{name}' is declared here"), decl);
+                }
+                value
+            }
+        };
+        let mut value = value;
         let param = self.resolve(param);
         if !matches!(
             self.cx.types.kind(param),
@@ -1007,7 +1026,7 @@ impl FnCx<'_, '_> {
         };
         let value = self.expr(arg, Some(err));
         let value = self.coerce_or(value, err, span, |want, got| {
-            format!("Err() takes {want}, got {got}")
+            format!("Err() takes an error code, a {want}, but this is {got}")
         });
         self.mk(ExprKind::Err(Box::new(value)), ty, span)
     }

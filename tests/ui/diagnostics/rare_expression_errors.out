@@ -27,12 +27,12 @@ Error: i32 has no field 'x'
    │
    │ Help: only a struct or a tuple has fields
 ───╯
-Error: Array element at index 1 type mismatch. Expected i32, got bool
+Error: Element 1 is bool, but the array holds i32
     ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:10:19 ]
     │
  10 │     var arr = [1, true];
     │                   ──┬─
-    │                     ╰─── Array element at index 1 type mismatch. Expected i32, got bool
+    │                     ╰─── this is bool
 ────╯
 Error: Cannot negate non-numeric type bool
     ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:11:13 ]
@@ -55,11 +55,13 @@ Error: Cannot tell the type of Vec[] here; annotate it
     │             ──┬──
     │               ╰──── Cannot tell the type of Vec[] here; annotate it
 ────╯
-Error: Binary operation '+' requires operands of same type. Got void and i32
-    ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:14:13 ]
+Error: Cannot add void and i32
+    ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:14:25 ]
     │
  14 │     var w = nothing() + 1;
-    │             ──────┬──────
-    │                   ╰──────── Binary operation '+' requires operands of same type. Got void and i32
+    │             ────┬────   ┬
+    │                 ╰────────── this is void
+    │                         │
+    │                         ╰── this is i32
 ────╯
 [-] Error: aborting due to previous error

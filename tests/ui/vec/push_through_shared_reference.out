@@ -3,8 +3,14 @@ status: compile error
 Error: Cannot write through a '&' reference
    ╭─[ tests/ui/vec/push_through_shared_reference.zr:2:5 ]
    │
+ 1 │ fn f(r: &Vec<i32>) {
+   │         ┬
+   │         ╰── 'r' is a & reference, which only reads
  2 │     r.push(1);
    │     ────┬────
-   │         ╰────── Cannot write through a '&' reference
+   │         ╰────── this changes what a & reference points at
+   │
+   │ Help: make 'r' a &var reference, which may change it
+   │           fn f(r: &var Vec<i32>) {
 ───╯
 [-] Error: aborting due to previous error

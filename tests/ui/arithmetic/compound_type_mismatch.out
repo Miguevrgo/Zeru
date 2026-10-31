@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: Type mismatch in assignment. Expected i32, got f64
-   ╭─[ tests/ui/arithmetic/compound_type_mismatch.zr:3:5 ]
+Error: 'x' holds i32, but this is f64
+   ╭─[ tests/ui/arithmetic/compound_type_mismatch.zr:3:10 ]
    │
  3 │     x += 3.14;
-   │     ────┬────
-   │         ╰────── Type mismatch in assignment. Expected i32, got f64
+   │          ──┬─
+   │            ╰─── this is f64
 ───╯
 [-] Error: aborting due to previous error

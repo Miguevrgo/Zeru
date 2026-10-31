@@ -7,11 +7,11 @@ Error: Invalid return type. Function expects i32, returning void
    │     ───┬───
    │        ╰───── Invalid return type. Function expects i32, returning void
 ───╯
-Error: Invalid return type. Function expects i32, returning bool
-   ╭─[ tests/ui/control_flow/return_wrong_type.zr:5:5 ]
+Error: This function returns i32, but this value is bool
+   ╭─[ tests/ui/control_flow/return_wrong_type.zr:5:12 ]
    │
  5 │     return true;
-   │     ──────┬─────
-   │           ╰─────── Invalid return type. Function expects i32, returning bool
+   │            ──┬─
+   │              ╰─── this is bool
 ───╯
 [-] Error: aborting due to previous error

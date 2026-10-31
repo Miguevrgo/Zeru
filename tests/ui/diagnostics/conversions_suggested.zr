@@ -1,0 +1,36 @@
+struct P {
+    x: i32,
+}
+fn add(a: i64, b: i64) i64 {
+    return a + b;
+}
+fn first(v: &Vec<i32>) i32 {
+    return v[0];
+}
+fn label(n: i32) String {
+    return "n";
+}
+fn main() {
+    var small: i32 = 1;
+    var wide: i64 = 2;
+    var a = add(small, wide);
+    var b: i64 = small;
+    var o: i32? = 3;
+    var c: i32 = o;
+    var v: Vec<i32> = Vec[1];
+    var d = first(v);
+    var e: bool = small;
+    if small = 2 {}
+    var f = small + wide;
+    var g: u8 = "a";
+    var p = P { x: wide };
+    var r = &v;
+    var h: Vec<i32> = r;
+    var n: i32 = *v.get(0);
+    var m = &v;
+    m.push(2);
+}
+fn take(v: &var Vec<i32>) {}
+fn lend(v: &Vec<i32>) {
+    take(v);
+}

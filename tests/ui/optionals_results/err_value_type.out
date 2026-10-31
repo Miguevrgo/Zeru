@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: Err() takes i32, got bool
-   ╭─[ tests/ui/optionals_results/err_value_type.zr:2:12 ]
+Error: Err() takes an error code, a i32, but this is bool
+   ╭─[ tests/ui/optionals_results/err_value_type.zr:2:16 ]
    │
  2 │     return Err(true);
-   │            ────┬────
-   │                ╰────── Err() takes i32, got bool
+   │                ──┬─
+   │                  ╰─── this is bool
 ───╯
 [-] Error: aborting due to previous error

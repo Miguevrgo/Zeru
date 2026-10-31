@@ -5,6 +5,9 @@ Error: If condition must be boolean, got i32
    │
  3 │     if i {}
    │        ┬
-   │        ╰── If condition must be boolean, got i32
+   │        ╰── this is i32
+   │
+   │ Help: compare it to get a bool
+   │           if i != 0 {}
 ───╯
 [-] Error: aborting due to previous error

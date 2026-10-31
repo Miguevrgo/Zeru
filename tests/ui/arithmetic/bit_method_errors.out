@@ -19,7 +19,7 @@ Error: rotate_left takes the places to move, a usize, not bool
    │
  6 │     a.rotate_left(true);
    │                   ──┬─
-   │                     ╰─── rotate_left takes the places to move, a usize, not bool
+   │                     ╰─── this is bool
 ───╯
 Error: f64 has no method 'count_ones'
    ╭─[ tests/ui/arithmetic/bit_method_errors.zr:7:7 ]

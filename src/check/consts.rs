@@ -49,7 +49,7 @@ impl Checker<'_> {
         let checked = cx.expr(value, expected);
         let mut checked = match expected {
             Some(ty) => cx.coerce_or(checked, ty, span, |want, got| {
-                format!("Type mismatch for variable '{name}'. Annotated as {want} but got {got}")
+                format!("'{name}' is declared as {want}, but its value is {got}")
             }),
             None => checked,
         };
