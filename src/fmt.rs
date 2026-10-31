@@ -929,7 +929,7 @@ fn names_text(names: &Names) -> String {
     }
 }
 
-fn ty_text(ty: &TypeSpec) -> String {
+pub(crate) fn ty_text(ty: &TypeSpec) -> String {
     match ty {
         TypeSpec::Named(name) => name.clone(),
         TypeSpec::Generic { name, args } => format!("{name}<{}>", types(args)),

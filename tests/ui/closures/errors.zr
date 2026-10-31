@@ -47,4 +47,13 @@ fn main() {
     var grow = fn(var t: String) {
         t.push_str("x");
     };
+    var lent = words.map(fn(w) {
+        w.push_str("!");
+        return 0;
+    });
+    var nothing = words.map(fn(w) {
+        println("{}", w);
+    });
+    var pair = words.map(fn(a, b) a);
+    var lens = words.filter(fn(w) w.len());
 }

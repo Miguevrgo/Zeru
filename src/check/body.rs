@@ -35,6 +35,7 @@ pub(super) struct FnCx<'c, 'a> {
     pub(super) outer: Vec<Outer>,
     pub(super) captures: Vec<Captured>,
     pub(super) infer_ret: bool,
+    pub(super) in_closure: bool,
 }
 
 /// A variable of the code around a closure, which its body may capture:
@@ -164,6 +165,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             outer: Vec::new(),
             captures: Vec::new(),
             infer_ret: false,
+            in_closure: false,
         }
     }
 
@@ -665,6 +667,11 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 format!("declare it as var {name} to change it"),
                 sources.word_in(declared, &name).map(|named| (Span::new(named.start, named.start), "var ".to_string())),
             ),
+            Fixed::Lent => (
+                format!("Cannot change '{name}': a closure only borrows what it is given"),
+                format!("change a copy of it, as in var own = {name}.copy();"),
+                None,
+            ),
             Fixed::Counter => (
                 format!("Cannot change the loop counter '{name}'"),
                 "count with a var of your own and while, to change it as it goes".to_string(),
@@ -842,8 +849,13 @@ impl<'c, 'a> FnCx<'c, 'a> {
                         self.ret = checked.ty;
                     }
                     let ret = self.ret;
+                    let what = if self.in_closure {
+                        "closure"
+                    } else {
+                        "function"
+                    };
                     let mut value = self.coerce_or(checked, ret, span, |want, got| {
-                        format!("This function returns {want}, but this value is {got}")
+                        format!("This {what} returns {want}, but this value is {got}")
                     });
                     self.consume(&mut value);
                     value
@@ -1374,6 +1386,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
 pub(super) enum Fixed {
     Const,
     Param,
+    Lent,
     Counter,
     Element,
     Key,

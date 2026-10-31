@@ -25,8 +25,13 @@ impl FnCx<'_, '_> {
             && wanted.len() != closure.params.len()
         {
             let (count, wanted) = (closure.params.len(), wanted.len());
+            let plural = |n: usize| if n == 1 { "" } else { "s" };
             self.error(
-                format!("This closure takes {count} parameter(s), but it will be given {wanted}"),
+                format!(
+                    "This closure takes {count} parameter{}, but it is given {wanted} value{}",
+                    plural(count),
+                    plural(wanted)
+                ),
                 span,
             );
             return self.error_expr(span);
@@ -76,6 +81,7 @@ impl FnCx<'_, '_> {
         let in_instance = self.in_instance;
         let mut inner = FnCx::new(self.cx, scope, known.unwrap_or(Types::VOID));
         inner.in_instance = in_instance;
+        inner.in_closure = true;
         inner.outer = outer;
         inner.enter();
         let env = inner.cx.types.intern(TyKind::Ref(ty));
@@ -95,7 +101,7 @@ impl FnCx<'_, '_> {
             }
             let local = inner.declare(name, param, *mutable, view, span);
             if !*mutable {
-                inner.fix(local, Fixed::Param);
+                inner.fix(local, if view { Fixed::Lent } else { Fixed::Param });
             }
             locals.push(local);
         }
@@ -237,8 +243,13 @@ impl FnCx<'_, '_> {
         let (params, ret) = self.cx.types.closure_sig(ty).expect("a closure");
         if args.len() != params.len() {
             let (wanted, given) = (params.len(), args.len());
+            let plural = if wanted == 1 { "" } else { "s" };
+            let given = match given {
+                1 => "1 was given".to_string(),
+                given => format!("{given} were given"),
+            };
             self.error(
-                format!("This closure takes {wanted} argument(s), but {given} were given"),
+                format!("This closure takes {wanted} argument{plural}, but {given}"),
                 span,
             );
             for arg in args {
@@ -317,8 +328,13 @@ impl Checker<'_> {
 
 /// Whether `ty` keeps a closure inside another value, as `Vec<fn(i32)>`
 /// would, which no closure may outlive its references in.
-pub(super) fn holds_closure(types: &crate::ty::Types, ty: Ty) -> bool {
-    let inside = |inner: &Ty| types.closure_sig(*inner).is_some() || holds_closure(types, *inner);
+pub(super) fn holds_closure(types: &Types, ty: Ty) -> bool {
+    holds(types, ty, &|inner| types.closure_sig(inner).is_some())
+}
+
+/// Whether `ty` keeps inside another value a type that `is` accepts.
+pub(super) fn holds(types: &Types, ty: Ty, is: &dyn Fn(Ty) -> bool) -> bool {
+    let inside = |inner: &Ty| is(*inner) || holds(types, *inner, is);
     match types.kind(ty) {
         TyKind::Vec(inner) | TyKind::Array(inner, _) | TyKind::Optional(inner) => inside(inner),
         TyKind::Result(ok, err) => inside(ok) || inside(err),

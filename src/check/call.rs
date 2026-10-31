@@ -148,6 +148,9 @@ impl FnCx<'_, '_> {
 
     fn check_args_only(&mut self, args: &[Expression]) {
         for arg in args {
+            if matches!(arg.kind, ExpressionKind::Closure(_)) {
+                continue;
+            }
             self.expr(arg, None);
         }
     }
@@ -924,8 +927,7 @@ impl FnCx<'_, '_> {
             };
             let names: Vec<String> = params[skip..]
                 .iter()
-                .zip(&sig.params[skip..])
-                .map(|((name, ..), &ty)| format!("{name}: {}", self.cx.types.show(ty)))
+                .map(|(name, spec, _)| format!("{name}: {}", crate::fmt::ty_text(spec)))
                 .collect();
             let decl = self.cx.sources.first_line(item.decl.span);
             let in_std = self.cx.sources.in_std(decl);
@@ -1023,14 +1025,15 @@ impl FnCx<'_, '_> {
             .collect();
         let ret = self.cx.types.subst(callable.ret, generics);
         let ret = self.resolve(ret);
+        let errors = self.cx.errors.len();
         let value = match &arg.kind {
             ExpressionKind::Closure(closure) => {
                 self.closure(closure, Some((wanted.clone(), ret)), arg.span)
             }
             _ => self.value(arg, None),
         };
-        if self.cx.types.is_error(value.ty) {
-            return value;
+        if self.cx.types.is_error(value.ty) || self.cx.errors.len() > errors {
+            return self.error_expr(arg.span);
         }
         let fits = match self.cx.types.closure_sig(value.ty) {
             Some((params, returns)) => {
@@ -1067,6 +1070,21 @@ impl FnCx<'_, '_> {
             return self.error_expr(arg.span);
         }
         self.fits(generics[callable.generic], value.ty, true);
+        let returned = self.cx.types.closure_sig(value.ty).map(|(_, ret)| ret);
+        if returned == Some(Types::VOID) && callable.ret != Types::VOID {
+            let kept = self.cx.sig(def).map(|sig| sig.ret).unwrap_or(Types::VOID);
+            let kept = self.cx.types.subst(kept, generics);
+            let kept = self.resolve(kept);
+            if super::closure::holds(&self.cx.types, kept, &|ty| ty == Types::VOID) {
+                let callee = self.cx.items.shown(def);
+                self.error(
+                    format!("This closure returns nothing, but '{callee}' keeps what it returns"),
+                    arg.span,
+                )
+                .help("return a value from it, or run it on each element with a for loop");
+                return self.error_expr(arg.span);
+            }
+        }
         value
     }
 

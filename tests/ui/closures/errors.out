@@ -37,12 +37,12 @@ Error: A closure cannot be kept inside a Holder
     │
     │ Help: keep each closure in a variable of its own, or pass it as an argument
 ────╯
-Error: This closure takes 2 parameter(s), but it will be given 1
+Error: This closure takes 2 parameters, but it is given 1 value
     ╭─[ tests/ui/closures/errors.zr:24:25 ]
     │
  24 │     println("{}", apply(fn(x, y) x, 1));
     │                         ─────┬────
-    │                              ╰────── This closure takes 2 parameter(s), but it will be given 1
+    │                              ╰────── This closure takes 2 parameters, but it is given 1 value
 ────╯
 Error: 'apply' takes 'f' as fn(i32) i32, but this is fn(bool) bool
     ╭─[ tests/ui/closures/errors.zr:25:25 ]
@@ -67,12 +67,12 @@ Error: 'id' is generic, so it is not a value
     │
     │ Help: call it inside a closure, as in fn(x) id(x)
 ────╯
-Error: This closure takes 1 argument(s), but 2 were given
+Error: This closure takes 1 argument, but 2 were given
     ╭─[ tests/ui/closures/errors.zr:28:19 ]
     │
  28 │     println("{}", inc(1, 2));
     │                   ────┬────
-    │                       ╰────── This closure takes 1 argument(s), but 2 were given
+    │                       ╰────── This closure takes 1 argument, but 2 were given
 ────╯
 Error: Cannot tell the type of 'x' here
     ╭─[ tests/ui/closures/errors.zr:29:15 ]
@@ -143,5 +143,42 @@ Error: 't' cannot be var: a closure only borrows what it is given
     │                       ╰── 't' cannot be var: a closure only borrows what it is given
     │
     │ Help: change a copy of it, as in var own = t.copy();
+────╯
+Error: Cannot change 'w': a closure only borrows what it is given
+    ╭─[ tests/ui/closures/errors.zr:51:9 ]
+    │
+ 51 │         w.push_str("!");
+    │         ───────┬───────
+    │                ╰───────── Cannot change 'w': a closure only borrows what it is given
+    │
+    │ Help: change a copy of it, as in var own = w.copy();
+────╯
+Error: This closure returns nothing, but 'Vec.map' keeps what it returns
+    ╭─[ tests/ui/closures/errors.zr:54:29 ]
+    │
+ 54 │ ╭─▶     var nothing = words.map(fn(w) {
+    ┆ ┆
+ 56 │ ├─▶     });
+    │ │
+    │ ╰───────────── This closure returns nothing, but 'Vec.map' keeps what it returns
+    │
+    │     Help: return a value from it, or run it on each element with a for loop
+────╯
+Error: This closure takes 2 parameters, but it is given 1 value
+    ╭─[ tests/ui/closures/errors.zr:57:26 ]
+    │
+ 57 │     var pair = words.map(fn(a, b) a);
+    │                          ─────┬────
+    │                               ╰────── This closure takes 2 parameters, but it is given 1 value
+────╯
+Error: This closure returns bool, but this value is usize
+    ╭─[ tests/ui/closures/errors.zr:58:35 ]
+    │
+ 58 │     var lens = words.filter(fn(w) w.len());
+    │                                   ───┬───
+    │                                      ╰───── this is usize
+    │
+    │ Help: compare it to get a bool
+    │           var lens = words.filter(fn(w) w.len() != 0);
 ────╯
 [-] Error: aborting due to previous error
