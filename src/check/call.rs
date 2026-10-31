@@ -147,6 +147,11 @@ impl FnCx<'_, '_> {
         span: Span,
     ) -> Expr {
         let module = self.scope.module;
+        if self.names_closure(name)
+            && let Some((place, ty)) = self.variable(name)
+        {
+            return self.call_closure(place, ty, args, span);
+        }
         if PRINTS.contains(&name) {
             return self.print(name, args, span);
         }
@@ -948,11 +953,18 @@ impl FnCx<'_, '_> {
             let var = self.new_var(&param.name, &full, span);
             generics.push(var);
         }
+        for _ in &sig.callables {
+            let var = self.new_var("a closure", &full, span);
+            generics.push(var);
+        }
         let params = self.cx.types.subst_all(&sig.params[skip..], &generics);
         let ret = self.cx.types.subst(sig.ret, &generics);
 
+        let callable = |at: usize| sig.callables.iter().find(|c| c.param == at + skip);
+        let (closures, plain): (Vec<usize>, Vec<usize>) =
+            (0..args.len()).partition(|&at| callable(at).is_some());
         let (late, early): (Vec<usize>, Vec<usize>) =
-            (0..args.len()).partition(|&at| written_value(&args[at]));
+            plain.into_iter().partition(|&at| written_value(&args[at]));
         let mut checked: Vec<Option<Expr>> = (0..args.len()).map(|_| None).collect();
         for at in early {
             checked[at] = Some(self.argument(&args[at], params[at], def, at + skip));
@@ -963,6 +975,10 @@ impl FnCx<'_, '_> {
         for at in late {
             checked[at] = Some(self.argument(&args[at], params[at], def, at + skip));
         }
+        for at in closures {
+            let callable = callable(at).expect("partitioned above").clone();
+            checked[at] = Some(self.callable_argument(&args[at], &callable, &generics, def));
+        }
 
         let Some(id) = self.call_instance(def, generics, span) else {
             return self.error_expr(span);
@@ -970,6 +986,73 @@ impl FnCx<'_, '_> {
         let mut values: Vec<Expr> = receiver.into_iter().collect();
         values.extend(checked.into_iter().map(Option::unwrap));
         self.mk(ExprKind::Call(id, values), ret, span)
+    }
+
+    /// The argument for the `fn(..)` parameter `callable` of `def`: a
+    /// closure checked against what the parameter takes and returns, or a
+    /// closure or function that fits it. Its type becomes the parameter's.
+    fn callable_argument(
+        &mut self,
+        arg: &Expression,
+        callable: &super::Callable,
+        generics: &[Ty],
+        def: DefId,
+    ) -> Expr {
+        let wanted: Vec<Ty> = callable
+            .params
+            .iter()
+            .map(|&param| {
+                let param = self.cx.types.subst(param, generics);
+                self.resolve(param)
+            })
+            .collect();
+        let ret = self.cx.types.subst(callable.ret, generics);
+        let ret = self.resolve(ret);
+        let value = match &arg.kind {
+            ExpressionKind::Closure(closure) => {
+                self.closure(closure, Some((wanted.clone(), ret)), arg.span)
+            }
+            _ => self.value(arg, None),
+        };
+        if self.cx.types.is_error(value.ty) {
+            return value;
+        }
+        let fits = match self.cx.types.closure_sig(value.ty) {
+            Some((params, returns)) => {
+                params.len() == wanted.len()
+                    && params
+                        .iter()
+                        .zip(&wanted)
+                        .all(|(&p, &w)| self.fits(w, p, true))
+                    && self.fits(ret, returns, false)
+            }
+            None => false,
+        };
+        if !fits {
+            let items = self.cx.items;
+            let callee = items.shown(def);
+            let StatementKind::Function { params, .. } = &items.item(def).decl.kind else {
+                unreachable!("a call is to a function")
+            };
+            let name = params[callable.param].0.clone();
+            let shown: Vec<String> = wanted.iter().map(|&ty| self.ty(ty)).collect();
+            let returns = match self.resolve(ret) {
+                ty if ty == Types::VOID => String::new(),
+                ty => format!(" {}", self.ty(ty)),
+            };
+            let got = self.ty(value.ty);
+            self.error(
+                format!(
+                    "'{callee}' takes '{name}' as fn({}){returns}, but this is {got}",
+                    shown.join(", ")
+                ),
+                arg.span,
+            )
+            .label(format!("this is {got}"));
+            return self.error_expr(arg.span);
+        }
+        self.fits(generics[callable.generic], value.ty, true);
+        value
     }
 
     /// The argument for parameter `at` of `def`, going where `param` is
@@ -1832,5 +1915,6 @@ fn stable(place: &Place) -> bool {
         Place::Index(base, index) => stable(base) && matches!(index.kind, ExprKind::Int(_)),
         Place::Deref(pointer) => matches!(&pointer.kind, ExprKind::Read(place) if stable(place)),
         Place::Temp(_) => false,
+        Place::Capture(_) => true,
     }
 }

@@ -1,7 +1,8 @@
 use crate::{
     ast::{
-        AsmOperand, Expression, ExpressionKind, MatchArm, Names, PRIMITIVES, Pattern, PatternKind,
-        Program, Statement, StatementKind, TraitMethod, TypeParameter, TypeSpec,
+        AsmOperand, Closure, ClosureBody, Expression, ExpressionKind, MatchArm, Names, PRIMITIVES,
+        Pattern, PatternKind, Program, Statement, StatementKind, TraitMethod, TypeParameter,
+        TypeSpec,
     },
     errors::{Span, ZeruError},
     lexer::Lexer,
@@ -24,6 +25,7 @@ pub struct Parser {
 
     no_struct_literal: bool,
     in_pattern: bool,
+    argument_at: usize,
     code_seen: bool,
 
     depth: usize,
@@ -85,6 +87,7 @@ impl Parser {
             panic_mode: false,
             no_struct_literal: false,
             in_pattern: false,
+            argument_at: usize::MAX,
             code_seen: false,
             depth: 0,
             brackets: 0,
@@ -581,6 +584,23 @@ impl Parser {
                 Token::BitAnd => p.parse_reference_type()?,
                 Token::LParen => p.parse_parenthesized_type()?,
                 Token::Identifier(_) => p.parse_named_type()?,
+                Token::Fn => {
+                    p.bump();
+                    p.expect(&Token::LParen)?;
+                    let params = p.parse_list(&Token::RParen, Self::parse_type)?;
+                    let returns = match p.at_any(&[
+                        Token::Comma,
+                        Token::RParen,
+                        Token::Gt,
+                        Token::Semicolon,
+                        Token::Assign,
+                        Token::LBrace,
+                    ]) {
+                        true => None,
+                        false => Some(Box::new(p.parse_type()?)),
+                    };
+                    TypeSpec::Fn(params, returns)
+                }
                 _ => return p.error_here("Type identifier expected"),
             };
             if p.eat(&Token::Question) {
@@ -1069,7 +1089,7 @@ impl Parser {
                 .any(|arg| matches!(arg, TypeSpec::IntLiteral(_)))
             && self.eat(&Token::LParen)
         {
-            let arguments = self.struct_literals(true, |p| p.parse_expressions(&Token::RParen))?;
+            let arguments = self.parse_arguments()?;
             let start = function.span;
             let kind = ExpressionKind::Call {
                 function: Box::new(function),
@@ -1364,6 +1384,7 @@ impl Parser {
                 Token::BitAnd => self.parse_borrow_expression(),
                 Token::Match => self.parse_match_expression(),
                 Token::If => self.parse_if_expression(),
+                Token::Fn => self.parse_closure(),
                 Token::Asm => self.parse_asm_expression(),
                 token => self.error_here(format!("Expected an expression, found '{token}'")),
             },
@@ -1659,8 +1680,7 @@ impl Parser {
                 }
             }
             Token::LParen => {
-                let arguments =
-                    self.struct_literals(true, |p| p.parse_expressions(&Token::RParen))?;
+                let arguments = self.parse_arguments()?;
                 ExpressionKind::Call {
                     function: left,
                     type_args: Vec::new(),
@@ -1772,6 +1792,55 @@ impl Parser {
             }
         }
         Some(items)
+    }
+
+    /// A call's arguments, up to its `)`. A closure that is a whole one may
+    /// have a body of one expression.
+    fn parse_arguments(&mut self) -> Option<Vec<Expression>> {
+        self.struct_literals(true, |p| {
+            p.parse_list(&Token::RParen, |p| {
+                p.argument_at = p.pos;
+                p.parse_expression(Precedence::Lowest)
+            })
+        })
+    }
+
+    /// `fn(x: i32) i32 { body }`, or with a body of one expression,
+    /// `fn(x) x * 2`. After the parameters, a type followed by `{` is the
+    /// return type of a block body.
+    fn parse_closure(&mut self) -> Option<Expression> {
+        let start = self.span();
+        let argument = self.argument_at == self.pos;
+        self.bump();
+        self.expect(&Token::LParen)?;
+        let params = self.parse_list(&Token::RParen, |p| {
+            let mutable = p.eat(&Token::Var);
+            let name = p.identifier("a parameter name")?;
+            let ty = match p.eat(&Token::Colon) {
+                true => Some(p.parse_type()?),
+                false => None,
+            };
+            Some((name, ty, mutable))
+        })?;
+        let saved = self.checkpoint();
+        let return_type = match self.at(&Token::LBrace) {
+            true => None,
+            false => self.parse_type().filter(|_| self.at(&Token::LBrace)),
+        };
+        let body = match self.at(&Token::LBrace) {
+            true => ClosureBody::Block(self.parse_block_statement()?),
+            false => {
+                self.rewind(saved);
+                ClosureBody::Expression(Box::new(self.parse_expression(Precedence::Lowest)?))
+            }
+        };
+        let closure = Closure {
+            params,
+            return_type,
+            body,
+            argument,
+        };
+        Some(self.expression(ExpressionKind::Closure(Box::new(closure)), start))
     }
 
     fn parse_expressions(&mut self, close: &Token) -> Option<Vec<Expression>> {

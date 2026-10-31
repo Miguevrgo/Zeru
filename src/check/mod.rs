@@ -5,6 +5,7 @@
 
 mod body;
 mod call;
+mod closure;
 mod consts;
 mod eval;
 mod expr;
@@ -32,6 +33,28 @@ pub struct Sig {
     pub receiver: Receiver,
     pub generics: Vec<TypeParameter>,
     pub own_generics: usize,
+    pub callables: Vec<Callable>,
+}
+
+/// A parameter written `fn(..)`: parameter `param` takes any closure that
+/// takes `params` and returns `ret`, so its type is a type parameter of its
+/// own, `generic`, after those written, and each closure an instance.
+#[derive(Clone)]
+pub struct Callable {
+    pub param: usize,
+    pub generic: usize,
+    pub params: Vec<Ty>,
+    pub ret: Ty,
+}
+
+/// A closure: its type, the function its body is, and the references it
+/// holds to what it captured. One `named` is a function passed by name,
+/// called with no references at all.
+struct ClosureInfo {
+    ty: Ty,
+    body: FnId,
+    fields: Vec<Ty>,
+    named: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -96,6 +119,8 @@ pub struct Checker<'a> {
     pending: VecDeque<FnId>,
     functions: Vec<Option<tir::Function>>,
     queued: Vec<Instance>,
+    closures: Vec<ClosureInfo>,
+    named_closures: HashMap<DefId, Ty>,
     unsatisfied: HashSet<(DefId, Vec<Ty>)>,
     adts_seen: HashSet<Ty>,
     unreported: Cell<Option<Span>>,
@@ -128,6 +153,8 @@ impl<'a> Checker<'a> {
             pending: VecDeque::new(),
             functions: Vec::new(),
             queued: Vec::new(),
+            closures: Vec::new(),
+            named_closures: HashMap::new(),
             unsatisfied: HashSet::new(),
             adts_seen: HashSet::new(),
             unreported: Cell::new(None),
@@ -204,7 +231,9 @@ impl<'a> Checker<'a> {
         for &def in &defs {
             let item = self.items.item(def);
             if item.kind != ItemKind::Fn
-                || !self.sig(def).is_some_and(|sig| sig.generics.is_empty())
+                || !self
+                    .sig(def)
+                    .is_some_and(|sig| sig.generics.is_empty() && sig.callables.is_empty())
             {
                 continue;
             }
@@ -288,7 +317,41 @@ impl<'a> Checker<'a> {
             done = upto;
             self.drain();
         }
+        for closure in &self.closures {
+            let fields = closure.fields.clone();
+            structs.insert(closure.ty, tir::StructLayout { fields, drop: None });
+        }
         (structs, enums)
+    }
+
+    /// Keep the body of closure `ty`, checked already, as a function of its
+    /// own.
+    fn add_closure(&mut self, ty: Ty, body: tir::Function, fields: Vec<Ty>, named: bool) -> FnId {
+        let id = FnId(self.functions.len() as u32);
+        self.queued.push(Instance {
+            def: DefId(u32::MAX),
+            args: Vec::new(),
+            from: body.span,
+        });
+        self.functions.push(Some(body));
+        self.closures.push(ClosureInfo {
+            ty,
+            body: id,
+            fields,
+            named,
+        });
+        id
+    }
+
+    /// The function closure `ty` runs, and whether it is called with no
+    /// references, as a function passed by name is.
+    fn closure_body(&self, ty: Ty) -> (FnId, bool) {
+        let closure = self
+            .closures
+            .iter()
+            .find(|closure| closure.ty == ty)
+            .expect("each closure is kept as it is made");
+        (closure.body, closure.named)
     }
 
     fn drain(&mut self) {
@@ -424,7 +487,24 @@ impl<'a> Checker<'a> {
 
         let mut receiver = Receiver::None;
         let mut param_tys = Vec::new();
+        let mut callables = Vec::new();
         for (index, (param, spec, mutable)) in params.iter().enumerate() {
+            if let TypeSpec::Fn(takes, returns) = spec {
+                let generic = generics.len() + callables.len();
+                let takes = takes
+                    .iter()
+                    .map(|ty| self.resolve_type(ty, &scope, span))
+                    .collect();
+                let ret = self.resolve_return(returns.as_deref(), &scope, span);
+                callables.push(Callable {
+                    param: index,
+                    generic,
+                    params: takes,
+                    ret,
+                });
+                param_tys.push(self.types.intern(TyKind::Param(generic as u32)));
+                continue;
+            }
             if param == "self" {
                 match item.owner {
                     Some(owner) if index == 0 => {
@@ -487,6 +567,7 @@ impl<'a> Checker<'a> {
             receiver,
             own_generics: type_params.len(),
             generics,
+            callables,
         })
     }
 

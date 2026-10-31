@@ -86,7 +86,7 @@ impl<'ctx> Lower<'_, 'ctx> {
                 let parts: Vec<BasicTypeEnum> = parts.iter().map(|&p| self.llvm_ty(p)).collect();
                 context.struct_type(&parts, false).into()
             }
-            TyKind::Adt(..) if self.program.structs.contains_key(&ty) => {
+            TyKind::Adt(..) | TyKind::Closure(_) if self.program.structs.contains_key(&ty) => {
                 let named = context.opaque_struct_type(&self.types().show(ty));
                 self.llvm_types.insert(ty, named.into());
                 let fields = self.program.structs[&ty].fields.clone();
@@ -112,6 +112,7 @@ impl<'ctx> Lower<'_, 'ctx> {
                     .struct_type(&[context.i32_type().into(), area.into()], false)
                     .into()
             }
+            TyKind::Closure(_) => unreachable!("every closure gets a layout"),
             TyKind::Void | TyKind::Param(_) | TyKind::Infer(_) | TyKind::Error => {
                 unreachable!("{} has no values", self.types().show(ty))
             }

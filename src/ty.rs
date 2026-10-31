@@ -110,6 +110,9 @@ pub enum TyKind {
     Optional(Ty),
     Result(Ty, Ty),
     Tuple(Vec<Ty>),
+    /// A closure, each its own type; [`Types::closure_sig`] gives what it
+    /// takes and returns.
+    Closure(u32),
     Error,
 }
 
@@ -117,6 +120,7 @@ pub struct Types {
     kinds: Vec<TyKind>,
     ids: HashMap<TyKind, Ty>,
     names: HashMap<DefId, String>,
+    closures: Vec<(Vec<Ty>, Ty)>,
 }
 
 impl Types {
@@ -137,6 +141,7 @@ impl Types {
             kinds: Vec::new(),
             ids: HashMap::new(),
             names: HashMap::new(),
+            closures: Vec::new(),
         };
         for kind in [
             TyKind::Error,
@@ -193,6 +198,27 @@ impl Types {
             "str" => Self::STR,
             _ => return None,
         })
+    }
+
+    /// A new closure type, taking `params` and returning `ret`.
+    pub fn new_closure(&mut self, params: Vec<Ty>, ret: Ty) -> Ty {
+        let at = self.closures.len() as u32;
+        self.closures.push((params, ret));
+        self.intern(TyKind::Closure(at))
+    }
+
+    /// What the closure `ty` takes and returns.
+    pub fn closure_sig(&self, ty: Ty) -> Option<(Vec<Ty>, Ty)> {
+        match self.kind(ty) {
+            TyKind::Closure(at) => Some(self.closures[*at as usize].clone()),
+            _ => None,
+        }
+    }
+
+    pub fn set_closure_ret(&mut self, ty: Ty, ret: Ty) {
+        if let TyKind::Closure(at) = *self.kind(ty) {
+            self.closures[at as usize].1 = ret;
+        }
     }
 
     pub fn name_adt(&mut self, def: DefId, name: String) {
@@ -378,6 +404,10 @@ impl Types {
             TyKind::Result(ok, _) => format!("{}!", self.show_operand(*ok)),
             TyKind::Tuple(items) if items.len() == 1 => format!("({},)", list(items)),
             TyKind::Tuple(items) => format!("({})", list(items)),
+            TyKind::Closure(at) => match &self.closures[*at as usize] {
+                (params, ret) if *ret == Self::VOID => format!("fn({})", list(params)),
+                (params, ret) => format!("fn({}) {}", list(params), self.show(*ret)),
+            },
             TyKind::Error => "<error>".into(),
         }
     }

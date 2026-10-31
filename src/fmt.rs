@@ -11,7 +11,7 @@
 use std::collections::HashSet;
 
 use crate::ast::{
-    Expression, ExpressionKind as E, Names, Pattern, PatternKind, Program, Statement,
+    ClosureBody, Expression, ExpressionKind as E, Names, Pattern, PatternKind, Program, Statement,
     StatementKind as S, TypeParameter, TypeSpec,
 };
 use crate::errors::{Span, ZeruError};
@@ -784,6 +784,32 @@ impl<'s> Printer<'s> {
                 let items = items.iter().map(|item| self.expr(item)).collect();
                 list("(", items, ")", false)
             }
+            E::Closure(closure) => {
+                let params = closure
+                    .params
+                    .iter()
+                    .map(|(name, ty, mutable)| {
+                        let var = if *mutable { "var " } else { "" };
+                        text(match ty {
+                            Some(ty) => format!("{var}{name}: {}", ty_text(ty)),
+                            None => format!("{var}{name}"),
+                        })
+                    })
+                    .collect();
+                let mut parts = vec![text("fn"), list("(", params, ")", false)];
+                match &closure.body {
+                    ClosureBody::Expression(body) => parts.extend([text(" "), self.expr(body)]),
+                    ClosureBody::Block(body) => {
+                        let ret = closure
+                            .return_type
+                            .as_ref()
+                            .map_or(String::new(), |ty| format!(" {}", return_text(ty)));
+                        parts
+                            .extend([text(format!("{ret} ")), self.block(body, expr.span.end - 1)]);
+                    }
+                }
+                seq(parts)
+            }
         }
     }
 
@@ -921,6 +947,10 @@ fn ty_text(ty: &TypeSpec) -> String {
             inner => format!("&{inner}"),
         },
         TypeSpec::RefMut(inner) => format!("&var {}", ty_text(inner)),
+        TypeSpec::Fn(params, returns) => match returns {
+            Some(returns) => format!("fn({}) {}", types(params), ty_text(returns)),
+            None => format!("fn({})", types(params)),
+        },
     }
 }
 

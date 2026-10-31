@@ -638,6 +638,13 @@ impl<'a> Builder<'a> {
                 None => Place::local(self.map[local.0 as usize].expect("declared before use")),
             },
             tir::Place::Field(base, at) => self.as_place(base).project(Projection::Field(*at)),
+            tir::Place::Capture(at) => {
+                let env = tir::Place::Local(self.function.params[0]);
+                self.as_place(&env)
+                    .project(Projection::Deref)
+                    .project(Projection::Field(*at))
+                    .project(Projection::Deref)
+            }
             tir::Place::Index(base, index) => {
                 let mut base = self.as_place(base);
                 if !simple(index)
@@ -1604,6 +1611,7 @@ fn plain(place: &tir::Place) -> bool {
         tir::Place::Index(base, index) => plain(base) && simple(index),
         tir::Place::Deref(pointer) => simple(pointer),
         tir::Place::Temp(_) => false,
+        tir::Place::Capture(_) => true,
     }
 }
 
@@ -1660,7 +1668,9 @@ fn borrowed_temps(value: &Expr) -> Vec<Ty> {
                 return temps;
             }
             tir::Place::Field(base, _) | tir::Place::Index(base, _) => place = base,
-            tir::Place::Local(_) | tir::Place::Deref(_) => return Vec::new(),
+            tir::Place::Local(_) | tir::Place::Deref(_) | tir::Place::Capture(_) => {
+                return Vec::new();
+            }
         }
     }
 }

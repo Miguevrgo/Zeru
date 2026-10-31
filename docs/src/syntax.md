@@ -33,6 +33,16 @@ fn log(message: str) { println("{}", message); }
 fn bump(var n: i32) i32 { n += 1; return n; }   // var: an assignable copy
 fn pair() (i32, str) { return (1, "one"); }
 fn largest<T: Ord>(a: T, b: T) T { ... }        // generic, with a bound
+fn apply(f: fn(i32) i32, x: i32) i32 { return f(x); }  // takes a closure
+```
+
+## Closures ([more](basics/closures.md))
+
+```zeru,ignore
+var square = fn(x: i32) i32 { return x * x; };  // a block, anywhere
+apply(fn(x) x * 2, 3)                           // one expression, as a whole argument
+apply(double, 3)                                // a function by its name
+each(&v, fn(x) { total += x; })                 // changes total: captured as &var
 ```
 
 ## Control flow ([more](basics/control-flow.md))

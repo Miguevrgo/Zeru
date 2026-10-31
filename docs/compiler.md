@@ -78,12 +78,25 @@ Two rules keep errors from cascading:
   decides whether it fits, and records how: unchanged, retyped between pointer
   kinds, or wrapped in `Some`.
 
+## Closures
+
+`check/closure.rs` checks a closure's body where it is written, in an `FnCx`
+of its own that sees the variables around it. The first one the body names
+becomes a capture, `Place::Capture(k)`, read through a `&`, or a `&var` once
+the body writes it. The closure is its own type, `TyKind::Closure`, a struct
+of those references laid out like any struct, and its body a function whose
+first parameter refers to that struct. A parameter written `fn(..)` is a
+type parameter of its own (`Sig::callables`), so a function taking one is an
+instance per closure, called directly. Since a closure only borrows, it is
+never returned or kept inside another value, and the borrow checker sees it
+as the struct of references it is.
+
 ## The typed IR
 
 `tir.rs` is the contract between checking and code generation. Every
 expression carries its exact type. Every implicit conversion is a node of its
 own, every call names the function instance it reaches, and every place
-(`Local`, `Field`, `Index`, `Deref`, `Temp`) is explicit. Every move is a
+(`Local`, `Field`, `Index`, `Deref`, `Temp`, `Capture`) is explicit. Every move is a
 `Move` and every drop of a replaced value an `Assign { drop_old }`. The
 checker has decided all of it before code generation starts.
 

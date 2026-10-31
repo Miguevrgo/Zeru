@@ -478,6 +478,7 @@ impl Eval<'_, '_> {
                 let value = self.expr(value)?;
                 self.temp(value)
             }
+            Place::Capture(_) => return cannot("run a closure", Span::default()),
         })
     }
 

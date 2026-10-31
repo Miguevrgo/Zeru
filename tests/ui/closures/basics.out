@@ -1,0 +1,9 @@
+status: exit 0
+-- stdout
+15
+16
+36
+14
+6
+[10, 20, 30]
+[false, true, true]

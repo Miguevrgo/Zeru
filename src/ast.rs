@@ -21,7 +21,10 @@ pub struct TraitMethod {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeSpec {
     Named(String),
-    Generic { name: String, args: Vec<TypeSpec> },
+    Generic {
+        name: String,
+        args: Vec<TypeSpec>,
+    },
     IntLiteral(u64),
     Tuple(Vec<TypeSpec>),
     Pointer(Box<TypeSpec>),
@@ -31,6 +34,9 @@ pub enum TypeSpec {
     SliceMut(Box<TypeSpec>),
     Ref(Box<TypeSpec>),
     RefMut(Box<TypeSpec>),
+    /// `fn(i32) i32`: what a closure parameter takes, with no return type
+    /// for one that returns nothing.
+    Fn(Vec<TypeSpec>, Option<Box<TypeSpec>>),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -201,6 +207,7 @@ pub enum ExpressionKind {
     },
     Block(Vec<Statement>),
     Tuple(Vec<Expression>),
+    Closure(Box<Closure>),
     InlineAsm {
         template: String,
         outputs: Vec<AsmOperand>,
@@ -208,6 +215,23 @@ pub enum ExpressionKind {
         clobbers: Vec<String>,
         is_volatile: bool,
     },
+}
+
+/// A function without a name: `fn(x: i32) i32 { body }`, or `fn(x) x * 2`
+/// with a body of one expression, which only a call's whole `argument`
+/// may be. Each parameter may leave out its type, and may be `var`.
+#[derive(Debug, Clone)]
+pub struct Closure {
+    pub params: Vec<(String, Option<TypeSpec>, bool)>,
+    pub return_type: Option<TypeSpec>,
+    pub body: ClosureBody,
+    pub argument: bool,
+}
+
+#[derive(Debug, Clone)]
+pub enum ClosureBody {
+    Block(Vec<Statement>),
+    Expression(Box<Expression>),
 }
 
 /// What a `var`, `const` or `for` names: one name, `_` for a part left

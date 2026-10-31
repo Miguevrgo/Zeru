@@ -418,7 +418,7 @@ impl Program {
             TyKind::Vec(inner) | TyKind::Array(inner, _) | TyKind::Optional(inner) => vec![*inner],
             TyKind::Result(value, error) => vec![*value, *error],
             TyKind::Tuple(parts) => parts.clone(),
-            TyKind::Adt(..) => match self.structs.get(&ty) {
+            TyKind::Adt(..) | TyKind::Closure(_) => match self.structs.get(&ty) {
                 Some(layout) => layout.fields.clone(),
                 None => self
                     .enums

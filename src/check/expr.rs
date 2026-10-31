@@ -276,6 +276,7 @@ impl FnCx<'_, '_> {
                 self.error("A range only goes in a 'for' loop", span);
                 self.error_expr(span)
             }
+            ExpressionKind::Closure(closure) => self.closure(closure, None, span),
             ExpressionKind::Tuple(elements) => {
                 let hints = match inner.map(|ty| self.cx.types.kind(ty).clone()) {
                     Some(TyKind::Tuple(parts)) => parts.into_iter().map(Some).collect(),
@@ -421,10 +422,8 @@ impl FnCx<'_, '_> {
     }
 
     fn identifier(&mut self, name: &str, span: Span) -> Expr {
-        if let Some(local) = self.local(name) {
-            self.note_read(local);
-            let ty = self.local_ty(local);
-            return self.mk(ExprKind::Read(Place::Local(local)), ty, span);
+        if let Some((place, ty)) = self.variable(name) {
+            return self.mk(ExprKind::Read(place), ty, span);
         }
         if let Some((owner, variant)) = name.rsplit_once("::")
             && let Some(def) = self.cx.items.lookup_type(self.scope.module, owner)
@@ -460,12 +459,9 @@ impl FnCx<'_, '_> {
                 value.span = span;
                 value
             }
-            Some(_) => {
-                self.error(format!("'{name}' is a function, not a variable"), span)
-                    .help(format!(
-                        "a function is not a value in Zeru; call it, as in {name}(...)"
-                    ));
-                self.error_expr(span)
+            Some(def) => {
+                let name = name.to_string();
+                self.function_value(def, &name, span)
             }
             None => {
                 let mut candidates = self.local_names();
@@ -613,6 +609,12 @@ impl FnCx<'_, '_> {
     /// The same, a temporary taking the type `expected` when it can.
     fn place_expecting(&mut self, e: &Expression, expected: Option<Ty>) -> (Place, Ty) {
         let span = e.span;
+        if let ExpressionKind::Identifier(name) = &e.kind
+            && self.local(name).is_none()
+            && let Some((at, ty)) = self.capture(name)
+        {
+            return (Place::Capture(at), ty);
+        }
         match &e.kind {
             ExpressionKind::Identifier(name) if self.local(name).is_some() => {
                 let value = self.identifier(name, span);
@@ -1023,6 +1025,7 @@ impl FnCx<'_, '_> {
                 _ => return None,
             },
             Place::Temp(value) => value.ty,
+            Place::Capture(at) => self.captures[*at as usize].outer.ty,
         })
     }
 

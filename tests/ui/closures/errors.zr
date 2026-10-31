@@ -1,0 +1,41 @@
+struct Holder<T> {
+    value: T,
+}
+fn apply(f: fn(i32) i32, x: i32) i32 {
+    return f(x);
+}
+fn id<T>(x: T) T {
+    return x;
+}
+fn stored(f: fn(i32)) fn(i32) {
+    return f;
+}
+fn main() {
+    const k = 1;
+    var inc = fn(x: i32) i32 {
+        return x + k;
+    };
+    var siguiente = fn() k + 1;
+    var lista = Vec[inc];
+    var caja = Holder { value: inc };
+    println("{}", apply(fn(x, y) x, 1));
+    println("{}", apply(fn(x: bool) x, 1));
+    println("{}", apply(5, 1));
+    println("{}", apply(id, 1));
+    println("{}", inc(1, 2));
+    var sin = fn(x) {
+        return x;
+    };
+    var fabrica = fn() {
+        return fn(x: i32) i32 {
+            return x;
+        };
+    };
+    var v: Vec<i32> = Vec[1];
+    var mueve = fn() {
+        var robado = v;
+    };
+    var nada = fn() {
+        k += 1;
+    };
+}

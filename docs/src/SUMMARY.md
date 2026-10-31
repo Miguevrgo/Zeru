@@ -9,6 +9,7 @@
 - [Basics](basics/README.md)
   - [Variables and Types](basics/variables.md)
   - [Functions](basics/functions.md)
+  - [Closures](basics/closures.md)
   - [Control Flow](basics/control-flow.md)
   - [Arrays, Vecs and Tuples](basics/sequences.md)
   - [Text](basics/text.md)

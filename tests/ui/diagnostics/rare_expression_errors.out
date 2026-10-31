@@ -9,15 +9,6 @@ Error: Cannot match on f64, only on an integer, a bool, an enum, a T? or a T!
    │
    │ Help: compare it with if and else if instead
 ───╯
-Error: 'main' is a function, not a variable
-   ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:8:13 ]
-   │
- 8 │     var g = main;
-   │             ──┬─
-   │               ╰─── 'main' is a function, not a variable
-   │
-   │ Help: a function is not a value in Zeru; call it, as in main(...)
-───╯
 Error: i32 has no field 'x'
    ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:9:15 ]
    │

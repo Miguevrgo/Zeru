@@ -301,13 +301,13 @@ impl Place {
         match self {
             Place::Local(local) => Some(*local),
             Place::Field(base, _) | Place::Index(base, _) => base.root(),
-            Place::Deref(_) | Place::Temp(_) => None,
+            Place::Deref(_) | Place::Temp(_) | Place::Capture(_) => None,
         }
     }
 
     fn for_each_expr(&mut self, f: &mut impl FnMut(&mut Expr)) {
         match self {
-            Place::Local(_) => {}
+            Place::Local(_) | Place::Capture(_) => {}
             Place::Field(base, _) => base.for_each_expr(f),
             Place::Index(base, index) => {
                 base.for_each_expr(f);
@@ -434,6 +434,9 @@ pub enum Place {
     Index(Box<Place>, Box<Expr>),
     Deref(Box<Expr>),
     Temp(Box<Expr>),
+    /// What a closure's body uses from around it, the `k`th: read through
+    /// the reference its first parameter holds.
+    Capture(u32),
 }
 
 impl Unpack {

@@ -76,6 +76,11 @@ impl Checker<'_> {
             TypeSpec::Ref(inner) => self.wrap(inner, scope, span, TyKind::Ref),
             TypeSpec::RefMut(inner) => self.wrap(inner, scope, span, TyKind::RefMut),
             TypeSpec::Result(ok) => self.wrap(ok, scope, span, |ok| TyKind::Result(ok, Types::I32)),
+            TypeSpec::Fn(..) => {
+                self.error("A fn(..) type is written only as a function's parameter", span)
+                    .help("a closure is passed as an argument or kept in a variable, never returned or kept inside another value");
+                Types::ERROR
+            }
         }
     }
 
@@ -205,6 +210,15 @@ impl Checker<'_> {
     /// `Pair<i32>`: the struct at those arguments, if they meet its bounds.
     pub(super) fn generic_adt(&mut self, def: DefId, args: Vec<Ty>, span: Span) -> Ty {
         if args.iter().any(|&arg| self.types.is_error(arg)) {
+            return Types::ERROR;
+        }
+        if args
+            .iter()
+            .any(|&arg| self.types.closure_sig(arg).is_some())
+        {
+            let base = self.items.item(def).name.clone();
+            self.error(format!("A closure cannot be kept inside a {base}"), span)
+                .help("keep each closure in a variable of its own, or pass it as an argument");
             return Types::ERROR;
         }
         let generics = super::generics_of(self.items.item(def).decl).to_vec();

@@ -1,0 +1,64 @@
+struct Bag {
+    items: Vec<i32>,
+
+    fn each(self, f: fn(i32)) {
+        for x in self.items {
+            f(x);
+        }
+    }
+
+    fn count(self, keep: fn(i32) bool) usize {
+        var n: usize = 0;
+        for x in self.items {
+            if keep(x) {
+                n += 1;
+            }
+        }
+        return n;
+    }
+}
+
+fn apply(f: fn(i32) i32, x: i32) i32 {
+    return f(x);
+}
+
+fn twice(f: fn(i32) i32, x: i32) i32 {
+    return apply(f, apply(f, x));
+}
+
+fn sum_with<T: Num>(v: &Vec<T>, start: T) T {
+    var total = start;
+    var add = fn(x: T) {
+        total += x;
+    };
+    for x in v {
+        add(x);
+    }
+    return total;
+}
+
+fn main() {
+    var bag = Bag { items: Vec[1, 2, 3, 4] };
+    var seen = 0;
+    bag.each(fn(x) {
+        seen += x;
+    });
+    println("{} {}", seen, bag.count(fn(x) x % 2 == 0));
+    var base = 10;
+    println("{}", twice(fn(x) x + base, 1));
+    var outer = 100;
+    var nested = fn(x: i32) i32 {
+        return apply(fn(y) y + outer + x, 1);
+    };
+    println("{}", nested(5));
+    for k in Vec[7, 8] {
+        println("{}", apply(fn(x) x * k, 2));
+    }
+    var step = fn(var x: i32) i32 {
+        x += 1;
+        return x;
+    };
+    println("{}", step(41));
+    var floats: Vec<f64> = Vec[1.5, 2.5];
+    println("{} {}", sum_with(&bag.items, 0), sum_with(&floats, 0.5));
+}

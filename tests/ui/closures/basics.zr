@@ -1,0 +1,43 @@
+fn apply(f: fn(i32) i32, x: i32) i32 {
+    return f(x);
+}
+
+fn each(v: &Vec<i32>, f: fn(i32)) {
+    for x in v {
+        f(x);
+    }
+}
+
+fn map<T, U>(v: &Vec<T>, f: fn(T) U) Vec<U> {
+    var out: Vec<U> = Vec.new();
+    for x in v {
+        out.push(f(x));
+    }
+    return out;
+}
+
+fn double(x: i32) i32 {
+    return x * 2;
+}
+
+fn main() {
+    var n = 3;
+    println("{}", apply(fn(x) x * n, 5));
+    var cuadrado = fn(x: i32) i32 {
+        var y = x * x;
+        return y;
+    };
+    println("{}", cuadrado(4));
+    println("{}", apply(cuadrado, 6));
+    println("{}", apply(double, 7));
+    var v: Vec<i32> = Vec[1, 2, 3];
+    var total = 0;
+    each(&v, fn(x) {
+        total += x;
+    });
+    println("{}", total);
+    var texts = map(&v, fn(x) x * 10);
+    println("{}", texts);
+    var flags = map(&v, fn(x) x > 1);
+    println("{}", flags);
+}

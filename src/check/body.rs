@@ -32,6 +32,27 @@ pub(super) struct FnCx<'c, 'a> {
     breaks: Vec<bool>,
     pub(super) vars: Vec<Var>,
     pub(super) deferred: Vec<DeferredCall>,
+    pub(super) outer: Vec<Outer>,
+    pub(super) captures: Vec<Captured>,
+    pub(super) infer_ret: bool,
+}
+
+/// A variable of the code around a closure, which its body may capture:
+/// its name, type, why it cannot change if it cannot, and where it is
+/// declared.
+#[derive(Clone)]
+pub(super) struct Outer {
+    pub(super) name: String,
+    pub(super) ty: Ty,
+    pub(super) fixed: Option<Fixed>,
+    pub(super) declared: Span,
+}
+
+/// What a closure's body captured: the variable, and whether the body
+/// changes it, which takes a `&var` to it rather than a `&`.
+pub(super) struct Captured {
+    pub(super) outer: Outer,
+    pub(super) mutable: bool,
 }
 
 pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::Function {
@@ -123,7 +144,7 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
 }
 
 impl<'c, 'a> FnCx<'c, 'a> {
-    fn new(cx: &'c mut Checker<'a>, scope: Scope, ret: Ty) -> Self {
+    pub(super) fn new(cx: &'c mut Checker<'a>, scope: Scope, ret: Ty) -> Self {
         Self {
             cx,
             scope,
@@ -140,6 +161,9 @@ impl<'c, 'a> FnCx<'c, 'a> {
             breaks: Vec::new(),
             vars: Vec::new(),
             deferred: Vec::new(),
+            outer: Vec::new(),
+            captures: Vec::new(),
+            infer_ret: false,
         }
     }
 
@@ -156,6 +180,10 @@ impl<'c, 'a> FnCx<'c, 'a> {
 
     pub(super) fn ret_ty(&self) -> Ty {
         self.ret
+    }
+
+    pub(super) fn set_ret(&mut self, ret: Ty) {
+        self.ret = ret;
     }
 
     pub(super) fn fix(&mut self, id: LocalId, why: Fixed) {
@@ -177,7 +205,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
 
     /// Warn about each variable after the first `params` locals that is
     /// never read. A name that starts with `_` is left alone.
-    fn warn_unread(&mut self, params: usize) {
+    pub(super) fn warn_unread(&mut self, params: usize) {
         for at in params..self.locals.len() {
             let name = &self.locals[at].name;
             if self.read[at] || name.is_empty() || name.starts_with('_') {
@@ -213,6 +241,11 @@ impl<'c, 'a> FnCx<'c, 'a> {
         view: bool,
         span: Span,
     ) -> LocalId {
+        if super::closure::holds_closure(&self.cx.types, ty) {
+            let shown = self.cx.types.show(ty);
+            self.error(format!("A closure cannot be kept inside {shown}"), span)
+                .help("keep each closure in a variable of its own, or pass it as an argument");
+        }
         let id = LocalId(self.locals.len() as u32);
         self.locals.push(tir::Local {
             name: name.to_string(),
@@ -247,6 +280,53 @@ impl<'c, 'a> FnCx<'c, 'a> {
         if view {
             self.note_borrow(scrutinee);
         }
+    }
+
+    /// The variables a closure written here may capture, the nearest last.
+    pub(super) fn visible(&self) -> Vec<Outer> {
+        let mut visible = self.outer.clone();
+        visible.extend(
+            self.names
+                .iter()
+                .filter(|(name, _)| !name.is_empty())
+                .map(|(name, id)| Outer {
+                    name: name.clone(),
+                    ty: self.locals[id.0 as usize].ty,
+                    fixed: self.fixed[id.0 as usize],
+                    declared: self.declared[id.0 as usize],
+                }),
+        );
+        visible
+    }
+
+    /// The variable `name` of the code around this closure, captured the
+    /// first time it is used, and its type.
+    pub(super) fn capture(&mut self, name: &str) -> Option<(u32, Ty)> {
+        if let Some(at) = self.captures.iter().position(|c| c.outer.name == name) {
+            return Some((at as u32, self.captures[at].outer.ty));
+        }
+        let outer = self.outer.iter().rev().find(|o| o.name == name)?.clone();
+        let ty = outer.ty;
+        self.captures.push(Captured {
+            outer,
+            mutable: false,
+        });
+        Some((self.captures.len() as u32 - 1, ty))
+    }
+
+    /// The place and type of the variable `name`, its own or captured.
+    pub(super) fn variable(&mut self, name: &str) -> Option<(Place, Ty)> {
+        if let Some(local) = self.local(name) {
+            self.note_read(local);
+            return Some((Place::Local(local), self.local_ty(local)));
+        }
+        let (at, ty) = self.capture(name)?;
+        Some((Place::Capture(at), ty))
+    }
+
+    /// The locals the function was checked with, taken out of it.
+    pub(super) fn take_locals(&mut self) -> Vec<tir::Local> {
+        std::mem::take(&mut self.locals)
     }
 
     pub(super) fn local(&self, name: &str) -> Option<LocalId> {
@@ -306,6 +386,12 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 return;
             }
             ExprKind::Read(Place::Local(_)) => {}
+            ExprKind::Read(Place::Capture(at)) => {
+                let name = self.captures[*at as usize].outer.name.clone();
+                let message = format!("Cannot move '{name}' out of the code around this closure");
+                self.cannot_move(message, "the closure only borrows it", expr);
+                return;
+            }
             ExprKind::Read(place @ Place::Field(..)) if self.field_of_temporary(place) => {}
             ExprKind::Read(Place::Field(..) | Place::Index(..) | Place::Deref(_)) => {
                 let message = "Cannot move a value out of a field, an element or a pointer";
@@ -558,6 +644,12 @@ impl<'c, 'a> FnCx<'c, 'a> {
         };
         let name = self.local_name(local).to_string();
         let declared = self.declared[local.0 as usize];
+        self.fixed_error(name, why, declared, span);
+    }
+
+    /// Report a write at `span` to `name`, declared at `declared`, which
+    /// cannot change because of `why`.
+    fn fixed_error(&mut self, name: String, why: Fixed, declared: Span, span: Span) {
         let sources = self.cx.sources;
         let text = sources.text(declared);
         let at = |offset: usize| Span::new(declared.start + offset, declared.start + offset);
@@ -637,6 +729,14 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 }
             }
             Place::Temp(_) => {}
+            Place::Capture(at) => {
+                let captured = &mut self.captures[*at as usize];
+                captured.mutable = true;
+                if let Some(why) = captured.outer.fixed {
+                    let (name, declared) = (captured.outer.name.clone(), captured.outer.declared);
+                    self.fixed_error(name, why, declared, span);
+                }
+            }
         }
     }
 
@@ -732,9 +832,16 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 StmtKind::Expr(self.mk(kind, Types::VOID, span))
             }
             StatementKind::Return(value) => {
-                let ret = self.ret;
+                let infer = std::mem::take(&mut self.infer_ret);
+                if infer && value.is_none() {
+                    self.ret = Types::VOID;
+                }
                 let value = value.as_ref().map(|value| {
-                    let checked = self.expr(value, Some(ret));
+                    let checked = self.expr(value, (!infer).then_some(self.ret));
+                    if infer {
+                        self.ret = checked.ty;
+                    }
+                    let ret = self.ret;
                     let mut value = self.coerce_or(checked, ret, span, |want, got| {
                         format!("This function returns {want}, but this value is {got}")
                     });
@@ -742,6 +849,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     value
                 });
                 self.diverges = true;
+                let ret = self.ret;
                 if value.is_none() && self.cx.types.is_unit_result(ret) {
                     self.error("A ! function returns early with 'return Ok();'", span);
                 } else if value.is_none() && ret != Types::VOID {
@@ -1278,7 +1386,7 @@ pub(super) fn in_temporary(place: &Place) -> bool {
     match place {
         Place::Field(base, _) | Place::Index(base, _) => in_temporary(base),
         Place::Temp(_) => true,
-        Place::Local(_) | Place::Deref(_) => false,
+        Place::Local(_) | Place::Deref(_) | Place::Capture(_) => false,
     }
 }
 
