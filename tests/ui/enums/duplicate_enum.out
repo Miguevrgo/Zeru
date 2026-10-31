@@ -3,10 +3,14 @@ status: compile error
 Error: Type 'Color' is already defined
    ╭─[ tests/ui/enums/duplicate_enum.zr:4:1 ]
    │
- 4 │ ╭─▶ enum Color {
-   ┆ ┆
- 6 │ ├─▶ }
-   │ │
-   │ ╰─────── Type 'Color' is already defined
+ 1 │ enum Color {
+   │ ──────┬─────
+   │       ╰─────── first defined here
+   │
+ 4 │ enum Color {
+   │ ──────┬─────
+   │       ╰─────── Type 'Color' is already defined
+   │
+   │ Help: rename one of them
 ───╯
 [-] Error: aborting due to previous error

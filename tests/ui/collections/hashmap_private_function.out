@@ -1,10 +1,16 @@
 status: compile error
 -- stderr
-Error: 'hashmap::hash' is private to module 'hashmap'; mark it pub
-   ╭─[ tests/ui/collections/hashmap_private_function.zr:3:14 ]
-   │
- 3 │     var at = hashmap::hash(1);
-   │              ────────┬───────
-   │                      ╰───────── 'hashmap::hash' is private to module 'hashmap'; mark it pub
-───╯
+Error: 'hashmap::hash' is private to module 'hashmap'
+    ╭─[ tests/ui/collections/hashmap_private_function.zr:3:14 ]
+    │
+  3 │     var at = hashmap::hash(1);
+    │              ────────┬───────
+    │                      ╰───────── 'hashmap::hash' is private to module 'hashmap'
+    │
+    ├─[ std/collections/hashmap.zr:13:1 ]
+    │
+ 13 │ fn hash(bits: u64) u64 {
+    │ ───────────┬──────────
+    │            ╰──────────── declared here, without pub
+────╯
 [-] Error: aborting due to previous error

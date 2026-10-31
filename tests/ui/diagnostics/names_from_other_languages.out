@@ -1,0 +1,103 @@
+status: compile error
+-- stderr
+Error: Unknown type 'int'
+   ╭─[ tests/ui/diagnostics/names_from_other_languages.zr:2:12 ]
+   │
+ 2 │     var a: int = 1;
+   │            ─┬─
+   │             ╰─── Unknown type 'int'
+   │
+   │ Help: Zeru calls it 'i32'
+   │           var a: i32 = 1;
+───╯
+Error: Unknown type 'string'
+   ╭─[ tests/ui/diagnostics/names_from_other_languages.zr:3:12 ]
+   │
+ 3 │     var b: string = "b";
+   │            ───┬──
+   │               ╰──── Unknown type 'string'
+   │
+   │ Help: text is 'str', or 'String' where it owns its bytes
+   │           var b: str = "b";
+───╯
+Error: Unknown type 'Option'
+   ╭─[ tests/ui/diagnostics/names_from_other_languages.zr:4:12 ]
+   │
+ 4 │     var c: Option<i64> = null;
+   │            ─────┬─────
+   │                 ╰─────── Unknown type 'Option'
+   │
+   │ Help: Zeru writes an optional of T as T?
+   │           var c: i64? = null;
+───╯
+Error: Undeclared variable 'null'
+   ╭─[ tests/ui/diagnostics/names_from_other_languages.zr:4:26 ]
+   │
+ 4 │     var c: Option<i64> = null;
+   │                          ──┬─
+   │                            ╰─── Undeclared variable 'null'
+   │
+   │ Help: Zeru writes it 'None'
+   │           var c: Option<i64> = None;
+───╯
+Error: Unknown type 'Result'
+   ╭─[ tests/ui/diagnostics/names_from_other_languages.zr:5:12 ]
+   │
+ 5 │     var d: Result<i32, i32> = 1;
+   │            ────────┬───────
+   │                    ╰───────── Unknown type 'Result'
+   │
+   │ Help: Zeru writes a result of T as T!
+   │           var d: i32! = 1;
+───╯
+Error: Vec<i32> has no method 'length'
+   ╭─[ tests/ui/diagnostics/names_from_other_languages.zr:7:24 ]
+   │
+ 7 │     println("{} {}", v.length(), len(v));
+   │                        ───┬──
+   │                           ╰──── Vec<i32> has no method 'length'
+   │
+   │ Help: Zeru calls it 'len'
+   │           println("{} {}", v.len(), len(v));
+───╯
+Error: Function 'len' not defined
+   ╭─[ tests/ui/diagnostics/names_from_other_languages.zr:7:34 ]
+   │
+ 7 │     println("{} {}", v.length(), len(v));
+   │                                  ─┬─
+   │                                   ╰─── Function 'len' not defined
+   │
+   │ Help: it is a method; call it on the value
+   │           println("{} {}", v.length(), v.len());
+───╯
+Error: Vec<i32> has no method 'clone'
+   ╭─[ tests/ui/diagnostics/names_from_other_languages.zr:8:15 ]
+   │
+ 8 │     var w = v.clone();
+   │               ──┬──
+   │                 ╰──── Vec<i32> has no method 'clone'
+   │
+   │ Help: Zeru calls it 'copy'
+   │           var w = v.copy();
+───╯
+Error: Function 'String::from' not defined
+   ╭─[ tests/ui/diagnostics/names_from_other_languages.zr:9:13 ]
+   │
+ 9 │     var s = String::from("s");
+   │             ──────┬─────
+   │                   ╰─────── Function 'String::from' not defined
+   │
+   │ Help: call a type's function with '.'
+   │           var s = String.from("s");
+───╯
+Error: Undeclared variable 'True'
+    ╭─[ tests/ui/diagnostics/names_from_other_languages.zr:10:13 ]
+    │
+ 10 │     var t = True;
+    │             ──┬─
+    │               ╰─── Undeclared variable 'True'
+    │
+    │ Help: Zeru writes it 'true'
+    │           var t = true;
+────╯
+[-] Error: aborting due to previous error

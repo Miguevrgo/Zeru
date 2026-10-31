@@ -50,10 +50,21 @@ pub struct ZeruError {
     pub fix: Option<(Span, String)>,
 }
 
-/// Sort `errors` by where they point and drop the repeats.
+/// Sort `errors` by where they point and drop the repeats, and those an
+/// earlier one already says how to fix, with the same help and edit.
 pub fn tidy(errors: &mut Vec<ZeruError>) {
     errors.sort_by(|a, b| (a.span.start, &a.message).cmp(&(b.span.start, &b.message)));
     errors.dedup_by(|a, b| a.span == b.span && a.message == b.message);
+    let mut fixes = Vec::new();
+    errors.retain(|error| {
+        let Some(fix) = &error.fix else {
+            return true;
+        };
+        let fix = (fix.clone(), error.help.clone());
+        let new = !fixes.contains(&fix);
+        fixes.push(fix);
+        new
+    });
 }
 
 impl ZeruError {
@@ -169,8 +180,8 @@ impl ZeruError {
         report.finish().eprint(ariadne::sources(files)).unwrap();
     }
 
-    /// The lines the fix touches as they read once it is made, indented
-    /// under the help that describes it.
+    /// The lines the fix touches as they read once it is made, or the lines
+    /// it adds, indented under the help that describes it.
     fn fixed(&self, sources: &Sources) -> Option<String> {
         let (span, replacement) = self.fix.as_ref()?;
         let (_, text, range) = sources.locate(*span)?;
@@ -178,11 +189,14 @@ impl ZeruError {
         let end = text[range.end..]
             .find('\n')
             .map_or(text.len(), |at| range.end + at);
-        let lines = format!(
-            "{}{replacement}{}",
-            &text[start..range.start],
-            &text[range.end..end]
-        );
+        let lines = match replacement.contains('\n') {
+            true => replacement.clone(),
+            false => format!(
+                "{}{replacement}{}",
+                &text[start..range.start],
+                &text[range.end..end]
+            ),
+        };
         let indent = lines
             .lines()
             .filter(|line| !line.trim().is_empty())
@@ -252,6 +266,36 @@ impl Sources {
         Some((&file.name, line as u32, column as u32))
     }
 
+    /// Where `name` is first written as a whole word inside `within`.
+    pub fn word_in(&self, within: Span, name: &str) -> Option<Span> {
+        let text = self.text(within);
+        text.match_indices(name)
+            .find(|&(at, _)| whole(text, at, name.len()))
+            .map(|(at, _)| Span::new(within.start + at, within.start + at + name.len()))
+    }
+
+    /// Where `name` is last written as a whole word inside `within`.
+    pub fn last_word_in(&self, within: Span, name: &str) -> Option<Span> {
+        let text = self.text(within);
+        text.rmatch_indices(name)
+            .find(|&(at, _)| whole(text, at, name.len()))
+            .map(|(at, _)| Span::new(within.start + at, within.start + at + name.len()))
+    }
+
+    /// The part of `span` on its first line, as the head of a declaration.
+    pub fn first_line(&self, span: Span) -> Span {
+        let text = self.text(span);
+        let end = text
+            .find('\n')
+            .map_or(text.len(), |at| text[..at].trim_end().len());
+        Span::new(span.start, span.start + end)
+    }
+
+    /// Where the file a span points into starts.
+    pub fn file_start(&self, span: Span) -> Option<usize> {
+        self.file(span).map(|file| file.start)
+    }
+
     /// Whether a span points into the standard library.
     pub fn in_std(&self, span: Span) -> bool {
         self.file(span).is_some_and(|file| file.std)
@@ -269,6 +313,12 @@ impl Sources {
         let end = span.end.min(file.end) - file.start;
         Some((&file.name, text, span.start - file.start..end))
     }
+}
+
+/// Whether the `len` bytes at `at` in `text` are a whole word there.
+fn whole(text: &str, at: usize, len: usize) -> bool {
+    let word = |c: char| c.is_alphanumeric() || c == '_';
+    !text[..at].ends_with(word) && !text[at + len..].starts_with(word)
 }
 
 /// Whether stderr is a terminal, so output to it may be coloured.

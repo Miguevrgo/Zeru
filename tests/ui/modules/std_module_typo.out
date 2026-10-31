@@ -1,0 +1,13 @@
+status: compile error
+-- stderr
+Error: Module 'std.colections.hashmap' not found at std/colections/hashmap.zr
+   ╭─[ tests/ui/modules/std_module_typo.zr:1:1 ]
+   │
+ 1 │ import std.colections.hashmap;
+   │ ───────────────┬──────────────
+   │                ╰──────────────── Module 'std.colections.hashmap' not found at std/colections/hashmap.zr
+   │
+   │ Help: did you mean 'std.collections.hashmap'?
+   │           import std.collections.hashmap;
+───╯
+[-] Error: aborting due to previous error

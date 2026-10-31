@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
 Error: Unknown type 'Nope'
-   ╭─[ tests/ui/traits/bound_with_unknown_return.zr:6:5 ]
+   ╭─[ tests/ui/traits/bound_with_unknown_return.zr:6:19 ]
    │
  6 │     fn area(self) Nope {
-   │     ─────────┬────────
-   │              ╰────────── Unknown type 'Nope'
+   │                   ──┬─
+   │                     ╰─── Unknown type 'Nope'
 ───╯
 [-] Error: aborting due to previous error

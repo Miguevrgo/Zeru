@@ -43,17 +43,20 @@ Error: String has no function 'pop'
    │                   ╰─────── String has no function 'pop'
 ───╯
 Error: str has no method 'shout'
-    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:10:13 ]
+    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:10:19 ]
     │
  10 │     var w = "abc".shout();
-    │             ──────┬──────
-    │                   ╰──────── str has no method 'shout'
+    │                   ──┬──
+    │                     ╰──── str has no method 'shout'
 ────╯
 Error: Vec<i32> has no method 'shout'
-    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:12:5 ]
+    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:12:7 ]
     │
  12 │     n.shout();
-    │     ────┬────
-    │         ╰────── Vec<i32> has no method 'shout'
+    │       ──┬──
+    │         ╰──── Vec<i32> has no method 'shout'
+    │
+    │ Help: did you mean 'sort'?
+    │           n.sort();
 ────╯
 [-] Error: aborting due to previous error

@@ -10,8 +10,8 @@ use crate::tir::{Arm, Asm, BinOp, Builtin, Expr, ExprKind, Place, UnOp, Unpack};
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
-use super::Checker;
 use super::body::FnCx;
+use super::{Checker, suggest};
 
 impl FnCx<'_, '_> {
     pub(super) fn mk(&self, kind: ExprKind, ty: Ty, span: Span) -> Expr {
@@ -429,7 +429,13 @@ impl FnCx<'_, '_> {
             self.cx.check_visible(def, self.scope.module, span);
             let variants = self.cx.variants_of(def);
             let Some(index) = variants.iter().position(|(v, _)| v == variant) else {
-                self.error(format!("Enum '{owner}' has no variant '{variant}'"), span);
+                let names: Vec<String> = variants.iter().map(|(v, _)| v.clone()).collect();
+                let at = Span::new(span.end - variant.len(), span.end);
+                let error = self.error(format!("Enum '{owner}' has no variant '{variant}'"), span);
+                suggest::did_you_mean(error, variant, &names, Some(at));
+                if error.help.is_none() {
+                    error.help(format!("its variants are {}", names.join(", ")));
+                }
                 return self.error_expr(span);
             };
             if !variants[index].1.is_empty() {
@@ -451,7 +457,10 @@ impl FnCx<'_, '_> {
                 value
             }
             Some(_) => {
-                self.error(format!("'{name}' is a function, not a variable"), span);
+                self.error(format!("'{name}' is a function, not a variable"), span)
+                    .help(format!(
+                        "a function is not a value in Zeru; call it, as in {name}(...)"
+                    ));
                 self.error_expr(span)
             }
             None => {
@@ -464,8 +473,22 @@ impl FnCx<'_, '_> {
                         .filter(|item| item.kind == ItemKind::Const)
                         .map(|item| item.name.clone()),
                 );
+                let sources = self.cx.sources;
                 let error = self.error(format!("Undeclared variable '{name}'"), span);
-                super::types::did_you_mean(error, name, &candidates, span);
+                if let Some(ours) = suggest::value_alias(name) {
+                    error
+                        .help(format!("Zeru writes it '{ours}'"))
+                        .fix(span, ours);
+                } else if let Some(module) = name
+                    .split_once("::")
+                    .and_then(|(short, item)| suggest::std_module_with(short, item))
+                {
+                    suggest::suggest_import(sources, error, span, &module, None);
+                } else if let Some(module) = suggest::std_home(name) {
+                    suggest::suggest_import(sources, error, span, &module, Some(name));
+                } else {
+                    suggest::did_you_mean(error, name, &candidates, Some(span));
+                }
                 self.error_expr(span)
             }
         }
@@ -632,7 +655,11 @@ impl FnCx<'_, '_> {
                 Some(at) => (Place::Field(Box::new(base), at as u32), parts[at]),
                 None => {
                     let shown = self.ty(ty);
-                    self.error(format!("{shown} has no field '{name}'"), span);
+                    let last = parts.len().saturating_sub(1);
+                    self.error(format!("{shown} has no field '{name}'"), span)
+                        .help(format!(
+                            "a tuple's parts are named by position, .0 to .{last}"
+                        ));
                     (base, Types::ERROR)
                 }
             },
@@ -641,14 +668,14 @@ impl FnCx<'_, '_> {
                 match fields.iter().position(|(field, _)| field == name) {
                     Some(at) => (Place::Field(Box::new(base), at as u32), fields[at].1),
                     None => {
-                        let shown = self.ty(ty);
-                        self.error(format!("Struct '{shown}' has no field '{name}'"), span);
+                        let names: Vec<String> = fields.into_iter().map(|(f, _)| f).collect();
+                        self.no_field(ty, name, &names, span);
                         (base, Types::ERROR)
                     }
                 }
             }
             _ => {
-                self.error("Cannot access property on non-struct type", span);
+                self.no_field(ty, name, &[], span);
                 (base, Types::ERROR)
             }
         }
@@ -1326,6 +1353,35 @@ impl FnCx<'_, '_> {
             || int(from) && is_ptr(to)
     }
 
+    /// Report that `ty` has no field `name`, read at the end of `span`,
+    /// with what was meant when it can tell: a method called without
+    /// parentheses, or a field of a similar name.
+    fn no_field(&mut self, ty: Ty, name: &str, fields: &[String], span: Span) {
+        let sources = self.cx.sources;
+        let at =
+            Some(Span::new(span.end - name.len(), span.end)).filter(|&at| sources.text(at) == name);
+        let method = self.methods_of(ty).iter().any(|m| m == name);
+        let shown = self.ty(ty);
+        let what = match self.cx.is_struct(ty) {
+            Some(_) => format!("Struct '{shown}'"),
+            None => shown,
+        };
+        let error = self.error(format!("{what} has no field '{name}'"), at.unwrap_or(span));
+        if method {
+            error.help(format!("'{name}' is a method; call it"));
+            if let Some(at) = at {
+                error.fix(at, format!("{name}()"));
+            }
+        } else if fields.is_empty() {
+            error.help("only a struct or a tuple has fields");
+        } else {
+            suggest::did_you_mean(error, name, fields, at);
+            if error.help.is_none() {
+                error.help(format!("its fields are {}", fields.join(", ")));
+            }
+        }
+    }
+
     fn struct_literal(
         &mut self,
         name: &str,
@@ -1339,7 +1395,17 @@ impl FnCx<'_, '_> {
             .lookup_type(self.scope.module, name)
             .filter(|&def| self.cx.items.item(def).kind == ItemKind::Struct)
         else {
-            self.error(format!("Unknown struct type '{name}'"), span);
+            let sources = self.cx.sources;
+            let at = sources.word_in(span, name);
+            let structs = self
+                .cx
+                .items
+                .names_of(self.scope.module, ItemKind::Struct, false);
+            let error = self.error(format!("Unknown struct type '{name}'"), at.unwrap_or(span));
+            match suggest::std_home(name) {
+                Some(module) => suggest::suggest_import(sources, error, span, &module, Some(name)),
+                None => suggest::did_you_mean(error, name, &structs, at),
+            }
             for (_, value) in fields {
                 self.expr(value, None);
             }
@@ -1355,16 +1421,43 @@ impl FnCx<'_, '_> {
 
         let declared = self.cx.fields_of(ty);
         let written: Vec<String> = fields.iter().map(|(f, _)| f.clone()).collect();
+        let sources = self.cx.sources;
+        let name_of = |at: usize| {
+            let start = match at {
+                0 => span.start,
+                _ => fields[at - 1].1.span.end,
+            };
+            sources.last_word_in(Span::new(start, fields[at].1.span.start), &fields[at].0)
+        };
         if let Some(dup) = super::first_duplicate(&written) {
-            self.error(
+            let mut given = written.iter().enumerate().filter(|(_, f)| *f == dup);
+            let first = given.next().and_then(|(at, _)| name_of(at));
+            let again = given.next().and_then(|(at, _)| name_of(at));
+            let error = self.error(
                 format!("Field '{dup}' is given twice in struct literal {shown}"),
-                span,
+                again.unwrap_or(span),
             );
+            if let Some(first) = first {
+                error.note("first given here", first);
+            }
         }
+        let missing: Vec<String> = declared
+            .iter()
+            .map(|(d, _)| d.clone())
+            .filter(|d| !written.contains(d))
+            .collect();
+        let mut meant = Vec::new();
         let mut values = Vec::new();
         for (at, (field, value)) in fields.iter().enumerate() {
             let Some(position) = declared.iter().position(|(d, _)| d == field) else {
-                self.error(format!("Unknown field '{field}' in struct '{shown}'"), span);
+                let named = name_of(at);
+                let error = self.error(
+                    format!("Unknown field '{field}' in struct '{shown}'"),
+                    named.unwrap_or(span),
+                );
+                suggest::did_you_mean(error, field, &missing, named);
+                meant.extend(suggest::closest(field, &missing).map(String::from));
+                self.expr(value, None);
                 continue;
             };
             let field_ty = declared[position].1;
@@ -1379,12 +1472,26 @@ impl FnCx<'_, '_> {
             self.consume(&mut checked);
             values.push((position as u32, checked));
         }
-        for (field, _) in &declared {
-            if !written.contains(field) {
+        let missing: Vec<String> = missing.into_iter().filter(|f| !meant.contains(f)).collect();
+        match missing.as_slice() {
+            [] => {}
+            [field] => {
                 self.error(
                     format!("Missing field '{field}' in struct literal {shown}"),
                     span,
-                );
+                )
+                .help(format!("give it a value: {field}: ..."));
+            }
+            _ => {
+                let names = missing.iter().map(|f| format!("'{f}'")).collect::<Vec<_>>();
+                self.error(
+                    format!(
+                        "Missing fields {} in struct literal {shown}",
+                        names.join(", ")
+                    ),
+                    span,
+                )
+                .help("give each of them a value");
             }
         }
         self.mk(ExprKind::Struct(values), ty, span)

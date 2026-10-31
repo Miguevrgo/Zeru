@@ -15,13 +15,17 @@ Error: 'main' is a function, not a variable
  8 │     var g = main;
    │             ──┬─
    │               ╰─── 'main' is a function, not a variable
+   │
+   │ Help: a function is not a value in Zeru; call it, as in main(...)
 ───╯
-Error: Cannot access property on non-struct type
-   ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:9:13 ]
+Error: i32 has no field 'x'
+   ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:9:15 ]
    │
  9 │     var k = 5.x;
-   │             ─┬─
-   │              ╰─── Cannot access property on non-struct type
+   │               ┬
+   │               ╰── i32 has no field 'x'
+   │
+   │ Help: only a struct or a tuple has fields
 ───╯
 Error: Array element at index 1 type mismatch. Expected i32, got bool
     ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:10:19 ]

@@ -36,10 +36,12 @@ Error: Cannot write through a slice, which may point at read-only memory
     │                        ╰───────── Cannot write through a slice, which may point at read-only memory
 ────╯
 Error: &var [i32] has no method 'push'
-    ╭─[ tests/ui/vec/mutable_slice_errors.zr:15:5 ]
+    ╭─[ tests/ui/vec/mutable_slice_errors.zr:15:7 ]
     │
  15 │     s.push(3);
-    │     ────┬────
-    │         ╰────── &var [i32] has no method 'push'
+    │       ──┬─
+    │         ╰─── &var [i32] has no method 'push'
+    │
+    │ Help: a slice cannot change its length; call it on the Vec the slice comes from
 ────╯
 [-] Error: aborting due to previous error

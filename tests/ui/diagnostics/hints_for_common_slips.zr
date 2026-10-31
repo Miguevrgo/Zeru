@@ -9,3 +9,19 @@ fn main() {
     if x = 2 {}
     var o: i32? = Some(3);
 }
+struct P {
+    x: i32,
+    y: i32,
+
+    fn sum(self) i32 {
+        return self.x + self.y;
+    }
+}
+fn slips() {
+    var p = P { x: 1, y: 2 };
+    var total = p.sum;
+    var empty = P {};
+    var v: Vec<i32> = Vec[1, 2];
+    var part = &var v[..];
+    part.push(3);
+}

@@ -10,13 +10,14 @@ mod eval;
 mod expr;
 mod infer;
 mod pattern;
+pub(crate) mod suggest;
 mod types;
 
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{Statement, StatementKind, TypeParameter, TypeSpec};
-use crate::errors::{Span, ZeruError, tidy};
+use crate::errors::{Sources, Span, ZeruError, tidy};
 use crate::items::{DefId, ItemKind, Items, ModuleId};
 use crate::tir::{self, FnId};
 use crate::token::Token;
@@ -79,6 +80,7 @@ struct Instance {
 
 pub struct Checker<'a> {
     items: &'a Items<'a>,
+    sources: &'a Sources,
     pub types: Types,
     errors: Vec<ZeruError>,
     warnings: Vec<ZeruError>,
@@ -109,9 +111,10 @@ struct Scope {
 }
 
 impl<'a> Checker<'a> {
-    pub fn new(items: &'a Items<'a>) -> Self {
+    pub fn new(items: &'a Items<'a>, sources: &'a Sources) -> Self {
         Self {
             items,
+            sources,
             types: Types::new(),
             errors: items.errors.clone(),
             warnings: Vec::new(),
@@ -606,7 +609,14 @@ impl<'a> Checker<'a> {
                 Some(def) if bound.contains("::") => self.check_visible(def, module, span),
                 Some(_) => {}
                 None => {
-                    self.error(format!("Unknown trait '{bound}' in a bound"), span);
+                    let mut known = self.items.names_of(module, ItemKind::Trait, false);
+                    known.extend(["Eq", "Ord", "Num", "Hash"].map(String::from));
+                    let at = self.sources.word_in(span, bound);
+                    let error = self.error(
+                        format!("Unknown trait '{bound}' in a bound"),
+                        at.unwrap_or(span),
+                    );
+                    suggest::did_you_mean(error, bound, &known, at);
                 }
             }
         }

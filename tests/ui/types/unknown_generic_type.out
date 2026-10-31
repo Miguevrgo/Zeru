@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
 Error: Unknown type 'Wrapper'
-   ╭─[ tests/ui/types/unknown_generic_type.zr:2:5 ]
+   ╭─[ tests/ui/types/unknown_generic_type.zr:2:12 ]
    │
  2 │     var a: Wrapper<i32> = 1;
-   │     ────────────┬───────────
-   │                 ╰───────────── Unknown type 'Wrapper'
+   │            ───┬───
+   │               ╰───── Unknown type 'Wrapper'
 ───╯
 [-] Error: aborting due to previous error

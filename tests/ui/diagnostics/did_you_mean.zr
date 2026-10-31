@@ -1,4 +1,28 @@
+struct Point {
+    x: i32,
+    y: i32,
+
+    fn total(self) i32 {
+        return self.x + self.y;
+    }
+}
+enum Color {
+    Red,
+    Green,
+}
+fn helper() i32 {
+    return 1;
+}
+fn biggest<T: Ordd>(a: T) T {
+    return a;
+}
 fn main() {
     var counter: i32 = 0;
     var x = countr;
+    var p: Pointt = Point { x: 1, yy: 2 };
+    var q = Point { x: 1, y: 2 };
+    println("{} {} {}", q.totl(), q.xx, helpr());
+    var c = Color::Gren;
+    var v: Vec<i32> = Vec[1];
+    v.psuh(2);
 }

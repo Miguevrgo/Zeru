@@ -1,18 +1,23 @@
 status: compile error
 -- stderr
 Error: Unknown type 'Strng'
-   ╭─[ tests/ui/diagnostics/declaration_errors.zr:1:1 ]
+   ╭─[ tests/ui/diagnostics/declaration_errors.zr:1:9 ]
    │
  1 │ fn f(a: Strng) {}
-   │ ───────┬──────
-   │        ╰──────── Unknown type 'Strng'
+   │         ──┬──
+   │           ╰──── Unknown type 'Strng'
 ───╯
 Error: Function 'g' is already defined
    ╭─[ tests/ui/diagnostics/declaration_errors.zr:3:1 ]
    │
+ 2 │ fn g() {}
+   │ ───┬──
+   │    ╰──── first defined here
  3 │ fn g() {}
    │ ───┬──
    │    ╰──── Function 'g' is already defined
+   │
+   │ Help: rename one of them
 ───╯
 Error: Function 'h' declares parameter 'a' twice
    ╭─[ tests/ui/diagnostics/declaration_errors.zr:4:1 ]
@@ -22,12 +27,10 @@ Error: Function 'h' declares parameter 'a' twice
    │           ╰─────────── Function 'h' declares parameter 'a' twice
 ───╯
 Error: Unknown type 'Strng'
-   ╭─[ tests/ui/diagnostics/declaration_errors.zr:5:1 ]
+   ╭─[ tests/ui/diagnostics/declaration_errors.zr:6:8 ]
    │
- 5 │ ╭─▶ struct S {
-   ┆ ┆
- 7 │ ├─▶ }
-   │ │
-   │ ╰─────── Unknown type 'Strng'
+ 6 │     a: Strng,
+   │        ──┬──
+   │          ╰──── Unknown type 'Strng'
 ───╯
 [-] Error: aborting due to previous error

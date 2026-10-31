@@ -1,0 +1,6 @@
+fn main() {
+    var m: HashMap<i32, i32> = HashMap.new();
+    var n = math::pow(2, 3);
+    var k = abs(-1);
+    var r = math::sqrt(2.0);
+}

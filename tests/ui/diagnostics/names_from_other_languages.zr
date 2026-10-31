@@ -1,0 +1,11 @@
+fn main() {
+    var a: int = 1;
+    var b: string = "b";
+    var c: Option<i64> = null;
+    var d: Result<i32, i32> = 1;
+    var v: Vec<i32> = Vec[1];
+    println("{} {}", v.length(), len(v));
+    var w = v.clone();
+    var s = String::from("s");
+    var t = True;
+}

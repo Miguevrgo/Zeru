@@ -1,10 +1,16 @@
 status: compile error
 -- stderr
-Error: 'hashmap::HashMap::control' is private to module 'hashmap'; mark it pub
-   ╭─[ tests/ui/collections/hashmap_private_method.zr:4:13 ]
-   │
- 4 │     var f = map.control(1);
-   │             ───────┬──────
-   │                    ╰──────── 'hashmap::HashMap::control' is private to module 'hashmap'; mark it pub
-───╯
+Error: 'hashmap::HashMap::control' is private to module 'hashmap'
+     ╭─[ tests/ui/collections/hashmap_private_method.zr:4:13 ]
+     │
+   4 │     var f = map.control(1);
+     │             ───────┬──────
+     │                    ╰──────── 'hashmap::HashMap::control' is private to module 'hashmap'
+     │
+     ├─[ std/collections/hashmap.zr:319:5 ]
+     │
+ 319 │     fn control(self, slot: usize) u64 {
+     │     ────────────────┬────────────────
+     │                     ╰────────────────── declared here, without pub
+─────╯
 [-] Error: aborting due to previous error

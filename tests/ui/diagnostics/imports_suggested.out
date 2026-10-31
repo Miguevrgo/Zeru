@@ -1,0 +1,42 @@
+status: compile error
+-- stderr
+Error: Unknown type 'HashMap'
+   ╭─[ tests/ui/diagnostics/imports_suggested.zr:2:12 ]
+   │
+ 2 │     var m: HashMap<i32, i32> = HashMap.new();
+   │            ───┬───
+   │               ╰───── Unknown type 'HashMap'
+   │
+   │ Help: 'HashMap' is in std.collections.hashmap; import it
+   │           import std.collections.hashmap::{HashMap};
+───╯
+Error: Function 'math::pow' not defined
+   ╭─[ tests/ui/diagnostics/imports_suggested.zr:3:13 ]
+   │
+ 3 │     var n = math::pow(2, 3);
+   │             ────┬────
+   │                 ╰────── Function 'math::pow' not defined
+   │
+   │ Help: std.math is not imported; import it
+   │           import std.math;
+───╯
+Error: Function 'abs' not defined
+   ╭─[ tests/ui/diagnostics/imports_suggested.zr:4:13 ]
+   │
+ 4 │     var k = abs(-1);
+   │             ─┬─
+   │              ╰─── Function 'abs' not defined
+   │
+   │ Help: 'abs' is in std.math; import it, and call it as math::abs
+   │           import std.math;
+───╯
+Error: Function 'math::sqrt' not defined
+   ╭─[ tests/ui/diagnostics/imports_suggested.zr:5:13 ]
+   │
+ 5 │     var r = math::sqrt(2.0);
+   │             ─────┬────
+   │                  ╰────── Function 'math::sqrt' not defined
+   │
+   │ Help: std.math has no 'sqrt'
+───╯
+[-] Error: aborting due to previous error

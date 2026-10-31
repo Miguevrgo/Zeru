@@ -22,10 +22,10 @@ Error: rotate_left takes the places to move, a usize, not bool
    │                     ╰─── rotate_left takes the places to move, a usize, not bool
 ───╯
 Error: f64 has no method 'count_ones'
-   ╭─[ tests/ui/arithmetic/bit_method_errors.zr:7:5 ]
+   ╭─[ tests/ui/arithmetic/bit_method_errors.zr:7:7 ]
    │
  7 │     f.count_ones();
-   │     ───────┬──────
-   │            ╰──────── f64 has no method 'count_ones'
+   │       ─────┬────
+   │            ╰────── f64 has no method 'count_ones'
 ───╯
 [-] Error: aborting due to previous error

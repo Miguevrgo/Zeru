@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use crate::ast::{Program, Statement, StatementKind};
-use crate::errors::{Span, ZeruError};
+use crate::errors::{Sources, Span, ZeruError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DefId(pub u32);
@@ -78,6 +78,7 @@ struct Module {
 
 pub struct Items<'a> {
     pub items: Vec<Item<'a>>,
+    sources: &'a Sources,
     modules: Vec<Module>,
     by_name: HashMap<String, ModuleId>,
     methods: HashMap<(DefId, String), DefId>,
@@ -85,9 +86,10 @@ pub struct Items<'a> {
 }
 
 impl<'a> Items<'a> {
-    pub fn collect(sources: &'a [SourceModule]) -> Self {
+    pub fn collect(sources: &'a [SourceModule], text: &'a Sources) -> Self {
         let mut items = Self {
             items: Vec::new(),
+            sources: text,
             modules: Vec::new(),
             by_name: HashMap::new(),
             methods: HashMap::new(),
@@ -130,7 +132,7 @@ impl<'a> Items<'a> {
         };
         let shown = self.qualified(module, name);
         let key = (kind.namespace(), name.clone());
-        if self.modules[module.0 as usize].scope.contains_key(&key) {
+        if let Some(&first) = self.modules[module.0 as usize].scope.get(&key) {
             let message = match kind {
                 _ if name.starts_with('#') => return,
                 ItemKind::Fn if name.starts_with('!') => {
@@ -141,8 +143,12 @@ impl<'a> Items<'a> {
                 ItemKind::Fn => format!("Function '{shown}' is already defined"),
                 ItemKind::Const => format!("'{shown}' is already defined"),
             };
-            self.errors
-                .push(ZeruError::semantic(message, statement.span));
+            let first = self.sources.first_line(self.item(first).decl.span);
+            let mut error = ZeruError::semantic(message, self.sources.first_line(statement.span));
+            error
+                .note("first defined here", first)
+                .help("rename one of them");
+            self.errors.push(error);
             return;
         }
         let def = self.push(Item {
@@ -163,11 +169,16 @@ impl<'a> Items<'a> {
                 continue;
             };
             let full = format!("{shown}::{name}");
-            if self.methods.contains_key(&(def, name.clone())) {
-                self.errors.push(ZeruError::semantic(
+            if let Some(&first) = self.methods.get(&(def, name.clone())) {
+                let first = self.sources.first_line(self.item(first).decl.span);
+                let mut error = ZeruError::semantic(
                     format!("Function '{full}' is already defined"),
-                    method.span,
-                ));
+                    self.sources.first_line(method.span),
+                );
+                error
+                    .note("first defined here", first)
+                    .help("rename one of them");
+                self.errors.push(error);
                 continue;
             }
             let method_def = self.push(Item {
@@ -219,10 +230,19 @@ impl<'a> Items<'a> {
                     })
                     .collect();
                 if found.is_empty() {
-                    self.errors.push(ZeruError::semantic(
+                    let at = self.sources.word_in(statement.span, symbol);
+                    let names: Vec<String> = self.modules[target.0 as usize]
+                        .scope
+                        .iter()
+                        .filter(|(_, def)| self.item(**def).is_pub)
+                        .map(|((_, name), _)| name.clone())
+                        .collect();
+                    let mut error = ZeruError::semantic(
                         format!("Module '{short}' has no '{symbol}'"),
-                        statement.span,
-                    ));
+                        at.unwrap_or(statement.span),
+                    );
+                    crate::check::suggest::did_you_mean(&mut error, symbol, &names, at);
+                    self.errors.push(error);
                     continue;
                 }
                 let declared_here = NAMESPACES.into_iter().any(|ns| {
@@ -323,6 +343,34 @@ impl<'a> Items<'a> {
         in_module(ModuleId::PRELUDE, path).filter(|&def| self.visible(def, from))
     }
 
+    /// The module code in `from` imports as `name`.
+    pub fn imported_module(&self, from: ModuleId, name: &str) -> Option<ModuleId> {
+        self.modules[from.0 as usize].modules.get(name).copied()
+    }
+
+    /// The names of the items of `kind` code in `from` names unqualified,
+    /// or with `public`, the public ones `from` itself declares.
+    pub fn names_of(&self, from: ModuleId, kind: ItemKind, public: bool) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .items
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| item.kind == kind && item.owner.is_none())
+            .filter(|&(at, item)| match public {
+                true => item.module == from && item.is_pub,
+                false => {
+                    item.module == from
+                        || item.module == ModuleId::PRELUDE && self.visible(DefId(at as u32), from)
+                }
+            })
+            .map(|(_, item)| item.name.clone())
+            .collect();
+        if !public {
+            names.extend(self.modules[from.0 as usize].imported.keys().cloned());
+        }
+        names
+    }
+
     pub fn lookup_type(&self, from: ModuleId, path: &str) -> Option<DefId> {
         self.lookup(from, Namespace::Type, path)
     }
@@ -346,16 +394,22 @@ impl<'a> Items<'a> {
             || item.module == ModuleId::PRELUDE && self.modules[from.0 as usize].std
     }
 
-    /// The error for using `def` where it is not visible.
+    /// The error for using `def` where it is not visible, with the `pub`
+    /// that makes it visible unless the standard library keeps it private.
     pub fn private_error(&self, def: DefId, span: Span) -> ZeruError {
         let item = self.item(def);
         let module = self.module_name(item.module).unwrap_or_default();
-        ZeruError::semantic(
-            format!(
-                "'{}' is private to module '{module}'; mark it pub",
-                item.name
-            ),
+        let mut error = ZeruError::semantic(
+            format!("'{}' is private to module '{module}'", item.name),
             span,
-        )
+        );
+        let decl = self.sources.first_line(item.decl.span);
+        error.note("declared here, without pub", decl);
+        if !self.modules[item.module.0 as usize].std {
+            error
+                .help("mark it pub to use it outside its module")
+                .fix(Span::new(decl.start, decl.start), "pub ");
+        }
+        error
     }
 }

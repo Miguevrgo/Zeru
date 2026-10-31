@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
 Error: Struct 'Point' has no method 'unknown_method'
-   ╭─[ tests/ui/structs/unknown_method.zr:6:5 ]
+   ╭─[ tests/ui/structs/unknown_method.zr:6:7 ]
    │
  6 │     p.unknown_method();
-   │     ─────────┬────────
-   │              ╰────────── Struct 'Point' has no method 'unknown_method'
+   │       ───────┬──────
+   │              ╰──────── Struct 'Point' has no method 'unknown_method'
 ───╯
 [-] Error: aborting due to previous error

@@ -1,11 +1,11 @@
 //! Types as written, resolved to interned [`Ty`]s.
 
 use crate::ast::{PRIMITIVES, TypeSpec};
-use crate::errors::{Span, ZeruError};
+use crate::errors::Span;
 use crate::items::{DefId, ItemKind};
 use crate::ty::{Ty, TyKind, Types};
 
-use super::{Checker, Scope};
+use super::{Checker, Scope, suggest};
 
 impl Checker<'_> {
     pub(super) fn resolve_type(&mut self, spec: &TypeSpec, scope: &Scope, span: Span) -> Ty {
@@ -43,6 +43,9 @@ impl Checker<'_> {
             }
             TypeSpec::Generic { name, args } => {
                 let Some(def) = self.items.lookup_type(scope.module, name) else {
+                    if self.foreign_generic(name, span) {
+                        return Types::ERROR;
+                    }
                     return self.resolve_named(name, scope, span);
                 };
                 self.check_visible(def, scope.module, span);
@@ -151,9 +154,52 @@ impl Checker<'_> {
                 .filter(|item| self.items.lookup_type(scope.module, &item.name).is_some())
                 .map(|item| item.name.clone()),
         );
-        let error = self.error(format!("Unknown type '{name}'"), span);
-        did_you_mean(error, name, &candidates, span);
+        let sources = self.sources;
+        let at = sources.word_in(span, name);
+        let error = self.error(format!("Unknown type '{name}'"), at.unwrap_or(span));
+        if let Some(ours) = suggest::type_alias(name) {
+            match ours {
+                "str" => error.help("text is 'str', or 'String' where it owns its bytes"),
+                _ => error.help(format!("Zeru calls it '{ours}'")),
+            };
+            if let Some(at) = at {
+                error.fix(at, ours);
+            }
+        } else if let Some(module) = name
+            .split_once("::")
+            .and_then(|(short, item)| suggest::std_module_with(short, item))
+        {
+            suggest::suggest_import(sources, error, span, &module, None);
+        } else if let Some(module) = suggest::std_home(name) {
+            suggest::suggest_import(sources, error, span, &module, Some(name));
+        } else {
+            suggest::did_you_mean(error, name, &candidates, at);
+        }
         Types::ERROR
+    }
+
+    /// `Option<T>` or `Result<T, E>`, which Zeru writes `T?` and `T!`.
+    fn foreign_generic(&mut self, name: &str, span: Span) -> bool {
+        let (zeru, mark) = match name {
+            "Option" => ("an optional", '?'),
+            "Result" => ("a result", '!'),
+            _ => return false,
+        };
+        let written = suggest::generic_in(self.sources, span, name);
+        let error = self.error(
+            format!("Unknown type '{name}'"),
+            written.as_ref().map_or(span, |w| w.0),
+        );
+        error.help(format!("Zeru writes {zeru} of T as T{mark}"));
+        if let Some((at, inner)) = written {
+            let first = split_top(&inner);
+            let wrapped = match first.starts_with(['&', '*']) {
+                true => format!("({first}){mark}"),
+                false => format!("{first}{mark}"),
+            };
+            error.fix(at, wrapped);
+        }
+        true
     }
 
     /// `Pair<i32>`: the struct at those arguments, if they meet its bounds.
@@ -181,39 +227,17 @@ impl Checker<'_> {
     }
 }
 
-/// Suggest in `error` the candidate closest to `name`, which `span` writes.
-pub(super) fn did_you_mean(error: &mut ZeruError, name: &str, candidates: &[String], span: Span) {
-    if let Some(similar) = closest(name, candidates) {
-        error
-            .help(format!("did you mean '{similar}'?"))
-            .fix(span, similar);
-    }
-}
-
-/// The candidate within two edits of `name`, closest first.
-pub(super) fn closest<'c>(name: &str, candidates: &'c [String]) -> Option<&'c str> {
-    candidates
-        .iter()
-        .map(|c| (c.as_str(), edit_distance(name, c)))
-        .filter(|(_, distance)| *distance <= 2)
-        .min_by_key(|(_, distance)| *distance)
-        .map(|(c, _)| c)
-}
-
-/// Levenshtein distance, one row at a time.
-fn edit_distance(a: &str, b: &str) -> usize {
-    let b: Vec<char> = b.chars().collect();
-    let mut row: Vec<usize> = (0..=b.len()).collect();
-    for (i, a_char) in a.chars().enumerate() {
-        let mut diagonal = row[0];
-        row[0] = i + 1;
-        for (j, &b_char) in b.iter().enumerate() {
-            let above = row[j + 1];
-            row[j + 1] = (above + 1)
-                .min(row[j] + 1)
-                .min(diagonal + usize::from(a_char != b_char));
-            diagonal = above;
+/// The first of the comma-separated parts of `text`, not looking inside
+/// brackets: `i32` of `i32, Error`.
+fn split_top(text: &str) -> &str {
+    let mut depth = 0;
+    for (at, c) in text.char_indices() {
+        match c {
+            '<' | '(' | '[' => depth += 1,
+            '>' | ')' | ']' => depth -= 1,
+            ',' if depth == 0 => return text[..at].trim(),
+            _ => {}
         }
     }
-    row[b.len()]
+    text.trim()
 }

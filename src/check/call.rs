@@ -9,9 +9,9 @@ use crate::tir::{
 };
 use crate::ty::{Ty, TyKind, Types};
 
-use super::Receiver;
 use super::body::FnCx;
 use super::expr::is_number_literal;
+use super::{Receiver, suggest};
 
 /// The built-in ways to write text: to stdout or stderr, with or without a
 /// newline after.
@@ -220,14 +220,14 @@ impl FnCx<'_, '_> {
             .lookup_value(module, name)
             .filter(|&def| self.cx.items.item(def).kind == ItemKind::Fn)
         else {
-            let message = match name {
-                "Some" => {
-                    "Write the value itself, not Some(..): it becomes a T? wherever one is wanted"
-                        .to_string()
-                }
-                _ => format!("Function '{name}' not defined"),
-            };
-            self.error(message, span);
+            if name == "Some" {
+                self.error(
+                    "Write the value itself, not Some(..): it becomes a T? wherever one is wanted",
+                    span,
+                );
+                return self.error_expr(span);
+            }
+            self.no_function(name, function_span, args, span);
             return self.error_expr(span);
         };
         self.cx.check_visible(def, module, span);
@@ -288,6 +288,10 @@ impl FnCx<'_, '_> {
             self.check_args_only(args);
             return self.error_expr(span);
         }
+        let name_at = self
+            .cx
+            .sources
+            .word_in(Span::new(object.span.end, span.end), name);
 
         if name == "copy"
             && args.is_empty()
@@ -363,13 +367,12 @@ impl FnCx<'_, '_> {
                     let def = self.cx.prelude_def(&format!("__zeru_vec_{name}"));
                     return self.call_def(def, vec![elem], Some(receiver), args, expected, span);
                 }
-                self.vec_method(name, elem, receiver, args, span)
+                self.vec_method(name, elem, receiver, args, name_at, span)
             }
             TyKind::SliceMut(elem) => {
                 let slice = self.mk(ExprKind::Read(place), ty, object.span);
                 if !SLICE_METHODS.contains(&name) && !SLICE_MUT_METHODS.contains(&name) {
-                    let shown = self.ty(ty);
-                    self.error(format!("{shown} has no method '{name}'"), span);
+                    self.no_method(ty, name, name_at, span);
                     return self.error_expr(span);
                 }
                 let slice = match SLICE_METHODS.contains(&name) {
@@ -395,12 +398,17 @@ impl FnCx<'_, '_> {
                     let def = self.cx.prelude_def(&format!("__zeru_vec_{name}"));
                     return self.call_def(def, vec![elem], Some(slice), args, expected, span);
                 }
-                let shown = self.ty(ty);
-                self.error(format!("{shown} has no method '{name}'"), span);
+                self.no_method(ty, name, name_at, span);
                 self.error_expr(span)
             }
             TyKind::Optional(_) | TyKind::Result(..) => {
-                self.fallible_method(name, place, ty, object.span, args, span)
+                match self.fallible_method(name, place, ty, object.span, args, span) {
+                    Some(call) => call,
+                    None => {
+                        self.no_method(ty, name, name_at, span);
+                        self.error_expr(span)
+                    }
+                }
             }
             TyKind::Adt(..) | TyKind::Ptr(_) => {
                 let (place, struct_ty) = match *self.cx.types.kind(ty) {
@@ -408,16 +416,14 @@ impl FnCx<'_, '_> {
                     _ => (place, ty),
                 };
                 let Some(owner) = self.cx.is_struct(struct_ty) else {
-                    let shown = self.ty(ty);
-                    self.error(format!("{shown} has no method '{name}'"), span);
+                    self.no_method(ty, name, name_at, span);
                     return self.error_expr(span);
                 };
                 let TyKind::Adt(_, struct_args) = self.cx.types.kind(struct_ty).clone() else {
                     unreachable!()
                 };
-                let shown = self.ty(struct_ty);
                 let Some(def) = self.cx.items.method(owner, name) else {
-                    self.error(format!("Struct '{shown}' has no method '{name}'"), span);
+                    self.no_method(struct_ty, name, name_at, span);
                     self.check_args_only(args);
                     return self.error_expr(span);
                 };
@@ -457,15 +463,179 @@ impl FnCx<'_, '_> {
                 let value = self.mk(ExprKind::Read(place), ty, object.span);
                 self.bit_method(value, name, args, span)
             }
-            kind => {
-                let shown = self.ty(ty);
-                let hint = match (kind, name) {
-                    (TyKind::Array(_, len), "len") => format!("; its length is {len}"),
-                    _ => String::new(),
-                };
-                self.error(format!("{shown} has no method '{name}'{hint}"), span);
+            _ => {
+                self.no_method(ty, name, name_at, span);
                 self.error_expr(span)
             }
+        }
+    }
+
+    /// Report that no function `name`, written at `at` in the call `span`,
+    /// exists, with the one meant when it can tell.
+    fn no_function(&mut self, name: &str, at: Span, args: &[Expression], span: Span) {
+        let module = self.scope.module;
+        let sources = self.cx.sources;
+        let receiver = match args.first() {
+            Some(first) if !name.contains("::") => Some(self.expr(first, None).ty),
+            _ => None,
+        };
+        let as_method = receiver.is_some_and(|ty| self.methods_of(ty).iter().any(|m| m == name));
+        let items = self.cx.items;
+        let functions = items.names_of(module, ItemKind::Fn, false);
+        let error = self.cx.error(format!("Function '{name}' not defined"), at);
+        if let Some((owner, function)) = name.rsplit_once("::") {
+            let short = Span::new(at.end - function.len(), at.end);
+            match items.imported_module(module, owner) {
+                _ if matches!(owner, "String" | "Vec") => {
+                    error
+                        .help("call a type's function with '.'")
+                        .fix(at, format!("{owner}.{function}"));
+                }
+                Some(id) => {
+                    let public = items.names_of(id, ItemKind::Fn, true);
+                    suggest::did_you_mean(error, function, &public, Some(short));
+                }
+                None => match suggest::std_modules()
+                    .into_iter()
+                    .find(|m| m.0.rsplit('.').next() == Some(owner))
+                {
+                    Some((path, source)) => {
+                        let public = suggest::publics(&source);
+                        match public.iter().any(|p| p == function) {
+                            true => suggest::suggest_import(sources, error, at, &path, None),
+                            false => {
+                                error.help(format!("{path} has no '{function}'"));
+                                suggest::did_you_mean(error, function, &public, Some(short));
+                            }
+                        }
+                    }
+                    None => {
+                        error.help(format!("no module '{owner}' is imported"));
+                    }
+                },
+            }
+            return;
+        }
+        if as_method {
+            let rest: Vec<&str> = args[1..].iter().map(|arg| sources.text(arg.span)).collect();
+            let call = format!("{}.{name}({})", sources.text(args[0].span), rest.join(", "));
+            error
+                .help("it is a method; call it on the value")
+                .fix(span, call);
+        } else if let Some(path) = suggest::std_home(name) {
+            let short = path.rsplit('.').next().unwrap_or_default().to_string();
+            match items.imported_module(module, &short) {
+                Some(_) => {
+                    error
+                        .help(format!("it is in {path}; call it as {short}::{name}"))
+                        .fix(at, format!("{short}::{name}"));
+                }
+                None => {
+                    suggest::suggest_import(sources, error, at, &path, None);
+                    error.help(format!(
+                        "'{name}' is in {path}; import it, and call it as {short}::{name}"
+                    ));
+                }
+            }
+        } else {
+            suggest::did_you_mean(error, name, &functions, Some(at));
+        }
+    }
+
+    /// The methods a value of `ty` has.
+    pub(super) fn methods_of(&mut self, ty: Ty) -> Vec<String> {
+        const VEC_METHODS: &[&str] = &[
+            "len",
+            "capacity",
+            "is_empty",
+            "push",
+            "insert",
+            "remove",
+            "pop",
+            "get",
+            "clear",
+            "reserve",
+            "shrink_to_fit",
+            "copy",
+        ];
+        let names: Vec<&str> = match self.cx.types.kind(ty).clone() {
+            TyKind::Ref(inner) | TyKind::RefMut(inner) | TyKind::Ptr(inner) => {
+                return self.methods_of(inner);
+            }
+            TyKind::Adt(def, _) if self.cx.is_struct(ty).is_some() => {
+                let items = &self.cx.items;
+                return items
+                    .methods_of(def)
+                    .map(|m| {
+                        items
+                            .item(m)
+                            .name
+                            .rsplit("::")
+                            .next()
+                            .unwrap_or_default()
+                            .to_string()
+                    })
+                    .collect();
+            }
+            TyKind::Vec(elem) => {
+                let text = elem == Types::U8;
+                let std = VEC_STD_METHODS.iter().filter(|&&m| text || m != "push_str");
+                let strs = STR_METHODS.iter().filter(|_| text);
+                VEC_METHODS.iter().chain(std).chain(strs).copied().collect()
+            }
+            TyKind::Slice(_) if ty == Types::STR => {
+                STR_METHODS.iter().chain(&["len"]).copied().collect()
+            }
+            TyKind::Slice(_) => SLICE_METHODS.iter().chain(&["len"]).copied().collect(),
+            TyKind::SliceMut(_) => SLICE_METHODS
+                .iter()
+                .chain(SLICE_MUT_METHODS)
+                .chain(&["len"])
+                .copied()
+                .collect(),
+            TyKind::Optional(_) => vec!["is_some", "is_none", "unwrap", "copy"],
+            TyKind::Result(..) => vec!["is_ok", "is_err", "unwrap", "unwrap_err"],
+            TyKind::Int(_) => BIT_METHODS.to_vec(),
+            _ => Vec::new(),
+        };
+        names.into_iter().map(String::from).collect()
+    }
+
+    /// Report that `ty` has no method `name`, written at `name_at` in the
+    /// call `span`, with the one meant when it can tell.
+    fn no_method(&mut self, ty: Ty, name: &str, name_at: Option<Span>, span: Span) {
+        let methods = self.methods_of(ty);
+        let shown = self.ty(ty);
+        let what = match self.cx.is_struct(ty) {
+            Some(_) => format!("Struct '{shown}'"),
+            None => shown,
+        };
+        let length = match *self.cx.types.kind(ty) {
+            TyKind::Array(_, len) if name == "len" => Some(len),
+            _ => None,
+        };
+        let fixed_length = matches!(
+            self.cx.types.kind(ty),
+            TyKind::Slice(_) | TyKind::SliceMut(_)
+        ) && ["push", "insert", "pop", "remove", "clear", "reserve"]
+            .contains(&name);
+        let error = self.error(
+            format!("{what} has no method '{name}'"),
+            name_at.unwrap_or(span),
+        );
+        if fixed_length {
+            error.help("a slice cannot change its length; call it on the Vec the slice comes from");
+        } else if let Some(len) = length {
+            error
+                .help(format!("its length is part of its type: {len}"))
+                .fix(span, len.to_string());
+        } else if let Some(ours) = suggest::method_alias(name, &methods) {
+            error.help(format!("Zeru calls it '{ours}'"));
+            if let Some(at) = name_at {
+                error.fix(at, ours);
+            }
+        } else {
+            suggest::did_you_mean(error, name, &methods, name_at);
         }
     }
 
@@ -941,6 +1111,7 @@ impl FnCx<'_, '_> {
         elem: Ty,
         receiver: Expr,
         args: &[Expression],
+        name_at: Option<Span>,
         span: Span,
     ) -> Expr {
         let builtin = match name {
@@ -958,8 +1129,7 @@ impl FnCx<'_, '_> {
             _ => {
                 self.check_args_only(args);
                 let vec = self.cx.types.intern(TyKind::Vec(elem));
-                let shown = self.ty(vec);
-                self.error(format!("{shown} has no method '{name}'"), span);
+                self.no_method(vec, name, name_at, span);
                 return self.error_expr(span);
             }
         };
@@ -987,10 +1157,7 @@ impl FnCx<'_, '_> {
         object_span: Span,
         args: &[Expression],
         span: Span,
-    ) -> Expr {
-        if !args.is_empty() {
-            self.error(format!("{name}() takes exactly 0 arguments"), span);
-        }
+    ) -> Option<Expr> {
         let (builtin, result) = match (self.cx.types.kind(ty).clone(), name) {
             (TyKind::Optional(_), "is_some") => (Builtin::IsSome, Types::BOOL),
             (TyKind::Optional(_), "is_none") => (Builtin::IsNone, Types::BOOL),
@@ -1000,17 +1167,16 @@ impl FnCx<'_, '_> {
                 (Builtin::Unwrap, inner)
             }
             (TyKind::Result(_, err), "unwrap_err") => (Builtin::UnwrapErr, err),
-            _ => {
-                let shown = self.ty(ty);
-                self.error(format!("{shown} has no method '{name}'"), span);
-                return self.error_expr(span);
-            }
+            _ => return None,
         };
+        if !args.is_empty() {
+            self.error(format!("{name}() takes exactly 0 arguments"), span);
+        }
         let mut value = self.mk(ExprKind::Read(place), ty, object_span);
         if builtin == Builtin::Unwrap {
             self.consume(&mut value);
         }
-        self.mk(ExprKind::Builtin(builtin, vec![value]), result, span)
+        Some(self.mk(ExprKind::Builtin(builtin, vec![value]), result, span))
     }
 
     /// `print("x is {}", x)`: a literal format with one `{}` per printable
@@ -1508,6 +1674,15 @@ impl FnCx<'_, '_> {
         self.view(text)
     }
 }
+
+const BIT_METHODS: &[&str] = &[
+    "count_ones",
+    "leading_zeros",
+    "trailing_zeros",
+    "rotate_left",
+    "rotate_right",
+    "swap_bytes",
+];
 
 /// The bit method of an integer called `name`.
 fn bit_op(name: &str) -> Option<BitOp> {

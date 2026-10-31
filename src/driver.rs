@@ -35,7 +35,7 @@ pub fn status(colour: &str, icon: char, verb: &str, detail: impl std::fmt::Displ
 
 /// The standard library: `ZERU_STD_PATH`, or else the one beside the
 /// compiler, so a compiler always reads the std it was released with.
-fn std_path() -> Option<PathBuf> {
+pub(crate) fn std_path() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("ZERU_STD_PATH") {
         return Some(path.into());
     }
@@ -93,14 +93,16 @@ fn analyze(
     if !errors.is_empty() {
         return Ok((sources, Err(errors)));
     }
-    let items = Items::collect(&modules);
-    let analysis = Checker::new(&items).check().and_then(|mut program| {
-        let bodies = crate::mir::build(&mut program, &sources, mode)?;
-        let warnings = &mut program.warnings;
-        warnings.retain(|warning| !sources.in_std(warning.span));
-        tidy(warnings);
-        Ok((program, bodies))
-    });
+    let items = Items::collect(&modules, &sources);
+    let analysis = Checker::new(&items, &sources)
+        .check()
+        .and_then(|mut program| {
+            let bodies = crate::mir::build(&mut program, &sources, mode)?;
+            let warnings = &mut program.warnings;
+            warnings.retain(|warning| !sources.in_std(warning.span));
+            tidy(warnings);
+            Ok((program, bodies))
+        });
     Ok((sources, analysis))
 }
 
@@ -398,10 +400,20 @@ fn load(path: &Path, user_code: &str, tests: bool) -> (Sources, Vec<SourceModule
                 continue;
             };
             let Ok(source) = std::fs::read_to_string(&file) else {
-                errors.push(ZeruError::semantic(
+                let mut error = ZeruError::semantic(
                     format!("Module '{import}' not found at {}", file.display()),
                     span,
-                ));
+                );
+                let known: Vec<String> = match import.starts_with("std.") {
+                    true => crate::check::suggest::std_modules()
+                        .into_iter()
+                        .map(|m| m.0)
+                        .collect(),
+                    false => local_modules(dir),
+                };
+                let at = sources.word_in(span, &import);
+                crate::check::suggest::did_you_mean(&mut error, &import, &known, at);
+                errors.push(error);
                 continue;
             };
             let program = parse_file(
@@ -422,6 +434,17 @@ fn load(path: &Path, user_code: &str, tests: bool) -> (Sources, Vec<SourceModule
         next += 1;
     }
     (sources, modules, errors)
+}
+
+/// The modules beside the root file, as an import names them.
+fn local_modules(dir: &Path) -> Vec<String> {
+    let files = std::fs::read_dir(dir).into_iter().flatten().flatten();
+    files
+        .filter_map(|entry| {
+            let path = entry.path();
+            (path.extension()? == "zr").then(|| path.file_stem()?.to_str().map(String::from))?
+        })
+        .collect()
 }
 
 fn imports(program: &Program) -> Vec<(String, Span)> {

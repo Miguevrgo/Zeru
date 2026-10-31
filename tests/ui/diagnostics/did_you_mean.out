@@ -1,13 +1,93 @@
 status: compile error
 -- stderr
+Error: Unknown trait 'Ordd' in a bound
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:16:15 ]
+    │
+ 16 │ fn biggest<T: Ordd>(a: T) T {
+    │               ──┬─
+    │                 ╰─── Unknown trait 'Ordd' in a bound
+    │
+    │ Help: did you mean 'Ord'?
+    │           fn biggest<T: Ord>(a: T) T {
+────╯
 Error: Undeclared variable 'countr'
-   ╭─[ tests/ui/diagnostics/did_you_mean.zr:3:13 ]
-   │
- 3 │     var x = countr;
-   │             ───┬──
-   │                ╰──── Undeclared variable 'countr'
-   │
-   │ Help: did you mean 'counter'?
-   │           var x = counter;
-───╯
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:21:13 ]
+    │
+ 21 │     var x = countr;
+    │             ───┬──
+    │                ╰──── Undeclared variable 'countr'
+    │
+    │ Help: did you mean 'counter'?
+    │           var x = counter;
+────╯
+Error: Unknown type 'Pointt'
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:22:12 ]
+    │
+ 22 │     var p: Pointt = Point { x: 1, yy: 2 };
+    │            ───┬──
+    │               ╰──── Unknown type 'Pointt'
+    │
+    │ Help: did you mean 'Point'?
+    │           var p: Point = Point { x: 1, yy: 2 };
+────╯
+Error: Unknown field 'yy' in struct 'Point'
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:22:35 ]
+    │
+ 22 │     var p: Pointt = Point { x: 1, yy: 2 };
+    │                                   ─┬
+    │                                    ╰── Unknown field 'yy' in struct 'Point'
+    │
+    │ Help: did you mean 'y'?
+    │           var p: Pointt = Point { x: 1, y: 2 };
+────╯
+Error: Struct 'Point' has no method 'totl'
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:24:27 ]
+    │
+ 24 │     println("{} {} {}", q.totl(), q.xx, helpr());
+    │                           ──┬─
+    │                             ╰─── Struct 'Point' has no method 'totl'
+    │
+    │ Help: did you mean 'total'?
+    │           println("{} {} {}", q.total(), q.xx, helpr());
+────╯
+Error: Struct 'Point' has no field 'xx'
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:24:37 ]
+    │
+ 24 │     println("{} {} {}", q.totl(), q.xx, helpr());
+    │                                     ─┬
+    │                                      ╰── Struct 'Point' has no field 'xx'
+    │
+    │ Help: did you mean 'x'?
+    │           println("{} {} {}", q.totl(), q.x, helpr());
+────╯
+Error: Function 'helpr' not defined
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:24:41 ]
+    │
+ 24 │     println("{} {} {}", q.totl(), q.xx, helpr());
+    │                                         ──┬──
+    │                                           ╰──── Function 'helpr' not defined
+    │
+    │ Help: did you mean 'helper'?
+    │           println("{} {} {}", q.totl(), q.xx, helper());
+────╯
+Error: Enum 'Color' has no variant 'Gren'
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:25:13 ]
+    │
+ 25 │     var c = Color::Gren;
+    │             ─────┬─────
+    │                  ╰─────── Enum 'Color' has no variant 'Gren'
+    │
+    │ Help: did you mean 'Green'?
+    │           var c = Color::Green;
+────╯
+Error: Vec<i32> has no method 'psuh'
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:27:7 ]
+    │
+ 27 │     v.psuh(2);
+    │       ──┬─
+    │         ╰─── Vec<i32> has no method 'psuh'
+    │
+    │ Help: did you mean 'push'?
+    │           v.push(2);
+────╯
 [-] Error: aborting due to previous error

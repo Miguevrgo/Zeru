@@ -1,10 +1,12 @@
 status: compile error
 -- stderr
 Error: Struct 'Point' has no field 'z'
-   ╭─[ tests/ui/structs/unknown_field_access.zr:6:15 ]
+   ╭─[ tests/ui/structs/unknown_field_access.zr:6:17 ]
    │
  6 │     var val = p.z;
-   │               ─┬─
-   │                ╰─── Struct 'Point' has no field 'z'
+   │                 ┬
+   │                 ╰── Struct 'Point' has no field 'z'
+   │
+   │ Help: its fields are x
 ───╯
 [-] Error: aborting due to previous error

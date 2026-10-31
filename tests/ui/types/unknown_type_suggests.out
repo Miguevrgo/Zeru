@@ -1,13 +1,13 @@
 status: compile error
 -- stderr
 Error: Unknown type 'i3'
-   ╭─[ tests/ui/types/unknown_type_suggests.zr:2:5 ]
+   ╭─[ tests/ui/types/unknown_type_suggests.zr:2:12 ]
    │
  2 │     var x: i3 = 10;
-   │     ───────┬───────
-   │            ╰───────── Unknown type 'i3'
+   │            ─┬
+   │             ╰── Unknown type 'i3'
    │
-   │ Help: did you mean 'i8'?
-   │           i8
+   │ Help: did you mean 'i32'?
+   │           var x: i32 = 10;
 ───╯
 [-] Error: aborting due to previous error

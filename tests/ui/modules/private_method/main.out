@@ -1,10 +1,19 @@
 status: compile error
 -- stderr
-Error: 'lib::Thing::secret' is private to module 'lib'; mark it pub
+Error: 'lib::Thing::secret' is private to module 'lib'
    ╭─[ tests/ui/modules/private_method/main.zr:4:13 ]
    │
  4 │     var x = t.secret();
    │             ─────┬────
-   │                  ╰────── 'lib::Thing::secret' is private to module 'lib'; mark it pub
+   │                  ╰────── 'lib::Thing::secret' is private to module 'lib'
+   │
+   ├─[ tests/ui/modules/private_method/lib.zr:3:5 ]
+   │
+ 3 │     fn secret(self) i32 {
+   │     ─────────┬─────────
+   │              ╰─────────── declared here, without pub
+   │
+   │ Help: mark it pub to use it outside its module
+   │           pub fn secret(self) i32 {
 ───╯
 [-] Error: aborting due to previous error

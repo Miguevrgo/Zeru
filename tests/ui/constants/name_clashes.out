@@ -3,15 +3,25 @@ status: compile error
 Error: 'LIMIT' is already defined
    ╭─[ tests/ui/constants/name_clashes.zr:2:1 ]
    │
+ 1 │ const LIMIT: i32 = 1;
+   │ ──────────┬──────────
+   │           ╰──────────── first defined here
  2 │ const LIMIT: i32 = 2;
    │ ──────────┬──────────
    │           ╰──────────── 'LIMIT' is already defined
+   │
+   │ Help: rename one of them
 ───╯
 Error: 'A' is already defined
    ╭─[ tests/ui/constants/name_clashes.zr:6:1 ]
    │
+ 5 │ fn A() {}
+   │ ───┬──
+   │    ╰──── first defined here
  6 │ const A: i32 = 2;
    │ ────────┬────────
    │         ╰────────── 'A' is already defined
+   │
+   │ Help: rename one of them
 ───╯
 [-] Error: aborting due to previous error

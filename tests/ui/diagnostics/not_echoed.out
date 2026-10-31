@@ -4,14 +4,14 @@ Error: Function 'nope' not defined
    ╭─[ tests/ui/diagnostics/not_echoed.zr:2:13 ]
    │
  2 │     var x = nope(3);
-   │             ───┬───
-   │                ╰───── Function 'nope' not defined
+   │             ──┬─
+   │               ╰─── Function 'nope' not defined
 ───╯
 Error: i32 has no method 'foo'
-   ╭─[ tests/ui/diagnostics/not_echoed.zr:4:13 ]
+   ╭─[ tests/ui/diagnostics/not_echoed.zr:4:15 ]
    │
  4 │     var y = a.foo();
-   │             ───┬───
-   │                ╰───── i32 has no method 'foo'
+   │               ─┬─
+   │                ╰─── i32 has no method 'foo'
 ───╯
 [-] Error: aborting due to previous error

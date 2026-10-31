@@ -3,8 +3,13 @@ status: compile error
 Error: Trait 'Foo' is already defined
    ╭─[ tests/ui/traits/duplicate_trait.zr:2:1 ]
    │
+ 1 │ trait Foo {}
+   │ ──────┬─────
+   │       ╰─────── first defined here
  2 │ trait Foo {}
    │ ──────┬─────
    │       ╰─────── Trait 'Foo' is already defined
+   │
+   │ Help: rename one of them
 ───╯
 [-] Error: aborting due to previous error

@@ -1,0 +1,2 @@
+import std.colections.hashmap;
+fn main() {}

@@ -8,11 +8,11 @@ Error: 'zero' takes 1 type argument(s), got 2
    │                     ╰───────── 'zero' takes 1 type argument(s), got 2
 ───╯
 Error: Unknown type 'Nope'
-   ╭─[ tests/ui/generics/explicit_type_arguments_errors.zr:7:13 ]
+   ╭─[ tests/ui/generics/explicit_type_arguments_errors.zr:7:18 ]
    │
  7 │     var b = zero<Nope>();
-   │             ──────┬─────
-   │                   ╰─────── Unknown type 'Nope'
+   │                  ──┬─
+   │                    ╰─── Unknown type 'Nope'
 ───╯
 Error: 'print' takes no type arguments
    ╭─[ tests/ui/generics/explicit_type_arguments_errors.zr:8:5 ]

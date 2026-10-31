@@ -3,10 +3,14 @@ status: compile error
 Error: Type 'Foo' is already defined
    ╭─[ tests/ui/structs/duplicate_type.zr:4:1 ]
    │
- 4 │ ╭─▶ struct Foo {
-   ┆ ┆
- 6 │ ├─▶ }
-   │ │
-   │ ╰─────── Type 'Foo' is already defined
+ 1 │ struct Foo {
+   │ ──────┬─────
+   │       ╰─────── first defined here
+   │
+ 4 │ struct Foo {
+   │ ──────┬─────
+   │       ╰─────── Type 'Foo' is already defined
+   │
+   │ Help: rename one of them
 ───╯
 [-] Error: aborting due to previous error

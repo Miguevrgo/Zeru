@@ -1,10 +1,19 @@
 status: compile error
 -- stderr
-Error: 'lib::Hidden' is private to module 'lib'; mark it pub
+Error: 'lib::Hidden' is private to module 'lib'
    ╭─[ tests/ui/modules/private_trait/main.zr:1:1 ]
    │
  1 │ import lib::{Hidden};
    │ ──────────┬──────────
-   │           ╰──────────── 'lib::Hidden' is private to module 'lib'; mark it pub
+   │           ╰──────────── 'lib::Hidden' is private to module 'lib'
+   │
+   ├─[ tests/ui/modules/private_trait/lib.zr:1:1 ]
+   │
+ 1 │ trait Hidden {
+   │ ───────┬──────
+   │        ╰──────── declared here, without pub
+   │
+   │ Help: mark it pub to use it outside its module
+   │           pub trait Hidden {
 ───╯
 [-] Error: aborting due to previous error
