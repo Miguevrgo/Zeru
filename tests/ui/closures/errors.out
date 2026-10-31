@@ -206,4 +206,13 @@ Error: 'plain' is i32, not a function
     │     ──┬──
     │       ╰──── 'plain' is i32, not a function
 ────╯
+Error: A fn(..) type is written only as a function's parameter
+    ╭─[ tests/ui/closures/errors.zr:65:5 ]
+    │
+ 65 │     var maybe: fn()? = None;
+    │     ────────────┬───────────
+    │                 ╰───────────── A fn(..) type is written only as a function's parameter
+    │
+    │ Help: a closure is passed as an argument or kept in a variable, never returned or kept inside another value
+────╯
 [-] Error: aborting due to previous error

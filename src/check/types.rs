@@ -217,8 +217,14 @@ impl Checker<'_> {
             .any(|&arg| self.types.closure_sig(arg).is_some())
         {
             let base = self.items.item(def).name.clone();
-            self.error(format!("A closure cannot be kept inside a {base}"), span)
-                .help("keep each closure in a variable of its own, or pass it as an argument");
+            self.error(
+                format!(
+                    "A closure cannot be kept inside {}",
+                    crate::errors::with_article(&base)
+                ),
+                span,
+            )
+            .help("keep each closure in a variable of its own, or pass it as an argument");
             return Types::ERROR;
         }
         let generics = super::generics_of(self.items.item(def).decl).to_vec();

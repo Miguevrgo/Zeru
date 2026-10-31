@@ -62,4 +62,5 @@ fn main() {
     };
     var plain = 3;
     plain(1);
+    var maybe: fn()? = None;
 }

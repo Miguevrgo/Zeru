@@ -1,5 +1,6 @@
 struct P {
     x: i32,
+    pub y: i32,
 }
 def helper(n: i32) -> i32 {
     return n;
@@ -17,6 +18,10 @@ fn main() {
         1 -> println("one"),
         default => {}
     }
+    var size = match count {
+        0 => "none",
+        _ => "some",
+    };
     var p = P { x: 1 };
     var q: *P = &p;
     println("{}", q->x);

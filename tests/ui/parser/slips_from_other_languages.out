@@ -1,9 +1,19 @@
 status: compile error
 -- stderr
-Error: Zeru declares a function with fn
-   ╭─[ tests/ui/parser/slips_from_other_languages.zr:4:1 ]
+Error: A field takes no pub: every field is visible wherever its struct is
+   ╭─[ tests/ui/parser/slips_from_other_languages.zr:3:5 ]
    │
- 4 │ def helper(n: i32) -> i32 {
+ 3 │     pub y: i32,
+   │     ─┬─
+   │      ╰─── A field takes no pub: every field is visible wherever its struct is
+   │
+   │ Help: remove pub
+   │           y: i32,
+───╯
+Error: Zeru declares a function with fn
+   ╭─[ tests/ui/parser/slips_from_other_languages.zr:5:1 ]
+   │
+ 5 │ def helper(n: i32) -> i32 {
    │ ─┬─
    │  ╰─── Zeru declares a function with fn
    │
@@ -11,9 +21,9 @@ Error: Zeru declares a function with fn
    │           fn helper(n: i32) -> i32 {
 ───╯
 Error: Zeru writes the return type right after the parameters, with no ->
-   ╭─[ tests/ui/parser/slips_from_other_languages.zr:4:20 ]
+   ╭─[ tests/ui/parser/slips_from_other_languages.zr:5:20 ]
    │
- 4 │ def helper(n: i32) -> i32 {
+ 5 │ def helper(n: i32) -> i32 {
    │                    ─┬
    │                     ╰── Zeru writes the return type right after the parameters, with no ->
    │
@@ -21,9 +31,9 @@ Error: Zeru writes the return type right after the parameters, with no ->
    │           def helper(n: i32) i32 {
 ───╯
 Error: Zeru declares a variable with 'var', or 'const' when it never changes
-   ╭─[ tests/ui/parser/slips_from_other_languages.zr:8:5 ]
+   ╭─[ tests/ui/parser/slips_from_other_languages.zr:9:5 ]
    │
- 8 │     let mut count = 0;
+ 9 │     let mut count = 0;
    │     ───┬───
    │        ╰───── Zeru declares a variable with 'var', or 'const' when it never changes
    │
@@ -31,19 +41,19 @@ Error: Zeru declares a variable with 'var', or 'const' when it never changes
    │           var count = 0;
 ───╯
 Error: Zeru declares a variable with var, not :=
-   ╭─[ tests/ui/parser/slips_from_other_languages.zr:9:5 ]
-   │
- 9 │     total := 1;
-   │     ────┬───
-   │         ╰───── Zeru declares a variable with var, not :=
-   │
-   │ Help: write var
-   │           var total = 1;
-───╯
-Error: Zeru has no ++; write += 1
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:10:10 ]
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:10:5 ]
     │
- 10 │     count++;
+ 10 │     total := 1;
+    │     ────┬───
+    │         ╰───── Zeru declares a variable with var, not :=
+    │
+    │ Help: write var
+    │           var total = 1;
+────╯
+Error: Zeru has no ++; write += 1
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:11:10 ]
+    │
+ 11 │     count++;
     │          ─┬
     │           ╰── Zeru has no ++; write += 1
     │
@@ -51,9 +61,9 @@ Error: Zeru has no ++; write += 1
     │           count += 1;
 ────╯
 Error: Zeru has no --; write -= 1
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:11:10 ]
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:12:10 ]
     │
- 11 │     total--;
+ 12 │     total--;
     │          ─┬
     │           ╰── Zeru has no --; write -= 1
     │
@@ -61,9 +71,9 @@ Error: Zeru has no --; write -= 1
     │           total -= 1;
 ────╯
 Error: Zeru writes 'and' as &&
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:12:27 ]
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:13:27 ]
     │
- 12 │     var flag = count == 1 and total === 0 or not true;
+ 13 │     var flag = count == 1 and total === 0 or not true;
     │                           ─┬─
     │                            ╰─── Zeru writes 'and' as &&
     │
@@ -71,9 +81,9 @@ Error: Zeru writes 'and' as &&
     │           var flag = count == 1 && total === 0 or not true;
 ────╯
 Error: Zeru compares with ==, never ===
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:12:37 ]
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:13:37 ]
     │
- 12 │     var flag = count == 1 and total === 0 or not true;
+ 13 │     var flag = count == 1 and total === 0 or not true;
     │                                     ─┬─
     │                                      ╰─── Zeru compares with ==, never ===
     │
@@ -81,9 +91,9 @@ Error: Zeru compares with ==, never ===
     │           var flag = count == 1 and total == 0 or not true;
 ────╯
 Error: Zeru writes 'or' as ||
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:12:43 ]
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:13:43 ]
     │
- 12 │     var flag = count == 1 and total === 0 or not true;
+ 13 │     var flag = count == 1 and total === 0 or not true;
     │                                           ─┬
     │                                            ╰── Zeru writes 'or' as ||
     │
@@ -91,9 +101,9 @@ Error: Zeru writes 'or' as ||
     │           var flag = count == 1 and total === 0 || not true;
 ────╯
 Error: Zeru writes 'not' as !
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:12:46 ]
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:13:46 ]
     │
- 12 │     var flag = count == 1 and total === 0 or not true;
+ 13 │     var flag = count == 1 and total === 0 or not true;
     │                                              ─┬─
     │                                               ╰─── Zeru writes 'not' as !
     │
@@ -101,9 +111,9 @@ Error: Zeru writes 'not' as !
     │           var flag = count == 1 and total === 0 or !true;
 ────╯
 Error: Zeru writes 'else if'
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:14:7 ]
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:15:7 ]
     │
- 14 │     } elif count == 2 {
+ 15 │     } elif count == 2 {
     │       ──┬─
     │         ╰─── Zeru writes 'else if'
     │
@@ -111,19 +121,29 @@ Error: Zeru writes 'else if'
     │           } else if count == 2 {
 ────╯
 Error: A match arm is written pattern => value
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:17:11 ]
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:18:11 ]
     │
- 17 │         1 -> println("one"),
+ 18 │         1 -> println("one"),
     │           ─┬
     │            ╰── A match arm is written pattern => value
     │
     │ Help: write =>
     │           1 => println("one"),
 ────╯
-Error: Zeru reaches a field through a pointer with '.', not ->
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:22:20 ]
+Error: Zeru writes the arm for every other value as default
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:23:9 ]
     │
- 22 │     println("{}", q->x);
+ 23 │         _ => "some",
+    │         ┬
+    │         ╰── Zeru writes the arm for every other value as default
+    │
+    │ Help: write default
+    │           default => "some",
+────╯
+Error: Zeru reaches a field through a pointer with '.', not ->
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:27:20 ]
+    │
+ 27 │     println("{}", q->x);
     │                    ─┬
     │                     ╰── Zeru reaches a field through a pointer with '.', not ->
     │
@@ -131,9 +151,9 @@ Error: Zeru reaches a field through a pointer with '.', not ->
     │           println("{}", q.x);
 ────╯
 Error: Zeru writes a loop without end as while true
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:23:5 ]
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:28:5 ]
     │
- 23 │     loop {
+ 28 │     loop {
     │     ──┬─
     │       ╰─── Zeru writes a loop without end as while true
     │
@@ -141,9 +161,9 @@ Error: Zeru writes a loop without end as while true
     │           while true {
 ────╯
 Error: Zeru's for walks a range or a sequence
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:26:9 ]
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:31:9 ]
     │
- 26 │     for (var i = 0; i < 3; i += 1) {
+ 31 │     for (var i = 0; i < 3; i += 1) {
     │         ┬
     │         ╰── Zeru's for walks a range or a sequence
     │

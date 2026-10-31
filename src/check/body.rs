@@ -116,7 +116,8 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
             )
             .label("it can end after this")
             .help(format!(
-                "return a {shown} on every path, or end it with a return after this"
+                "return {} on every path, or end it with a return after this",
+                crate::errors::with_article(&shown)
             ));
     }
     fx.warn_unread(params.len());

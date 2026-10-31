@@ -52,4 +52,43 @@ Error: &var [i32] has no method 'push'
     │
     │ Help: a slice cannot change its length; call it on the Vec the slice comes from
 ────╯
+Error: Array<i32, 3> has no method 'sum'
+    ╭─[ tests/ui/vec/mutable_slice_errors.zr:17:21 ]
+    │
+ 17 │     var total = arr.sum();
+    │                     ─┬─
+    │                      ╰─── Array<i32, 3> has no method 'sum'
+    │
+    │ Help: an array has it through a slice of all of it, arr[..]
+    │           var total = arr[..].sum();
+────╯
+Error: Array<i32, 3> has no method 'sort'
+    ╭─[ tests/ui/vec/mutable_slice_errors.zr:18:9 ]
+    │
+ 18 │     arr.sort();
+    │         ──┬─
+    │           ╰─── Array<i32, 3> has no method 'sort'
+    │
+    │ Help: sort changes the elements, so it needs a slice that writes, (&var arr[..])
+    │           (&var arr[..]).sort();
+────╯
+Error: &[i32] has no method 'sort'
+    ╭─[ tests/ui/vec/mutable_slice_errors.zr:19:13 ]
+    │
+ 19 │     arr[..].sort();
+    │             ──┬─
+    │               ╰─── &[i32] has no method 'sort'
+    │
+    │ Help: sort changes the elements, so it needs a slice that writes, (&var arr[..])
+    │           (&var arr[..]).sort();
+────╯
+Error: &[i32] has no method 'reverse'
+    ╭─[ tests/ui/vec/mutable_slice_errors.zr:20:8 ]
+    │
+ 20 │     ro.reverse();
+    │        ───┬───
+    │           ╰───── &[i32] has no method 'reverse'
+    │
+    │ Help: reverse changes the elements, and 'ro' only reads them; make it with &var, as in &var v[..]
+────╯
 [-] Error: aborting due to previous error

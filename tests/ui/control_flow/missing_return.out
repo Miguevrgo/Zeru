@@ -7,7 +7,7 @@ Error: Function 'f' can finish without returning a value
    │ ─────┬────
    │      ╰────── it can end after this
    │
-   │ Help: return a i32 on every path, or end it with a return after this
+   │ Help: return an i32 on every path, or end it with a return after this
 ───╯
 Error: Function 'g' can finish without returning a value
    ╭─[ tests/ui/control_flow/missing_return.zr:3:5 ]
@@ -29,6 +29,6 @@ Error: Function 'h' can finish without returning a value
     │ │
     │ ╰─────────── it can end after this
     │
-    │     Help: return a i32 on every path, or end it with a return after this
+    │     Help: return an i32 on every path, or end it with a return after this
 ────╯
 [-] Error: aborting due to previous error

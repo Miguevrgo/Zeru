@@ -121,7 +121,10 @@ impl FnCx<'_, '_> {
                     let shown = inner.cx.types.show(ret);
                     inner
                         .error("This closure can finish without returning a value", span)
-                        .help(format!("return a {shown} on every path"));
+                        .help(format!(
+                            "return {} on every path",
+                            crate::errors::with_article(&shown)
+                        ));
                 }
                 block
             }

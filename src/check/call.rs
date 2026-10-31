@@ -319,6 +319,10 @@ impl FnCx<'_, '_> {
             if type_name == "Vec" {
                 return self.vec_static(name, type_args, args, expected, span);
             }
+            if self.enum_dot(object, name, span) {
+                self.check_args_only(args);
+                return self.error_expr(span);
+            }
             if type_name == "String" {
                 if !type_args.is_empty() {
                     self.error("'String' takes no type arguments", span);
@@ -692,11 +696,42 @@ impl FnCx<'_, '_> {
             TyKind::Slice(_) | TyKind::SliceMut(_)
         ) && ["push", "insert", "pop", "remove", "clear", "reserve"]
             .contains(&name);
+        let kind = self.cx.types.kind(ty).clone();
+        let reads = SLICE_METHODS.contains(&name) && matches!(kind, TyKind::Array(..));
+        let writes = SLICE_MUT_METHODS.contains(&name)
+            && matches!(kind, TyKind::Array(..) | TyKind::Slice(_))
+            && ty != Types::STR;
+        let object = name_at.map(|at| Span::new(span.start, at.start - 1));
+        let text = object.map(|at| self.cx.sources.text(at).to_string());
         let error = self.error(
             format!("{what} has no method '{name}'"),
             name_at.unwrap_or(span),
         );
-        if fixed_length {
+        if let (true, Some(at), Some(text)) = (reads, object, &text) {
+            error
+                .help(format!(
+                    "an array has it through a slice of all of it, {text}[..]"
+                ))
+                .fix(Span::new(at.end, at.end), "[..]");
+        } else if let (true, Some(at), Some(text)) = (writes, object, text) {
+            let whole = match kind {
+                TyKind::Array(..) => Some(format!("{text}[..]")),
+                _ if text.ends_with(']') => Some(text.clone()),
+                _ => None,
+            };
+            match whole {
+                Some(whole) => {
+                    error
+                        .help(format!("{name} changes the elements, so it needs a slice that writes, (&var {whole})"))
+                        .fix(at, format!("(&var {whole})"));
+                }
+                None => {
+                    error.help(format!(
+                        "{name} changes the elements, and '{text}' only reads them; make it with &var, as in &var v[..]"
+                    ));
+                }
+            }
+        } else if fixed_length {
             error.help("a slice cannot change its length; call it on the Vec the slice comes from");
         } else if let Some(len) = length {
             error
@@ -1233,7 +1268,10 @@ impl FnCx<'_, '_> {
         };
         let value = self.expr(arg, Some(err));
         let value = self.coerce_or(value, err, span, |want, got| {
-            format!("Err() takes an error code, a {want}, but this is {got}")
+            format!(
+                "Err() takes an error code, {}, but this is {got}",
+                crate::errors::with_article(want)
+            )
         });
         self.mk(ExprKind::Err(Box::new(value)), ty, span)
     }

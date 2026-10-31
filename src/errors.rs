@@ -420,3 +420,15 @@ pub enum CompileError {
     #[error("{0} file(s) not formatted; zeru fmt formats them")]
     Unformatted(usize),
 }
+
+/// `word` after "a" or "an", as it sounds: an i32, an f64, a u8, a Vec.
+pub(crate) fn with_article(word: &str) -> String {
+    let mut chars = word.chars();
+    let first = chars.next().unwrap_or(' ').to_ascii_lowercase();
+    let an = "aeio".contains(first)
+        || (first == 'f' && chars.next().is_some_and(|c| c.is_ascii_digit()));
+    match an {
+        true => format!("an {word}"),
+        false => format!("a {word}"),
+    }
+}

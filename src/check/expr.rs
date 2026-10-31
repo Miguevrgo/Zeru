@@ -494,6 +494,36 @@ impl FnCx<'_, '_> {
         }
     }
 
+    /// Report `Shape.Circle` where `object` names an enum, whose variants
+    /// Zeru names with `::`; whether it did.
+    pub(super) fn enum_dot(&mut self, object: &Expression, name: &str, span: Span) -> bool {
+        let ExpressionKind::Identifier(type_name) = &object.kind else {
+            return false;
+        };
+        let is_enum = self.local(type_name).is_none()
+            && self
+                .cx
+                .items
+                .lookup_type(self.scope.module, type_name)
+                .is_some_and(|def| self.cx.items.item(def).kind == ItemKind::Enum);
+        if !is_enum {
+            return false;
+        }
+        let end = self
+            .cx
+            .sources
+            .word_in(Span::new(object.span.end, span.end), name)
+            .map_or(span.end, |at| at.end);
+        let written = format!("{type_name}::{name}");
+        self.error(
+            format!("Zeru names a variant with ::, as in {written}"),
+            Span::new(object.span.start, end),
+        )
+        .help(format!("write {written}"))
+        .fix(Span::new(object.span.start, end), written);
+        true
+    }
+
     /// `i32.MAX` or `f64.MIN`: the largest or the lowest value of a number
     /// type, the most negative for a float.
     fn limit(&mut self, object: &Expression, name: &str, span: Span) -> Option<Expr> {
@@ -667,6 +697,9 @@ impl FnCx<'_, '_> {
     /// `object.name`: a struct's field or a tuple's part, through one pointer
     /// or reference.
     fn field(&mut self, object: &Expression, name: &str, span: Span) -> (Place, Ty) {
+        if self.enum_dot(object, name, span) {
+            return (Place::Temp(Box::new(self.error_expr(span))), Types::ERROR);
+        }
         let (base, ty) = self.place(object);
         let (base, ty) = match *self.cx.types.kind(ty) {
             TyKind::Ptr(_) => self.deref(base, ty, object.span),
@@ -1111,12 +1144,6 @@ impl FnCx<'_, '_> {
                     ExprKind::Some(inner) | ExprKind::Ok(inner) => inner.ty,
                     _ => r.ty,
                 };
-                let wrapped = [l.ty, r_ty].into_iter().any(|ty| {
-                    matches!(
-                        self.cx.types.kind(ty),
-                        TyKind::Optional(_) | TyKind::Result(..)
-                    )
-                });
                 let (lt, rt) = (self.ty(l.ty), self.ty(r_ty));
                 let verb = match operator.to_string().trim_end_matches('%') {
                     "+" => "add",
@@ -1152,19 +1179,24 @@ impl FnCx<'_, '_> {
                 let wrapped_side = [(&l, l.ty), (&r, r_ty)].into_iter().find(|(_, ty)| {
                     matches!(types.kind(*ty), TyKind::Optional(_) | TyKind::Result(..))
                 });
-                let unwrapped = wrapped_side.map(|(side, _)| {
+                let unwrapped = wrapped_side.map(|(side, ty)| {
                     let text = sources.text(side.span);
-                    (side.span, format!("{text}.unwrap()"))
+                    let pass = match types.kind(ty) {
+                        TyKind::Optional(_) => "?",
+                        _ => "!",
+                    };
+                    (side.span, format!("{text}.unwrap()"), pass)
                 });
                 let error = self
                     .error(format!("Cannot {verb} {lt} and {rt}"), r.span)
                     .label(format!("this is {rt}"));
                 error.note(format!("this is {lt}"), l.span);
-                if wrapped {
-                    error.help("take the value out first, with !, ? or .unwrap()");
-                    if let Some((at, fix)) = unwrapped {
-                        error.fix(at, fix);
-                    }
+                if let Some((at, fix, pass)) = unwrapped {
+                    error
+                        .help(format!(
+                            "take the value out first, with {pass} or .unwrap()"
+                        ))
+                        .fix(at, fix);
                 } else if numbers {
                     error
                         .help("make them one type: convert one with as")
@@ -1885,12 +1917,25 @@ impl FnCx<'_, '_> {
         let ok = match (operator, self.cx.types.kind(value.ty)) {
             (Token::Question, TyKind::Optional(ok)) | (Token::Bang, TyKind::Result(ok, _)) => *ok,
             (_, TyKind::Error) => return self.error_expr(span),
-            _ => {
+            (_, kind) => {
+                let other = match kind {
+                    TyKind::Optional(_) => Some("?"),
+                    TyKind::Result(..) => Some("!"),
+                    _ => None,
+                };
                 let shown = self.ty(value.ty);
-                self.error(
+                let error = self.error(
                     format!("'{operator}' takes a T{operator} value, not {shown}"),
                     span,
                 );
+                if let Some(other) = other {
+                    error
+                        .help(format!(
+                            "{} is passed on with '{other}'",
+                            crate::errors::with_article(&shown)
+                        ))
+                        .fix(Span::new(span.end - 1, span.end), other);
+                }
                 return self.error_expr(span);
             }
         };

@@ -595,13 +595,15 @@ impl Parser {
                         Token::Semicolon,
                         Token::Assign,
                         Token::LBrace,
+                        Token::Question,
+                        Token::Bang,
                     ]) {
                         true => None,
                         false => Some(Box::new(p.parse_type()?)),
                     };
                     TypeSpec::Fn(params, returns)
                 }
-                _ => return p.error_here("Type identifier expected"),
+                other => return p.error_here(format!("Expected a type, found '{other}'")),
             };
             if p.eat(&Token::Question) {
                 return Some(TypeSpec::Optional(Box::new(base)));
@@ -962,6 +964,23 @@ impl Parser {
         let mut seen_method = false;
 
         while !self.at_any(&[Token::RBrace, Token::Eof]) {
+            if self.at(&Token::Pub)
+                && matches!(self.ahead(1), Token::Identifier(_))
+                && *self.ahead(2) == Token::Colon
+            {
+                let span = self.span();
+                let next = self.tokens[self.pos + 1].1;
+                if let Some(error) = self.error(
+                    "A field takes no pub: every field is visible wherever its struct is",
+                    span,
+                ) {
+                    error
+                        .help("remove pub")
+                        .fix(Span::new(span.start, next.start), "");
+                }
+                self.panic_mode = false;
+                self.bump();
+            }
             if self.at_any(&[Token::Fn, Token::Pub]) {
                 seen_method = true;
                 let is_pub = self.eat(&Token::Pub);
@@ -1458,6 +1477,17 @@ impl Parser {
 
         let mut arms = Vec::new();
         while !self.at_any(&[Token::RBrace, Token::Eof]) {
+            if matches!(self.peek(), Token::Identifier(word) if word == "_")
+                && *self.ahead(1) == Token::Arrow
+            {
+                self.slip(
+                    1,
+                    "Zeru writes the arm for every other value as default",
+                    "write default",
+                    "default",
+                    vec![Token::Default],
+                );
+            }
             let pattern = match self.at(&Token::Default) {
                 true => {
                     let span = self.span();

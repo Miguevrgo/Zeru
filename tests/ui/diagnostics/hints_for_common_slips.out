@@ -1,41 +1,71 @@
 status: compile error
 -- stderr
-Error: Cannot add i32! and i32
-   ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:5:20 ]
+Error: '?' takes a T? value, not i32!
+   ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:9:13 ]
    │
- 5 │     var a = f(1) + 1;
-   │             ──┬─   ┬
-   │               ╰─────── this is i32!
-   │                    │
-   │                    ╰── this is i32
+ 9 │     var m = f(n)?;
+   │             ──┬──
+   │               ╰──── '?' takes a T? value, not i32!
    │
-   │ Help: take the value out first, with !, ? or .unwrap()
-   │           var a = f(1).unwrap() + 1;
+   │ Help: an i32! is passed on with '!'
+   │           var m = f(n)!;
 ───╯
-Error: Array<i32, 3> has no method 'len'
-   ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:7:17 ]
-   │
- 7 │     var n = arr.len();
-   │                 ─┬─
-   │                  ╰─── Array<i32, 3> has no method 'len'
-   │
-   │ Help: its length is part of its type: 3
-   │           var n = 3;
-───╯
-Error: If condition must be boolean, got void
-   ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:9:8 ]
-   │
- 9 │     if x = 2 {}
-   │        ──┬──
-   │          ╰──── this assigns, and gives nothing
-   │
-   │ Help: to compare, write ==
-   │           if x == 2 {}
-───╯
-Error: Write the value itself, not Some(..): it becomes a T? wherever one is wanted
-    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:10:19 ]
+Error: Zeru names a variant with ::, as in Shape::Circle
+    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:13:17 ]
     │
- 10 │     var o: i32? = Some(3);
+ 13 │     var round = Shape.Circle(1.0);
+    │                 ──────┬─────
+    │                       ╰─────── Zeru names a variant with ::, as in Shape::Circle
+    │
+    │ Help: write Shape::Circle
+    │           var round = Shape::Circle(1.0);
+────╯
+Error: Zeru names a variant with ::, as in Shape::Empty
+    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:14:16 ]
+    │
+ 14 │     var none = Shape.Empty;
+    │                ─────┬─────
+    │                     ╰─────── Zeru names a variant with ::, as in Shape::Empty
+    │
+    │ Help: write Shape::Empty
+    │           var none = Shape::Empty;
+────╯
+Error: Cannot add i32! and i32
+    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:15:20 ]
+    │
+ 15 │     var a = f(1) + 1;
+    │             ──┬─   ┬
+    │               ╰─────── this is i32!
+    │                    │
+    │                    ╰── this is i32
+    │
+    │ Help: take the value out first, with ! or .unwrap()
+    │           var a = f(1).unwrap() + 1;
+────╯
+Error: Array<i32, 3> has no method 'len'
+    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:17:17 ]
+    │
+ 17 │     var n = arr.len();
+    │                 ─┬─
+    │                  ╰─── Array<i32, 3> has no method 'len'
+    │
+    │ Help: its length is part of its type: 3
+    │           var n = 3;
+────╯
+Error: If condition must be boolean, got void
+    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:19:8 ]
+    │
+ 19 │     if x = 2 {}
+    │        ──┬──
+    │          ╰──── this assigns, and gives nothing
+    │
+    │ Help: to compare, write ==
+    │           if x == 2 {}
+────╯
+Error: Write the value itself, not Some(..): it becomes a T? wherever one is wanted
+    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:20:19 ]
+    │
+ 20 │     var o: i32? = Some(3);
     │                   ───┬───
     │                      ╰───── Write the value itself, not Some(..): it becomes a T? wherever one is wanted
     │
@@ -43,9 +73,9 @@ Error: Write the value itself, not Some(..): it becomes a T? wherever one is wan
     │           var o: i32? = 3;
 ────╯
 Error: Struct 'P' has no field 'sum'
-    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:22:19 ]
+    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:32:19 ]
     │
- 22 │     var total = p.sum;
+ 32 │     var total = p.sum;
     │                   ─┬─
     │                    ╰─── Struct 'P' has no field 'sum'
     │
@@ -53,18 +83,18 @@ Error: Struct 'P' has no field 'sum'
     │           var total = p.sum();
 ────╯
 Error: Missing fields 'x', 'y' in struct literal P
-    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:23:17 ]
+    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:33:17 ]
     │
- 23 │     var empty = P {};
+ 33 │     var empty = P {};
     │                 ──┬─
     │                   ╰─── Missing fields 'x', 'y' in struct literal P
     │
     │ Help: give each of them a value
 ────╯
 Error: &var [i32] has no method 'push'
-    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:26:10 ]
+    ╭─[ tests/ui/diagnostics/hints_for_common_slips.zr:36:10 ]
     │
- 26 │     part.push(3);
+ 36 │     part.push(3);
     │          ──┬─
     │            ╰─── &var [i32] has no method 'push'
     │
