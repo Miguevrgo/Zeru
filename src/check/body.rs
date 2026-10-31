@@ -36,6 +36,8 @@ pub(super) struct FnCx<'c, 'a> {
     pub(super) captures: Vec<Captured>,
     pub(super) infer_ret: bool,
     pub(super) in_closure: bool,
+    pub(super) naming: Option<String>,
+    pub(super) own_name: Option<String>,
 }
 
 /// A variable of the code around a closure, which its body may capture:
@@ -166,6 +168,8 @@ impl<'c, 'a> FnCx<'c, 'a> {
             captures: Vec::new(),
             infer_ret: false,
             in_closure: false,
+            naming: None,
+            own_name: None,
         }
     }
 
@@ -804,6 +808,9 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     let scope = self.scope.clone();
                     self.cx.resolve_type(spec, &scope, span)
                 });
+                if matches!(value.kind, ExpressionKind::Closure(_)) {
+                    self.naming = Some(name.clone());
+                }
                 let checked = self.value(value, expected);
                 if name == "_" {
                     return Some(Stmt {

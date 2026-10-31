@@ -56,4 +56,10 @@ fn main() {
     });
     var pair = words.map(fn(a, b) a);
     var lens = words.filter(fn(w) w.len());
+    var either = if words.len() > 0 { fn() {} } else { fn() {} };
+    var again = fn(n: i32) i32 {
+        return again(n - 1);
+    };
+    var plain = 3;
+    plain(1);
 }

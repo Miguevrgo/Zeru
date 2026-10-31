@@ -82,6 +82,7 @@ impl FnCx<'_, '_> {
         let mut inner = FnCx::new(self.cx, scope, known.unwrap_or(Types::VOID));
         inner.in_instance = in_instance;
         inner.in_closure = true;
+        inner.own_name = self.naming.take();
         inner.outer = outer;
         inner.enter();
         let env = inner.cx.types.intern(TyKind::Ref(ty));

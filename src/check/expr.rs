@@ -554,7 +554,15 @@ impl FnCx<'_, '_> {
             Ok(second) => second,
             Err(second) if second_leaves => second,
             Err(second) => {
-                if !self.cx.types.is_error(second.ty) && !self.cx.types.is_error(target) {
+                let closures =
+                    [target, second.ty].map(|ty| self.cx.types.closure_sig(ty).is_some());
+                if closures == [true, true] {
+                    self.error(
+                        "Each closure is a type of its own, so the branches of an if cannot give two",
+                        otherwise.span,
+                    )
+                    .help("call the closure each branch needs inside that branch");
+                } else if !self.cx.types.is_error(second.ty) && !self.cx.types.is_error(target) {
                     let (want, got) = (self.ty(target), self.ty(second.ty));
                     self.error(
                         format!("Both branches of the if must give {want}; this one gives {got}"),

@@ -272,6 +272,23 @@ impl FnCx<'_, '_> {
                 }
                 return self.error_expr(span);
             }
+            if self.own_name.as_deref() == Some(name) {
+                self.error(
+                    format!("A closure cannot call itself, and '{name}' is this one"),
+                    span,
+                )
+                .help("write a named function to call itself");
+                return self.error_expr(span);
+            }
+            if let Some((_, ty)) = self.variable(name) {
+                let shown = self.ty(ty);
+                self.error(
+                    format!("'{name}' is {shown}, not a function"),
+                    function_span,
+                );
+                self.check_args_only(args);
+                return self.error_expr(span);
+            }
             self.no_function(name, function_span, args, span);
             return self.error_expr(span);
         };

@@ -181,4 +181,29 @@ Error: This closure returns bool, but this value is usize
     │ Help: compare it to get a bool
     │           var lens = words.filter(fn(w) w.len() != 0);
 ────╯
+Error: Each closure is a type of its own, so the branches of an if cannot give two
+    ╭─[ tests/ui/closures/errors.zr:59:56 ]
+    │
+ 59 │     var either = if words.len() > 0 { fn() {} } else { fn() {} };
+    │                                                        ───┬───
+    │                                                           ╰───── Each closure is a type of its own, so the branches of an if cannot give two
+    │
+    │ Help: call the closure each branch needs inside that branch
+────╯
+Error: A closure cannot call itself, and 'again' is this one
+    ╭─[ tests/ui/closures/errors.zr:61:16 ]
+    │
+ 61 │         return again(n - 1);
+    │                ──────┬─────
+    │                      ╰─────── A closure cannot call itself, and 'again' is this one
+    │
+    │ Help: write a named function to call itself
+────╯
+Error: 'plain' is i32, not a function
+    ╭─[ tests/ui/closures/errors.zr:64:5 ]
+    │
+ 64 │     plain(1);
+    │     ──┬──
+    │       ╰──── 'plain' is i32, not a function
+────╯
 [-] Error: aborting due to previous error
