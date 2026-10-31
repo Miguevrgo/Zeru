@@ -41,6 +41,7 @@ const STR_METHODS: &[&str] = &[
 /// reference to the Vec first.
 const VEC_STD_METHODS: &[&str] = &[
     "sort",
+    "sort_by",
     "swap",
     "reverse",
     "rotate_left",
@@ -52,20 +53,34 @@ const VEC_STD_METHODS: &[&str] = &[
     "sum",
     "min",
     "max",
+    "map",
+    "filter",
+    "any",
+    "all",
     "push_str",
 ];
 
 /// The prelude's methods that only read the elements: slices have them, and
 /// a Vec reaches them through a slice of all of it.
-const SLICE_METHODS: &[&str] = &["contains", "sum", "min", "max", "windows", "chunks"];
+const SLICE_METHODS: &[&str] = &[
+    "contains", "sum", "min", "max", "windows", "chunks", "map", "filter", "any", "all",
+];
 
 /// The prelude's methods that move the elements around: a `&var [T]` has
 /// them, and a Vec reaches them through one of all of it.
-const SLICE_MUT_METHODS: &[&str] = &["sort", "swap", "reverse", "rotate_left", "rotate_right"];
+const SLICE_MUT_METHODS: &[&str] = &[
+    "sort",
+    "sort_by",
+    "swap",
+    "reverse",
+    "rotate_left",
+    "rotate_right",
+];
 
 /// The `Vec` methods that change it, so need a receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
     "sort",
+    "sort_by",
     "reverse",
     "rotate_left",
     "rotate_right",

@@ -1,0 +1,35 @@
+struct Person {
+    name: String,
+    age: i32,
+}
+
+fn main() {
+    var v: Vec<i32> = Vec[3, 1, 4, 1, 5, 9, 2, 6];
+    println("{}", v.map(fn(x) x * 2));
+    println("{}", v.filter(fn(x) x > 2).map(fn(x) x * 10));
+    println("{} {}", v.any(fn(x) x == 4), v.all(fn(x) x > 1));
+    v.sort_by(fn(a, b) b - a);
+    println("{}", v);
+    println("{}", v[2..].map(fn(x) x + 1));
+
+    var words: Vec<String> = Vec[String.from("abc"), String.from("c"), String.from("de")];
+    println("{}", words.map(fn(w) w.len()));
+    println("{}", words.filter(fn(w) w.len() > 1));
+    words.sort_by(fn(a, b) a.len() as i32 - b.len() as i32);
+    println("{}", words);
+    words.sort();
+    println("{}", words);
+
+    var people: Vec<Person> = Vec[
+        Person { name: String.from("Ana"), age: 30 },
+        Person { name: String.from("Luis"), age: 20 },
+    ];
+    people.sort_by(fn(a, b) a.age - b.age);
+    println("{}", people.map(fn(p) p.name.copy()));
+
+    var size = fn(s: String) usize {
+        return s.len();
+    };
+    var kept = String.from("ab");
+    println("{} {} {}", size(String.from("xyz")), size(kept), kept);
+}

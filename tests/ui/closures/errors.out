@@ -1,18 +1,18 @@
 status: compile error
 -- stderr
 Error: A fn(..) type is written only as a function's parameter
-    ╭─[ tests/ui/closures/errors.zr:10:1 ]
+    ╭─[ tests/ui/closures/errors.zr:13:1 ]
     │
- 10 │ fn stored(f: fn(i32)) fn(i32) {
+ 13 │ fn stored(f: fn(i32)) fn(i32) {
     │ ──────────────┬──────────────
     │               ╰──────────────── A fn(..) type is written only as a function's parameter
     │
     │ Help: a closure is passed as an argument or kept in a variable, never returned or kept inside another value
 ────╯
 Error: A closure outside a call's arguments has its body in braces, as a function does
-    ╭─[ tests/ui/closures/errors.zr:18:26 ]
+    ╭─[ tests/ui/closures/errors.zr:21:26 ]
     │
- 18 │     var siguiente = fn() k + 1;
+ 21 │     var siguiente = fn() k + 1;
     │                          ──┬──
     │                            ╰──── A closure outside a call's arguments has its body in braces, as a function does
     │
@@ -20,86 +20,86 @@ Error: A closure outside a call's arguments has its body in braces, as a functio
     │           var siguiente = fn() i32 { return k + 1; };
 ────╯
 Error: A closure cannot be kept inside Vec<fn(i32) i32>
-    ╭─[ tests/ui/closures/errors.zr:19:5 ]
+    ╭─[ tests/ui/closures/errors.zr:22:5 ]
     │
- 19 │     var lista = Vec[inc];
+ 22 │     var lista = Vec[inc];
     │     ──────────┬──────────
     │               ╰──────────── A closure cannot be kept inside Vec<fn(i32) i32>
     │
     │ Help: keep each closure in a variable of its own, or pass it as an argument
 ────╯
 Error: A closure cannot be kept inside a Holder
-    ╭─[ tests/ui/closures/errors.zr:20:16 ]
+    ╭─[ tests/ui/closures/errors.zr:23:16 ]
     │
- 20 │     var caja = Holder { value: inc };
+ 23 │     var caja = Holder { value: inc };
     │                ──────────┬──────────
     │                          ╰──────────── A closure cannot be kept inside a Holder
     │
     │ Help: keep each closure in a variable of its own, or pass it as an argument
 ────╯
 Error: This closure takes 2 parameter(s), but it will be given 1
-    ╭─[ tests/ui/closures/errors.zr:21:25 ]
+    ╭─[ tests/ui/closures/errors.zr:24:25 ]
     │
- 21 │     println("{}", apply(fn(x, y) x, 1));
+ 24 │     println("{}", apply(fn(x, y) x, 1));
     │                         ─────┬────
     │                              ╰────── This closure takes 2 parameter(s), but it will be given 1
 ────╯
 Error: 'apply' takes 'f' as fn(i32) i32, but this is fn(bool) bool
-    ╭─[ tests/ui/closures/errors.zr:22:25 ]
+    ╭─[ tests/ui/closures/errors.zr:25:25 ]
     │
- 22 │     println("{}", apply(fn(x: bool) x, 1));
+ 25 │     println("{}", apply(fn(x: bool) x, 1));
     │                         ──────┬──────
     │                               ╰──────── this is fn(bool) bool
 ────╯
 Error: 'apply' takes 'f' as fn(i32) i32, but this is i32
-    ╭─[ tests/ui/closures/errors.zr:23:25 ]
+    ╭─[ tests/ui/closures/errors.zr:26:25 ]
     │
- 23 │     println("{}", apply(5, 1));
+ 26 │     println("{}", apply(5, 1));
     │                         ┬
     │                         ╰── this is i32
 ────╯
 Error: 'id' is generic, so it is not a value
-    ╭─[ tests/ui/closures/errors.zr:24:25 ]
+    ╭─[ tests/ui/closures/errors.zr:27:25 ]
     │
- 24 │     println("{}", apply(id, 1));
+ 27 │     println("{}", apply(id, 1));
     │                         ─┬
     │                          ╰── 'id' is generic, so it is not a value
     │
     │ Help: call it inside a closure, as in fn(x) id(x)
 ────╯
 Error: This closure takes 1 argument(s), but 2 were given
-    ╭─[ tests/ui/closures/errors.zr:25:19 ]
+    ╭─[ tests/ui/closures/errors.zr:28:19 ]
     │
- 25 │     println("{}", inc(1, 2));
+ 28 │     println("{}", inc(1, 2));
     │                   ────┬────
     │                       ╰────── This closure takes 1 argument(s), but 2 were given
 ────╯
 Error: Cannot tell the type of 'x' here
-    ╭─[ tests/ui/closures/errors.zr:26:15 ]
+    ╭─[ tests/ui/closures/errors.zr:29:15 ]
     │
- 26 │ ╭─▶     var sin = fn(x) {
+ 29 │ ╭─▶     var sin = fn(x) {
     ┆ ┆
- 28 │ ├─▶     };
+ 31 │ ├─▶     };
     │ │
     │ ╰──────────── Cannot tell the type of 'x' here
     │
     │     Help: write it, as in x: i32
 ────╯
 Error: A closure cannot return a closure
-    ╭─[ tests/ui/closures/errors.zr:29:19 ]
+    ╭─[ tests/ui/closures/errors.zr:32:19 ]
     │
- 29 │ ╭─▶     var fabrica = fn() {
+ 32 │ ╭─▶     var fabrica = fn() {
     ┆ ┆
- 33 │ ├─▶     };
+ 36 │ ├─▶     };
     │ │
     │ ╰──────────── A closure cannot return a closure
     │
     │     Help: a closure only borrows what it uses, so it never outlives where it is made
 ────╯
 Error: Cannot move 'v' out of the code around this closure
-    ╭─[ tests/ui/closures/errors.zr:36:22 ]
+    ╭─[ tests/ui/closures/errors.zr:39:22 ]
     │
- 36 │         var robado = v;
+ 39 │         var robado = v;
     │                      ┬
     │                      ╰── the closure only borrows it
     │
@@ -107,13 +107,41 @@ Error: Cannot move 'v' out of the code around this closure
     │           var robado = v.copy();
 ────╯
 Error: Cannot change 'k', which is declared with const
-    ╭─[ tests/ui/closures/errors.zr:39:9 ]
+    ╭─[ tests/ui/closures/errors.zr:42:9 ]
     │
- 39 │         k += 1;
+ 42 │         k += 1;
     │         ───┬──
     │            ╰──── Cannot change 'k', which is declared with const
     │
     │ Help: declare it with var to change it
     │           var k = 1;
+────╯
+Error: Cannot move 'w', which is borrowed
+    ╭─[ tests/ui/closures/errors.zr:45:32 ]
+    │
+ 45 │     var same = words.map(fn(w) w);
+    │                                ┬
+    │                                ╰── what it borrows from keeps it
+    │
+    │ Help: move a copy of it instead
+    │           var same = words.map(fn(w) w.copy());
+────╯
+Error: 'keep' takes a String to keep, but a closure only borrows what it is given
+    ╭─[ tests/ui/closures/errors.zr:46:26 ]
+    │
+ 46 │     var lens = words.map(keep);
+    │                          ──┬─
+    │                            ╰─── 'keep' takes a String to keep, but a closure only borrows what it is given
+    │
+    │ Help: call it inside a closure, as in fn(x) keep(x.copy())
+────╯
+Error: 't' cannot be var: a closure only borrows what it is given
+    ╭─[ tests/ui/closures/errors.zr:47:23 ]
+    │
+ 47 │     var grow = fn(var t: String) {
+    │                       ┬
+    │                       ╰── 't' cannot be var: a closure only borrows what it is given
+    │
+    │ Help: change a copy of it, as in var own = t.copy();
 ────╯
 [-] Error: aborting due to previous error

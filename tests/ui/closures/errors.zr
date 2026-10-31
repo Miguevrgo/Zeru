@@ -7,6 +7,9 @@ fn apply(f: fn(i32) i32, x: i32) i32 {
 fn id<T>(x: T) T {
     return x;
 }
+fn keep(s: String) usize {
+    return s.len();
+}
 fn stored(f: fn(i32)) fn(i32) {
     return f;
 }
@@ -37,5 +40,11 @@ fn main() {
     };
     var nada = fn() {
         k += 1;
+    };
+    var words: Vec<String> = Vec[String.from("a")];
+    var same = words.map(fn(w) w);
+    var lens = words.map(keep);
+    var grow = fn(var t: String) {
+        t.push_str("x");
     };
 }

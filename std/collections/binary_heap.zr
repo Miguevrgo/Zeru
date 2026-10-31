@@ -63,7 +63,7 @@ pub struct BinaryHeap<T: Ord> {
             self.data.swap(0, self.data.len() - 1);
         }
         var largest = self.data.pop();
-        __zeru_sift(&var self.data, 0, 0, self.data.len());
+        __zeru_sift(&var self.data, 0, 0, self.data.len(), fn(a, b) a < b);
         return largest;
     }
 

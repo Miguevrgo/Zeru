@@ -1114,36 +1114,47 @@ fn __zeru_order(a: u64, ten: i64, b: u64, two: i64) i32 {
 // median of three, insertion sort for short runs, and heapsort for a run
 // that keeps splitting badly, so it never takes more than n log n steps.
 fn __zeru_vec_sort<T: Ord>(v: &var [T]) {
+    __zeru_sort(v, fn(a, b) a < b);
+}
+
+// `v.sort_by(order)`: `v` in the order `order` gives, a negative number
+// when its first element goes before its second.
+fn __zeru_vec_sort_by<T>(v: &var [T], order: fn(T, T) i32) {
+    __zeru_sort(v, fn(a, b) order(a, b) < 0);
+}
+
+// Sort `v` so that no element goes after one it is `less` than.
+fn __zeru_sort<T>(v: &var [T], less: fn(T, T) bool) {
     var depth: usize = 0;
     var n = v.len();
     while n > 1 {
         depth += 2;
         n /= 2;
     }
-    __zeru_quick(v, 0, v.len(), depth);
+    __zeru_quick(v, 0, v.len(), depth, less);
 }
 
 // Sort `v[low..high]`, falling back on heapsort once `depth` splits are
 // spent. Elements only trade places and are compared where they are, so
 // those that own memory sort too.
-fn __zeru_quick<T: Ord>(v: &var [T], low: usize, high: usize, depth: usize) {
+fn __zeru_quick<T>(v: &var [T], low: usize, high: usize, depth: usize, less: fn(T, T) bool) {
     var lo = low;
     var hi = high;
     var left = depth;
     while hi - lo > 16 {
         if left == 0 {
-            __zeru_heap(v, lo, hi);
+            __zeru_heap(v, lo, hi, less);
             return;
         }
         left -= 1;
         var mid = lo + (hi - lo) / 2;
-        if v[mid] < v[lo] {
+        if less(v[mid], v[lo]) {
             __zeru_vec_swap(v, mid, lo);
         }
-        if v[hi - 1] < v[lo] {
+        if less(v[hi - 1], v[lo]) {
             __zeru_vec_swap(v, hi - 1, lo);
         }
-        if v[hi - 1] < v[mid] {
+        if less(v[hi - 1], v[mid]) {
             __zeru_vec_swap(v, hi - 1, mid);
         }
         __zeru_vec_swap(v, lo, mid);
@@ -1151,11 +1162,11 @@ fn __zeru_quick<T: Ord>(v: &var [T], low: usize, high: usize, depth: usize) {
         var j = hi;
         while true {
             i += 1;
-            while i < hi && v[i] < v[lo] {
+            while i < hi && less(v[i], v[lo]) {
                 i += 1;
             }
             j -= 1;
-            while v[lo] < v[j] {
+            while less(v[lo], v[j]) {
                 j -= 1;
             }
             if i >= j {
@@ -1165,16 +1176,16 @@ fn __zeru_quick<T: Ord>(v: &var [T], low: usize, high: usize, depth: usize) {
         }
         __zeru_vec_swap(v, lo, j);
         if j - lo < hi - j - 1 {
-            __zeru_quick(v, lo, j, left);
+            __zeru_quick(v, lo, j, left, less);
             lo = j + 1;
         } else {
-            __zeru_quick(v, j + 1, hi, left);
+            __zeru_quick(v, j + 1, hi, left, less);
             hi = j;
         }
     }
     for k in lo + 1..hi {
         var at = k;
-        while at > lo && v[at] < v[at - 1] {
+        while at > lo && less(v[at], v[at - 1]) {
             __zeru_vec_swap(v, at, at - 1);
             at -= 1;
         }
@@ -1182,31 +1193,31 @@ fn __zeru_quick<T: Ord>(v: &var [T], low: usize, high: usize, depth: usize) {
 }
 
 // Heapsort `v[low..high]`.
-fn __zeru_heap<T: Ord>(v: &var [T], low: usize, high: usize) {
+fn __zeru_heap<T>(v: &var [T], low: usize, high: usize, less: fn(T, T) bool) {
     var count = high - low;
     var start = count / 2;
     while start > 0 {
         start -= 1;
-        __zeru_sift(v, low, start, count);
+        __zeru_sift(v, low, start, count, less);
     }
     var end = count;
     while end > 1 {
         end -= 1;
         __zeru_vec_swap(v, low, low + end);
-        __zeru_sift(v, low, 0, end);
+        __zeru_sift(v, low, 0, end, less);
     }
 }
 
 // Sink element `root` below the larger of its children, in the heap of
 // `end` elements that starts at `v[base]`.
-fn __zeru_sift<T: Ord>(v: &var [T], base: usize, root: usize, end: usize) {
+fn __zeru_sift<T>(v: &var [T], base: usize, root: usize, end: usize, less: fn(T, T) bool) {
     var at = root;
     while 2 * at + 1 < end {
         var child = 2 * at + 1;
-        if child + 1 < end && v[base + child] < v[base + child + 1] {
+        if child + 1 < end && less(v[base + child], v[base + child + 1]) {
             child += 1;
         }
-        if v[base + at] >= v[base + child] {
+        if !less(v[base + at], v[base + child]) {
             return;
         }
         __zeru_vec_swap(v, base + at, base + child);
@@ -1422,6 +1433,47 @@ fn __zeru_vec_max<T: Ord>(v: &[T]) T? {
         }
     }
     return best;
+}
+
+// `v.map(f)`: a new Vec of `f` applied to each element.
+fn __zeru_vec_map<T, U>(v: &[T], f: fn(T) U) Vec<U> {
+    var out: Vec<U> = Vec.new();
+    out.reserve(v.len());
+    for x in v {
+        out.push(f(x));
+    }
+    return out;
+}
+
+// `v.filter(keep)`: a new Vec with a copy of each element `keep` accepts.
+fn __zeru_vec_filter<T>(v: &[T], keep: fn(T) bool) Vec<T> {
+    var out: Vec<T> = Vec.new();
+    for x in v {
+        if keep(x) {
+            out.push(x.copy());
+        }
+    }
+    return out;
+}
+
+// `v.any(f)`: whether `f` accepts some element.
+fn __zeru_vec_any<T>(v: &[T], f: fn(T) bool) bool {
+    for x in v {
+        if f(x) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// `v.all(f)`: whether `f` accepts every element; true when there are none.
+fn __zeru_vec_all<T>(v: &[T], f: fn(T) bool) bool {
+    for x in v {
+        if !f(x) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // Blocks up to this many bytes come from the heap's size classes; larger

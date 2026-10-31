@@ -59,6 +59,45 @@ A function that takes a `fn(..)` is compiled again for each closure it is
 given, as a generic is for each type, so calling the closure costs no more
 than calling a function.
 
+## Vec methods
+
+A Vec, and a slice, takes a closure in `map`, `filter`, `any` and `all`;
+a Vec, and a `&var [T]`, in `sort_by`:
+
+```zeru
+var v: Vec<i32> = Vec[3, 1, 4, 1, 5];
+println("{}", v.map(fn(x) x * 2)); // [6, 2, 8, 2, 10]
+println("{}", v.filter(fn(x) x > 2)); // [3, 4, 5]
+println("{} {}", v.any(fn(x) x == 4), v.all(fn(x) x > 0)); // true true
+v.sort_by(fn(a, b) b - a);
+println("{}", v); // [5, 4, 3, 1, 1]
+```
+
+`map` gives a new Vec of what the closure returns for each element, and
+`filter` a new Vec with a copy of each element the closure accepts.
+`any` says whether it accepts some element, `all` whether it accepts every
+one. `sort_by` puts the Vec in the order the closure gives: a negative
+number when its first element goes before its second.
+
+## What a closure is given
+
+A closure is given each value as a `for` is each element: a value that
+owns memory, as a `String`, stays its caller's, and the closure only reads
+it. To keep it, or change it, it makes a copy:
+
+```zeru,fails
+fn main() {
+    var words: Vec<String> = Vec[String.from("a")];
+    var same = words.map(fn(w) w);
+}
+```
+
+```text
+Error: Cannot move 'w', which is borrowed
+```
+
+`words.map(fn(w) w.copy())` gives a second Vec of the same words.
+
 ## Using what is around
 
 A closure uses the variables of the code around it as references: a `&`

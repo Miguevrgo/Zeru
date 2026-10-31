@@ -62,12 +62,13 @@ The methods:
 | `insert(i, x)`, `remove(i)` | add or take at index `i`, moving the rest |
 | `len()`, `is_empty()`, `capacity()` | sizes |
 | `get(i)` | a reference to element `i`, or `None` past the end |
-| `swap(i, j)`, `sort()`, `reverse()` | reorder in place |
+| `swap(i, j)`, `sort()`, `sort_by(order)`, `reverse()` | reorder in place |
 | `rotate_left(n)`, `rotate_right(n)` | move every element `n` places, wrapping around |
 | `dedup()` | drop each element equal to the one before it |
 | `chunks(n)` | views of the elements `n` at a time |
 | `windows(n)` | views of every run of `n` elements next to each other |
 | `contains(x)`, `sum()`, `min()`, `max()` | look at the values |
+| `map(f)`, `filter(keep)`, `any(f)`, `all(f)` | run a [closure](closures.md#vec-methods) on each element |
 | `clear()`, `reserve(n)`, `shrink_to_fit()` | manage the memory |
 | `copy()` | a second Vec with the same elements |
 
@@ -143,8 +144,8 @@ freed, since that could move the elements it points at.
 A slice reads its elements. `&var v[a..b]` makes one that may also change
 them, of type `&var [T]`, from a `var` array or Vec; `&var v` lends all of
 one. Besides the methods that read, it has those that move elements around
-without changing how many there are: `sort`, `swap`, `reverse`,
-`rotate_left` and `rotate_right`.
+without changing how many there are: `sort`, `sort_by`, `swap`,
+`reverse`, `rotate_left` and `rotate_right`.
 
 ```zeru
 fn clear(values: &var [i32]) {

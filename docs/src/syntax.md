@@ -43,6 +43,7 @@ var square = fn(x: i32) i32 { return x * x; };  // a block, anywhere
 apply(fn(x) x * 2, 3)                           // one expression, as a whole argument
 apply(double, 3)                                // a function by its name
 each(&v, fn(x) { total += x; })                 // changes total: captured as &var
+v.map(fn(x) x * 2)  v.filter(fn(x) x > 0)  v.any(..)  v.all(..)  v.sort_by(fn(a, b) a - b)
 ```
 
 ## Control flow ([more](basics/control-flow.md))

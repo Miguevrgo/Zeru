@@ -90,6 +90,8 @@ type parameter of its own (`Sig::callables`), so a function taking one is an
 instance per closure, called directly. Since a closure only borrows, it is
 never returned or kept inside another value, and the borrow checker sees it
 as the struct of references it is.
+A parameter of a closure that owns memory is a view, as `self` is: the
+caller passes its address and keeps it, so the body cannot move or free it.
 
 ## The typed IR
 

@@ -81,7 +81,19 @@ impl FnCx<'_, '_> {
         let env = inner.cx.types.intern(TyKind::Ref(ty));
         let mut locals = vec![inner.declare("", env, false, false, span)];
         for ((name, _, mutable), &param) in closure.params.iter().zip(&params) {
-            let local = inner.declare(name, param, *mutable, false, span);
+            let view = inner.cx.owns_heap(param);
+            if view && *mutable {
+                let at = inner.cx.sources.word_in(span, name).unwrap_or(span);
+                inner
+                    .error(
+                        format!("'{name}' cannot be var: a closure only borrows what it is given"),
+                        at,
+                    )
+                    .help(format!(
+                        "change a copy of it, as in var own = {name}.copy();"
+                    ));
+            }
+            let local = inner.declare(name, param, *mutable, view, span);
             if !*mutable {
                 inner.fix(local, Fixed::Param);
             }
@@ -241,16 +253,18 @@ impl FnCx<'_, '_> {
         }
         for (arg, &param) in args.iter().zip(&params) {
             let value = self.value(arg, Some(param));
-            let mut value = self.coerce_or(value, param, arg.span, |want, got| {
+            let value = self.coerce_or(value, param, arg.span, |want, got| {
                 format!("This closure takes {want} here, but this is {got}")
             });
-            if !matches!(
-                self.cx.types.kind(param),
-                TyKind::Ref(_) | TyKind::RefMut(_)
-            ) {
-                self.consume(&mut value);
+            if !self.cx.owns_heap(param) {
+                values.push(value);
+                continue;
             }
-            values.push(value);
+            let place = match value.kind {
+                ExprKind::Read(place) => place,
+                _ => Place::Temp(Box::new(value)),
+            };
+            values.push(self.address(place, param, false, arg.span));
         }
         self.mk(ExprKind::Call(body, values), ret, span)
     }
@@ -267,6 +281,19 @@ impl FnCx<'_, '_> {
         if !sig.generics.is_empty() || !sig.callables.is_empty() {
             self.error(format!("'{name}' is generic, so it is not a value"), span)
                 .help(format!("call it inside a closure, as in fn(x) {name}(x)"));
+            return self.error_expr(span);
+        }
+        if let Some(&owned) = sig.params.iter().find(|&&ty| self.cx.owns_heap(ty)) {
+            let shown = self.cx.types.show(owned);
+            self.error(
+                format!(
+                    "'{name}' takes a {shown} to keep, but a closure only borrows what it is given"
+                ),
+                span,
+            )
+            .help(format!(
+                "call it inside a closure, as in fn(x) {name}(x.copy())"
+            ));
             return self.error_expr(span);
         }
         let body = self.cx.instance(def, Vec::new(), span);
