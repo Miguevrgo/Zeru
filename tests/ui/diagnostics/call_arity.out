@@ -1,24 +1,63 @@
 status: compile error
 -- stderr
-Error: Function 'add' expects 2 arguments, got 1
+Error: 'add' takes 2 arguments, but 1 was given
    ╭─[ tests/ui/diagnostics/call_arity.zr:5:5 ]
+   │
+ 1 │ fn add(a: i32, b: i32) i32 {
+   │ ─────────────┬────────────
+   │              ╰────────────── 'add' is declared here, taking (a: i32, b: i32)
    │
  5 │     add(10);
    │     ───┬───
-   │        ╰───── Function 'add' expects 2 arguments, got 1
+   │        ╰───── missing b: i32
+   │
+   │ Help: pass b: i32 too
 ───╯
-Error: Function 'add' expects 2 arguments, got 3
-   ╭─[ tests/ui/diagnostics/call_arity.zr:6:5 ]
+Error: 'add' takes 2 arguments, but 3 were given
+   ╭─[ tests/ui/diagnostics/call_arity.zr:6:15 ]
+   │
+ 1 │ fn add(a: i32, b: i32) i32 {
+   │ ─────────────┬────────────
+   │              ╰────────────── 'add' is declared here, taking (a: i32, b: i32)
    │
  6 │     add(1, 2, 3);
-   │     ──────┬─────
-   │           ╰─────── Function 'add' expects 2 arguments, got 3
+   │               ┬
+   │               ╰── not taken
+   │
+   │ Help: remove what it does not take
+   │           add(1, 2);
 ───╯
-Error: Function 'add' expects 2 arguments, got 1
+Error: 'add' takes 2 arguments, but 1 was given
    ╭─[ tests/ui/diagnostics/call_arity.zr:7:18 ]
+   │
+ 1 │ fn add(a: i32, b: i32) i32 {
+   │ ─────────────┬────────────
+   │              ╰────────────── 'add' is declared here, taking (a: i32, b: i32)
    │
  7 │     var x: i32 = add(1);
    │                  ───┬──
-   │                     ╰──── Function 'add' expects 2 arguments, got 1
+   │                     ╰──── missing b: i32
+   │
+   │ Help: pass b: i32 too
 ───╯
+Error: Vec<i32>.push() takes 1 argument, but 2 were given
+    ╭─[ tests/ui/diagnostics/call_arity.zr:11:15 ]
+    │
+ 11 │     v.push(1, 2);
+    │               ┬
+    │               ╰── not taken
+    │
+    │ Help: remove what it does not take
+    │           v.push(1);
+────╯
+Error: Vec<i32>.pop() takes 0 arguments, but 1 was given
+    ╭─[ tests/ui/diagnostics/call_arity.zr:12:11 ]
+    │
+ 12 │     v.pop(3);
+    │           ┬
+    │           ╰── not taken
+    │
+    │ Help: remove what it does not take
+    │           v.pop();
+────╯
 [-] Error: aborting due to previous error

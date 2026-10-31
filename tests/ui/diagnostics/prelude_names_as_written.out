@@ -14,26 +14,34 @@ Error: 'Vec.sum' asks for T: Num, which bool does not satisfy
    │     ─────┬─────
    │          ╰─────── 'Vec.sum' asks for T: Num, which bool does not satisfy
 ───╯
-Error: Function 'String.from' expects 1 argument, got 0
+Error: 'String.from' takes 1 argument, but 0 were given
    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:6:13 ]
    │
  6 │     var s = String.from();
    │             ──────┬──────
-   │                   ╰──────── Function 'String.from' expects 1 argument, got 0
+   │                   ╰──────── missing text: str
+   │
+   │ Help: pass text: str too
 ───╯
-Error: Function 'str.trim' expects 0 arguments, got 1
-   ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:7:13 ]
+Error: 'str.trim' takes 0 arguments, but 1 was given
+   ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:7:22 ]
    │
  7 │     var t = "x".trim(1);
-   │             ─────┬─────
-   │                  ╰─────── Function 'str.trim' expects 0 arguments, got 1
+   │                      ┬
+   │                      ╰── not taken
+   │
+   │ Help: remove what it does not take
+   │           var t = "x".trim();
 ───╯
-Error: String.with_capacity() takes exactly 1 argument
-   ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:8:13 ]
+Error: String.with_capacity() takes 1 argument, but 2 were given
+   ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:8:37 ]
    │
  8 │     var u = String.with_capacity(3, 4);
-   │             ─────────────┬────────────
-   │                          ╰────────────── String.with_capacity() takes exactly 1 argument
+   │                                     ┬
+   │                                     ╰── not taken
+   │
+   │ Help: remove what it does not take
+   │           var u = String.with_capacity(3);
 ───╯
 Error: String has no function 'pop'
    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:9:13 ]

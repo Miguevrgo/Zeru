@@ -6,3 +6,8 @@ fn main() {
     add(1, 2, 3);
     var x: i32 = add(1);
 }
+fn methods() {
+    var v: Vec<i32> = Vec[1];
+    v.push(1, 2);
+    v.pop(3);
+}

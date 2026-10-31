@@ -888,14 +888,49 @@ impl FnCx<'_, '_> {
         let skip = usize::from(receiver.is_some());
         let wanted = sig.params.len() - skip;
         if args.len() != wanted {
+            let items = self.cx.items;
+            let item = items.item(def);
+            let StatementKind::Function { params, .. } = &item.decl.kind else {
+                unreachable!("a call is to a function")
+            };
+            let names: Vec<String> = params[skip..]
+                .iter()
+                .zip(&sig.params[skip..])
+                .map(|((name, ..), &ty)| format!("{name}: {}", self.cx.types.show(ty)))
+                .collect();
+            let decl = self.cx.sources.first_line(item.decl.span);
+            let in_std = self.cx.sources.in_std(decl);
             let plural = if wanted == 1 { "" } else { "s" };
-            self.error(
-                format!(
-                    "Function '{full}' expects {wanted} argument{plural}, got {}",
-                    args.len()
-                ),
-                span,
-            );
+            let given = match args.len() {
+                1 => "1 was given".to_string(),
+                count => format!("{count} were given"),
+            };
+            let message = format!("'{full}' takes {wanted} argument{plural}, but {given}");
+            let error = match args.get(wanted) {
+                Some(extra) => {
+                    let last = args.last().map_or(extra.span, |arg| arg.span);
+                    let removed = match wanted {
+                        0 => Span::new(extra.span.start, last.end),
+                        _ => Span::new(args[wanted - 1].span.end, last.end),
+                    };
+                    self.error(message, Span::new(extra.span.start, last.end))
+                        .label("not taken")
+                        .help("remove what it does not take")
+                        .fix(removed, "")
+                }
+                None => {
+                    let missing = names[args.len()..].join(", ");
+                    self.error(message, span)
+                        .label(format!("missing {missing}"))
+                        .help(format!("pass {missing} too"))
+                }
+            };
+            if !in_std {
+                error.note(
+                    format!("'{full}' is declared here, taking ({})", names.join(", ")),
+                    decl,
+                );
+            }
             self.check_args_only(args);
             return self.error_expr(span);
         }
@@ -1117,10 +1152,27 @@ impl FnCx<'_, '_> {
         let owner = self.ty(vec);
         if args.len() != arity {
             let plural = if arity == 1 { "" } else { "s" };
-            self.error(
-                format!("{owner}.{name}() takes exactly {arity} argument{plural}"),
-                span,
-            );
+            let given = match args.len() {
+                1 => "1 was given".to_string(),
+                count => format!("{count} were given"),
+            };
+            let message = format!("{owner}.{name}() takes {arity} argument{plural}, but {given}");
+            match args.get(arity) {
+                Some(extra) => {
+                    let last = args.last().map_or(extra.span, |arg| arg.span);
+                    let removed = match arity {
+                        0 => Span::new(extra.span.start, last.end),
+                        _ => Span::new(args[arity - 1].span.end, last.end),
+                    };
+                    self.error(message, Span::new(extra.span.start, last.end))
+                        .label("not taken")
+                        .help("remove what it does not take")
+                        .fix(removed, "");
+                }
+                None => {
+                    self.error(message, span);
+                }
+            }
             self.check_args_only(args);
             return Vec::new();
         }
