@@ -126,9 +126,10 @@ fn main() {
 Error: Cannot return a reference into 'x', which ends with this function
 ```
 
-A method returns references into `self` only. Its other `&` parameters
-are lent for the call alone, so what it returns can be kept after them,
-as with a key a map looks up:
+A method returns references into `self` only. What its other `&`
+parameters point at is lent for the call alone, so what it returns can be
+kept after them, as with a key a map looks up. A reference held inside one
+of them, as the text of a `&str`, may still be returned:
 
 ```zeru
 import std.collections.hashmap::{HashMap};

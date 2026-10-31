@@ -5,7 +5,8 @@ fn main() {
     ages.insert("ann", 31);
     ages.insert("bob", 40);
     ages.insert("ann", 32);
-    println("{} {} {}", ages.len(), *ages.get(&"ann").unwrap(), ages.contains(&"eve"));
+    var ann = ages.get(&"ann").unwrap();
+    println("{} {} {}", ages.len(), *ann, ages.contains(&"eve"));
     var owned: HashMap<String, i32> = HashMap.new();
     for i in 0..1000 {
         var key = String.from("k");

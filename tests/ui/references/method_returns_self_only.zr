@@ -9,6 +9,14 @@ struct S {
         return &other.v[0];
     }
 
+    fn pointer(self, k: &str) &str {
+        return k;
+    }
+
+    fn echo(self, k: &str) str {
+        return *k;
+    }
+
     fn mine(self, at: &usize) &i32 {
         return &self.v[*at];
     }
@@ -17,4 +25,9 @@ fn main() {
     var s = S { v: Vec[7, 8] };
     var x = s.mine(&1);
     println("{} {} {}", *x, *s.pick(&2), *s.field(&s));
+    var owner = String.from("abc");
+    var view: str = owner;
+    var r = s.echo(&view);
+    owner.push('d');
+    println("{} {}", r, s.pointer(&view));
 }

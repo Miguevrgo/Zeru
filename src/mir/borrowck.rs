@@ -696,13 +696,15 @@ impl<'a> Cx<'a> {
             let mut carried = Vec::new();
             for (at, arg) in args.iter().enumerate() {
                 let loans = self.carried_operand(arg, facts);
-                let lent = self.lends_nothing(method, at, self.body.operand_ty(self.program, arg));
-                for (loan, _) in loans {
-                    carried.push((loan, true));
-                    if !lent {
-                        returnable.push((loan, true));
+                let ty = self.body.operand_ty(self.program, arg);
+                match (self.lent(method, at, ty), arg) {
+                    (true, Operand::Copy(place) | Operand::Move(place)) => {
+                        let inside = place.clone().project(Projection::Deref);
+                        returnable.extend(self.carried(&inside, facts));
                     }
+                    _ => returnable.extend(loans.iter().map(|&(loan, _)| (loan, true))),
                 }
+                carried.extend(loans.into_iter().map(|(loan, _)| (loan, true)));
             }
             let mut escaped = Vec::new();
             for &(loan, _) in carried
@@ -1090,16 +1092,17 @@ impl<'a> Cx<'a> {
     }
 
     /// Whether argument `at`, of type `ty`, of a call to a function that is
-    /// a `method` or not, lends nothing to what it returns: a method
-    /// returns references into `self` only, so its other arguments that
-    /// are a `&T` to a value holding no reference are lent for the call.
-    fn lends_nothing(&self, method: bool, at: usize, ty: Ty) -> bool {
-        match self.program.types.kind(ty) {
-            TyKind::Ref(inner) | TyKind::RefMut(inner) => {
-                method && at > 0 && !self.has(*inner, Part::Ref)
-            }
-            _ => false,
-        }
+    /// a `method` or not, is lent for the call only: a method returns
+    /// references into `self` only, so what its other `&T` arguments point
+    /// at is not reached by what it returns, though the references a `T`
+    /// holds may be.
+    fn lent(&self, method: bool, at: usize, ty: Ty) -> bool {
+        method
+            && at > 0
+            && matches!(
+                self.program.types.kind(ty),
+                TyKind::Ref(_) | TyKind::RefMut(_)
+            )
     }
 
     /// A method returning a reference into an argument other than `self`
@@ -1113,7 +1116,7 @@ impl<'a> Cx<'a> {
                 .find(|root| {
                     let at = root.0 as usize;
                     (1..=self.body.arg_count).contains(&at)
-                        && self.lends_nothing(self.body.method, at - 1, self.body.locals[at].ty)
+                        && self.lent(self.body.method, at - 1, self.body.locals[at].ty)
                 });
             let Some(param) = lent else {
                 continue;

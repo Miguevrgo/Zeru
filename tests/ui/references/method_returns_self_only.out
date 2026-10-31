@@ -14,4 +14,45 @@ Error: A method returns references into 'self' only, not into 'other'
    │                ─────┬─────
    │                     ╰─────── A method returns references into 'self' only, not into 'other'
 ───╯
+Error: A method returns references into 'self' only, not into 'k'
+    ╭─[ tests/ui/references/method_returns_self_only.zr:12:5 ]
+    │
+ 12 │     fn pointer(self, k: &str) &str {
+    │     ───────────────┬──────────────
+    │                    ╰──────────────── A method returns references into 'self' only, not into 'k'
+────╯
+Error: Cannot change 'owner' while 'r' still refers into it
+    ╭─[ tests/ui/references/method_returns_self_only.zr:31:5 ]
+    │
+ 31 │     owner.push('d');
+    │     ───────┬───────
+    │            ╰───────── Cannot change 'owner' while 'r' still refers into it
+    │
+    ├─[ tests/ui/references/method_returns_self_only.zr:31:5 ]
+    │
+ 29 │     var view: str = owner;
+    │                     ──┬──
+    │                       ╰──── borrowed here
+    │
+ 32 │     println("{} {}", r, s.pointer(&view));
+    │                      ┬
+    │                      ╰── used later here
+────╯
+Error: Cannot change 'owner' while 'view' still refers into it
+    ╭─[ tests/ui/references/method_returns_self_only.zr:31:5 ]
+    │
+ 31 │     owner.push('d');
+    │     ───────┬───────
+    │            ╰───────── Cannot change 'owner' while 'view' still refers into it
+    │
+    ├─[ tests/ui/references/method_returns_self_only.zr:31:5 ]
+    │
+ 29 │     var view: str = owner;
+    │                     ──┬──
+    │                       ╰──── borrowed here
+    │
+ 32 │     println("{} {}", r, s.pointer(&view));
+    │                                   ──┬──
+    │                                     ╰──── used later here
+────╯
 [-] Error: aborting due to previous error
