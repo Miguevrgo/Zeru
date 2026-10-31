@@ -808,6 +808,13 @@ impl FnCx<'_, '_> {
             _ => None,
         });
         let (place, ty) = self.place_expecting(inner, pointee);
+        if ty == Types::VOID {
+            self.error(
+                "This returns nothing, so there is nothing to refer to",
+                inner.span,
+            );
+            return self.error_expr(span);
+        }
         if mutable {
             self.require_mutable(&place, inner, span);
         }

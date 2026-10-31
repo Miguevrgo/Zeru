@@ -37,33 +37,47 @@ Error: greet() returns nothing, so it has no value to use
     │              ───┬───
     │                 ╰───── greet() returns nothing, so it has no value to use
 ────╯
-Error: void has no values; only what a function returns can be void
-    ╭─[ tests/ui/types/void_has_no_value.zr:19:5 ]
+Error: This returns nothing, so there is nothing to refer to
+    ╭─[ tests/ui/types/void_has_no_value.zr:19:14 ]
     │
- 19 │     var w: Vec<void> = Vec.new();
+ 19 │     var r = &greet();
+    │              ───┬───
+    │                 ╰───── This returns nothing, so there is nothing to refer to
+────╯
+Error: This returns nothing, so there is nothing to refer to
+    ╭─[ tests/ui/types/void_has_no_value.zr:21:10 ]
+    │
+ 21 │     &var list.push(1);
+    │          ──────┬─────
+    │                ╰─────── This returns nothing, so there is nothing to refer to
+────╯
+Error: void has no values; only what a function returns can be void
+    ╭─[ tests/ui/types/void_has_no_value.zr:22:5 ]
+    │
+ 22 │     var w: Vec<void> = Vec.new();
     │     ──────────────┬──────────────
     │                   ╰──────────────── void has no values; only what a function returns can be void
 ────╯
 Error: void has no values; only what a function returns can be void
-    ╭─[ tests/ui/types/void_has_no_value.zr:20:5 ]
+    ╭─[ tests/ui/types/void_has_no_value.zr:23:5 ]
     │
- 20 │     var b: Box<void>? = None;
+ 23 │     var b: Box<void>? = None;
     │     ────────────┬────────────
     │                 ╰────────────── void has no values; only what a function returns can be void
 ────╯
 Error: This has no value to use
-    ╭─[ tests/ui/types/void_has_no_value.zr:23:17 ]
+    ╭─[ tests/ui/types/void_has_no_value.zr:26:17 ]
     │
- 23 │ ╭─▶         var y = match c {
+ 26 │ ╭─▶         var y = match c {
     ┆ ┆
- 28 │ ├─▶         };
+ 31 │ ├─▶         };
     │ │
     │ ╰──────────────── This has no value to use
 ────╯
 Error: void has no values; only what a function returns can be void
-    ╭─[ tests/ui/types/void_has_no_value.zr:33:1 ]
+    ╭─[ tests/ui/types/void_has_no_value.zr:36:1 ]
     │
- 33 │ fn f(a: void) {}
+ 36 │ fn f(a: void) {}
     │ ──────┬──────
     │       ╰──────── void has no values; only what a function returns can be void
 ────╯

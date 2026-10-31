@@ -120,6 +120,7 @@ pub struct Checker<'a> {
     functions: Vec<Option<tir::Function>>,
     queued: Vec<Instance>,
     closures: Vec<ClosureInfo>,
+    broken: HashSet<FnId>,
     named_closures: HashMap<DefId, Ty>,
     unsatisfied: HashSet<(DefId, Vec<Ty>)>,
     adts_seen: HashSet<Ty>,
@@ -154,6 +155,7 @@ impl<'a> Checker<'a> {
             functions: Vec::new(),
             queued: Vec::new(),
             closures: Vec::new(),
+            broken: HashSet::new(),
             named_closures: HashMap::new(),
             unsatisfied: HashSet::new(),
             adts_seen: HashSet::new(),
@@ -367,7 +369,11 @@ impl<'a> Checker<'a> {
         }
         let instance = &self.queued[id.0 as usize];
         let (def, args) = (instance.def, instance.args.clone());
+        let errors = self.errors.len();
         let function = body::check_function(self, def, &args);
+        if self.errors.len() > errors {
+            self.broken.insert(id);
+        }
         self.functions[id.0 as usize] = Some(function);
     }
 

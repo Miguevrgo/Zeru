@@ -16,6 +16,9 @@ fn void_has_no_value() {
     id(greet());
     var t = (greet(), 1);
     var a = [greet()];
+    var r = &greet();
+    var list: Vec<i32> = Vec.new();
+    &var list.push(1);
     var w: Vec<void> = Vec.new();
     var b: Box<void>? = None;
     var c = true;

@@ -31,6 +31,11 @@ fn selfish() i32 {
 fn text() String {
     return String.new();
 }
+fn broken() i32 {
+    return missing;
+}
+fn unfinished() i32 {
+}
 const A = heap();
 const B = noisy();
 const C = forever();
@@ -39,4 +44,6 @@ const E = overflow();
 const G = outside();
 const LOOP = selfish();
 const H = text();
+const I = broken();
+const J = unfinished();
 fn main() {}

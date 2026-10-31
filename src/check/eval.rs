@@ -50,6 +50,7 @@ enum Exit {
     Continue,
     Return(Value),
     Fail(String, Span),
+    Broken,
 }
 
 type Run<T> = Result<T, Exit>;
@@ -107,6 +108,7 @@ impl Checker<'_> {
                 self.errors.push(error);
                 return None;
             }
+            Err(Exit::Broken) => return None,
             Err(_) => unreachable!("a jump stays inside its function"),
         };
         Some(self.literal(&value, expr.ty, expr.span))
@@ -207,6 +209,9 @@ impl Eval<'_, '_> {
             );
         }
         let body = self.body(id);
+        if self.cx.broken.contains(&id) {
+            return Err(Exit::Broken);
+        }
         let mut slots = vec![None; body.views.len()];
         for (&param, arg) in body.params.iter().zip(args) {
             slots[param.0 as usize] = Some(arg);
