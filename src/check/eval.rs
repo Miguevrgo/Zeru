@@ -683,7 +683,7 @@ impl Eval<'_, '_> {
             Value::Bool(b) => i128::from(*b),
             Value::Variant(at, _) => i128::from(*at),
             Value::Optional(inner) => i128::from(inner.is_some()),
-            _ => unreachable!("a matched value has a tag"),
+            _ => 0,
         };
         for arm in arms {
             let alternative = match arm.tags.is_empty() {

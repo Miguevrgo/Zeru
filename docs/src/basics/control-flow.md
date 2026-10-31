@@ -181,3 +181,21 @@ fn main() {
     println("{} {} {} {}", kind('q'), kind('7'), kind(200), kind('?')); // letter digit beyond ASCII other
 }
 ```
+
+Text matches the same way, a `str` or a `String` against string literals
+and text constants, with `default` for every other text:
+
+```zeru
+fn command(word: str) i32 {
+    return match word {
+        "start" | "go" => 1,
+        "stop" => 2,
+        w if w.starts_with("#") => 0,
+        default => -1,
+    };
+}
+
+fn main() {
+    println("{} {} {}", command("go"), command("stop"), command("jump")); // 1 2 -1
+}
+```

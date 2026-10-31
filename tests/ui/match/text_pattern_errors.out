@@ -1,0 +1,53 @@
+status: compile error
+-- stderr
+Error: A match on str needs a 'default' arm
+   ╭─[ tests/ui/match/text_pattern_errors.zr:2:13 ]
+   │
+ 2 │     var a = match w {
+   │             ────┬────
+   │                 ╰────── A match on str needs a 'default' arm
+   │
+   │ Help: add a default arm for the values no other arm takes
+   │           default => {}
+───╯
+Error: This value is already matched by an earlier arm
+   ╭─[ tests/ui/match/text_pattern_errors.zr:8:9 ]
+   │
+ 7 │         "x" => 1,
+   │         ─┬─
+   │          ╰─── matched first here, so this arm never runs for it
+ 8 │         "x" | "z" => 2,
+   │         ─┬─
+   │          ╰─── This value is already matched by an earlier arm
+   │
+   │ Help: remove this arm, or narrow it to values no earlier arm takes
+───╯
+Error: A pattern of type i32 cannot match a value of type str
+    ╭─[ tests/ui/match/text_pattern_errors.zr:12:9 ]
+    │
+ 12 │         1 => 1,
+    │         ┬
+    │         ╰── A pattern of type i32 cannot match a value of type str
+────╯
+Error: A range matches integers, not str
+    ╭─[ tests/ui/match/text_pattern_errors.zr:16:9 ]
+    │
+ 16 │         "a"..="c" => 1,
+    │         ────┬────
+    │             ╰────── A range matches integers, not str
+────╯
+Error: This pattern cannot match str
+    ╭─[ tests/ui/match/text_pattern_errors.zr:17:9 ]
+    │
+ 17 │         Some(x) => 2,
+    │         ───┬───
+    │            ╰───── This pattern cannot match str
+────╯
+Error: 'n' names no value; a name alone matches only with an 'if' after it, as in n if n > 3, and 'default' takes every other value
+    ╭─[ tests/ui/match/text_pattern_errors.zr:18:9 ]
+    │
+ 18 │         n => 3,
+    │         ┬
+    │         ╰── 'n' names no value; a name alone matches only with an 'if' after it, as in n if n > 3, and 'default' takes every other value
+────╯
+[-] Error: aborting due to previous error

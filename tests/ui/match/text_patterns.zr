@@ -1,0 +1,61 @@
+const LET: str = "let";
+
+fn kind(word: str) i32 {
+    return match word {
+        "fn" => 1,
+        LET => 2,
+        "if" | "else" => 3,
+        w if w.len() > 5 => 4,
+        "" => 5,
+        default => 0,
+    };
+}
+
+fn owned(s: String) str {
+    match s {
+        "a" => {
+            return "got a";
+        }
+        x if x.starts_with("b") => {
+            return "starts with b";
+        }
+        default => {
+            return "other";
+        }
+    }
+}
+
+fn main_words() {
+    for w in ["fn", "let", "if", "else", "longword", "", "x"] {
+        print("{} ", kind(w));
+    }
+    println("");
+    println("{} {} {}", owned(String.from("a")), owned(String.from("bee")), owned(String.from("c")));
+    var s = String.from("else");
+    var r = &s;
+    println("{}", match *r { "else" => "yes", default => "no" });
+    println("{}", match s { "else" if false => 1, "else" => 2, default => 3 });
+}
+fn code(w: str) i32 {
+    return match w { "one" => 1, "two" => 2, default => 0 };
+}
+const TWO: i32 = code("two");
+fn make(n: i32) String {
+    var s = String.new();
+    for i in 0..n {
+        s.push('a');
+    }
+    return s;
+}
+fn main_temps() {
+    println("{}", TWO);
+    var total = 0;
+    for i in 0..5 {
+        total += match make(i) { "" => 100, "aa" => 10, x if x.len() > 3 => 1, default => 0 };
+    }
+    println("{}", total);
+}
+fn main() {
+    main_words();
+    main_temps();
+}

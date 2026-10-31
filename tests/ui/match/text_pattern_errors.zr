@@ -1,0 +1,23 @@
+fn f(w: str) i32 {
+    var a = match w {
+        "x" => 1,
+        "y" => 2,
+    };
+    var b = match w {
+        "x" => 1,
+        "x" | "z" => 2,
+        default => 3,
+    };
+    var c = match w {
+        1 => 1,
+        default => 3,
+    };
+    var d = match w {
+        "a"..="c" => 1,
+        Some(x) => 2,
+        n => 3,
+        default => 4,
+    };
+    return a + b + c + d;
+}
+fn main() {}

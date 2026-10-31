@@ -4,9 +4,14 @@ use crate::ast::{Expression, ExpressionKind, MatchArm, Pattern, PatternKind};
 use crate::errors::Span;
 use crate::items::ItemKind;
 use crate::tir::{Arm, Expr, ExprKind, Payload, Place};
+use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
 use super::body::{Fixed, FnCx};
+
+/// The binding a match on text tests its values against, a name no code
+/// can write.
+const TEXT: &str = "the text matched";
 
 /// Where binding `field` of a pattern for variant `variant` finds its value.
 type PayloadAt = fn(u32, u32) -> Payload;
@@ -34,6 +39,14 @@ impl FnCx<'_, '_> {
     ) -> Expr {
         let (scrutinee, subject) = self.place(value);
         let (scrutinee, subject) = self.through_ref(scrutinee, subject, value.span);
+        let text_arms;
+        let arms = match subject == Types::STR || subject == Types::STRING {
+            true => {
+                text_arms = self.text_arms(arms);
+                &text_arms[..]
+            }
+            false => arms,
+        };
         let patterns = self.patterns(subject, arms, span);
         if arms.is_empty() {
             return self.mk(
@@ -142,6 +155,83 @@ impl FnCx<'_, '_> {
         )
     }
 
+    /// The arms of a match on text, each value it lists tested by its guard:
+    /// `"a" | "b" => x` becomes `t if t == "a" || t == "b" => x`, `t` bound
+    /// to the whole text.
+    fn text_arms(&mut self, arms: &[MatchArm]) -> Vec<MatchArm> {
+        let mut seen: Vec<(Vec<u8>, Span)> = Vec::new();
+        let mut rewritten = Vec::new();
+        for arm in arms {
+            let alternatives = match &arm.pattern.kind {
+                PatternKind::Or(alternatives) => alternatives.iter().collect(),
+                _ => vec![&arm.pattern],
+            };
+            let values = alternatives
+                .iter()
+                .map(|alternative| match &alternative.kind {
+                    PatternKind::Constant(
+                        value @ Expression {
+                            kind: ExpressionKind::StringLit(_) | ExpressionKind::Identifier(_),
+                            ..
+                        },
+                    ) if whole_binding(alternative).is_none_or(|name| self.names_a_value(name)) => {
+                        Some(value)
+                    }
+                    _ => None,
+                });
+            let Some(values) = values.collect::<Option<Vec<_>>>() else {
+                rewritten.push(arm.clone());
+                continue;
+            };
+            let text = |span| Expression::new(ExpressionKind::Identifier(TEXT.into()), span);
+            let infix = |left: Expression, operator, right: Expression| {
+                let span = left.span.merge(right.span);
+                let (left, right) = (Box::new(left), Box::new(right));
+                Expression::new(
+                    ExpressionKind::Infix {
+                        left,
+                        operator,
+                        right,
+                    },
+                    span,
+                )
+            };
+            for value in &values {
+                let ExpressionKind::StringLit(bytes) = &value.kind else {
+                    continue;
+                };
+                if let Some((_, first)) = seen.iter().find(|(seen, _)| seen == bytes) {
+                    self.error(
+                        "This value is already matched by an earlier arm",
+                        value.span,
+                    )
+                    .note("matched first here, so this arm never runs for it", *first)
+                    .help("remove this arm, or narrow it to values no earlier arm takes");
+                } else if arm.guard.is_none() {
+                    seen.push((bytes.clone(), value.span));
+                }
+            }
+            let test = values
+                .into_iter()
+                .map(|value| infix(text(value.span), Token::Eq, value.clone()))
+                .reduce(|left, right| infix(left, Token::Or, right))
+                .expect("a pattern has an alternative");
+            let guard = match &arm.guard {
+                Some(guard) => infix(test, Token::And, guard.clone()),
+                None => test,
+            };
+            rewritten.push(MatchArm {
+                pattern: Pattern {
+                    kind: PatternKind::Constant(text(arm.pattern.span)),
+                    span: arm.pattern.span,
+                },
+                guard: Some(guard),
+                body: arm.body.clone(),
+            });
+        }
+        rewritten
+    }
+
     /// Whether `name` in a payload is a constant, which a binding would
     /// silently shadow.
     fn names_a_value(&self, name: &str) -> bool {
@@ -173,6 +263,7 @@ impl FnCx<'_, '_> {
         let all: Option<Vec<String>> = match self.cx.types.kind(subject).clone() {
             TyKind::Error => return none(),
             TyKind::Int(_) => None,
+            _ if subject == Types::STR || subject == Types::STRING => None,
             TyKind::Bool => Some(vec!["false".into(), "true".into()]),
             TyKind::Optional(_) => Some(vec!["None".into(), "Some(_)".into()]),
             TyKind::Result(..) => Some(vec!["Err(_)".into(), "Ok(_)".into()]),
