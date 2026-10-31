@@ -17,7 +17,7 @@ source ─▶ lexer ─▶ parser ─▶ items ─▶ check ─▶ mir ─▶ lo
 | Check | `check/` | The typed IR of every function instance, or the errors |
 | MIR | `mir/` | Each function as a graph of basic blocks, borrow checked, its drops elaborated |
 | Lower | `lower/` | An LLVM module, with debug info from `lower/debug.rs` |
-| Errors | `errors.rs` | Every message with its span, printed with the source line, or as JSON for editors |
+| Errors | `errors.rs` | Every message with its span, a label for that spot, notes at the other spots that explain it, and help with the edit that fixes it, printed with the source lines or as JSON for editors. `check/suggest.rs` finds what an unknown name meant: the closest name, the name another language uses, or the std import |
 | Formatter | `fmt.rs` | `zeru fmt`: the syntax tree printed back in one layout, comments kept |
 
 ## Names
