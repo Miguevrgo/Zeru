@@ -11,6 +11,10 @@ use crate::{
 /// A recursive descent parser over the whole token list of a file. Each
 /// `parse_*` starts on the first token of what it reads and stops after its
 /// last one.
+/// Tokens replaced while parsing, so a rewind can put them back: where,
+/// the ones taken out, and how many went in.
+type Rewrite = (usize, Vec<(Token, Span)>, usize);
+
 pub struct Parser {
     tokens: Vec<(Token, Span)>,
     pos: usize,
@@ -19,13 +23,16 @@ pub struct Parser {
     panic_mode: bool,
 
     no_struct_literal: bool,
+    in_pattern: bool,
     code_seen: bool,
 
     depth: usize,
     brackets: usize,
     nesting: usize,
-    splits: Vec<(usize, (Token, Span))>,
+    rewrites: Vec<Rewrite>,
+    opens: Vec<Span>,
     pub comments: Vec<Span>,
+    nested: Vec<(Span, usize)>,
     pub parens: Vec<Span>,
 }
 
@@ -77,12 +84,15 @@ impl Parser {
             errors: Vec::new(),
             panic_mode: false,
             no_struct_literal: false,
+            in_pattern: false,
             code_seen: false,
             depth: 0,
             brackets: 0,
             nesting: 0,
-            splits: Vec::new(),
+            rewrites: Vec::new(),
+            opens: Vec::new(),
             comments: lexer.comments,
+            nested: lexer.nested,
             parens: Vec::new(),
         };
         p.report_illegal();
@@ -113,8 +123,14 @@ impl Parser {
         let token = self.peek().clone();
         match token {
             Token::Eof => return token,
-            Token::LBrace => self.depth += 1,
-            Token::RBrace => self.depth = self.depth.saturating_sub(1),
+            Token::LBrace => {
+                self.depth += 1;
+                self.opens.push(self.span());
+            }
+            Token::RBrace => {
+                self.depth = self.depth.saturating_sub(1);
+                self.opens.pop();
+            }
             Token::LBracket => self.brackets += 1,
             Token::RBracket => self.brackets = self.brackets.saturating_sub(1),
             _ => {}
@@ -154,7 +170,72 @@ impl Parser {
         if self.eat(token) {
             return Some(());
         }
-        self.expected(&format!("'{token}'"))
+        let found = self.peek().clone();
+        let before = self.prev_span();
+        match (token, &found) {
+            (Token::RBrace, Token::Eof) => {
+                let open = self.opens.last().copied();
+                let error = self.error("Expected '}', found the end of the file", self.span())?;
+                if let Some(open) = open {
+                    error.note("this '{' is never closed", open);
+                }
+                None
+            }
+            (Token::Semicolon, _) if self.after_nested_comment(before).is_some() => {
+                let inner = self.after_nested_comment(before)?;
+                let error = self.error(
+                    "Block comments do not nest, so this is not commented out",
+                    before,
+                )?;
+                error
+                    .note(
+                        "this '/*' starts nothing; the comment ends at the first '*/'",
+                        inner,
+                    )
+                    .help("comment out each line with // instead");
+                None
+            }
+            (Token::Semicolon, _) => {
+                let error =
+                    self.error(format!("Expected ';' after this, found '{found}'"), before)?;
+                error
+                    .label("the statement ends here")
+                    .help("end the statement with ;")
+                    .fix(Span::new(before.end, before.end), ";");
+                None
+            }
+            _ => self.expected(&format!("'{token}'")),
+        }
+    }
+
+    /// The `/*` inside the block comment that ends right before the token
+    /// at `span`, with nothing else between them.
+    fn after_nested_comment(&self, span: Span) -> Option<Span> {
+        let at = self.tokens.iter().position(|(_, s)| *s == span)?;
+        let prior = at.checked_sub(1).map_or(0, |at| self.tokens[at].1.end);
+        self.nested
+            .iter()
+            .find(|&&(inner, end)| prior <= inner.start && end <= span.start)
+            .map(|&(inner, _)| inner)
+    }
+
+    /// Report a slip at the next `count` tokens, written as another
+    /// language writes it, and read them as `with`, which `fix` writes.
+    fn slip(&mut self, count: usize, message: &str, help: &str, fix: &str, with: Vec<Token>) {
+        let span = self.span().merge(self.tokens[self.pos + count - 1].1);
+        if let Some(error) = self.error(message, span) {
+            error.help(help).fix(span, fix);
+        }
+        self.panic_mode = false;
+        let with = with.into_iter().map(|token| (token, span)).collect();
+        self.rewrite(self.pos, count, with);
+    }
+
+    /// The token `ahead` places after the next one.
+    fn ahead(&self, ahead: usize) -> &Token {
+        self.tokens
+            .get(self.pos + ahead)
+            .map_or(&Token::Eof, |(token, _)| token)
     }
 
     /// Report that `what` should follow the last token read.
@@ -172,13 +253,14 @@ impl Parser {
 
     /// One error per mistake: nothing more is reported until parsing recovers,
     /// nor next to a token the lexer already rejected.
-    fn error(&mut self, message: impl Into<String>, span: Span) {
+    fn error(&mut self, message: impl Into<String>, span: Span) -> Option<&mut ZeruError> {
         let illegal = |at: usize| matches!(self.tokens[at].0, Token::Illegal(_));
         if self.panic_mode || illegal(self.pos) || illegal(self.pos.saturating_sub(1)) {
-            return;
+            return None;
         }
         self.panic_mode = true;
         self.errors.push(ZeruError::syntax(message, span));
+        self.errors.last_mut()
     }
 
     /// The name that should follow the last token read.
@@ -298,6 +380,13 @@ impl Parser {
                     false => self.error_here("Tests go inside '#test { }', at the end of the file"),
                 },
                 Token::Var => self.error_here("Global variables ('var') are not allowed. Use 'const' for constants or move 'var' inside a function"),
+                Token::Identifier(word)
+                    if ["def", "func", "function", "fun"].contains(&word.as_str())
+                        && matches!(self.ahead(1), Token::Identifier(_)) =>
+                {
+                    self.slip(1, "Zeru declares a function with fn", "write fn", "fn", vec![Token::Fn]);
+                    self.parse_function_statement()
+                }
                 token => {
                     let message = format!("Unexpected '{token}' at top level, expected fn, struct, enum, trait, const or import");
                     self.error_here(message)
@@ -377,12 +466,43 @@ impl Parser {
             Token::LBrace => p.parse_block(),
             Token::Import => p.parse_import_statement(),
             Token::Identifier(word)
-                if word == "let"
-                    && matches!(p.tokens.get(p.pos + 1), Some((Token::Identifier(_), _))) =>
+                if word == "let" && matches!(p.ahead(1), Token::Identifier(_)) =>
             {
-                p.error_here(
+                let count = match (p.ahead(1), p.ahead(2)) {
+                    (Token::Identifier(m), Token::Identifier(_)) if m == "mut" => 2,
+                    _ => 1,
+                };
+                p.slip(
+                    count,
                     "Zeru declares a variable with 'var', or 'const' when it never changes",
-                )
+                    "write var",
+                    "var",
+                    vec![Token::Var],
+                );
+                p.parse_var_statement(false)
+            }
+            Token::Identifier(name)
+                if matches!(p.ahead(1), Token::Colon) && matches!(p.ahead(2), Token::Assign) =>
+            {
+                let name = name.clone();
+                p.slip(
+                    3,
+                    "Zeru declares a variable with var, not :=",
+                    "write var",
+                    &format!("var {name} ="),
+                    vec![Token::Var, Token::Identifier(name.clone()), Token::Assign],
+                );
+                p.parse_var_statement(false)
+            }
+            Token::Identifier(word) if word == "loop" && matches!(p.ahead(1), Token::LBrace) => {
+                p.slip(
+                    1,
+                    "Zeru writes a loop without end as while true",
+                    "write while true",
+                    "while true",
+                    vec![Token::While, Token::True],
+                );
+                p.parse_while_statement()
             }
             _ => p.parse_expression_statement(),
         })
@@ -571,10 +691,18 @@ impl Parser {
     /// Replace the next token by its one-character `first` and the `rest`.
     fn split_token(&mut self, first: Token, rest: Token) {
         let Span { start, end } = self.span();
-        self.splits.push((self.pos, self.tokens[self.pos].clone()));
-        self.tokens[self.pos] = (first, Span::new(start, start + 1));
-        self.tokens
-            .insert(self.pos + 1, (rest, Span::new(start + 1, end)));
+        let split = vec![
+            (first, Span::new(start, start + 1)),
+            (rest, Span::new(start + 1, end)),
+        ];
+        self.rewrite(self.pos, 1, split);
+    }
+
+    /// Replace the `count` tokens from `at` by `with`, until a rewind.
+    fn rewrite(&mut self, at: usize, count: usize, with: Vec<(Token, Span)>) {
+        let inserted = with.len();
+        let removed = self.tokens.splice(at..at + count, with).collect();
+        self.rewrites.push((at, removed, inserted));
     }
 
     fn parse_return_statement(&mut self) -> Option<Statement> {
@@ -613,6 +741,27 @@ impl Parser {
     }
 
     fn parse_return_type(&mut self, body_starts: &[Token]) -> Option<Option<TypeSpec>> {
+        if self.at(&Token::Minus) && matches!(self.ahead(1), Token::Gt) {
+            let arrow = self.span();
+            let next = self
+                .tokens
+                .get(self.pos + 2)
+                .map_or(arrow.end, |(_, span)| span.start);
+            self.slip(
+                2,
+                "Zeru writes the return type right after the parameters, with no ->",
+                "drop the ->",
+                "",
+                Vec::new(),
+            );
+            if let Some(error) = self
+                .errors
+                .last_mut()
+                .filter(|e| e.span.start == arrow.start)
+            {
+                error.fix(Span::new(arrow.start, next), "");
+            }
+        }
         if self.at_any(body_starts) {
             return Some(None);
         }
@@ -654,6 +803,7 @@ impl Parser {
         self.bump();
         let condition = self.parse_condition()?;
         let then_branch = Box::new(self.parse_block()?);
+        self.else_if_slip();
         let else_branch = match self.eat(&Token::Else) {
             true if self.at(&Token::If) => Some(Box::new(self.parse_if_statement()?)),
             true => Some(Box::new(self.parse_block()?)),
@@ -668,6 +818,20 @@ impl Parser {
         Some(self.statement(kind, start))
     }
 
+    /// Read `elif`, as another language writes `else if`.
+    fn else_if_slip(&mut self) {
+        if matches!(self.peek(), Token::Identifier(word) if ["elif", "elsif", "elseif"].contains(&word.as_str()))
+        {
+            self.slip(
+                1,
+                "Zeru writes 'else if'",
+                "write else if",
+                "else if",
+                vec![Token::Else, Token::If],
+            );
+        }
+    }
+
     fn parse_while_statement(&mut self) -> Option<Statement> {
         let start = self.span();
         self.bump();
@@ -679,6 +843,29 @@ impl Parser {
     fn parse_for_statement(&mut self) -> Option<Statement> {
         let start = self.span();
         self.bump();
+        if self.at(&Token::LParen) {
+            let closing = self.tokens[self.pos..]
+                .iter()
+                .position(|(t, _)| *t == Token::RParen);
+            let counted = closing.is_some_and(|end| {
+                self.tokens[self.pos..self.pos + end]
+                    .iter()
+                    .any(|(t, _)| *t == Token::Semicolon)
+            });
+            if let (true, Some(end)) = (counted, closing) {
+                if let Some(error) =
+                    self.error("Zeru's for walks a range or a sequence", self.span())
+                {
+                    error.help("count with a range, as in for i in 0..n, or loop with while");
+                }
+                for _ in 0..=end {
+                    self.bump();
+                }
+                self.panic_mode = false;
+                self.parse_block()?;
+                return Some(self.statement(StatementKind::Block(Vec::new()), start));
+            }
+        }
         let mut variable = self.parse_names(false)?;
         let mut index = None;
         if let Names::One(name, None) = &variable
@@ -903,17 +1090,17 @@ impl Parser {
             usize::from(self.panic_mode),
             self.depth,
             self.brackets,
-            self.splits.len(),
+            self.rewrites.len(),
         ]
     }
 
-    fn rewind(&mut self, [pos, errors, panic_mode, depth, brackets, splits]: [usize; 6]) {
-        for (at, token) in self.splits.drain(splits..).rev() {
-            self.tokens.remove(at + 1);
-            self.tokens[at] = token;
+    fn rewind(&mut self, [pos, errors, panic_mode, depth, brackets, rewrites]: [usize; 6]) {
+        for (at, removed, inserted) in self.rewrites.drain(rewrites..).rev() {
+            self.tokens.splice(at..at + inserted, removed);
         }
         (self.pos, self.panic_mode, self.depth, self.brackets) =
             (pos, panic_mode == 1, depth, brackets);
+        self.opens.truncate(depth);
         self.errors.truncate(errors);
     }
 
@@ -985,6 +1172,7 @@ impl Parser {
 
     fn parse_block_statement(&mut self) -> Option<Vec<Statement>> {
         self.expect(&Token::LBrace)?;
+        let open = self.prev_span();
         let (depth, brackets) = (self.depth, self.brackets);
         let mut block = Vec::new();
 
@@ -1001,7 +1189,12 @@ impl Parser {
                 .last()
                 .is_none_or(|e| e.span.end < self.span().start)
         {
-            self.error_here::<()>("Expected '}', found 'end of file'");
+            let at = self.span();
+            if let Some(error) = self.error("Expected '}', found the end of the file", at) {
+                error
+                    .note("this '{' is never closed", open)
+                    .help("close it with }");
+            }
         }
         Some(block)
     }
@@ -1021,7 +1214,11 @@ impl Parser {
         precedence: Precedence,
     ) -> Option<Expression> {
         let mut compared = false;
-        while precedence < token_precedence(self.peek()) {
+        loop {
+            self.operator_slips();
+            if precedence >= token_precedence(self.peek()) {
+                break;
+            }
             let comparison = matches!(
                 token_precedence(self.peek()),
                 Precedence::Equals | Precedence::LessGreater
@@ -1035,7 +1232,100 @@ impl Parser {
         Some(left)
     }
 
+    /// Read an operator another language writes as Zeru does: `and`, `or`,
+    /// `===`, `!==`, and the `++` and `--` that end a statement.
+    fn operator_slips(&mut self) {
+        let ends = |token: &Token| {
+            matches!(
+                token,
+                Token::Semicolon | Token::RParen | Token::RBrace | Token::Comma
+            )
+        };
+        match (self.peek().clone(), self.ahead(1).clone()) {
+            (Token::Identifier(word), next)
+                if (word == "and" || word == "or") && starts_operand(&next) =>
+            {
+                let (written, with) = match word.as_str() {
+                    "and" => ("&&", Token::And),
+                    _ => ("||", Token::Or),
+                };
+                let message = format!("Zeru writes '{word}' as {written}");
+                self.slip(
+                    1,
+                    &message,
+                    &format!("write {written}"),
+                    written,
+                    vec![with],
+                );
+            }
+            (Token::Eq | Token::NotEq, Token::Assign) => {
+                let (written, with) = match self.peek() {
+                    Token::Eq => ("==", Token::Eq),
+                    _ => ("!=", Token::NotEq),
+                };
+                let message = format!("Zeru compares with {written}, never {written}=");
+                self.slip(
+                    2,
+                    &message,
+                    &format!("write {written}"),
+                    written,
+                    vec![with],
+                );
+            }
+            (Token::Minus, Token::Gt) if self.in_pattern => {
+                self.slip(
+                    2,
+                    "A match arm is written pattern => value",
+                    "write =>",
+                    "=>",
+                    vec![Token::Arrow],
+                );
+            }
+            (Token::Minus, Token::Gt) if matches!(self.ahead(2), Token::Identifier(_)) => {
+                self.slip(
+                    2,
+                    "Zeru reaches a field through a pointer with '.', not ->",
+                    "write .",
+                    ".",
+                    vec![Token::Dot],
+                );
+            }
+            (Token::Plus, Token::Plus) | (Token::Minus, Token::Minus) if ends(self.ahead(2)) => {
+                let (written, with) = match self.peek() {
+                    Token::Plus => ("+=", Token::PlusEq),
+                    _ => ("-=", Token::MinusEq),
+                };
+                let doubled = &written[..1].repeat(2);
+                let message = format!("Zeru has no {doubled}; write {written} 1");
+                let fix = format!(" {written} 1");
+                self.slip(
+                    2,
+                    &message,
+                    &format!("write {written} 1"),
+                    &fix,
+                    vec![with, Token::Int(1)],
+                );
+            }
+            _ => {}
+        }
+    }
+
     fn parse_operand(&mut self) -> Option<Expression> {
+        if matches!(self.peek(), Token::Identifier(word) if word == "not")
+            && starts_operand(self.ahead(1))
+        {
+            let (word, next) = (self.span(), self.tokens[self.pos + 1].1);
+            self.slip(
+                1,
+                "Zeru writes 'not' as !",
+                "write !",
+                "!",
+                vec![Token::Bang],
+            );
+            if let Some(error) = self.errors.last_mut().filter(|e| e.span == word) {
+                error.fix(Span::new(word.start, next.start), "!");
+            }
+        }
         let start = self.span();
         let literal = match self.peek() {
             Token::Int(val) => Some(ExpressionKind::Int(*val)),
@@ -1102,6 +1392,7 @@ impl Parser {
         self.bump();
         let condition = Box::new(self.parse_condition()?);
         let then = Box::new(self.parse_branch()?);
+        self.else_if_slip();
         if !self.eat(&Token::Else) {
             return self.error_here("An if that gives a value needs an else");
         }
@@ -1156,6 +1447,15 @@ impl Parser {
                 true => Some(self.parse_expression(Precedence::Lowest)?),
                 false => None,
             };
+            if self.at(&Token::Minus) && matches!(self.ahead(1), Token::Gt) {
+                self.slip(
+                    2,
+                    "A match arm is written pattern => value",
+                    "write =>",
+                    "=>",
+                    vec![Token::Arrow],
+                );
+            }
             self.expect(&Token::Arrow)?;
 
             let body = match self.at(&Token::LBrace) {
@@ -1203,6 +1503,13 @@ impl Parser {
     /// Alternatives separated by `|`. A name alone is a binding inside a
     /// payload and a constant or variant elsewhere.
     fn parse_pattern(&mut self, in_payload: bool) -> Option<Pattern> {
+        let outer = std::mem::replace(&mut self.in_pattern, true);
+        let pattern = self.parse_alternatives(in_payload);
+        self.in_pattern = outer;
+        pattern
+    }
+
+    fn parse_alternatives(&mut self, in_payload: bool) -> Option<Pattern> {
         self.nested(|p| {
             let start = p.span();
             let first = p.parse_alternative(in_payload)?;
@@ -1514,4 +1821,22 @@ fn token_precedence(token: &Token) -> Precedence {
         Token::Dot | Token::LBracket | Token::Question | Token::Bang => Precedence::Index,
         _ => Precedence::Lowest,
     }
+}
+
+/// Whether `token` can start an operand.
+fn starts_operand(token: &Token) -> bool {
+    matches!(
+        token,
+        Token::Identifier(_)
+            | Token::Int(_)
+            | Token::Float(_)
+            | Token::StringLit(_)
+            | Token::True
+            | Token::False
+            | Token::None
+            | Token::SelfTok
+            | Token::LParen
+            | Token::Bang
+            | Token::Minus
+    )
 }

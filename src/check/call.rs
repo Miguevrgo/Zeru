@@ -7,6 +7,7 @@ use crate::items::{DefId, ItemKind};
 use crate::tir::{
     Arm, BinOp, BitOp, Block, Builtin, Expr, ExprKind, Payload, Place, Stmt, StmtKind, Walk,
 };
+use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
 use super::body::FnCx;
@@ -100,8 +101,23 @@ impl FnCx<'_, '_> {
                 self.method_call(object, name, type_args, args, expected, span),
                 name,
             ),
+            ExpressionKind::Try {
+                operator: Token::Bang,
+                value,
+            } if matches!(&value.kind, ExpressionKind::Identifier(_)) => {
+                let name = self.cx.sources.text(value.span).to_string();
+                self.error(
+                    format!("'{name}' is a function, called without !"),
+                    function.span,
+                )
+                .help("drop the !")
+                .fix(function.span, name);
+                self.check_args_only(args);
+                return self.error_expr(span);
+            }
             _ => {
-                self.error("Invalid call expression", span);
+                self.error("Only a function or a method can be called", function.span);
+                self.check_args_only(args);
                 return self.error_expr(span);
             }
         };
@@ -516,7 +532,15 @@ impl FnCx<'_, '_> {
             }
             return;
         }
-        if as_method {
+        if name == "range" && (1..=2).contains(&args.len()) {
+            let bounds: Vec<&str> = args.iter().map(|arg| sources.text(arg.span)).collect();
+            let range = match bounds.as_slice() {
+                [end] => format!("0..{end}"),
+                [start, end] => format!("{start}..{end}"),
+                _ => unreachable!("one or two bounds"),
+            };
+            error.help("a range is written start..end").fix(span, range);
+        } else if as_method {
             let rest: Vec<&str> = args[1..].iter().map(|arg| sources.text(arg.span)).collect();
             let call = format!("{}.{name}({})", sources.text(args[0].span), rest.join(", "));
             error

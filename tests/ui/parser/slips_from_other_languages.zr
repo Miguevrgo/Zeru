@@ -1,0 +1,28 @@
+struct P {
+    x: i32,
+}
+def helper(n: i32) -> i32 {
+    return n;
+}
+fn main() {
+    let mut count = 0;
+    total := 1;
+    count++;
+    total--;
+    var flag = count == 1 and total === 0 or not true;
+    if count == 1 {
+    } elif count == 2 {
+    }
+    match count {
+        1 -> println("one"),
+        default => {}
+    }
+    var p = P { x: 1 };
+    var q: *P = &p;
+    println("{}", q->x);
+    loop {
+        break;
+    }
+    for (var i = 0; i < 3; i += 1) {
+    }
+}

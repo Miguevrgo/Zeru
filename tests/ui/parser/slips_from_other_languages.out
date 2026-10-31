@@ -1,0 +1,152 @@
+status: compile error
+-- stderr
+Error: Zeru declares a function with fn
+   ╭─[ tests/ui/parser/slips_from_other_languages.zr:4:1 ]
+   │
+ 4 │ def helper(n: i32) -> i32 {
+   │ ─┬─
+   │  ╰─── Zeru declares a function with fn
+   │
+   │ Help: write fn
+   │           fn helper(n: i32) -> i32 {
+───╯
+Error: Zeru writes the return type right after the parameters, with no ->
+   ╭─[ tests/ui/parser/slips_from_other_languages.zr:4:20 ]
+   │
+ 4 │ def helper(n: i32) -> i32 {
+   │                    ─┬
+   │                     ╰── Zeru writes the return type right after the parameters, with no ->
+   │
+   │ Help: drop the ->
+   │           def helper(n: i32) i32 {
+───╯
+Error: Zeru declares a variable with 'var', or 'const' when it never changes
+   ╭─[ tests/ui/parser/slips_from_other_languages.zr:8:5 ]
+   │
+ 8 │     let mut count = 0;
+   │     ───┬───
+   │        ╰───── Zeru declares a variable with 'var', or 'const' when it never changes
+   │
+   │ Help: write var
+   │           var count = 0;
+───╯
+Error: Zeru declares a variable with var, not :=
+   ╭─[ tests/ui/parser/slips_from_other_languages.zr:9:5 ]
+   │
+ 9 │     total := 1;
+   │     ────┬───
+   │         ╰───── Zeru declares a variable with var, not :=
+   │
+   │ Help: write var
+   │           var total = 1;
+───╯
+Error: Zeru has no ++; write += 1
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:10:10 ]
+    │
+ 10 │     count++;
+    │          ─┬
+    │           ╰── Zeru has no ++; write += 1
+    │
+    │ Help: write += 1
+    │           count += 1;
+────╯
+Error: Zeru has no --; write -= 1
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:11:10 ]
+    │
+ 11 │     total--;
+    │          ─┬
+    │           ╰── Zeru has no --; write -= 1
+    │
+    │ Help: write -= 1
+    │           total -= 1;
+────╯
+Error: Zeru writes 'and' as &&
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:12:27 ]
+    │
+ 12 │     var flag = count == 1 and total === 0 or not true;
+    │                           ─┬─
+    │                            ╰─── Zeru writes 'and' as &&
+    │
+    │ Help: write &&
+    │           var flag = count == 1 && total === 0 or not true;
+────╯
+Error: Zeru compares with ==, never ===
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:12:37 ]
+    │
+ 12 │     var flag = count == 1 and total === 0 or not true;
+    │                                     ─┬─
+    │                                      ╰─── Zeru compares with ==, never ===
+    │
+    │ Help: write ==
+    │           var flag = count == 1 and total == 0 or not true;
+────╯
+Error: Zeru writes 'or' as ||
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:12:43 ]
+    │
+ 12 │     var flag = count == 1 and total === 0 or not true;
+    │                                           ─┬
+    │                                            ╰── Zeru writes 'or' as ||
+    │
+    │ Help: write ||
+    │           var flag = count == 1 and total === 0 || not true;
+────╯
+Error: Zeru writes 'not' as !
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:12:46 ]
+    │
+ 12 │     var flag = count == 1 and total === 0 or not true;
+    │                                              ─┬─
+    │                                               ╰─── Zeru writes 'not' as !
+    │
+    │ Help: write !
+    │           var flag = count == 1 and total === 0 or !true;
+────╯
+Error: Zeru writes 'else if'
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:14:7 ]
+    │
+ 14 │     } elif count == 2 {
+    │       ──┬─
+    │         ╰─── Zeru writes 'else if'
+    │
+    │ Help: write else if
+    │           } else if count == 2 {
+────╯
+Error: A match arm is written pattern => value
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:17:11 ]
+    │
+ 17 │         1 -> println("one"),
+    │           ─┬
+    │            ╰── A match arm is written pattern => value
+    │
+    │ Help: write =>
+    │           1 => println("one"),
+────╯
+Error: Zeru reaches a field through a pointer with '.', not ->
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:22:20 ]
+    │
+ 22 │     println("{}", q->x);
+    │                    ─┬
+    │                     ╰── Zeru reaches a field through a pointer with '.', not ->
+    │
+    │ Help: write .
+    │           println("{}", q.x);
+────╯
+Error: Zeru writes a loop without end as while true
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:23:5 ]
+    │
+ 23 │     loop {
+    │     ──┬─
+    │       ╰─── Zeru writes a loop without end as while true
+    │
+    │ Help: write while true
+    │           while true {
+────╯
+Error: Zeru's for walks a range or a sequence
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:26:9 ]
+    │
+ 26 │     for (var i = 0; i < 3; i += 1) {
+    │         ┬
+    │         ╰── Zeru's for walks a range or a sequence
+    │
+    │ Help: count with a range, as in for i in 0..n, or loop with while
+────╯
+[-] Error: aborting due to previous error

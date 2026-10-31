@@ -8,6 +8,9 @@ pub struct Lexer<'a> {
     pos: usize,
     after_dot: bool,
     pub comments: Vec<Span>,
+    /// Each `/*` inside a block comment, which starts nothing, with where
+    /// that comment ends.
+    pub nested: Vec<(Span, usize)>,
 }
 
 impl<'a> Lexer<'a> {
@@ -20,6 +23,7 @@ impl<'a> Lexer<'a> {
             pos: start,
             after_dot: false,
             comments: Vec::new(),
+            nested: Vec::new(),
         }
     }
 
@@ -66,12 +70,20 @@ impl<'a> Lexer<'a> {
                             self.advance();
                             self.advance();
 
+                            let mut inner = None;
                             loop {
+                                let at = self.pos;
                                 match self.advance() {
                                     Some('*') if self.peek() == Some(&'/') => {
                                         self.advance();
                                         self.comments.push(Span::new(start, self.pos));
+                                        if let Some(inner) = inner {
+                                            self.nested.push((inner, self.pos));
+                                        }
                                         break;
+                                    }
+                                    Some('/') if self.peek() == Some(&'*') && inner.is_none() => {
+                                        inner = Some(Span::new(at, at + 2));
                                     }
                                     Some(_) => {}
                                     None => return Err(start),
