@@ -535,7 +535,7 @@ impl FnCx<'_, '_> {
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
-        self.lint_if(condition, then, otherwise);
+        self.lint_if(condition, then, otherwise, span);
         let cond = self.condition(condition, "If condition must be boolean, got ");
         let wraps = self.wrapper(expected);
         let before = self.diverges;
@@ -1249,29 +1249,67 @@ impl FnCx<'_, '_> {
             },
             _ => false,
         };
+        let sources = self.cx.sources;
         if let Some(holds) = always {
             self.warn(format!("This comparison is always {holds}"), span);
         } else if equality && flag {
+            let (value, literal) = match left.kind {
+                ExpressionKind::Boolean(b) => (right, b),
+                _ => (left, matches!(right.kind, ExpressionKind::Boolean(true))),
+            };
+            let text = sources.text(value.span);
+            let same = literal == (*operator == Token::Eq);
+            let written = match same {
+                true => text.to_string(),
+                false => format!("!{text}"),
+            };
             self.warn(
-                "A bool compared with true or false is itself or its opposite; drop the comparison",
+                "A bool compared with true or false is itself or its opposite",
                 span,
-            );
+            )
+            .help("drop the comparison")
+            .fix(span, written);
         } else if vec_len && zero(right) && (equality || *operator == Token::Gt) {
-            self.warn("Write .is_empty() to ask whether a Vec is empty", span);
+            let warning = self.warn("Write .is_empty() to ask whether a Vec is empty", span);
+            if let ExpressionKind::Call { function, .. } = &left.kind
+                && let ExpressionKind::Get { object, .. } = &function.kind
+            {
+                let negated = match operator {
+                    Token::Eq => "",
+                    _ => "!",
+                };
+                let text = sources.text(object.span);
+                warning
+                    .help("ask it directly")
+                    .fix(span, format!("{negated}{text}.is_empty()"));
+            }
         }
     }
 
     /// Warn about an `if` giving a value that a shorter form says: the
     /// condition itself, or `min`, `max` or `abs` from std.math.
-    fn lint_if(&mut self, condition: &Expression, then: &Expression, otherwise: &Expression) {
+    fn lint_if(
+        &mut self,
+        condition: &Expression,
+        then: &Expression,
+        otherwise: &Expression,
+        whole: Span,
+    ) {
         use ExpressionKind as E;
         let negated = |e: &Expression, of: &Expression| matches!(&e.kind, E::Prefix { operator: Token::Minus, right } if same(right, of));
+        let text = self.cx.sources.text(condition.span).to_string();
         let message = match (&condition.kind, &then.kind, &otherwise.kind) {
             (_, E::Boolean(true), E::Boolean(false)) => {
-                "This if gives its condition; write the condition alone"
+                self.warn("This if gives its condition", whole)
+                    .help("write the condition alone")
+                    .fix(whole, text);
+                return;
             }
             (_, E::Boolean(false), E::Boolean(true)) => {
-                "This if gives the opposite of its condition; write !(condition)"
+                self.warn("This if gives the opposite of its condition", whole)
+                    .help("write the condition negated")
+                    .fix(whole, format!("!({text})"));
+                return;
             }
             (
                 E::Infix {

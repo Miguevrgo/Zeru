@@ -428,6 +428,13 @@ fn check_warns_without_failing() {
         ],
         "{stdout}"
     );
+    let fixed: Vec<&str> = stdout
+        .lines()
+        .zip(&lines)
+        .filter(|(line, _)| !line.ends_with("\"fix\":null}"))
+        .map(|(_, at)| *at)
+        .collect();
+    assert_eq!(fixed, ["1", "4", "20", "28", "30", "33", "35"], "{stdout}");
 }
 
 #[test]

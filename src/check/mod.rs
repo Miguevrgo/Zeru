@@ -174,10 +174,16 @@ impl<'a> Checker<'a> {
                 ItemKind::Fn => "Function",
                 _ => "Constant",
             };
-            self.warn(
-                format!("{what} '{name}' is never used; remove it or name it '_{name}'"),
-                item.decl.span,
+            let head = self.sources.first_line(item.decl.span);
+            let named = self.sources.word_in(head, name);
+            let warning = self.warn(
+                format!("{what} '{name}' is never used"),
+                named.unwrap_or(head),
             );
+            warning.help(format!("remove it, or name it '_{name}' to keep it unused"));
+            if let Some(at) = named {
+                warning.fix(Span::new(at.start, at.start), "_");
+            }
         }
     }
 

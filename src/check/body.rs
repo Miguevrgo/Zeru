@@ -177,9 +177,14 @@ impl<'c, 'a> FnCx<'c, 'a> {
             if self.read[at] || name.is_empty() || name.starts_with('_') {
                 continue;
             }
-            let message =
-                format!("Variable '{name}' is never read; remove it or name it '_{name}'");
-            self.warn(message, self.declared[at]);
+            let declared = self.declared[at];
+            let named = self.cx.sources.word_in(declared, name);
+            let message = format!("Variable '{name}' is never read");
+            let help = format!("remove it, or name it '_{name}' to keep it unread");
+            let warning = self.warn(message, named.unwrap_or(declared)).help(help);
+            if let Some(at) = named {
+                warning.fix(Span::new(at.start, at.start), "_");
+            }
         }
     }
 
@@ -746,7 +751,10 @@ impl<'c, 'a> FnCx<'c, 'a> {
                         ExpressionKind::Call { .. } | ExpressionKind::Try { .. }
                     )
                 {
-                    self.warn("The value this call returns is never used", expr.span);
+                    let start = Span::new(expr.span.start, expr.span.start);
+                    self.warn("The value this call returns is never used", expr.span)
+                        .help("use it, or drop it on purpose")
+                        .fix(start, "var _ = ");
                 }
                 StmtKind::Expr(value)
             }
