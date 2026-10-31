@@ -1,0 +1,51 @@
+status: compile error
+-- stderr
+Error: Computing a constant while compiling cannot use the heap or a slice
+     ╭─[ std/builtin.zr:644:67 ]
+     │
+ 644 │     return OutStream { fd: -1, buffer: [0; 4096], index: 0, text: String.new() };
+     │                                                                   ──────┬─────
+     │                                                                         ╰─────── Computing a constant while compiling cannot use the heap or a slice
+     │
+     ├─[ tests/ui/strings_printing/format_errors.zr:4:1 ]
+     │
+   4 │ const C: String = format("{}", 1);
+     │ ─────────────────┬────────────────
+     │                  ╰────────────────── while computing 'C'
+─────╯
+Error: format takes a format string first
+   ╭─[ tests/ui/strings_printing/format_errors.zr:6:13 ]
+   │
+ 6 │     var a = format();
+   │             ────┬───
+   │                 ╰───── format takes a format string first
+───╯
+Error: The format must be a string literal, as in format("{}", x)
+   ╭─[ tests/ui/strings_printing/format_errors.zr:7:20 ]
+   │
+ 7 │     var b = format(s);
+   │                    ┬
+   │                    ╰── The format must be a string literal, as in format("{}", x)
+───╯
+Error: The format has 2 '{}' but 1 value(s) follow it
+   ╭─[ tests/ui/strings_printing/format_errors.zr:8:13 ]
+   │
+ 8 │     var c = format("{} {}", 1);
+   │             ─────────┬────────
+   │                      ╰────────── The format has 2 '{}' but 1 value(s) follow it
+───╯
+Error: Cannot format P: format takes numbers, bools, text, and lists, tuples, optionals and results of them
+   ╭─[ tests/ui/strings_printing/format_errors.zr:9:26 ]
+   │
+ 9 │     var d = format("{}", P { x: 1 });
+   │                          ─────┬────
+   │                               ╰────── Cannot format P: format takes numbers, bools, text, and lists, tuples, optionals and results of them
+───╯
+Error: 'e' is declared as i32, but its value is String
+    ╭─[ tests/ui/strings_printing/format_errors.zr:11:18 ]
+    │
+ 11 │     var e: i32 = format("x");
+    │                  ─────┬─────
+    │                       ╰─────── this is String
+────╯
+[-] Error: aborting due to previous error

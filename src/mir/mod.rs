@@ -72,11 +72,18 @@ pub enum StatementKind {
     Asm(Box<Asm>),
     StorageDead(Local),
     Print {
-        stderr: bool,
+        to: Sink,
         newline: bool,
         pieces: Vec<Vec<u8>>,
         values: Vec<Operand>,
     },
+}
+
+/// Where `print` writes: stdout, stderr, or the text stream at a place.
+pub enum Sink {
+    Out,
+    Err,
+    Text(Place),
 }
 
 pub struct Terminator {

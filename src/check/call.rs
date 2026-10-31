@@ -5,7 +5,8 @@ use crate::ast::{Expression, ExpressionKind, Spec, StatementKind, TypeSpec, form
 use crate::errors::Span;
 use crate::items::{DefId, ItemKind};
 use crate::tir::{
-    Arm, BinOp, BitOp, Block, Builtin, Expr, ExprKind, Payload, Place, Stmt, StmtKind, Test, Walk,
+    Arm, BinOp, BitOp, Block, Builtin, Expr, ExprKind, Payload, Place, Sink, Stmt, StmtKind, Test,
+    Walk,
 };
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
@@ -178,6 +179,9 @@ impl FnCx<'_, '_> {
         }
         if name == "assert" {
             return self.assert(args, span);
+        }
+        if name == "format" && self.builtin_name(name) {
+            return self.format_call(args, span);
         }
         if name == "zip" && self.builtin_name(name) {
             self.error(
@@ -1483,11 +1487,41 @@ impl FnCx<'_, '_> {
     /// `print("x is {}", x)`: a literal format with one `{}` per printable
     /// value.
     fn print(&mut self, name: &str, args: &[Expression], span: Span) -> Expr {
-        let Some((pieces, values)) = self.format(args, span) else {
+        let Some((pieces, values)) = self.format(name, args, span) else {
             return self.error_expr(span);
         };
-        let (stderr, newline) = (name.starts_with('e'), name.ends_with("ln"));
-        self.print_values(stderr, newline, pieces, values, span)
+        let to = match name.starts_with('e') {
+            true => Sink::Err,
+            false => Sink::Out,
+        };
+        self.print_values(to, name.ends_with("ln"), pieces, values, span)
+    }
+
+    /// `format("x is {}", x)`: the text print would write, as a String,
+    /// written to a stream in a local of its own.
+    fn format_call(&mut self, args: &[Expression], span: Span) -> Expr {
+        let Some((pieces, values)) = self.format("format", args, span) else {
+            return self.error_expr(span);
+        };
+        let stream = self.cx.prelude_type("OutStream");
+        self.enter();
+        let out = self.declare("", stream, true, false, span);
+        let open = self.cx.prelude_fn("__zeru_text_stream");
+        let opened = self.mk(ExprKind::Call(open, Vec::new()), stream, span);
+        let written = self.print_values(Sink::Text(out), false, pieces, values, span);
+        let pointer = self.cx.types.intern(TyKind::RefMut(stream));
+        let address = self.mk(ExprKind::AddressOf(Place::Local(out)), pointer, span);
+        let take = self.cx.prelude_fn("__zeru_stream_text");
+        let text = self.mk(ExprKind::Call(take, vec![address]), Types::STRING, span);
+        self.leave();
+        let stmts = [
+            StmtKind::Let(out, opened),
+            StmtKind::Expr(written),
+            StmtKind::Expr(text),
+        ]
+        .map(|kind| Stmt { kind, span })
+        .into();
+        self.mk(ExprKind::Block(Block { stmts }), Types::STRING, span)
     }
 
     /// Write `values` between `pieces`. Numbers, bools and text are written
@@ -1495,7 +1529,7 @@ impl FnCx<'_, '_> {
     /// its text quoted.
     fn print_values(
         &mut self,
-        stderr: bool,
+        to: Sink,
         newline: bool,
         pieces: Vec<Vec<u8>>,
         values: Vec<Expr>,
@@ -1503,7 +1537,7 @@ impl FnCx<'_, '_> {
     ) -> Expr {
         if values.iter().all(|value| self.plain_print(value.ty)) {
             let kind = ExprKind::Print {
-                stderr,
+                to,
                 newline,
                 pieces,
                 values,
@@ -1516,10 +1550,10 @@ impl FnCx<'_, '_> {
         for value in values {
             let piece = pieces.next().unwrap_or_default();
             if self.plain_print(value.ty) {
-                stmts.push(self.write(stderr, vec![piece, Vec::new()], vec![value], span));
+                stmts.push(self.write(to, vec![piece, Vec::new()], vec![value], span));
                 continue;
             }
-            stmts.push(self.write(stderr, vec![piece], Vec::new(), span));
+            stmts.push(self.write(to, vec![piece], Vec::new(), span));
             let ty = value.ty;
             let place = match value.kind {
                 ExprKind::Read(place) if stable(&place) => place,
@@ -1542,11 +1576,11 @@ impl FnCx<'_, '_> {
                     Place::Local(held)
                 }
             };
-            self.show(place, ty, false, stderr, &mut stmts, span);
+            self.show(place, ty, false, to, &mut stmts, span);
         }
         let last = pieces.next().unwrap_or_default();
         let kind = ExprKind::Print {
-            stderr,
+            to,
             newline,
             pieces: vec![last],
             values: Vec::new(),
@@ -1560,9 +1594,9 @@ impl FnCx<'_, '_> {
     }
 
     /// A statement writing `values` between `pieces`, with no line break.
-    fn write(&mut self, stderr: bool, pieces: Vec<Vec<u8>>, values: Vec<Expr>, span: Span) -> Stmt {
+    fn write(&mut self, to: Sink, pieces: Vec<Vec<u8>>, values: Vec<Expr>, span: Span) -> Stmt {
         let kind = ExprKind::Print {
-            stderr,
+            to,
             newline: false,
             pieces,
             values,
@@ -1604,7 +1638,7 @@ impl FnCx<'_, '_> {
         place: Place,
         ty: Ty,
         quoted: bool,
-        stderr: bool,
+        to: Sink,
         out: &mut Vec<Stmt>,
         span: Span,
     ) {
@@ -1616,7 +1650,7 @@ impl FnCx<'_, '_> {
                     Place::Deref(Box::new(pointer)),
                     inner,
                     quoted,
-                    stderr,
+                    to,
                     out,
                     span,
                 );
@@ -1636,13 +1670,13 @@ impl FnCx<'_, '_> {
                     }
                     false => value,
                 };
-                out.push(self.write(stderr, vec![Vec::new(), Vec::new()], vec![value], span));
+                out.push(self.write(to, vec![Vec::new(), Vec::new()], vec![value], span));
             }
             TyKind::Vec(item)
             | TyKind::Array(item, _)
             | TyKind::Slice(item)
             | TyKind::SliceMut(item) => {
-                out.push(self.write(stderr, vec![text(b"[")], Vec::new(), span));
+                out.push(self.write(to, vec![text(b"[")], Vec::new(), span));
                 let index = self.declare("", Types::USIZE, false, false, span);
                 let view = self.cx.owns_heap(item);
                 let var = self.declare("", item, false, view, span);
@@ -1653,7 +1687,7 @@ impl FnCx<'_, '_> {
                     Types::BOOL,
                     span,
                 );
-                let comma = self.write(stderr, vec![text(b", ")], Vec::new(), span);
+                let comma = self.write(to, vec![text(b", ")], Vec::new(), span);
                 let mut stmts = vec![Stmt {
                     kind: StmtKind::If {
                         cond,
@@ -1662,7 +1696,7 @@ impl FnCx<'_, '_> {
                     },
                     span,
                 }];
-                self.show(Place::Local(var), item, true, stderr, &mut stmts, span);
+                self.show(Place::Local(var), item, true, to, &mut stmts, span);
                 out.push(Stmt {
                     kind: StmtKind::ForEach {
                         index: Some(index),
@@ -1676,29 +1710,29 @@ impl FnCx<'_, '_> {
                     },
                     span,
                 });
-                out.push(self.write(stderr, vec![text(b"]")], Vec::new(), span));
+                out.push(self.write(to, vec![text(b"]")], Vec::new(), span));
             }
             TyKind::Tuple(parts) => {
-                out.push(self.write(stderr, vec![text(b"(")], Vec::new(), span));
+                out.push(self.write(to, vec![text(b"(")], Vec::new(), span));
                 for (at, &part) in parts.iter().enumerate() {
                     if at > 0 {
-                        out.push(self.write(stderr, vec![text(b", ")], Vec::new(), span));
+                        out.push(self.write(to, vec![text(b", ")], Vec::new(), span));
                     }
                     let field = Place::Field(Box::new(place.clone()), at as u32);
-                    self.show(field, part, true, stderr, out, span);
+                    self.show(field, part, true, to, out, span);
                 }
                 let close = if parts.len() == 1 {
                     text(b",)")
                 } else {
                     text(b")")
                 };
-                out.push(self.write(stderr, vec![close], Vec::new(), span));
+                out.push(self.write(to, vec![close], Vec::new(), span));
             }
             TyKind::Optional(inner) | TyKind::Result(inner, _) => {
                 let optional = matches!(self.cx.types.kind(ty), TyKind::Optional(_));
                 let value = self.declare("", inner, false, true, span);
                 let mut stmts = Vec::new();
-                self.show(Place::Local(value), inner, quoted, stderr, &mut stmts, span);
+                self.show(Place::Local(value), inner, quoted, to, &mut stmts, span);
                 let payload = match optional {
                     true => Payload::SomeValue,
                     false => Payload::OkValue,
@@ -1713,14 +1747,14 @@ impl FnCx<'_, '_> {
                 }];
                 let (tags, bindings, written) = match optional {
                     true => {
-                        let none = self.write(stderr, vec![text(b"None")], Vec::new(), span);
+                        let none = self.write(to, vec![text(b"None")], Vec::new(), span);
                         (Vec::new(), Vec::new(), none)
                     }
                     false => {
                         let code = self.declare("", Types::I32, false, true, span);
                         let read = self.mk(ExprKind::Read(Place::Local(code)), Types::I32, span);
                         let pieces = vec![text(b"Err("), text(b")")];
-                        let err = self.write(stderr, pieces, vec![read], span);
+                        let err = self.write(to, pieces, vec![read], span);
                         (
                             vec![Test::is(0)],
                             vec![(code, vec![Payload::ErrValue.into()])],
@@ -1753,7 +1787,7 @@ impl FnCx<'_, '_> {
             }
             _ => {
                 let read = self.mk(ExprKind::Read(place), ty, span);
-                out.push(self.write(stderr, vec![Vec::new(), Vec::new()], vec![read], span));
+                out.push(self.write(to, vec![Vec::new(), Vec::new()], vec![read], span));
             }
         }
     }
@@ -1812,10 +1846,14 @@ impl FnCx<'_, '_> {
         let cond = self.condition(cond, "assert takes a bool, got ");
         let message = match message {
             [] => None,
-            _ => match self.format(message, span) {
-                Some((pieces, values)) => Some(Box::new(
-                    self.print_values(true, true, pieces, values, span),
-                )),
+            _ => match self.format("print", message, span) {
+                Some((pieces, values)) => Some(Box::new(self.print_values(
+                    Sink::Err,
+                    true,
+                    pieces,
+                    values,
+                    span,
+                ))),
                 None => return self.error_expr(span),
             },
         };
@@ -1830,14 +1868,19 @@ impl FnCx<'_, '_> {
     }
 
     /// A format string literal and the values for its `{}`, checked.
-    fn format(&mut self, args: &[Expression], span: Span) -> Option<(Vec<Vec<u8>>, Vec<Expr>)> {
+    fn format(
+        &mut self,
+        name: &str,
+        args: &[Expression],
+        span: Span,
+    ) -> Option<(Vec<Vec<u8>>, Vec<Expr>)> {
         let Some((format, values)) = args.split_first() else {
-            self.error("print takes a format string first", span);
+            self.error(format!("{name} takes a format string first"), span);
             return None;
         };
         let ExpressionKind::StringLit(text) = &format.kind else {
             self.error(
-                "The format must be a string literal, as in print(\"{}\", x)",
+                format!("The format must be a string literal, as in {name}(\"{{}}\", x)"),
                 format.span,
             );
             self.check_args_only(values);
@@ -1876,7 +1919,7 @@ impl FnCx<'_, '_> {
             if !self.printable(value.ty) {
                 let shown = self.ty(value.ty);
                 self.error(
-                    format!("Cannot print {shown}: print takes numbers, bools, text, and lists, tuples, optionals and results of them"),
+                    format!("Cannot {verb} {shown}: {name} takes numbers, bools, text, and lists, tuples, optionals and results of them", verb = name.trim_end_matches("ln").trim_start_matches('e')),
                     value.span,
                 );
             }

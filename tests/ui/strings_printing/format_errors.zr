@@ -1,0 +1,13 @@
+struct P {
+    x: i32,
+}
+const C: String = format("{}", 1);
+fn f(s: str) {
+    var a = format();
+    var b = format(s);
+    var c = format("{} {}", 1);
+    var d = format("{}", P { x: 1 });
+    format("dropped");
+    var e: i32 = format("x");
+}
+fn main() {}

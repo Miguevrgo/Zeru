@@ -1,0 +1,37 @@
+fn label(line: i32, what: str) String {
+    return format("line {}: expected {}", line, what);
+}
+fn main_texts() {
+    var s = format("{} + {} = {}", 1, 2.5, true);
+    println("{}", s);
+    println("{}", label(3, "')'"));
+    var v: Vec<i64> = Vec[1, 2, 3];
+    var o: i32? = 4;
+    var t = (1, "a");
+    println("[{}]", format("{} {} {} {:>5}|{:.2}|{:x}", v, o, t, "ab", 2.0 / 3.0, 255));
+    var big = String.new();
+    for i in 0..2000 {
+        big.push_str(format("{},", i));
+    }
+    println("{} {}", big.len(), big.ends_with("1999,"));
+    var long = format("{}{}", big, big);
+    println("{}", long.len());
+    var e = format("");
+    println("[{}] {}", e, e.len());
+    var names: Vec<String> = Vec.new();
+    for n in ["ann", "bob"] {
+        names.push(format("<{}>", n));
+    }
+    println("{}", names);
+    var r: i32! = Err(5);
+    println("{}", format("{} {}", r, format("{}", "nested")));
+}
+fn main_closure() {
+    var k = 7;
+    var labels = Vec["a", "b"].map(fn(w: str) String { return format("{}{}", w, k); });
+    println("{}", labels);
+}
+fn main() {
+    main_texts();
+    main_closure();
+}

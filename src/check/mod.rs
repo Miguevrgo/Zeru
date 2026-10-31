@@ -1037,6 +1037,14 @@ impl<'a> Checker<'a> {
     }
 
     /// An instance of the prelude's non-generic function `name`.
+    pub(super) fn prelude_type(&mut self, name: &str) -> Ty {
+        let def = self
+            .items
+            .lookup_type(ModuleId::PRELUDE, name)
+            .expect("the prelude declares it");
+        self.types.intern(TyKind::Adt(def, Vec::new()))
+    }
+
     pub(super) fn prelude_fn(&mut self, name: &str) -> FnId {
         let def = self.prelude_def(name);
         self.instance(def, Vec::new(), Span::default())

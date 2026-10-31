@@ -432,11 +432,11 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 self.builder.build_call(flush, &[], "").unwrap();
             }
             StatementKind::Print {
-                stderr,
+                to,
                 newline,
                 pieces,
                 values,
-            } => self.print(*stderr, *newline, pieces, values),
+            } => self.print(to, *newline, pieces, values),
             StatementKind::Asm(asm) => self.asm(asm),
         }
     }

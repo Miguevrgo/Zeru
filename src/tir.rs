@@ -208,7 +208,7 @@ pub enum ExprKind {
     Block(Block),
 
     Print {
-        stderr: bool,
+        to: Sink,
         newline: bool,
         pieces: Vec<Vec<u8>>,
         values: Vec<Expr>,
@@ -403,6 +403,15 @@ pub enum BitOp {
     RotateLeft,
     RotateRight,
     SwapBytes,
+}
+
+/// Where `print` writes: stdout, stderr, or the text stream in a local
+/// that `format` makes.
+#[derive(Clone, Copy)]
+pub enum Sink {
+    Out,
+    Err,
+    Text(LocalId),
 }
 
 /// One arm of a `match`: the values it takes, each alternative the tests

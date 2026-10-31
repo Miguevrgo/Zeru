@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: The format must be a string literal, as in print("{}", x)
+Error: The format must be a string literal, as in println("{}", x)
    ╭─[ tests/ui/strings_printing/format_must_be_literal.zr:3:13 ]
    │
  3 │     println(s);
    │             ┬
-   │             ╰── The format must be a string literal, as in print("{}", x)
+   │             ╰── The format must be a string literal, as in println("{}", x)
 ───╯
 [-] Error: aborting due to previous error

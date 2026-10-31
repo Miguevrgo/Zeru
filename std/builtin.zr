@@ -139,12 +139,19 @@ fn syscall6(nr: i64, arg1: i64, arg2: i64, arg3: i64, arg4: i64, arg5: i64, arg6
     return result;
 }
 
+// Text written through a buffer to `fd`, or with no fd kept in `text`.
 struct OutStream {
     fd: i32,
     buffer: Array<u8, 4096>,
     index: usize,
+    text: String,
 
     fn flush(var self) i64 {
+        if self.fd < 0 {
+            self.text.push_str(self.buffer[..self.index]);
+            self.index = 0;
+            return 0;
+        }
         var buf_ptr: *u8 = &self.buffer[0];
         var done: usize = 0;
         while done < self.index {
@@ -632,6 +639,17 @@ fn __zeru_shortest(
     return point;
 }
 
+// A stream that keeps what is written to it, for `format`.
+fn __zeru_text_stream() OutStream {
+    return OutStream { fd: -1, buffer: [0; 4096], index: 0, text: String.new() };
+}
+
+// What `out` kept.
+fn __zeru_stream_text(out: &var OutStream) String {
+    var _ = out.flush();
+    return replace(&var out.text, String.new());
+}
+
 fn __zeru_out_of_memory() {
     eprintln("panic: out of memory");
     exit(134);
@@ -649,7 +667,7 @@ fn __zeru_format_int(
     zero: bool,
     width: usize,
 ) String {
-    var out = OutStream { fd: -1, buffer: [0; 4096], index: 0 };
+    var out = __zeru_text_stream();
     if unsigned || value >= 0 {
         out.write_radix(value as u64, radix, upper);
     } else {
@@ -671,7 +689,7 @@ fn __zeru_format_float(
     zero: bool,
     width: usize,
 ) String {
-    var out = OutStream { fd: -1, buffer: [0; 4096], index: 0 };
+    var out = __zeru_text_stream();
     if precision < 0 {
         out.write_float(value, single);
     } else {

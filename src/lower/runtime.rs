@@ -18,7 +18,7 @@ use inkwell::{
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
-use crate::mir::{Asm, Operand, Place};
+use crate::mir::{Asm, Operand, Place, Sink};
 use crate::tir::{BinOp, BitOp, FnId};
 use crate::ty::{Ty, TyKind, Types};
 
@@ -721,13 +721,17 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     /// the `OutStream` method for its kind.
     pub(super) fn print(
         &mut self,
-        stderr: bool,
+        to: &Sink,
         newline: bool,
         pieces: &[Vec<u8>],
         values: &[Operand],
     ) {
         let [out, err] = self.streams.expect("the prelude declares the streams");
-        let stream = if stderr { err } else { out };
+        let stream = match to {
+            Sink::Out => out,
+            Sink::Err => err,
+            Sink::Text(place) => self.place(place),
+        };
         let runtime = &self.program.runtime;
         let (write_bytes, flush) = (runtime.write_bytes, runtime.flush);
         for (at, piece) in pieces.iter().enumerate() {

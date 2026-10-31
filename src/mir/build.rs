@@ -15,7 +15,7 @@ use crate::ty::{Ty, TyKind, Types};
 
 use super::{
     Aggregate, Asm, BlockData, BlockId, Body, ConstValue, Constant, Local, LocalDecl, Operand,
-    Panic, Part, Place, Projection, RETURN, Rvalue, Statement, StatementKind, Terminator,
+    Panic, Part, Place, Projection, RETURN, Rvalue, Sink, Statement, StatementKind, Terminator,
     TerminatorKind,
 };
 
@@ -247,7 +247,7 @@ impl<'a> Builder<'a> {
             first.push_str(self.sources.text(cond.span));
         }
         self.push(StatementKind::Print {
-            stderr: true,
+            to: Sink::Err,
             newline: message.is_none(),
             pieces: vec![first.into_bytes()],
             values: Vec::new(),
@@ -304,6 +304,20 @@ impl<'a> Builder<'a> {
 
     fn block(&mut self, block: &tir::Block) {
         self.scope(|this| this.stmts(&block.stmts));
+    }
+
+    /// A block that gives a value, its last statement, built into `dest`.
+    fn value_block(&mut self, dest: Option<Place>, block: &tir::Block) {
+        let (last, rest) = block.stmts.split_last().expect("a block's value ends it");
+        let StmtKind::Expr(value) = &last.kind else {
+            unreachable!("a block's value is an expression")
+        };
+        self.scope(|this| {
+            this.stmts(rest);
+            if this.current.is_some() {
+                this.expr_into(dest, value);
+            }
+        });
     }
 
     /// `inner` built in a scope of its own, which ends after it.
@@ -1037,16 +1051,22 @@ impl<'a> Builder<'a> {
             }
             ExprKind::Match { scrutinee, arms } => return self.match_expr(dest, scrutinee, arms),
             ExprKind::Try(value) => return self.try_expr(dest, value),
-            ExprKind::Block(block) => return self.block(block),
+            ExprKind::Block(block) if expr.ty == Types::VOID => return self.block(block),
+            ExprKind::Block(block) => return self.value_block(dest, block),
             ExprKind::Print {
-                stderr,
+                to,
                 newline,
                 pieces,
                 values,
             } => {
                 let values = values.iter().map(|value| self.as_operand(value)).collect();
+                let to = match *to {
+                    tir::Sink::Out => Sink::Out,
+                    tir::Sink::Err => Sink::Err,
+                    tir::Sink::Text(local) => Sink::Text(self.as_place(&tir::Place::Local(local))),
+                };
                 return self.push(StatementKind::Print {
-                    stderr: *stderr,
+                    to,
                     newline: *newline,
                     pieces: pieces.clone(),
                     values,

@@ -1,0 +1,3 @@
+fn main() {
+    format("x {}", 1);
+}

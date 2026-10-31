@@ -82,7 +82,13 @@ println("[{:05}] [{:08.3}] [{:*>4}]", -42, 2.5, 7); // [-0042] [0002.500] [***7]
 println("{:x} {:X} {:o} {:08b}", 255, 255, 8, 5); // ff FF 10 00000101
 ```
 
-`eprint` and `eprintln` write to the standard error instead.
+`eprint` and `eprintln` write to the standard error instead, and
+`format` gives back the text as a `String`:
+
+```zeru
+var message = format("{} of {} done", 3, 10);
+println("{} ({} bytes)", message, message.len()); // 3 of 10 done (12 bytes)
+```
 
 ## Comments
 

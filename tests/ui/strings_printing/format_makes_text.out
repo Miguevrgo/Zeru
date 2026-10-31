@@ -1,0 +1,11 @@
+status: exit 0
+-- stdout
+1 + 2.5 = true
+line 3: expected ')'
+[[1, 2, 3] 4 (1, "a")    ab|0.67|ff]
+8890 true
+17780
+[] 0
+["<ann>", "<bob>"]
+Err(5) nested
+["a7", "b7"]
