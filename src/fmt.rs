@@ -883,7 +883,11 @@ impl<'s> Printer<'s> {
                 seq(vec![self.expr(low), text("..="), self.expr(high)])
             }
             PatternKind::Binding(name) => text(name),
-            PatternKind::Payload { path, fields } => {
+            PatternKind::Payload { fields, .. } | PatternKind::Tuple(fields) => {
+                let path = match &pattern.kind {
+                    PatternKind::Payload { path, .. } => path.as_str(),
+                    _ => "",
+                };
                 let mut parts = vec![text(format!("{path}("))];
                 for (at, field) in fields.iter().enumerate() {
                     if at > 0 {

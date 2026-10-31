@@ -8,7 +8,8 @@ use std::mem::replace;
 use crate::errors::{Sources, Span, ZeruError, tidy};
 use crate::lower::SafetyMode;
 use crate::tir::{
-    self, Arm, BinOp, Builtin, Expr, ExprKind, FnId, Payload, Program, Stmt, StmtKind, UnOp,
+    self, Arm, BinOp, Builtin, Expr, ExprKind, FnId, Payload, Program, Reach, Stmt, StmtKind, Test,
+    UnOp,
 };
 use crate::ty::{Ty, TyKind, Types};
 
@@ -1170,22 +1171,48 @@ impl<'a> Builder<'a> {
         let place = self.as_place(scrutinee);
         let subject = self.place_ty(&place);
         let take = matches!(scrutinee, tir::Place::Temp(_)) && self.program.needs_drop(subject);
-        let tag_ty = match self.types().kind(subject) {
-            TyKind::Optional(_) | TyKind::Result(..) => Types::BOOL,
-            TyKind::Adt(..) => Types::I32,
-            _ => subject,
-        };
-        let tag = self.temp(tag_ty);
-        self.assign(Place::local(tag), Rvalue::Discriminant(place.clone()));
+        let mut slots: Vec<Option<u32>> = arms
+            .iter()
+            .flat_map(|arm| arm.tags.iter().flatten().map(|test| test.slot))
+            .collect();
+        slots.sort();
+        slots.dedup();
+        let tags: Vec<(Option<u32>, Local, Ty)> = slots
+            .into_iter()
+            .map(|slot| {
+                let tested = self.reached(
+                    &place,
+                    Reach {
+                        slot,
+                        payload: Payload::SomeValue,
+                    },
+                    true,
+                );
+                let ty = self.place_ty(&tested);
+                let tag_ty = match self.types().kind(ty) {
+                    TyKind::Optional(_) | TyKind::Result(..) => Types::BOOL,
+                    TyKind::Adt(..) => Types::I32,
+                    _ => ty,
+                };
+                let tag = self.temp(tag_ty);
+                self.assign(Place::local(tag), Rvalue::Discriminant(tested));
+                (slot, tag, tag_ty)
+            })
+            .collect();
         let merge = self.new_block();
         let unmatched = self.new_block();
         self.blocks[unmatched.0 as usize].1 = Some(Terminator {
             kind: TerminatorKind::Unreachable,
             span: self.span,
         });
-        let chained = arms
-            .iter()
-            .any(|arm| arm.guard.is_some() || arm.tags.iter().any(|(low, high)| low != high));
+        let chained = tags.len() > 1
+            || arms.iter().any(|arm| {
+                arm.guard.is_some()
+                    || arm
+                        .tags
+                        .iter()
+                        .any(|tests| tests.len() != 1 || tests[0].low != tests[0].high)
+            });
         let mut entries = Vec::new();
         for arm in arms {
             let body = self.new_block();
@@ -1199,14 +1226,14 @@ impl<'a> Builder<'a> {
                 .iter()
                 .map(|(local, _)| self.binding(*local, take))
                 .collect();
-            let alternatives: Vec<(Option<(i128, i128)>, BlockId)> = match arm.tags.is_empty() {
-                true => vec![None],
-                false => arm.tags.iter().copied().map(Some).collect(),
+            let alternatives: Vec<(&[Test], BlockId)> = match arm.tags.is_empty() {
+                true => vec![&[][..]],
+                false => arm.tags.iter().map(Vec::as_slice).collect(),
             }
             .into_iter()
-            .map(|tags| match locals.is_empty() {
-                true => (tags, start),
-                false => (tags, self.new_block()),
+            .map(|tests| match locals.is_empty() {
+                true => (tests, start),
+                false => (tests, self.new_block()),
             })
             .collect();
             entries.push((body, start, take, locals, alternatives));
@@ -1221,25 +1248,39 @@ impl<'a> Builder<'a> {
         };
         if chained {
             self.goto(tests[0]);
-            let read = Operand::Copy(Place::local(tag));
             for (at, (_, _, _, _, alternatives)) in entries.iter().enumerate() {
                 self.current = Some(tests[at]);
-                for &(tags, entry) in alternatives {
-                    let Some((low, high)) = tags else {
-                        self.goto(entry);
-                        break;
-                    };
-                    let inside = match low == high {
-                        true => self.binary(BinOp::Eq, read.clone(), constant(low, tag_ty)),
-                        false => {
-                            let above = self.binary(BinOp::Ge, read.clone(), constant(low, tag_ty));
-                            let below =
-                                self.binary(BinOp::Le, read.clone(), constant(high, tag_ty));
-                            self.binary(BinOp::BitAnd, above, below)
-                        }
-                    };
+                for &(checks, entry) in alternatives {
                     let next = self.new_block();
-                    self.switch(inside, vec![(0, next)], entry);
+                    for (count, test) in checks.iter().enumerate() {
+                        let &(_, tag, tag_ty) = tags
+                            .iter()
+                            .find(|(slot, ..)| *slot == test.slot)
+                            .expect("every tested slot has its tag");
+                        let read = Operand::Copy(Place::local(tag));
+                        let inside = match test.low == test.high {
+                            true => self.binary(BinOp::Eq, read, constant(test.low, tag_ty)),
+                            false => {
+                                let above = self.binary(
+                                    BinOp::Ge,
+                                    read.clone(),
+                                    constant(test.low, tag_ty),
+                                );
+                                let below =
+                                    self.binary(BinOp::Le, read, constant(test.high, tag_ty));
+                                self.binary(BinOp::BitAnd, above, below)
+                            }
+                        };
+                        let pass = match count + 1 == checks.len() {
+                            true => entry,
+                            false => self.new_block(),
+                        };
+                        self.switch(inside, vec![(0, next)], pass);
+                        self.current = Some(pass);
+                    }
+                    if checks.is_empty() {
+                        self.goto(entry);
+                    }
                     self.current = Some(next);
                 }
                 self.goto(tests[at + 1]);
@@ -1248,20 +1289,24 @@ impl<'a> Builder<'a> {
             let mut targets = Vec::new();
             let mut otherwise = unmatched;
             for (_, _, _, _, alternatives) in &entries {
-                for &(tags, entry) in alternatives {
-                    match tags {
-                        Some((value, _)) => targets.push((value, entry)),
+                for &(checks, entry) in alternatives {
+                    match checks.first() {
+                        Some(test) => targets.push((test.low, entry)),
                         None => otherwise = entry,
                     }
                 }
             }
-            self.switch(Operand::Move(Place::local(tag)), targets, otherwise);
+            let tag = tags.first().map_or_else(
+                || Operand::Copy(Place::local(self.temp(Types::BOOL))),
+                |&(_, tag, _)| Operand::Move(Place::local(tag)),
+            );
+            self.switch(tag, targets, otherwise);
         }
         for (at_arm, (arm, (body, start, take, locals, alternatives))) in
             arms.iter().zip(entries).enumerate()
         {
             let outer = replace(&mut self.span, arm.span);
-            for (at, (tags, entry)) in alternatives
+            for (at, (checks, entry)) in alternatives
                 .into_iter()
                 .enumerate()
                 .filter(|(_, (_, e))| *e != start)
@@ -1278,10 +1323,9 @@ impl<'a> Builder<'a> {
                         Rvalue::Use(Operand::Move(place.clone())),
                     );
                     from = Place::local(taken);
-                    let bound: Vec<Payload> = arm.bindings.iter().map(|(_, p)| p[at]).collect();
-                    let variant = tags.map_or(0, |(value, _)| value);
-                    for part in self.payloads(subject, variant) {
-                        let reached = payload(&from, part);
+                    let bound: Vec<Reach> = arm.bindings.iter().map(|(_, r)| r[at]).collect();
+                    for part in self.parts(subject, checks, &bound) {
+                        let reached = self.reached(&from, part, false);
                         if !bound.contains(&part)
                             && self.program.needs_drop(self.place_ty(&reached))
                         {
@@ -1289,8 +1333,8 @@ impl<'a> Builder<'a> {
                         }
                     }
                 }
-                for ((_, payloads), &(binding, copy)) in arm.bindings.iter().zip(&locals) {
-                    let reached = payload(&from, payloads[at]);
+                for ((_, reaches), &(binding, copy)) in arm.bindings.iter().zip(&locals) {
+                    let reached = self.reached(&from, reaches[at], false);
                     let value = match copy {
                         true => Rvalue::Use(Operand::Copy(reached)),
                         false => Rvalue::AddressOf(reached),
@@ -1336,6 +1380,70 @@ impl<'a> Builder<'a> {
         let mir = self.local(pointer, name);
         self.views[local.0 as usize] = Some(Place::local(mir).project(Projection::Deref));
         (mir, false)
+    }
+
+    /// Where `reach` lies inside the scrutinee at `place`: through the
+    /// reference a tuple element holds when it is taken apart, and with
+    /// `tag` the element itself, whose tag is read.
+    fn reached(&self, place: &Place, reach: Reach, tag: bool) -> Place {
+        let mut at = place.clone();
+        if let Some(slot) = reach.slot {
+            at = at.project(Projection::Field(slot));
+            let refers = matches!(
+                self.types().kind(self.place_ty(&at)),
+                TyKind::Ref(_) | TyKind::RefMut(_)
+            );
+            if refers && reach.payload != Payload::Whole {
+                at = at.project(Projection::Deref);
+            }
+        }
+        if tag {
+            return at;
+        }
+        match reach.payload {
+            Payload::Whole => at,
+            Payload::SomeValue | Payload::OkValue => at.project(Projection::Field(1)),
+            Payload::ErrValue => at.project(Projection::Field(2)),
+            Payload::Variant { variant, field } => at
+                .project(Projection::Downcast(variant))
+                .project(Projection::Field(field)),
+        }
+    }
+
+    /// The parts of a value of `ty` that an alternative making `checks`
+    /// takes apart: the payload of the variant it tests, or of each tuple
+    /// element, the element itself when it is not tested or `bound` whole.
+    fn parts(&self, ty: Ty, checks: &[Test], bound: &[Reach]) -> Vec<Reach> {
+        let tag_of = |slot| {
+            checks
+                .iter()
+                .find(|test| test.slot == slot)
+                .map_or(0, |test| test.low)
+        };
+        let TyKind::Tuple(elements) = self.types().kind(ty).clone() else {
+            return self
+                .payloads(ty, tag_of(None))
+                .into_iter()
+                .map(Reach::from)
+                .collect();
+        };
+        let mut parts = Vec::new();
+        for (slot, element) in (0..).zip(elements) {
+            let whole = Reach {
+                slot: Some(slot),
+                payload: Payload::Whole,
+            };
+            match checks.iter().any(|test| test.slot == Some(slot)) && !bound.contains(&whole) {
+                true => parts.extend(self.payloads(element, tag_of(Some(slot))).into_iter().map(
+                    |payload| Reach {
+                        slot: Some(slot),
+                        payload,
+                    },
+                )),
+                false => parts.push(whole),
+            }
+        }
+        parts
     }
 
     /// Where the parts of a value of `ty` with tag `tag` lie.
@@ -1587,19 +1695,6 @@ impl<'a> Builder<'a> {
         self.assign(Place::local(len), Rvalue::Len(vec.clone()));
         let inside = self.binary(op, reused(at.clone()), Operand::Move(Place::local(len)));
         self.assert(inside, Panic::Bounds);
-    }
-}
-
-/// Where `payload` lies inside the scrutinee at `place`.
-fn payload(place: &Place, payload: Payload) -> Place {
-    match payload {
-        Payload::Whole => place.clone(),
-        Payload::SomeValue | Payload::OkValue => place.clone().project(Projection::Field(1)),
-        Payload::ErrValue => place.clone().project(Projection::Field(2)),
-        Payload::Variant { variant, field } => place
-            .clone()
-            .project(Projection::Downcast(variant))
-            .project(Projection::Field(field)),
     }
 }
 

@@ -678,28 +678,41 @@ impl Eval<'_, '_> {
 
     fn match_expr(&mut self, scrutinee: &Place, arms: &[tir::Arm]) -> Run<Value> {
         let loc = self.loc(scrutinee)?;
-        let tag = match self.at(&loc) {
-            Value::Int(n) => *n,
-            Value::Bool(b) => i128::from(*b),
-            Value::Variant(at, _) => i128::from(*at),
-            Value::Optional(inner) => i128::from(inner.is_some()),
-            _ => 0,
+        let slot = |this: &Self, slot: Option<u32>| {
+            let mut place = loc.clone();
+            place.path.extend(slot.map(|slot| slot as usize));
+            match this.at(&place) {
+                Value::Ref(target) if slot.is_some() => target.clone(),
+                _ => place,
+            }
         };
         for arm in arms {
             let alternative = match arm.tags.is_empty() {
                 true => Some(0),
-                false => arm
-                    .tags
-                    .iter()
-                    .position(|&(low, high)| low <= tag && tag <= high),
+                false => arm.tags.iter().position(|tests| {
+                    tests.iter().all(|test| {
+                        let tag = match self.at(&slot(self, test.slot)) {
+                            Value::Int(n) => *n,
+                            Value::Bool(b) => i128::from(*b),
+                            Value::Variant(at, _) => i128::from(*at),
+                            Value::Optional(inner) => i128::from(inner.is_some()),
+                            _ => unreachable!("a tested value has a tag"),
+                        };
+                        test.low <= tag && tag <= test.high
+                    })
+                }),
             };
             let Some(at) = alternative else {
                 continue;
             };
-            for (binding, payloads) in &arm.bindings {
-                let mut place = loc.clone();
-                match payloads[at] {
-                    Payload::Whole => {}
+            for (binding, reaches) in &arm.bindings {
+                let reach = reaches[at];
+                let mut place = slot(self, reach.slot);
+                match reach.payload {
+                    Payload::Whole => {
+                        place = loc.clone();
+                        place.path.extend(reach.slot.map(|slot| slot as usize));
+                    }
                     Payload::SomeValue => place.path.push(0),
                     Payload::Variant { field, .. } => place.path.push(field as usize),
                     Payload::OkValue | Payload::ErrValue => {

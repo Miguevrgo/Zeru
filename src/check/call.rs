@@ -5,7 +5,7 @@ use crate::ast::{Expression, ExpressionKind, Spec, StatementKind, TypeSpec, form
 use crate::errors::Span;
 use crate::items::{DefId, ItemKind};
 use crate::tir::{
-    Arm, BinOp, BitOp, Block, Builtin, Expr, ExprKind, Payload, Place, Stmt, StmtKind, Walk,
+    Arm, BinOp, BitOp, Block, Builtin, Expr, ExprKind, Payload, Place, Stmt, StmtKind, Test, Walk,
 };
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
@@ -823,8 +823,8 @@ impl FnCx<'_, '_> {
         );
         let arms = vec![
             Arm {
-                tags: vec![(1, 1)],
-                bindings: vec![(binding, vec![Payload::SomeValue])],
+                tags: vec![Test::is(1)],
+                bindings: vec![(binding, vec![Payload::SomeValue.into()])],
                 guard: None,
                 body: some,
                 span,
@@ -1705,8 +1705,8 @@ impl FnCx<'_, '_> {
                 };
                 let shown = self.mk(ExprKind::Block(Block { stmts }), Types::VOID, span);
                 let mut arms = vec![Arm {
-                    tags: vec![(1, 1)],
-                    bindings: vec![(value, vec![payload])],
+                    tags: vec![Test::is(1)],
+                    bindings: vec![(value, vec![payload.into()])],
                     guard: None,
                     body: shown,
                     span,
@@ -1721,7 +1721,11 @@ impl FnCx<'_, '_> {
                         let read = self.mk(ExprKind::Read(Place::Local(code)), Types::I32, span);
                         let pieces = vec![text(b"Err("), text(b")")];
                         let err = self.write(stderr, pieces, vec![read], span);
-                        (vec![(0, 0)], vec![(code, vec![Payload::ErrValue])], err)
+                        (
+                            vec![Test::is(0)],
+                            vec![(code, vec![Payload::ErrValue.into()])],
+                            err,
+                        )
                     }
                 };
                 let body = Block {

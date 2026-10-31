@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use crate::ast::{Expression, ExpressionKind, StatementKind, TypeSpec};
 use crate::errors::Span;
 use crate::items::{DefId, ItemKind};
-use crate::tir::{Arm, Asm, BinOp, Builtin, Expr, ExprKind, Place, UnOp, Unpack};
+use crate::tir::{Arm, Asm, BinOp, Builtin, Expr, ExprKind, Place, Test, UnOp, Unpack};
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
@@ -606,7 +606,7 @@ impl FnCx<'_, '_> {
         self.consume(&mut second);
         let arms = vec![
             Arm {
-                tags: vec![(1, 1)],
+                tags: vec![Test::is(1)],
                 bindings: Vec::new(),
                 guard: None,
                 body: first,

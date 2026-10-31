@@ -267,6 +267,7 @@ pub enum PatternKind {
     Range(Expression, Expression),
     Binding(String),
     Payload { path: String, fields: Vec<Pattern> },
+    Tuple(Vec<Pattern>),
     Or(Vec<Pattern>),
 }
 

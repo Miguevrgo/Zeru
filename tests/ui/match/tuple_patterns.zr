@@ -1,0 +1,108 @@
+enum Value {
+    Nil,
+    Int(i64),
+    Text(String),
+    List(Vec<i64>),
+}
+
+fn same(a: &Value, b: &Value) bool {
+    return match (a, b) {
+        (Value::Nil, Value::Nil) => true,
+        (Value::Int(x), Value::Int(y)) => x == y,
+        (Value::Text(x), Value::Text(y)) => x == y,
+        default => false,
+    };
+}
+
+fn add(a: Value, b: Value) Value {
+    match (a, b) {
+        (Value::Int(x), Value::Int(y)) => {
+            return Value::Int(x + y);
+        }
+        (Value::Text(x), Value::Text(y)) => {
+            var joined = x;
+            joined.push_str(y);
+            return Value::Text(joined);
+        }
+        (Value::List(x), _) => {
+            return Value::List(x);
+        }
+        default => {
+            return Value::Nil;
+        }
+    }
+}
+
+fn both(a: bool, b: bool) str {
+    return match (a, b) {
+        (true, true) => "both",
+        (true, false) | (false, true) => "one",
+        (false, false) => "none",
+    };
+}
+
+fn grade(n: i32, bonus: bool) i32 {
+    return match (n, bonus) {
+        (0, _) => 0,
+        (1..=5, true) => 10,
+        (1..=5, false) => 5,
+        (x, true) if x > 100 => 1000,
+        (x, _) => x,
+    };
+}
+
+fn opt(a: i32?, b: i32?) i32 {
+    return match (a, b) {
+        (Some(x), Some(y)) => x + y,
+        (Some(x), None) | (None, Some(x)) => x,
+        (None, None) => -1,
+    };
+}
+
+fn show(v: Value) {
+    match v {
+        Value::Nil => println("nil"),
+        Value::Int(n) => println("{}", n),
+        Value::Text(s) => println("{}", s),
+        Value::List(l) => println("{}", l),
+    }
+}
+
+fn main_values() {
+    println("{} {} {}", same(&Value::Int(3), &Value::Int(3)), same(&Value::Nil, &Value::Int(1)), same(&Value::Text(String.from("a")), &Value::Text(String.from("a"))));
+    show(add(Value::Int(2), Value::Int(5)));
+    show(add(Value::Text(String.from("ab")), Value::Text(String.from("cd"))));
+    show(add(Value::List(Vec[1, 2]), Value::Text(String.from("dropped"))));
+    show(add(Value::Nil, Value::Text(String.from("x"))));
+    println("{} {} {}", both(true, true), both(false, true), both(false, false));
+    println("{} {} {} {} {}", grade(0, true), grade(3, true), grade(3, false), grade(200, true), grade(50, true));
+    println("{} {} {} {}", opt(1, 2), opt(None, 4), opt(7, None), opt(None, None));
+    var pair = (1, Value::Text(String.from("kept")));
+    match pair {
+        (1, Value::Text(s)) => println("view {}", s),
+        default => {}
+    }
+    println("{}", pair.0);
+}
+fn cell(a: bool, n: i32) i32 {
+    return match (a, n) {
+        (true, 0) => 1,
+        (true, x) => x * 2,
+        (false, x) if x > 3 => 100,
+        (false, _) => 7,
+    };
+}
+const A: i32 = cell(true, 0);
+const B: i32 = cell(true, 5);
+const C: i32 = cell(false, 9);
+const D: i32 = cell(false, 1);
+fn main_consts() {
+    println("{} {} {} {}", A, B, C, D);
+    var o: i32? = 3;
+    var r = match (o, 2) { (Some(x),   y) => x+y, (None,_)=>0 };
+    println("{}", r);
+}
+fn main() {
+    main_values();
+    main_consts();
+}

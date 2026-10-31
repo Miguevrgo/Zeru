@@ -3,7 +3,7 @@
 use crate::ast::{Expression, ExpressionKind, MatchArm, Pattern, PatternKind};
 use crate::errors::Span;
 use crate::items::ItemKind;
-use crate::tir::{Arm, Expr, ExprKind, Payload, Place};
+use crate::tir::{Arm, Expr, ExprKind, Payload, Place, Reach, Test};
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
@@ -17,17 +17,33 @@ const TEXT: &str = "the text matched";
 type PayloadAt = fn(u32, u32) -> Payload;
 
 /// What an arm's pattern stands for: the values it takes, each alternative
-/// a range of them, to find repeats and gaps, and the names it binds, with
-/// where each finds its value for each alternative.
+/// the tests that must all hold, to find repeats and gaps, and the names it
+/// binds, with where each finds its value for each alternative.
 #[derive(Default)]
 struct Shape {
-    tags: Vec<(i128, i128)>,
-    binds: Vec<(String, Ty, Vec<Payload>)>,
+    tags: Vec<Vec<Test>>,
+    binds: Vec<(String, Ty, Vec<Reach>)>,
 }
 
 /// One alternative of a pattern: the values it takes, from the first to
 /// the second, and what it binds.
 type Alternative = ((i128, i128), Vec<(String, Ty, Payload)>);
+
+/// The names an alternative binds, with their types and where each finds
+/// its value.
+type Binds = Vec<(String, Ty, Reach)>;
+
+/// One alternative of a whole pattern: the tests that must all hold, and
+/// what it binds.
+type Tested = (Vec<Test>, Binds);
+
+/// The tag a tuple element stands at in a combination of tags when a match
+/// does not list its values, as an integer's: only a name or `_` takes it.
+const OTHER: i128 = i128::MIN;
+
+/// How many combinations of its elements' values a match on a tuple checks
+/// at most for gaps and repeats; beyond them it needs a `default`.
+const MAX_COMBINATIONS: usize = 4096;
 
 impl FnCx<'_, '_> {
     pub(super) fn match_expr(
@@ -254,45 +270,45 @@ impl FnCx<'_, '_> {
                         tags: Vec::new(),
                         binds: names
                             .into_iter()
-                            .map(|name| (name, Types::ERROR, vec![Payload::SomeValue]))
+                            .map(|name| (name, Types::ERROR, vec![Payload::SomeValue.into()]))
                             .collect(),
                     }
                 })
                 .collect()
         };
+        let mut elements = Vec::new();
         let all: Option<Vec<String>> = match self.cx.types.kind(subject).clone() {
             TyKind::Error => return none(),
             TyKind::Int(_) => None,
             _ if subject == Types::STR || subject == Types::STRING => None,
-            TyKind::Bool => Some(vec!["false".into(), "true".into()]),
-            TyKind::Optional(_) => Some(vec!["None".into(), "Some(_)".into()]),
-            TyKind::Result(..) => Some(vec!["Err(_)".into(), "Ok(_)".into()]),
-            TyKind::Adt(def, _) if self.cx.is_enum(subject).is_some() => {
-                let name = self.cx.items.item(def).name.clone();
-                Some(
-                    self.cx
-                        .variants_of(def)
-                        .iter()
-                        .map(|(variant, fields)| match fields.len() {
-                            0 => format!("{name}::{variant}"),
-                            count => format!("{name}::{variant}({})", vec!["_"; count].join(", ")),
-                        })
-                        .collect(),
-                )
+            TyKind::Tuple(parts) if !parts.is_empty() => {
+                elements = parts;
+                None
             }
-            _ => {
-                let shown = self.ty(subject);
-                let head = self.cx.sources.first_line(span);
-                self.error(
-                    format!(
-                        "Cannot match on {shown}, only on an integer, a bool, an enum, a T? or a T!"
-                    ),
-                    head,
-                )
-                .help("compare it with if and else if instead");
-                return none();
-            }
+            _ => match self.listed(subject) {
+                Some(all) => Some(all),
+                None => {
+                    let shown = self.ty(subject);
+                    let head = self.cx.sources.first_line(span);
+                    self.error(
+                        format!(
+                            "Cannot match on {shown}, only on an integer, a bool, text, an enum, a T?, a T! or a tuple of them"
+                        ),
+                        head,
+                    )
+                    .help("compare it with if and else if instead");
+                    return none();
+                }
+            },
         };
+        let listed: Vec<Vec<String>> = elements
+            .iter()
+            .map(|&element| {
+                let element = self.pointee(element);
+                self.listed(element).unwrap_or_default()
+            })
+            .collect();
+        let combos = combinations(&listed);
 
         let mut covered = Vec::new();
         let mut has_default = false;
@@ -321,45 +337,109 @@ impl FnCx<'_, '_> {
             {
                 shapes.push(Shape {
                     tags: Vec::new(),
-                    binds: vec![(name.to_string(), subject, vec![Payload::Whole])],
+                    binds: vec![(name.to_string(), subject, vec![Payload::Whole.into()])],
                 });
                 continue;
             }
-            shapes.push(self.shape(pattern, subject, guarded, &mut covered));
+            shapes.push(self.shape(pattern, subject, guarded, &mut covered, combos.as_deref()));
         }
 
         if has_default {
             return shapes;
         }
-        let Some(all) = all else {
-            let shown = self.ty(subject);
-            let fix = self.added_arms(arms, &["default".to_string()], span);
-            let head = self.cx.sources.first_line(span);
-            let error = self.error(format!("A match on {shown} needs a 'default' arm"), head);
-            error.help("add a default arm for the values no other arm takes");
-            if let Some((at, arms)) = fix {
-                error.fix(at, arms);
+        let missing: Vec<String> = match (all, &combos) {
+            (Some(all), _) => (0..)
+                .zip(all)
+                .filter(|(at, _)| !covered.iter().any(|(tests, _)| takes(tests, &[*at])))
+                .map(|(_, name)| name)
+                .collect(),
+            (None, Some(combos)) if !elements.is_empty() => {
+                let missing = combos
+                    .iter()
+                    .filter(|combo| !covered.iter().any(|(tests, _)| takes(tests, combo)))
+                    .map(|combo| combo.iter().map(|&tag| Some(tag)).collect())
+                    .collect();
+                merged(missing, &listed)
+                    .into_iter()
+                    .map(|combo| {
+                        let parts: Vec<&str> = combo
+                            .iter()
+                            .zip(&listed)
+                            .map(|(&tag, names)| match tag {
+                                Some(OTHER) | None => "_",
+                                Some(tag) => &names[tag as usize],
+                            })
+                            .collect();
+                        format!("({})", parts.join(", "))
+                    })
+                    .collect()
             }
-            return shapes;
+            (None, _) => {
+                let shown = self.ty(subject);
+                let fix = self.added_arms(arms, &["default".to_string()], span);
+                let head = self.cx.sources.first_line(span);
+                let error = self.error(format!("A match on {shown} needs a 'default' arm"), head);
+                error.help("add a default arm for the values no other arm takes");
+                if let Some((at, arms)) = fix {
+                    error.fix(at, arms);
+                }
+                return shapes;
+            }
         };
-        let missing: Vec<String> = (0..)
-            .zip(all)
-            .filter(|(at, _)| !covered.iter().any(|(low, high, _)| low <= at && at <= high))
-            .map(|(_, name)| name)
-            .collect();
         if !missing.is_empty() {
-            let fix = self.added_arms(arms, &missing, span);
+            const SHOWN: usize = 4;
+            let added = match missing.len() > SHOWN {
+                true => vec!["default".to_string()],
+                false => missing.clone(),
+            };
+            let fix = self.added_arms(arms, &added, span);
             let head = self.cx.sources.first_line(span);
-            let error = self.error(
-                format!("This match does not cover {}", missing.join(", ")),
-                head,
-            );
+            let listed = match missing.len() > SHOWN {
+                true => format!(
+                    "{}, and {} more",
+                    missing[..SHOWN].join(", "),
+                    missing.len() - SHOWN
+                ),
+                false => missing.join(", "),
+            };
+            let error = self.error(format!("This match does not cover {listed}"), head);
             error.help("add an arm for each, or a default arm");
             if let Some((at, arms)) = fix {
                 error.fix(at, arms);
             }
         }
         shapes
+    }
+
+    /// What `ty` refers to when it is a reference, which a tuple element is
+    /// matched through; else `ty`.
+    fn pointee(&self, ty: Ty) -> Ty {
+        match *self.cx.types.kind(ty) {
+            TyKind::Ref(inner) | TyKind::RefMut(inner) => inner,
+            _ => ty,
+        }
+    }
+
+    /// The values of `ty` a match lists one by one, written as patterns:
+    /// none for an integer, text, or anything a match cannot list.
+    fn listed(&mut self, ty: Ty) -> Option<Vec<String>> {
+        Some(match self.cx.types.kind(ty) {
+            TyKind::Bool => vec!["false".into(), "true".into()],
+            TyKind::Optional(_) => vec!["None".into(), "Some(_)".into()],
+            TyKind::Result(..) => vec!["Err(_)".into(), "Ok(_)".into()],
+            &TyKind::Adt(def, _) if self.cx.is_enum(ty).is_some() => {
+                let name = self.cx.items.item(def).name.clone();
+                self.cx
+                    .variants_of(def)
+                    .iter()
+                    .map(|(variant, fields)| match fields.len() {
+                        0 => format!("{name}::{variant}"),
+                        count => format!("{name}::{variant}({})", vec!["_"; count].join(", ")),
+                    })
+                    .collect()
+            }
+            _ => return None,
+        })
     }
 
     /// The arms for `patterns`, each with an empty body, and where they go
@@ -409,12 +489,14 @@ impl FnCx<'_, '_> {
     /// An arm's pattern: each alternative takes values no earlier one took,
     /// and all bind the same names at the same types. The values of an arm
     /// with a guard may still go on to later arms, so they stay uncovered.
+    /// A match on a tuple checks the `combos` of its elements' tags.
     fn shape(
         &mut self,
         pattern: &Pattern,
         subject: Ty,
         guarded: bool,
-        covered: &mut Vec<(i128, i128, Span)>,
+        covered: &mut Vec<(Vec<Test>, Span)>,
+        combos: Option<&[Vec<i128>]>,
     ) -> Shape {
         let alternatives = match &pattern.kind {
             PatternKind::Default => &[],
@@ -423,67 +505,202 @@ impl FnCx<'_, '_> {
         };
         let mut shape: Option<Shape> = None;
         for alternative in alternatives {
-            let Some((tag, binds)) = self.pattern(alternative, subject) else {
-                continue;
-            };
-            if let Some(&(.., first)) = covered
-                .iter()
-                .find(|&&(low, high, _)| low <= tag.1 && tag.0 <= high)
-            {
-                self.error(
-                    "This value is already matched by an earlier arm",
-                    alternative.span,
-                )
-                .note("matched first here, so this arm never runs for it", first)
-                .help("remove this arm, or narrow it to values no earlier arm takes");
-            }
-            if !guarded {
-                covered.push((tag.0, tag.1, alternative.span));
-            }
-            let Some(shape) = &mut shape else {
-                shape = Some(Shape {
-                    tags: vec![tag],
-                    binds: binds
-                        .into_iter()
-                        .map(|(name, ty, payload)| (name, ty, vec![payload]))
-                        .collect(),
-                });
-                continue;
-            };
-            let unmatched = shape
-                .binds
-                .iter()
-                .map(|(name, ..)| name)
-                .find(|name| !binds.iter().any(|(other, ..)| other == *name))
-                .or_else(|| {
-                    binds
-                        .iter()
-                        .map(|(name, ..)| name)
-                        .find(|name| !shape.binds.iter().any(|(other, ..)| other == *name))
-                });
-            if let Some(name) = unmatched {
-                let message = format!("'{name}' is not bound in every alternative");
-                self.error(message, alternative.span);
-                continue;
-            }
-            for (name, ty, payload) in binds {
-                let (_, first, payloads) = shape
-                    .binds
-                    .iter_mut()
-                    .find(|(other, ..)| *other == name)
-                    .expect("every alternative binds the same names");
-                if *first != ty {
-                    let (want, got) = (self.cx.types.show(*first), self.cx.types.show(ty));
+            for (tests, binds) in self.tested(alternative, subject) {
+                if let Some(first) = repeated(&tests, covered, combos) {
                     self.error(
-                        format!("'{name}' is {got} here but {want} in the first alternative"),
+                        "This value is already matched by an earlier arm",
                         alternative.span,
-                    );
+                    )
+                    .note("matched first here, so this arm never runs for it", first)
+                    .help("remove this arm, or narrow it to values no earlier arm takes");
                 }
-                payloads.push(payload);
+                if !guarded {
+                    covered.push((tests.clone(), alternative.span));
+                }
+                let Some(shape) = &mut shape else {
+                    shape = Some(Shape {
+                        tags: vec![tests],
+                        binds: binds
+                            .into_iter()
+                            .map(|(name, ty, reach)| (name, ty, vec![reach]))
+                            .collect(),
+                    });
+                    continue;
+                };
+                let unmatched = shape
+                    .binds
+                    .iter()
+                    .map(|(name, ..)| name)
+                    .find(|name| !binds.iter().any(|(other, ..)| other == *name))
+                    .or_else(|| {
+                        binds
+                            .iter()
+                            .map(|(name, ..)| name)
+                            .find(|name| !shape.binds.iter().any(|(other, ..)| other == *name))
+                    });
+                if let Some(name) = unmatched {
+                    let message = format!("'{name}' is not bound in every alternative");
+                    self.error(message, alternative.span);
+                    continue;
+                }
+                for (name, ty, reach) in binds {
+                    let (_, first, reaches) = shape
+                        .binds
+                        .iter_mut()
+                        .find(|(other, ..)| *other == name)
+                        .expect("every alternative binds the same names");
+                    if *first != ty {
+                        let (want, got) = (self.cx.types.show(*first), self.cx.types.show(ty));
+                        self.error(
+                            format!("'{name}' is {got} here but {want} in the first alternative"),
+                            alternative.span,
+                        );
+                    }
+                    reaches.push(reach);
+                }
+                shape.tags.push(tests);
             }
-            shape.tags.push(tag);
         }
         shape.unwrap_or_default()
+    }
+
+    /// The alternatives a pattern with no `|` at its top makes: one, or for
+    /// a tuple one per way of picking an alternative of each element.
+    fn tested(&mut self, pattern: &Pattern, subject: Ty) -> Vec<Tested> {
+        let shown = self.ty(subject);
+        let TyKind::Tuple(elements) = self.cx.types.kind(subject).clone() else {
+            if matches!(pattern.kind, PatternKind::Tuple(_)) {
+                self.error(format!("This pattern cannot match {shown}"), pattern.span);
+                return Vec::new();
+            }
+            let Some(((low, high), binds)) = self.pattern(pattern, subject) else {
+                return Vec::new();
+            };
+            let test = Test {
+                slot: None,
+                low,
+                high,
+            };
+            let binds = binds
+                .into_iter()
+                .map(|(name, ty, payload)| (name, ty, payload.into()))
+                .collect();
+            return vec![(vec![test], binds)];
+        };
+        let PatternKind::Tuple(parts) = &pattern.kind else {
+            self.error(format!("This pattern cannot match {shown}"), pattern.span);
+            return Vec::new();
+        };
+        if parts.len() != elements.len() {
+            self.error(
+                format!(
+                    "This pattern has {} parts, but {shown} has {}",
+                    parts.len(),
+                    elements.len()
+                ),
+                pattern.span,
+            );
+            return Vec::new();
+        }
+        let mut product: Vec<Tested> = vec![(Vec::new(), Vec::new())];
+        for (slot, (part, &element)) in (0..).zip(parts.iter().zip(&elements)) {
+            let Some(options) = self.tuple_part(part, element, slot) else {
+                return Vec::new();
+            };
+            product = product
+                .into_iter()
+                .flat_map(|(tests, binds)| {
+                    options.iter().map(move |(test, more)| {
+                        let mut tests = tests.clone();
+                        tests.extend(*test);
+                        let mut binds = binds.clone();
+                        binds.extend(more.iter().cloned());
+                        (tests, binds)
+                    })
+                })
+                .collect();
+        }
+        product
+    }
+
+    /// The ways element `slot` of a tuple pattern takes a value of `ty`, or
+    /// of what it refers to: a test, or none for a name or `_`, and what
+    /// each binds.
+    fn tuple_part(
+        &mut self,
+        part: &Pattern,
+        ty: Ty,
+        slot: u32,
+    ) -> Option<Vec<(Option<Test>, Binds)>> {
+        let alternatives = match &part.kind {
+            PatternKind::Or(alternatives) => alternatives.iter().collect(),
+            _ => vec![part],
+        };
+        let mut options = Vec::new();
+        for alternative in alternatives {
+            let whole = Reach {
+                slot: Some(slot),
+                payload: Payload::Whole,
+            };
+            let constant;
+            let tested = match &alternative.kind {
+                PatternKind::Binding(name) if name == "_" => {
+                    options.push((None, Vec::new()));
+                    continue;
+                }
+                PatternKind::Binding(name) if !self.names_a_value(name) => {
+                    options.push((None, vec![(name.clone(), ty, whole)]));
+                    continue;
+                }
+                PatternKind::Tuple(_) => {
+                    self.error(
+                        "A tuple inside a tuple pattern is not taken apart; bind it to a name and match that inside the arm",
+                        alternative.span,
+                    );
+                    return None;
+                }
+                PatternKind::Binding(name) => {
+                    let value =
+                        Expression::new(ExpressionKind::Identifier(name.clone()), alternative.span);
+                    constant = Pattern {
+                        kind: PatternKind::Constant(value),
+                        span: alternative.span,
+                    };
+                    &constant
+                }
+                _ => alternative,
+            };
+            let ty = self.pointee(ty);
+            if self.listed(ty).is_none() && self.cx.types.as_int(ty).is_none() {
+                let shown = self.ty(ty);
+                self.error(
+                    format!("A part of type {shown} cannot be matched; bind it to a name and compare it inside the arm"),
+                    alternative.span,
+                );
+                return None;
+            }
+            let ((low, high), binds) = self.pattern(tested, ty)?;
+            let test = Test {
+                slot: Some(slot),
+                low,
+                high,
+            };
+            let binds = binds
+                .into_iter()
+                .map(|(name, ty, payload)| {
+                    (
+                        name,
+                        ty,
+                        Reach {
+                            slot: Some(slot),
+                            payload,
+                        },
+                    )
+                })
+                .collect();
+            options.push((Some(test), binds));
+        }
+        Some(options)
     }
 
     /// One alternative: a literal, a constant or a variant, `Some(x)`,
@@ -515,7 +732,10 @@ impl FnCx<'_, '_> {
                 return Some(((tag, tag), Vec::new()));
             }
             PatternKind::Range(low, high) => return self.range_pattern(low, high, subject),
-            PatternKind::Binding(_) | PatternKind::Or(_) | PatternKind::Default => {
+            PatternKind::Binding(_)
+            | PatternKind::Or(_)
+            | PatternKind::Default
+            | PatternKind::Tuple(_) => {
                 unreachable!("the parser puts these only in a payload or as a whole arm")
             }
         };
@@ -644,10 +864,112 @@ fn whole_binding(pattern: &Pattern) -> Option<&str> {
 fn first_bindings(pattern: &Pattern, names: &mut Vec<String>) {
     match &pattern.kind {
         PatternKind::Binding(name) if name != "_" => names.push(name.clone()),
-        PatternKind::Payload { fields, .. } => {
+        PatternKind::Payload { fields, .. } | PatternKind::Tuple(fields) => {
             fields.iter().for_each(|field| first_bindings(field, names));
         }
         PatternKind::Or(alternatives) => first_bindings(&alternatives[0], names),
         _ => {}
     }
+}
+
+/// Whether a value whose tags are `combo`, one per tuple element or the
+/// value's own, passes every test.
+fn takes(tests: &[Test], combo: &[i128]) -> bool {
+    tests.iter().all(|test| {
+        let tag = combo[test.slot.unwrap_or(0) as usize];
+        tag != OTHER && test.low <= tag && tag <= test.high
+    })
+}
+
+/// Every combination of tags of a tuple whose elements list `listed`, an
+/// element listing nothing standing at `OTHER`; none past
+/// `MAX_COMBINATIONS`.
+fn combinations(listed: &[Vec<String>]) -> Option<Vec<Vec<i128>>> {
+    let mut combos = vec![Vec::new()];
+    for names in listed {
+        let tags: Vec<i128> = match names.len() {
+            0 => vec![OTHER],
+            count => (0..count as i128).collect(),
+        };
+        if combos.len() * tags.len() > MAX_COMBINATIONS {
+            return None;
+        }
+        combos = combos
+            .into_iter()
+            .flat_map(|combo| {
+                tags.iter().map(move |&tag| {
+                    let mut combo = combo.clone();
+                    combo.push(tag);
+                    combo
+                })
+            })
+            .collect();
+    }
+    Some(combos)
+}
+
+/// Where an earlier arm already took every value `tests` takes: for one
+/// value, any it shares; for a tuple, each combination of its `combos`.
+fn repeated(
+    tests: &[Test],
+    covered: &[(Vec<Test>, Span)],
+    combos: Option<&[Vec<i128>]>,
+) -> Option<Span> {
+    if let [
+        Test {
+            slot: None,
+            low,
+            high,
+        },
+    ] = tests
+    {
+        return covered
+            .iter()
+            .find_map(|(earlier, span)| match earlier[..] {
+                [
+                    Test {
+                        low: first,
+                        high: last,
+                        ..
+                    },
+                ] if first <= *high && *low <= last => Some(*span),
+                _ => None,
+            });
+    }
+    let mine: Vec<&Vec<i128>> = combos?.iter().filter(|combo| takes(tests, combo)).collect();
+    let mut first = None;
+    for combo in mine {
+        let (_, span) = covered.iter().find(|(earlier, _)| takes(earlier, combo))?;
+        first = Some(*span);
+    }
+    first
+}
+
+/// `missing` combinations of tags, those that together take every value
+/// of an element and agree on the rest written once, that element as `_`.
+fn merged(mut missing: Vec<Vec<Option<i128>>>, listed: &[Vec<String>]) -> Vec<Vec<Option<i128>>> {
+    for (slot, names) in listed.iter().enumerate() {
+        let without = |combo: &Vec<Option<i128>>| {
+            let mut rest = combo.clone();
+            rest[slot] = None;
+            rest
+        };
+        let mut kept = Vec::new();
+        for combo in &missing {
+            let rest = without(combo);
+            let group = missing
+                .iter()
+                .filter(|other| without(other) == rest)
+                .count();
+            let entry = match group == names.len().max(1) {
+                true => rest,
+                false => combo.clone(),
+            };
+            if !kept.contains(&entry) {
+                kept.push(entry);
+            }
+        }
+        missing = kept;
+    }
+    missing
 }

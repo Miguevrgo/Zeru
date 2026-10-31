@@ -1638,12 +1638,35 @@ impl Parser {
                     }
                 }
             }
+            Token::LParen if self.tuple_ahead() => {
+                self.bump();
+                PatternKind::Tuple(self.parse_list(&Token::RParen, |p| p.parse_pattern(true))?)
+            }
             _ => self.parse_constant_pattern()?,
         };
         Some(Pattern {
             kind,
             span: start.merge(self.prev_span()),
         })
+    }
+
+    /// Whether the parentheses that open here hold a comma of their own,
+    /// making a tuple rather than a grouped value.
+    fn tuple_ahead(&self) -> bool {
+        let mut depth = 0;
+        for (token, _) in &self.tokens[self.pos..] {
+            match token {
+                Token::LParen | Token::LBracket | Token::LBrace => depth += 1,
+                Token::RParen | Token::RBracket | Token::RBrace => depth -= 1,
+                Token::Comma if depth == 1 => return true,
+                Token::Eof => return false,
+                _ => {}
+            }
+            if depth == 0 {
+                return false;
+            }
+        }
+        false
     }
 
     fn parse_asm_expression(&mut self) -> Option<Expression> {

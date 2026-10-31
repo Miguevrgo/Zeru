@@ -405,17 +405,53 @@ pub enum BitOp {
     SwapBytes,
 }
 
-/// One arm of a `match`: the tags it takes, each alternative a range from
-/// the first to the second, none for every other; its bindings; the guard
-/// that must hold too. `span` is its pattern, where its bindings borrow the
-/// scrutinee.
+/// One arm of a `match`: the values it takes, each alternative the tests
+/// that must all hold, none for every value; its bindings, with where each
+/// finds its value in each alternative; the guard that must hold too.
+/// `span` is its pattern, where its bindings borrow the scrutinee.
 #[derive(Clone)]
 pub struct Arm {
-    pub tags: Vec<(i128, i128)>,
-    pub bindings: Vec<(LocalId, Vec<Payload>)>,
+    pub tags: Vec<Vec<Test>>,
+    pub bindings: Vec<(LocalId, Vec<Reach>)>,
     pub guard: Option<Expr>,
     pub body: Expr,
     pub span: Span,
+}
+
+/// That the tag of the scrutinee, or of its tuple element `slot`, lies
+/// from `low` to `high`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Test {
+    pub slot: Option<u32>,
+    pub low: i128,
+    pub high: i128,
+}
+
+impl Test {
+    pub fn is(tag: i128) -> Vec<Test> {
+        vec![Test {
+            slot: None,
+            low: tag,
+            high: tag,
+        }]
+    }
+}
+
+/// Where a binding finds its value: `payload` of the scrutinee, or of its
+/// tuple element `slot`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Reach {
+    pub slot: Option<u32>,
+    pub payload: Payload,
+}
+
+impl From<Payload> for Reach {
+    fn from(payload: Payload) -> Self {
+        Reach {
+            slot: None,
+            payload,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

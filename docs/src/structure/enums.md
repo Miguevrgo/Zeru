@@ -111,6 +111,50 @@ above.
 `Some(x)`, `None`, `Ok(x)` and `Err(code)`; the [Errors](../errors/README.md)
 chapter shows them.
 
+## Matching several values at once
+
+A tuple matches all its parts together. Each part of a pattern is a
+pattern for that part, a name that binds it, or `_` for any value, and
+references are matched through as the values they refer to:
+
+```zeru
+enum Value {
+    Int(i64),
+    Text(str),
+    Nil,
+}
+
+fn same(a: &Value, b: &Value) bool {
+    return match (a, b) {
+        (Value::Int(x), Value::Int(y)) => x == y,
+        (Value::Text(x), Value::Text(y)) => x == y,
+        (Value::Nil, Value::Nil) => true,
+        default => false,
+    };
+}
+
+fn main() {
+    println("{} {}", same(&Value::Int(2), &Value::Int(2)), same(&Value::Nil, &Value::Int(2))); // true false
+}
+```
+
+The compiler checks every combination of the parts, so a `match` on two
+bools needs all four or a `default`:
+
+```zeru
+fn both(a: bool, b: bool) str {
+    return match (a, b) {
+        (true, true) => "both",
+        (true, false) | (false, true) => "one",
+        (false, false) => "none",
+    };
+}
+
+fn main() {
+    println("{} {}", both(true, false), both(false, false)); // one none
+}
+```
+
 ## Methods on enums
 
 Enums have no fields or methods of their own. Functions that take the enum,

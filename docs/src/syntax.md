@@ -65,6 +65,7 @@ var name = match day {
 };
 var size = match n { 0 => "none", 1..=9 => "few", x if x < 0 => "negative", default => "many" };
 var op = match word { "+" | "plus" => 1, "-" => 2, default => 0 };   // text too
+match (a, b) { (Some(x), Some(y)) => .., (Some(x), None) | (None, Some(x)) => .., (None, None) => .. }
 ```
 
 ## Lists ([more](basics/sequences.md))

@@ -1,11 +1,11 @@
 status: compile error
 -- stderr
-Error: Cannot match on f64, only on an integer, a bool, an enum, a T? or a T!
+Error: Cannot match on f64, only on an integer, a bool, text, an enum, a T?, a T! or a tuple of them
    ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:5:13 ]
    │
  5 │     var c = match f {
    │             ────┬────
-   │                 ╰────── Cannot match on f64, only on an integer, a bool, an enum, a T? or a T!
+   │                 ╰────── Cannot match on f64, only on an integer, a bool, text, an enum, a T?, a T! or a tuple of them
    │
    │ Help: compare it with if and else if instead
 ───╯

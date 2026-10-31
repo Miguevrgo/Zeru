@@ -1,0 +1,108 @@
+status: compile error
+-- stderr
+Error: This match does not cover (true, false)
+    ╭─[ tests/ui/match/tuple_pattern_errors.zr:11:14 ]
+    │
+ 11 │     var r1 = match (a, b) {
+    │              ───────┬──────
+    │                     ╰──────── This match does not cover (true, false)
+    │
+    │ Help: add an arm for each, or a default arm
+    │           (true, false) => {}
+────╯
+Error: This match does not cover (_, false), (E::B(_), true), (E::C, true)
+    ╭─[ tests/ui/match/tuple_pattern_errors.zr:15:14 ]
+    │
+ 15 │     var r2 = match (e, a) {
+    │              ───────┬──────
+    │                     ╰──────── This match does not cover (_, false), (E::B(_), true), (E::C, true)
+    │
+    │ Help: add an arm for each, or a default arm
+    │           (_, false) => {}
+    │           (E::B(_), true) => {}
+    │           (E::C, true) => {}
+────╯
+Error: This value is already matched by an earlier arm
+    ╭─[ tests/ui/match/tuple_pattern_errors.zr:21:9 ]
+    │
+ 19 │         (true, _) => 1,
+    │         ────┬────
+    │             ╰────── matched first here, so this arm never runs for it
+    │
+ 21 │         (true, true) => 3,
+    │         ──────┬─────
+    │               ╰─────── This value is already matched by an earlier arm
+    │
+    │ Help: remove this arm, or narrow it to values no earlier arm takes
+────╯
+Error: This match does not cover (_, _)
+    ╭─[ tests/ui/match/tuple_pattern_errors.zr:23:14 ]
+    │
+ 23 │     var r4 = match (n, a) {
+    │              ───────┬──────
+    │                     ╰──────── This match does not cover (_, _)
+    │
+    │ Help: add an arm for each, or a default arm
+    │           (_, _) => {}
+────╯
+Error: This pattern has 2 parts, but (bool, bool, bool) has 3
+    ╭─[ tests/ui/match/tuple_pattern_errors.zr:28:9 ]
+    │
+ 28 │         (true, false) => 1,
+    │         ──────┬──────
+    │               ╰──────── This pattern has 2 parts, but (bool, bool, bool) has 3
+────╯
+Error: A part of type str cannot be matched; bind it to a name and compare it inside the arm
+    ╭─[ tests/ui/match/tuple_pattern_errors.zr:32:10 ]
+    │
+ 32 │         ("x", _) => 1,
+    │          ─┬─
+    │           ╰─── A part of type str cannot be matched; bind it to a name and compare it inside the arm
+────╯
+Error: A tuple inside a tuple pattern is not taken apart; bind it to a name and match that inside the arm
+    ╭─[ tests/ui/match/tuple_pattern_errors.zr:36:10 ]
+    │
+ 36 │         ((1, 2), _) => 1,
+    │          ───┬──
+    │             ╰──── A tuple inside a tuple pattern is not taken apart; bind it to a name and match that inside the arm
+────╯
+Error: This pattern cannot match i32
+    ╭─[ tests/ui/match/tuple_pattern_errors.zr:40:9 ]
+    │
+ 40 │         (1, 2) => 1,
+    │         ───┬──
+    │            ╰──── This pattern cannot match i32
+────╯
+Error: This pattern cannot match bool
+    ╭─[ tests/ui/match/tuple_pattern_errors.zr:44:10 ]
+    │
+ 44 │         (Some(x), _) => 1,
+    │          ───┬───
+    │             ╰───── This pattern cannot match bool
+────╯
+Error: 'x' is i32 here but bool in the first alternative
+    ╭─[ tests/ui/match/tuple_pattern_errors.zr:45:18 ]
+    │
+ 45 │         (x, y) | (y, x) => 2,
+    │                  ───┬──
+    │                     ╰──── 'x' is i32 here but bool in the first alternative
+────╯
+Error: 'y' is bool here but i32 in the first alternative
+    ╭─[ tests/ui/match/tuple_pattern_errors.zr:45:18 ]
+    │
+ 45 │         (x, y) | (y, x) => 2,
+    │                  ───┬──
+    │                     ╰──── 'y' is bool here but i32 in the first alternative
+────╯
+Error: This value is already matched by an earlier arm
+    ╭─[ tests/ui/match/tuple_pattern_errors.zr:45:18 ]
+    │
+ 45 │         (x, y) | (y, x) => 2,
+    │         ───┬──   ───┬──
+    │            ╰───────────── matched first here, so this arm never runs for it
+    │                     │
+    │                     ╰──── This value is already matched by an earlier arm
+    │
+    │ Help: remove this arm, or narrow it to values no earlier arm takes
+────╯
+[-] Error: aborting due to previous error

@@ -1,0 +1,56 @@
+enum E {
+    A,
+    B(i32),
+    C,
+}
+struct P {
+    x: i32,
+}
+const MAX: i32 = 9;
+fn f(a: bool, b: bool, e: E, n: i32, s: str, p: P, t: (i32, i32)) {
+    var r1 = match (a, b) {
+        (true, true) => 1,
+        (false, _) => 2,
+    };
+    var r2 = match (e, a) {
+        (E::A, true) => 1,
+    };
+    var r3 = match (a, b) {
+        (true, _) => 1,
+        (false, _) => 2,
+        (true, true) => 3,
+    };
+    var r4 = match (n, a) {
+        (1, _) => 1,
+        (MAX, true) => 2,
+    };
+    var r5 = match (a, b, a) {
+        (true, false) => 1,
+        default => 0,
+    };
+    var r6 = match (s, a) {
+        ("x", _) => 1,
+        default => 0,
+    };
+    var r7 = match (t, a) {
+        ((1, 2), _) => 1,
+        default => 0,
+    };
+    var r8 = match n {
+        (1, 2) => 1,
+        default => 0,
+    };
+    var r9 = match (a, n) {
+        (Some(x), _) => 1,
+        (x, y) | (y, x) => 2,
+    };
+    var r10 = match (p, a) {
+        (q, true) => 1,
+        default => 0,
+    };
+    var r11 = match (1, 2) {
+        (1, n) => n,
+        default => 0,
+    };
+}
+fn main() {}

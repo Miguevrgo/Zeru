@@ -1,0 +1,14 @@
+status: exit 0
+-- stdout
+true false true
+7
+abcd
+[1, 2]
+nil
+both one none
+0 10 5 1000 50
+3 4 7 -1
+view kept
+1
+1 10 100 7
+5
