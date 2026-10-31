@@ -18,6 +18,14 @@ struct Bag {
     }
 }
 
+struct Shelf<T> {
+    items: Vec<T>,
+
+    fn count_if(self, keep: fn(T) bool) usize {
+        return self.items.filter(keep).len();
+    }
+}
+
 fn apply(f: fn(i32) i32, x: i32) i32 {
     return f(x);
 }
@@ -61,4 +69,6 @@ fn main() {
     println("{}", step(41));
     var floats: Vec<f64> = Vec[1.5, 2.5];
     println("{} {}", sum_with(&bag.items, 0), sum_with(&floats, 0.5));
+    var shelf: Shelf<String> = Shelf { items: Vec[String.from("ab"), String.from("c")] };
+    println("{}", shelf.count_if(fn(s) s.len() == 2));
 }

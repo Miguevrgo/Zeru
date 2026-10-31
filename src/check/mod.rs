@@ -840,7 +840,10 @@ impl<'a> Checker<'a> {
         }
         let methods: Vec<DefId> = self.items.methods_of(def).collect();
         for method in methods {
-            if self.sig(method).is_some_and(|sig| sig.own_generics == 0) {
+            if self
+                .sig(method)
+                .is_some_and(|sig| sig.own_generics == 0 && sig.callables.is_empty())
+            {
                 self.instance(method, args.clone(), span);
             }
         }
