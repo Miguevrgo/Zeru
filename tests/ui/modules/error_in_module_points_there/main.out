@@ -1,10 +1,49 @@
 status: compile error
 -- stderr
-Error: This function returns i32, but this value is bool
-   ╭─[ tests/ui/modules/error_in_module_points_there/lib.zr:2:12 ]
+Error: Function 'lib::typo' not defined
+   ╭─[ tests/ui/modules/error_in_module_points_there/main.zr:5:19 ]
    │
- 2 │     return true;
-   │            ──┬─
-   │              ╰─── this is bool
+ 5 │     println("{}", lib::typo());
+   │                   ────┬────
+   │                       ╰────── Function 'lib::typo' not defined
+   │
+   │ Help: did you mean 'typos'?
+   │           println("{}", lib::typos());
 ───╯
+Error: Function 'fs::read' not defined
+   ╭─[ tests/ui/modules/error_in_module_points_there/main.zr:6:16 ]
+   │
+ 6 │     var text = fs::read("a.txt");
+   │                ────┬───
+   │                    ╰───── Function 'fs::read' not defined
+   │
+   │ Help: did you mean one of read_dir, read_file, read_link?
+───╯
+Error: This function returns i32, but this value is bool
+    ╭─[ tests/ui/modules/error_in_module_points_there/lib.zr:10:12 ]
+    │
+ 10 │     return true;
+    │            ──┬─
+    │              ╰─── this is bool
+────╯
+Error: Unknown struct type 'Pont'
+    ╭─[ tests/ui/modules/error_in_module_points_there/lib.zr:14:13 ]
+    │
+ 14 │     var p = Pont { x: 1 };
+    │             ──┬─
+    │               ╰─── Unknown struct type 'Pont'
+    │
+    │ Help: did you mean 'Point'?
+    │           var p = Point { x: 1 };
+────╯
+Error: Function 'helpr' not defined
+    ╭─[ tests/ui/modules/error_in_module_points_there/lib.zr:15:12 ]
+    │
+ 15 │     return helpr();
+    │            ──┬──
+    │              ╰──── Function 'helpr' not defined
+    │
+    │ Help: did you mean 'helper'?
+    │           return helper();
+────╯
 [-] Error: aborting due to previous error

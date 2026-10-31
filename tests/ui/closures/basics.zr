@@ -1,3 +1,7 @@
+struct Point {
+    x: i32,
+}
+
 fn apply(f: fn(i32) i32, x: i32) i32 {
     return f(x);
 }
@@ -40,4 +44,7 @@ fn main() {
     println("{}", texts);
     var flags = map(&v, fn(x) x > 1);
     println("{}", flags);
+    var points = map(&v, fn(x) (Point { x: x }));
+    println("{}", map(&points, fn(p) p.x));
+    println("{}", map(&v, fn(x) (x + 1) * 2));
 }

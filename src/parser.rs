@@ -201,10 +201,34 @@ impl Parser {
             (Token::Semicolon, _) => {
                 let error =
                     self.error(format!("Expected ';' after this, found '{found}'"), before)?;
-                error
-                    .label("the statement ends here")
-                    .help("end the statement with ;")
-                    .fix(Span::new(before.end, before.end), ";");
+                let starts = matches!(
+                    found,
+                    Token::Identifier(_)
+                        | Token::Var
+                        | Token::Const
+                        | Token::If
+                        | Token::While
+                        | Token::For
+                        | Token::Return
+                        | Token::Match
+                        | Token::Break
+                        | Token::Continue
+                        | Token::RBrace
+                        | Token::Fn
+                        | Token::Pub
+                        | Token::Struct
+                        | Token::Enum
+                        | Token::Trait
+                        | Token::Import
+                );
+                if starts {
+                    error
+                        .label("the statement ends here")
+                        .help("end the statement with ;")
+                        .fix(Span::new(before.end, before.end), ";");
+                } else if found == Token::DoubleColon {
+                    error.help("a module is imported first, then named by its last part, as in import std.fs; and fs::read_file(..)");
+                }
                 None
             }
             _ => self.expected(&format!("'{token}'")),
@@ -1857,8 +1881,29 @@ impl Parser {
             true => None,
             false => self.parse_type().filter(|_| self.at(&Token::LBrace)),
         };
-        let body = match self.at(&Token::LBrace) {
+        if return_type.is_none() {
+            self.rewind(saved);
+        }
+        let literal = return_type.is_some()
+            && matches!(self.ahead(1), Token::Identifier(_))
+            && *self.ahead(2) == Token::Colon;
+        let body = match self.at(&Token::LBrace) && !literal {
             true => ClosureBody::Block(self.parse_block_statement()?),
+            false if literal => {
+                self.rewind(saved);
+                let body = self.parse_expression(Precedence::Lowest)?;
+                let name = match &return_type {
+                    Some(TypeSpec::Named(name)) => name.clone(),
+                    _ => "S".to_string(),
+                };
+                if let Some(error) = self.error(
+                    "A closure body that is one struct literal goes in parentheses, or it reads as a return type and a block",
+                    body.span,
+                ) {
+                    error.help(format!("write it as fn(..) ({name} {{ .. }})"));
+                }
+                ClosureBody::Expression(Box::new(body))
+            }
             false => {
                 self.rewind(saved);
                 ClosureBody::Expression(Box::new(self.parse_expression(Precedence::Lowest)?))

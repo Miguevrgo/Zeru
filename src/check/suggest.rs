@@ -89,19 +89,32 @@ pub(crate) fn method_alias(name: &str, methods: &[String]) -> Option<&'static st
     })
 }
 
-/// Suggest in `error` the candidate closest to `name`, replacing what `at`
-/// covers when it is known.
+/// Suggest in `error` the candidate closest to `name`, or those that start
+/// with it, replacing what `at` covers when there is one.
 pub(crate) fn did_you_mean(
     error: &mut ZeruError,
     name: &str,
     candidates: &[String],
     at: Option<Span>,
 ) {
-    if let Some(similar) = closest(name, candidates) {
+    let mut starting: Vec<&str> = candidates
+        .iter()
+        .filter(|c| name.len() >= 3 && c.starts_with(name) && c.as_str() != name)
+        .map(String::as_str)
+        .collect();
+    starting.sort();
+    starting.dedup();
+    let similar = closest(name, candidates).or(match starting[..] {
+        [only] => Some(only),
+        _ => None,
+    });
+    if let Some(similar) = similar {
         error.help(format!("did you mean '{similar}'?"));
         if let Some(at) = at {
             error.fix(at, similar);
         }
+    } else if (2..=5).contains(&starting.len()) {
+        error.help(format!("did you mean one of {}?", starting.join(", ")));
     }
 }
 

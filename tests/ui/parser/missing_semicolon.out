@@ -1,13 +1,31 @@
 status: compile error
 -- stderr
 Error: Expected ';' after this, found 'println'
-   ╭─[ tests/ui/parser/missing_semicolon.zr:2:13 ]
+   ╭─[ tests/ui/parser/missing_semicolon.zr:5:13 ]
    │
- 2 │     var x = 1
+ 5 │     var x = 1
    │             ┬
    │             ╰── the statement ends here
    │
    │ Help: end the statement with ;
    │           var x = 1;
+───╯
+Error: Expected ';' after this, found '::'
+   ╭─[ tests/ui/parser/missing_semicolon.zr:7:20 ]
+   │
+ 7 │     var data = std.fs::read_file("a.txt");
+   │                    ─┬
+   │                     ╰── Expected ';' after this, found '::'
+   │
+   │ Help: a module is imported first, then named by its last part, as in import std.fs; and fs::read_file(..)
+───╯
+Error: A closure body that is one struct literal goes in parentheses, or it reads as a return type and a block
+   ╭─[ tests/ui/parser/missing_semicolon.zr:9:26 ]
+   │
+ 9 │     var ps = v.map(fn(n) P { x: n });
+   │                          ─────┬────
+   │                               ╰────── A closure body that is one struct literal goes in parentheses, or it reads as a return type and a block
+   │
+   │ Help: write it as fn(..) (P { .. })
 ───╯
 [-] Error: aborting due to previous error

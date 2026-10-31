@@ -363,7 +363,13 @@ impl<'a> Items<'a> {
                         || item.module == ModuleId::PRELUDE && self.visible(DefId(at as u32), from)
                 }
             })
-            .map(|(_, item)| item.name.clone())
+            .map(|(_, item)| {
+                item.name
+                    .rsplit("::")
+                    .next()
+                    .unwrap_or(&item.name)
+                    .to_string()
+            })
             .collect();
         if !public {
             names.extend(self.modules[from.0 as usize].imported.keys().cloned());

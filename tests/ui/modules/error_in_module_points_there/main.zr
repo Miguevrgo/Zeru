@@ -1,4 +1,7 @@
+import std.fs;
 import lib;
 fn main() {
     println("{}", lib::broken());
+    println("{}", lib::typo());
+    var text = fs::read("a.txt");
 }

@@ -1,4 +1,10 @@
+struct P {
+    x: i32,
+}
 fn main() {
     var x = 1
     println("{}", x);
+    var data = std.fs::read_file("a.txt");
+    var v: Vec<i32> = Vec[1];
+    var ps = v.map(fn(n) P { x: n });
 }
