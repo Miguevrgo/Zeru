@@ -1,0 +1,32 @@
+enum Shape {
+    Dot,
+    Rect(i32, i32),
+    Line(i32),
+}
+fn main() {
+    var s = Shape::Dot;
+    match s {
+        Shape::Dot => {}
+    }
+    var n = 3;
+    match n {
+        1 => println("one"),
+        2 => println("two"),
+        1 => println("again"),
+    }
+    match n {
+        default => {}
+        3 => {}
+    }
+}
+fn arms_after_a_bare_one() {
+    var n = 3;
+    match n {
+        1 => println("one"),
+        2 => println("two")
+    }
+    var o: i32? = 1;
+    match o {
+        Some(x) => println("{}", x),
+    }
+}

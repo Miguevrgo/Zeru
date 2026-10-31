@@ -3,8 +3,13 @@ status: compile error
 Error: This value is already matched by an earlier arm
    ╭─[ tests/ui/match/duplicate_arm.zr:5:9 ]
    │
+ 4 │         1 => 1,
+   │         ┬
+   │         ╰── matched first here, so this arm never runs for it
  5 │         1 => 2,
    │         ┬
    │         ╰── This value is already matched by an earlier arm
+   │
+   │ Help: remove this arm, or narrow it to values no earlier arm takes
 ───╯
 [-] Error: aborting due to previous error

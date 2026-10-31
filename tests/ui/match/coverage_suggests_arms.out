@@ -1,0 +1,70 @@
+status: compile error
+-- stderr
+Error: This match does not cover Shape::Rect(_, _), Shape::Line(_)
+   ╭─[ tests/ui/match/coverage_suggests_arms.zr:8:5 ]
+   │
+ 8 │     match s {
+   │     ────┬────
+   │         ╰────── This match does not cover Shape::Rect(_, _), Shape::Line(_)
+   │
+   │ Help: add an arm for each, or a default arm
+   │           Shape::Rect(_, _) => {}
+   │           Shape::Line(_) => {}
+───╯
+Error: A match on i32 needs a 'default' arm
+    ╭─[ tests/ui/match/coverage_suggests_arms.zr:12:5 ]
+    │
+ 12 │     match n {
+    │     ────┬────
+    │         ╰────── A match on i32 needs a 'default' arm
+    │
+    │ Help: add a default arm for the values no other arm takes
+    │           default => {}
+────╯
+Error: This value is already matched by an earlier arm
+    ╭─[ tests/ui/match/coverage_suggests_arms.zr:15:9 ]
+    │
+ 13 │         1 => println("one"),
+    │         ┬
+    │         ╰── matched first here, so this arm never runs for it
+    │
+ 15 │         1 => println("again"),
+    │         ┬
+    │         ╰── This value is already matched by an earlier arm
+    │
+    │ Help: remove this arm, or narrow it to values no earlier arm takes
+────╯
+Error: 'default' goes last, after every other arm
+    ╭─[ tests/ui/match/coverage_suggests_arms.zr:18:9 ]
+    │
+ 18 │         default => {}
+    │         ───┬───
+    │            ╰───── 'default' goes last, after every other arm
+ 19 │         3 => {}
+    │         ┬
+    │         ╰── this arm comes after it, so it can never be chosen
+    │
+    │ Help: move the default arm to the end of the match
+────╯
+Error: A match on i32 needs a 'default' arm
+    ╭─[ tests/ui/match/coverage_suggests_arms.zr:24:5 ]
+    │
+ 24 │     match n {
+    │     ────┬────
+    │         ╰────── A match on i32 needs a 'default' arm
+    │
+    │ Help: add a default arm for the values no other arm takes
+    │           ,
+    │                   default => {}
+────╯
+Error: This match does not cover None
+    ╭─[ tests/ui/match/coverage_suggests_arms.zr:29:5 ]
+    │
+ 29 │     match o {
+    │     ────┬────
+    │         ╰────── This match does not cover None
+    │
+    │ Help: add an arm for each, or a default arm
+    │           None => {}
+────╯
+[-] Error: aborting due to previous error

@@ -3,11 +3,11 @@ status: compile error
 Error: Cannot match on f64, only on an integer, a bool, an enum, a T? or a T!
    ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:5:13 ]
    │
- 5 │ ╭─▶     var c = match f {
-   ┆ ┆
- 7 │ ├─▶     };
-   │ │
-   │ ╰──────────── Cannot match on f64, only on an integer, a bool, an enum, a T? or a T!
+ 5 │     var c = match f {
+   │             ────┬────
+   │                 ╰────── Cannot match on f64, only on an integer, a bool, an enum, a T? or a T!
+   │
+   │ Help: compare it with if and else if instead
 ───╯
 Error: 'main' is a function, not a variable
    ╭─[ tests/ui/diagnostics/rare_expression_errors.zr:8:13 ]

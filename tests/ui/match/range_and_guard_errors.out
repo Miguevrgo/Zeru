@@ -3,9 +3,14 @@ status: compile error
 Error: This value is already matched by an earlier arm
     ╭─[ tests/ui/match/range_and_guard_errors.zr:10:9 ]
     │
+  9 │         0..=9 => 1,
+    │         ──┬──
+    │           ╰──── matched first here, so this arm never runs for it
  10 │         5 => 2,
     │         ┬
     │         ╰── This value is already matched by an earlier arm
+    │
+    │ Help: remove this arm, or narrow it to values no earlier arm takes
 ────╯
 Error: A range matches integers, not E
     ╭─[ tests/ui/match/range_and_guard_errors.zr:14:9 ]
@@ -27,6 +32,11 @@ Error: 'default' goes last, after every other arm
  23 │         default if n > 2 => 2,
     │         ───┬───
     │            ╰───── 'default' goes last, after every other arm
+ 24 │         default => 3,
+    │         ───┬───
+    │            ╰───── this arm comes after it, so it can never be chosen
+    │
+    │ Help: move the default arm to the end of the match
 ────╯
 Error: 'default' takes every other value, with no 'if'; bind a name to test it, as in x if x > 3
     ╭─[ tests/ui/match/range_and_guard_errors.zr:23:9 ]
@@ -38,11 +48,12 @@ Error: 'default' takes every other value, with no 'if'; bind a name to test it, 
 Error: A match on i32 needs a 'default' arm
     ╭─[ tests/ui/match/range_and_guard_errors.zr:26:13 ]
     │
- 26 │ ╭─▶     var f = match n {
-    ┆ ┆
- 28 │ ├─▶     };
-    │ │
-    │ ╰──────────── A match on i32 needs a 'default' arm
+ 26 │     var f = match n {
+    │             ────┬────
+    │                 ╰────── A match on i32 needs a 'default' arm
+    │
+    │ Help: add a default arm for the values no other arm takes
+    │           default => {}
 ────╯
 Error: 'x' names no value; a name alone matches only with an 'if' after it, as in x if x > 3, and 'default' takes every other value
     ╭─[ tests/ui/match/range_and_guard_errors.zr:27:9 ]
@@ -61,10 +72,11 @@ Error: A match guard must be a bool, got i32
 Error: A match on i32 needs a 'default' arm
     ╭─[ tests/ui/match/range_and_guard_errors.zr:33:13 ]
     │
- 33 │ ╭─▶     var i = match n {
-    ┆ ┆
- 36 │ ├─▶     };
-    │ │
-    │ ╰──────────── A match on i32 needs a 'default' arm
+ 33 │     var i = match n {
+    │             ────┬────
+    │                 ╰────── A match on i32 needs a 'default' arm
+    │
+    │ Help: add a default arm for the values no other arm takes
+    │           default => {}
 ────╯
 [-] Error: aborting due to previous error

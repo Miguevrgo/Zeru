@@ -156,29 +156,31 @@ impl FnCx<'_, '_> {
             TyKind::Error => return none(),
             TyKind::Int(_) => None,
             TyKind::Bool => Some(vec!["false".into(), "true".into()]),
-            TyKind::Optional(_) => Some(vec!["None".into(), "Some(..)".into()]),
-            TyKind::Result(..) => Some(vec!["Err(..)".into(), "Ok(..)".into()]),
+            TyKind::Optional(_) => Some(vec!["None".into(), "Some(_)".into()]),
+            TyKind::Result(..) => Some(vec!["Err(_)".into(), "Ok(_)".into()]),
             TyKind::Adt(def, _) if self.cx.is_enum(subject).is_some() => {
                 let name = self.cx.items.item(def).name.clone();
                 Some(
                     self.cx
                         .variants_of(def)
                         .iter()
-                        .map(|(variant, fields)| match fields.is_empty() {
-                            true => format!("{name}::{variant}"),
-                            false => format!("{name}::{variant}(..)"),
+                        .map(|(variant, fields)| match fields.len() {
+                            0 => format!("{name}::{variant}"),
+                            count => format!("{name}::{variant}({})", vec!["_"; count].join(", ")),
                         })
                         .collect(),
                 )
             }
             _ => {
                 let shown = self.ty(subject);
+                let head = self.cx.sources.first_line(span);
                 self.error(
                     format!(
                         "Cannot match on {shown}, only on an integer, a bool, an enum, a T? or a T!"
                     ),
-                    span,
-                );
+                    head,
+                )
+                .help("compare it with if and else if instead");
                 return none();
             }
         };
@@ -191,7 +193,10 @@ impl FnCx<'_, '_> {
             let guarded = arm.guard.is_some();
             if matches!(pattern.kind, PatternKind::Default) {
                 if at + 1 < arms.len() {
-                    self.error("'default' goes last, after every other arm", pattern.span);
+                    let after = arms[at + 1].pattern.span;
+                    self.error("'default' goes last, after every other arm", pattern.span)
+                        .note("this arm comes after it, so it can never be chosen", after)
+                        .help("move the default arm to the end of the match");
                 }
                 if guarded {
                     self.error(
@@ -219,24 +224,77 @@ impl FnCx<'_, '_> {
         }
         let Some(all) = all else {
             let shown = self.ty(subject);
-            self.error(format!("A match on {shown} needs a 'default' arm"), span);
+            let fix = self.added_arms(arms, &["default".to_string()], span);
+            let head = self.cx.sources.first_line(span);
+            let error = self.error(format!("A match on {shown} needs a 'default' arm"), head);
+            error.help("add a default arm for the values no other arm takes");
+            if let Some((at, arms)) = fix {
+                error.fix(at, arms);
+            }
             return shapes;
         };
         let missing: Vec<String> = (0..)
             .zip(all)
-            .filter(|(at, _)| !covered.iter().any(|(low, high)| low <= at && at <= high))
+            .filter(|(at, _)| !covered.iter().any(|(low, high, _)| low <= at && at <= high))
             .map(|(_, name)| name)
             .collect();
         if !missing.is_empty() {
-            self.error(
-                format!(
-                    "Match does not cover {}; add an arm for each or a 'default' arm",
-                    missing.join(", ")
-                ),
-                span,
+            let fix = self.added_arms(arms, &missing, span);
+            let head = self.cx.sources.first_line(span);
+            let error = self.error(
+                format!("This match does not cover {}", missing.join(", ")),
+                head,
             );
+            error.help("add an arm for each, or a default arm");
+            if let Some((at, arms)) = fix {
+                error.fix(at, arms);
+            }
         }
         shapes
+    }
+
+    /// The arms for `patterns`, each with an empty body, and where they go
+    /// in the match written at `span`: on lines of their own before its
+    /// closing brace, indented as its other arms.
+    fn added_arms(
+        &self,
+        arms: &[MatchArm],
+        patterns: &[String],
+        span: Span,
+    ) -> Option<(Span, String)> {
+        let sources = self.cx.sources;
+        let text = sources.text(span);
+        let close = text.rfind('}')?;
+        let line = text[..close].rfind('\n')? + 1;
+        if !text[line..close].trim().is_empty() {
+            return None;
+        }
+        let indent = match arms.last() {
+            Some(arm) => {
+                let before = sources.text(Span::new(span.start, arm.pattern.span.start));
+                let start = before.rfind('\n').map_or(0, |at| at + 1);
+                before[start..].to_string()
+            }
+            None => format!("{}    ", &text[line..close]),
+        };
+        let bare = arms.last().filter(|arm| {
+            let after = Span::new(arm.body.span.end, span.start + close);
+            !matches!(arm.body.kind, ExpressionKind::Block(_)) && !sources.text(after).contains(',')
+        });
+        if let Some(arm) = bare {
+            let added: String = patterns
+                .iter()
+                .map(|pattern| format!(",\n{indent}{pattern} => {{}}"))
+                .collect();
+            let at = arm.body.span.end;
+            return Some((Span::new(at, at), added));
+        }
+        let added: String = patterns
+            .iter()
+            .map(|pattern| format!("{indent}{pattern} => {{}}\n"))
+            .collect();
+        let at = span.start + line;
+        Some((Span::new(at, at), added))
     }
 
     /// An arm's pattern: each alternative takes values no earlier one took,
@@ -247,7 +305,7 @@ impl FnCx<'_, '_> {
         pattern: &Pattern,
         subject: Ty,
         guarded: bool,
-        covered: &mut Vec<(i128, i128)>,
+        covered: &mut Vec<(i128, i128, Span)>,
     ) -> Shape {
         let alternatives = match &pattern.kind {
             PatternKind::Default => &[],
@@ -259,17 +317,19 @@ impl FnCx<'_, '_> {
             let Some((tag, binds)) = self.pattern(alternative, subject) else {
                 continue;
             };
-            if covered
+            if let Some(&(.., first)) = covered
                 .iter()
-                .any(|&(low, high)| low <= tag.1 && tag.0 <= high)
+                .find(|&&(low, high, _)| low <= tag.1 && tag.0 <= high)
             {
                 self.error(
                     "This value is already matched by an earlier arm",
                     alternative.span,
-                );
+                )
+                .note("matched first here, so this arm never runs for it", first)
+                .help("remove this arm, or narrow it to values no earlier arm takes");
             }
             if !guarded {
-                covered.push(tag);
+                covered.push((tag.0, tag.1, alternative.span));
             }
             let Some(shape) = &mut shape else {
                 shape = Some(Shape {
