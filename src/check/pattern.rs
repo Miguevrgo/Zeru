@@ -50,6 +50,7 @@ impl FnCx<'_, '_> {
         let mut all_leave = true;
         let wraps = self.wrapper(expected);
         let mut arm_ty: Option<Ty> = wraps;
+        let mut first_block: Option<Span> = None;
         let mut mismatched = false;
         let mut checked = Vec::new();
         let temporary = matches!(scrutinee, Place::Temp(_));
@@ -82,13 +83,30 @@ impl FnCx<'_, '_> {
             self.leave();
             match arm_ty {
                 _ if leaves => {}
-                None => arm_ty = Some(result.ty),
+                None => {
+                    arm_ty = Some(result.ty);
+                    first_block =
+                        matches!(body.kind, ExpressionKind::Block(_)).then_some(body.span);
+                }
                 Some(first) => {
                     result = match self.coerce(result, first) {
                         Ok(result) => result,
                         Err(result) => {
-                            if !self.cx.types.is_error(result.ty) {
-                                let (want, got) = (self.ty(first), self.ty(result.ty));
+                            let block = matches!(body.kind, ExpressionKind::Block(_));
+                            let (want, got) = (self.ty(first), self.ty(result.ty));
+                            let empty = match (first == Types::VOID, result.ty == Types::VOID) {
+                                (true, _) => first_block.map(|at| (at, got.clone())),
+                                (_, true) if block => Some((body.span, want.clone())),
+                                _ => None,
+                            };
+                            if self.cx.types.is_error(result.ty) {
+                            } else if let Some((at, other)) = empty {
+                                self.error(
+                                    format!("This block gives no value, but the other arms give {other}"),
+                                    at,
+                                )
+                                .help("a block leaves only with return, break or continue; make this arm one expression, or work the value out before the match");
+                            } else {
                                 self.error(
                                     format!("Every arm must give {want}, this one gives {got}"),
                                     body.span,

@@ -1,0 +1,10 @@
+fn main() {
+    var a = 1;
+    var v = match a {
+        1 => {
+            var t = a * 2;
+            t
+        }
+        default => 0,
+    };
+}

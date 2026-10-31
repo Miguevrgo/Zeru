@@ -1,0 +1,25 @@
+status: compile error
+-- stderr
+Error: This block gives no value, but the other arms give i32
+   ╭─[ tests/ui/match/block_arm_gives_no_value.zr:3:14 ]
+   │
+ 3 │ ╭─▶         1 => {
+   ┆ ┆
+ 6 │ ├─▶         }
+   │ │
+   │ ╰─────────────── This block gives no value, but the other arms give i32
+   │
+   │     Help: a block leaves only with return, break or continue; make this arm one expression, or work the value out before the match
+───╯
+Error: This block gives no value, but the other arms give i32
+    ╭─[ tests/ui/match/block_arm_gives_no_value.zr:15:20 ]
+    │
+ 15 │ ╭─▶         default => {
+    ┆ ┆
+ 17 │ ├─▶         }
+    │ │
+    │ ╰─────────────── This block gives no value, but the other arms give i32
+    │
+    │     Help: a block leaves only with return, break or continue; make this arm one expression, or work the value out before the match
+────╯
+[-] Error: aborting due to previous error

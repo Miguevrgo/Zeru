@@ -7,7 +7,7 @@ Error: Cannot move a value out of a field, an element or a pointer
     │             ──┬──
     │               ╰──── what holds it would be left without it
     │
-    │ Help: move a copy of it instead
+    │ Help: move a copy of it instead, or take it out with replace(&var vs[0], new value)
     │           var s = vs[0].copy();
 ────╯
 Error: Cannot move a value out of a field, an element or a pointer
@@ -17,7 +17,7 @@ Error: Cannot move a value out of a field, an element or a pointer
     │             ─┬─
     │              ╰─── what holds it would be left without it
     │
-    │ Help: move a copy of it instead
+    │ Help: move a copy of it instead, or take it out with replace(&var s.v, new value)
     │           var v = s.v.copy();
 ────╯
 Error: Cannot move a value out of a field, an element or a pointer

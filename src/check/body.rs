@@ -389,24 +389,27 @@ impl<'c, 'a> FnCx<'c, 'a> {
             ExprKind::Read(Place::Local(local)) if self.locals[local.0 as usize].view => {
                 let name = self.local_name(*local).to_string();
                 let message = format!("Cannot move '{name}', which is borrowed");
-                self.cannot_move(message, "what it borrows from keeps it", expr);
+                self.cannot_move(message, "what it borrows from keeps it", expr, false);
                 return;
             }
             ExprKind::Read(Place::Local(_)) => {}
             ExprKind::Read(Place::Capture(at)) => {
                 let name = self.captures[*at as usize].outer.name.clone();
                 let message = format!("Cannot move '{name}' out of the code around this closure");
-                self.cannot_move(message, "the closure only borrows it", expr);
+                self.cannot_move(message, "the closure only borrows it", expr, false);
                 return;
             }
             ExprKind::Read(place @ Place::Field(..)) if self.field_of_temporary(place) => {}
-            ExprKind::Read(Place::Field(..) | Place::Index(..) | Place::Deref(_)) => {
+            ExprKind::Read(place @ (Place::Field(..) | Place::Index(..) | Place::Deref(_))) => {
+                let mut root = &*place;
+                while let Place::Field(base, _) | Place::Index(base, _) = root {
+                    root = base;
+                }
+                let replaceable = matches!(root, Place::Local(local)
+                    if self.fixed[local.0 as usize].is_none() && !self.locals[local.0 as usize].view);
                 let message = "Cannot move a value out of a field, an element or a pointer";
-                self.cannot_move(
-                    message.to_string(),
-                    "what holds it would be left without it",
-                    expr,
-                );
+                let why = "what holds it would be left without it";
+                self.cannot_move(message.to_string(), why, expr, replaceable);
                 return;
             }
             _ => return,
@@ -418,12 +421,16 @@ impl<'c, 'a> FnCx<'c, 'a> {
     }
 
     /// Report that `expr` cannot be moved, suggesting a copy of it when the
-    /// value can be copied, and `replace` otherwise.
-    fn cannot_move(&mut self, message: String, why: &str, expr: &Expr) {
+    /// value can be copied, and `replace` when it is `replaceable` or
+    /// cannot be copied.
+    fn cannot_move(&mut self, message: String, why: &str, expr: &Expr, replaceable: bool) {
         let copyable = !self.cx.runs_drop(expr.ty);
         let text = self.cx.sources.text(expr.span).to_string();
         let error = self.error(message, expr.span).label(why);
         match copyable {
+            true if replaceable => error
+                .help(format!("move a copy of it instead, or take it out with replace(&var {text}, new value)"))
+                .fix(expr.span, format!("{text}.copy()")),
             true => error.help("move a copy of it instead").fix(expr.span, format!("{text}.copy()")),
             false => error.help(
                 "it runs a drop, so it cannot be copied; take it out with replace(&var place, new value)",

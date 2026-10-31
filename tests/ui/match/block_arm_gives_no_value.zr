@@ -1,0 +1,22 @@
+fn first(a: i32, b: i32) i32 {
+    var v = match a {
+        1 => {
+            var t = b * 2;
+            t;
+        }
+        default => 0,
+    };
+    return v;
+}
+
+fn last(a: i32) i32 {
+    var v = match a {
+        1 => 2,
+        default => {
+            println("other");
+        }
+    };
+    return v;
+}
+
+fn main() {}

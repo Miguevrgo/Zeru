@@ -1,0 +1,13 @@
+status: compile error
+-- stderr
+Error: Expected ';' after this, found '}'
+   ╭─[ tests/ui/parser/value_at_end_of_arm_block.zr:6:13 ]
+   │
+ 6 │             t
+   │             ┬
+   │             ╰── the statement ends here
+   │
+   │ Help: end the statement with ; (a block gives no value: an arm that gives one is a single expression, as in 1 => b * 2)
+   │           t;
+───╯
+[-] Error: aborting due to previous error

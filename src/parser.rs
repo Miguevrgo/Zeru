@@ -33,6 +33,7 @@ pub struct Parser {
     nesting: usize,
     rewrites: Vec<Rewrite>,
     opens: Vec<Span>,
+    arm_blocks: Vec<usize>,
     pub comments: Vec<Span>,
     nested: Vec<(Span, usize)>,
     pub parens: Vec<Span>,
@@ -94,6 +95,7 @@ impl Parser {
             nesting: 0,
             rewrites: Vec::new(),
             opens: Vec::new(),
+            arm_blocks: Vec::new(),
             comments: lexer.comments,
             nested: lexer.nested,
             parens: Vec::new(),
@@ -199,6 +201,7 @@ impl Parser {
                 None
             }
             (Token::Semicolon, _) => {
+                let in_arm = found == Token::RBrace && self.arm_blocks.last() == Some(&self.depth);
                 let error =
                     self.error(format!("Expected ';' after this, found '{found}'"), before)?;
                 let starts = matches!(
@@ -224,7 +227,10 @@ impl Parser {
                 if starts {
                     error
                         .label("the statement ends here")
-                        .help("end the statement with ;")
+                        .help(match in_arm {
+                            true => "end the statement with ; (a block gives no value: an arm that gives one is a single expression, as in 1 => b * 2)",
+                            false => "end the statement with ;",
+                        })
                         .fix(Span::new(before.end, before.end), ";");
                 } else if found == Token::DoubleColon {
                     error.help("a module is imported first, then named by its last part, as in import std.fs; and fs::read_file(..)");
@@ -1541,8 +1547,10 @@ impl Parser {
             let body = match self.at(&Token::LBrace) {
                 true => {
                     let span = self.span();
-                    let body = self.parse_block_statement()?;
-                    self.expression(ExpressionKind::Block(body), span)
+                    self.arm_blocks.push(self.depth + 1);
+                    let body = self.parse_block_statement();
+                    self.arm_blocks.pop();
+                    self.expression(ExpressionKind::Block(body?), span)
                 }
                 false => self.parse_expression(Precedence::Lowest)?,
             };
