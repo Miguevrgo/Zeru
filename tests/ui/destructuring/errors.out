@@ -7,12 +7,12 @@ Error: Cannot take i32 apart into 2 names
    │     ───────┬───────
    │            ╰───────── Cannot take i32 apart into 2 names
 ───╯
-Error: Cannot reassign constant variable 'c'
+Error: Cannot change 'c', declared with const; declare it with var to change it
    ╭─[ tests/ui/destructuring/errors.zr:8:5 ]
    │
  8 │     c = 3;
    │     ──┬──
-   │       ╰──── Cannot reassign constant variable 'c'
+   │       ╰──── Cannot change 'c', declared with const; declare it with var to change it
 ───╯
 Error: Type mismatch for variable 'e'. Annotated as i64 but got i32
    ╭─[ tests/ui/destructuring/errors.zr:9:5 ]

@@ -6,7 +6,7 @@ use crate::items::ItemKind;
 use crate::tir::{Arm, Expr, ExprKind, Payload, Place};
 use crate::ty::{Ty, TyKind, Types};
 
-use super::body::FnCx;
+use super::body::{Fixed, FnCx};
 
 /// Where binding `field` of a pattern for variant `variant` finds its value.
 type PayloadAt = fn(u32, u32) -> Payload;
@@ -62,10 +62,9 @@ impl FnCx<'_, '_> {
                 .binds
                 .into_iter()
                 .map(|(name, ty, payloads)| {
-                    (
-                        self.declare(&name, ty, false, !take, pattern.span),
-                        payloads,
-                    )
+                    let local = self.declare(&name, ty, false, !take, pattern.span);
+                    self.fix(local, Fixed::Binding);
+                    (local, payloads)
                 })
                 .collect();
             let guard = arm

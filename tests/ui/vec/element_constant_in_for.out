@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: Cannot reassign constant variable 'x'
+Error: Cannot change 'x', which reads each element; walk the sequence with &var to change its elements
    ╭─[ tests/ui/vec/element_constant_in_for.zr:4:9 ]
    │
  4 │         x = 2;
    │         ──┬──
-   │           ╰──── Cannot reassign constant variable 'x'
+   │           ╰──── Cannot change 'x', which reads each element; walk the sequence with &var to change its elements
 ───╯
 [-] Error: aborting due to previous error

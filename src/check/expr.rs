@@ -817,11 +817,7 @@ impl FnCx<'_, '_> {
             self.error("Cannot assign to a temporary value", target.span);
         }
         match revived {
-            Some(local) if !self.local_mutable(local) => {
-                let name = self.local_name(local).to_string();
-                self.error(format!("Cannot reassign constant variable '{name}'"), span);
-            }
-            Some(_) => {}
+            Some(local) => self.require_var(local, span),
             None => self.require_mutable(&place, target, span),
         }
         (place, target_ty)

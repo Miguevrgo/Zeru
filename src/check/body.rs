@@ -21,7 +21,7 @@ pub(super) struct FnCx<'c, 'a> {
     ret: Ty,
     pub(super) in_instance: bool,
     locals: Vec<tir::Local>,
-    mutable: Vec<bool>,
+    fixed: Vec<Option<Fixed>>,
     borrowed: Vec<bool>,
     read: Vec<bool>,
     declared: Vec<Span>,
@@ -67,7 +67,11 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
         .zip(&param_tys)
         .map(|((param, _, mutable), &ty)| {
             let receiver = param == "self" && sig.receiver != Receiver::None;
-            fx.declare(param, ty, *mutable, receiver, span)
+            let local = fx.declare(param, ty, *mutable, receiver, span);
+            if !*mutable {
+                fx.fix(local, Fixed::Param);
+            }
+            local
         })
         .collect();
     let mut body_block = fx.block(body);
@@ -119,7 +123,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             ret,
             in_instance: false,
             locals: Vec::new(),
-            mutable: Vec::new(),
+            fixed: Vec::new(),
             borrowed: Vec::new(),
             read: Vec::new(),
             declared: Vec::new(),
@@ -147,8 +151,8 @@ impl<'c, 'a> FnCx<'c, 'a> {
         self.ret
     }
 
-    pub(super) fn local_mutable(&self, id: LocalId) -> bool {
-        self.mutable[id.0 as usize]
+    pub(super) fn fix(&mut self, id: LocalId, why: Fixed) {
+        self.fixed[id.0 as usize] = Some(why);
     }
 
     pub(super) fn ty(&mut self, ty: Ty) -> String {
@@ -203,7 +207,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             ty,
             view,
         });
-        self.mutable.push(mutable);
+        self.fixed.push((!mutable).then_some(Fixed::Const));
         self.borrowed.push(false);
         self.read.push(false);
         self.declared.push(span);
@@ -401,17 +405,36 @@ impl<'c, 'a> FnCx<'c, 'a> {
         }
     }
 
+    /// Report a write to `local` when it cannot be assigned, saying why.
+    pub(super) fn require_var(&mut self, local: LocalId, span: Span) {
+        let Some(why) = self.fixed[local.0 as usize] else {
+            return;
+        };
+        let name = self.local_name(local).to_string();
+        let message = match why {
+            Fixed::Const => format!(
+                "Cannot change '{name}', declared with const; declare it with var to change it"
+            ),
+            Fixed::Param => format!(
+                "Cannot change the parameter '{name}'; declare it as var {name} to change it"
+            ),
+            Fixed::Counter => format!("Cannot change the loop counter '{name}'"),
+            Fixed::Element => format!(
+                "Cannot change '{name}', which reads each element; walk the sequence with &var to change its elements"
+            ),
+            Fixed::Key => format!(
+                "Cannot change the key '{name}': a key of a map or set is fixed, since where it is kept depends on its value"
+            ),
+            Fixed::Binding => format!(
+                "Cannot change '{name}', which this match arm binds; assign a whole new value to what the match looks at instead"
+            ),
+        };
+        self.error(message, span);
+    }
+
     fn require_var_root(&mut self, place: &Place, span: Span) {
         match place {
-            Place::Local(local) => {
-                if !self.mutable[local.0 as usize] {
-                    let name = self.local_name(*local).to_string();
-                    self.error(
-                        format!("Cannot modify '{name}', which is not declared 'var'"),
-                        span,
-                    );
-                }
-            }
+            Place::Local(local) => self.require_var(*local, span),
             Place::Index(base, _) => match self.place_ty(base).map(|ty| self.cx.types.kind(ty)) {
                 Some(TyKind::Slice(_)) => self.error(
                     "Cannot write through a slice, which may point at read-only memory",
@@ -665,6 +688,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             };
             self.enter();
             let var = self.declare(name, ty, false, false, iterable.span);
+            self.fix(var, Fixed::Counter);
             let (body, _) = self.loop_body(|this| this.branch(body));
             self.leave();
             return StmtKind::ForRange {
@@ -703,8 +727,11 @@ impl<'c, 'a> FnCx<'c, 'a> {
             .map(|(iterable, names)| (self.sequence(iterable), names.clone()))
             .collect();
         self.enter();
-        let index =
-            index.map(|index| self.declare(index, Types::USIZE, false, false, iterable.span));
+        let index = index.map(|index| {
+            let local = self.declare(index, Types::USIZE, false, false, iterable.span);
+            self.fix(local, Fixed::Counter);
+            local
+        });
         let walks = sequences
             .into_iter()
             .map(|((seq, item, writable, walked), names)| {
@@ -722,7 +749,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                         (self.declare("", item, false, view, iterable.span), None)
                     }
                     Names::One(name, _) => (
-                        self.declare(name, item, writable, view, iterable.span),
+                        self.element(name, item, writable, view, iterable.span),
                         None,
                     ),
                     Names::Skip => (self.declare("", item, writable, view, iterable.span), None),
@@ -784,7 +811,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             locals(key, &mut keys);
         }
         for key in keys {
-            self.mutable[key.0 as usize] = false;
+            self.fix(key, Fixed::Key);
         }
     }
 
@@ -936,6 +963,15 @@ impl<'c, 'a> FnCx<'c, 'a> {
         Unpack::Tuple(parts)
     }
 
+    /// The local a `for` names `name` for each element, or a part of one.
+    fn element(&mut self, name: &str, ty: Ty, writable: bool, view: bool, span: Span) -> LocalId {
+        let local = self.declare(name, ty, writable, view, span);
+        if !writable {
+            self.fix(local, Fixed::Element);
+        }
+        local
+    }
+
     /// The parts of each element of type `ty` a `for` names, each a view of
     /// the element's part or a copy of it, as the element itself would be.
     fn view_names(&mut self, names: &[Names], ty: Ty, writable: bool, span: Span) -> Unpack {
@@ -948,7 +984,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 Names::Tuple(inner) => self.view_names(inner, part, writable, span),
                 Names::One(name, _) => {
                     let view = writable || self.cx.owns_heap(part);
-                    Unpack::Declare(self.declare(name, part, writable, view, span))
+                    Unpack::Declare(self.element(name, part, writable, view, span))
                 }
             })
             .collect();
@@ -983,6 +1019,19 @@ impl<'c, 'a> FnCx<'c, 'a> {
         self.diverges = before;
         (checked, self.breaks.pop().expect("pushed above"))
     }
+}
+
+/// Why a local cannot be assigned: declared `const`, a parameter not
+/// declared `var`, a loop counter, an element a `for` reads, a key of a
+/// map or set, or what a `match` arm binds.
+#[derive(Clone, Copy)]
+pub(super) enum Fixed {
+    Const,
+    Param,
+    Counter,
+    Element,
+    Key,
+    Binding,
 }
 
 /// Whether `place` is part of a temporary value, not reached through a

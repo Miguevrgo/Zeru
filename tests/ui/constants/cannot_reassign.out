@@ -1,11 +1,11 @@
 status: compile error
 -- stderr
-Error: Cannot reassign constant variable 'x'
+Error: Cannot change 'x', declared with const; declare it with var to change it
    ╭─[ tests/ui/constants/cannot_reassign.zr:4:5 ]
    │
  4 │     x = 20;
    │     ───┬──
-   │        ╰──── Cannot reassign constant variable 'x'
+   │        ╰──── Cannot change 'x', declared with const; declare it with var to change it
 ───╯
 Error: Cannot modify constant 'G'
    ╭─[ tests/ui/constants/cannot_reassign.zr:5:5 ]
@@ -14,11 +14,11 @@ Error: Cannot modify constant 'G'
    │     ───┬───
    │        ╰───── Cannot modify constant 'G'
 ───╯
-Error: Cannot reassign constant variable 'x'
+Error: Cannot change the parameter 'x'; declare it as var x to change it
    ╭─[ tests/ui/constants/cannot_reassign.zr:9:5 ]
    │
  9 │     x += 1;
    │     ───┬──
-   │        ╰──── Cannot reassign constant variable 'x'
+   │        ╰──── Cannot change the parameter 'x'; declare it as var x to change it
 ───╯
 [-] Error: aborting due to previous error
