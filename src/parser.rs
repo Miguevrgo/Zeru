@@ -574,6 +574,14 @@ impl Parser {
         self.bump();
         let (name, type_annotation) = match self.parse_names(true)? {
             Names::Tuple(names) => {
+                if self.at(&Token::Colon) {
+                    if let Some(error) =
+                        self.error("A type goes after each name it is for", self.span())
+                    {
+                        error.help("write var (a: usize, b: usize) = ..");
+                    }
+                    return None;
+                }
                 self.expect(&Token::Assign)?;
                 let value = self.parse_expression(Precedence::Lowest)?;
                 self.expect(&Token::Semicolon)?;

@@ -1,0 +1,12 @@
+status: compile error
+-- stderr
+Error: A type goes after each name it is for
+   ╭─[ tests/ui/parser/destructuring_type_goes_per_name.zr:2:19 ]
+   │
+ 2 │     var (n, depth): (usize, usize) = (1, 0);
+   │                   ┬
+   │                   ╰── A type goes after each name it is for
+   │
+   │ Help: write var (a: usize, b: usize) = ..
+───╯
+[-] Error: aborting due to previous error
