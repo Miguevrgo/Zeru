@@ -534,6 +534,13 @@ fmodf:
     movss -4(%rsp), %xmm0
     ret
 
+# Where a signal handler returns to, which the kernel wants on x86-64.
+    .globl __zeru_sigreturn
+    .type __zeru_sigreturn, @function
+__zeru_sigreturn:
+    mov $15, %eax
+    syscall
+
 # Raise SIGABRT; exit with status 134 if that returns.
     .globl abort
     .type abort, @function

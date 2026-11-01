@@ -672,6 +672,119 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         });
     }
 
+    /// With checks, a SIGSEGV runs `__zeru_fault` on a stack of its own, so
+    /// running out of stack panics with a message instead of dying silently.
+    fn guard_stack(&mut self) {
+        const ALT_STACK: u32 = 64 * 1024;
+        const FLAGS: u64 = 0x4 | 0x0400_0000 | 0x0800_0000 | 0x8000_0000;
+        let i64_type = self.context.i64_type();
+        let alt_type = self.context.i8_type().array_type(ALT_STACK);
+        let alt = self.module.add_global(alt_type, None, "alt_stack");
+        alt.set_initializer(&alt_type.const_zero());
+        alt.set_linkage(Linkage::Private);
+        let stack = self.context.const_struct(
+            &[
+                alt.as_pointer_value().into(),
+                i64_type.const_zero().into(),
+                i64_type.const_int(ALT_STACK as u64, false).into(),
+            ],
+            false,
+        );
+        let fault = self.fault_fn().as_global_value().as_pointer_value();
+        let sigreturn = self.module.add_function(
+            "__zeru_sigreturn",
+            self.context.void_type().fn_type(&[], false),
+            None,
+        );
+        let action = self.context.const_struct(
+            &[
+                fault.into(),
+                i64_type.const_int(FLAGS, false).into(),
+                sigreturn.as_global_value().as_pointer_value().into(),
+                i64_type.const_zero().into(),
+            ],
+            false,
+        );
+        let (stack, action) = (
+            self.read_only(stack.into(), "alt_stack_t"),
+            self.read_only(action.into(), "sigaction"),
+        );
+        let int = |n: u64| i64_type.const_int(n, false).into();
+        self.syscall(&[int(131), stack.into(), int(0), int(0), int(0)]);
+        self.syscall(&[int(13), int(11), action.into(), int(0), int(8)]);
+    }
+
+    /// The SIGSEGV handler: a fault from 64 KiB under the stack pointer up
+    /// to the top of the stack is a stack overflow.
+    fn fault_fn(&mut self) -> FunctionValue<'ctx> {
+        let (i64_type, ptr) = (self.context.i64_type(), self.ptr_type());
+        let function = self.module.add_function(
+            "__zeru_fault",
+            self.context.void_type().fn_type(
+                &[self.context.i32_type().into(), ptr.into(), ptr.into()],
+                false,
+            ),
+            Some(Linkage::Internal),
+        );
+        let top = self.module.add_global(i64_type, None, "__zeru_stack");
+        self.in_helper(function, |this| {
+            let b = &this.builder;
+            let field = |base: BasicValueEnum<'ctx>, offset: u64| {
+                let at = unsafe {
+                    b.build_gep(
+                        this.context.i8_type(),
+                        base.into_pointer_value(),
+                        &[i64_type.const_int(offset, false)],
+                        "",
+                    )
+                }
+                .unwrap();
+                b.build_load(i64_type, at, "").unwrap().into_int_value()
+            };
+            let address = field(function.get_nth_param(1).unwrap(), 16);
+            let sp = field(function.get_nth_param(2).unwrap(), 160);
+            let top = b.build_load(i64_type, top.as_pointer_value(), "").unwrap();
+            let low = b
+                .build_int_sub(sp, i64_type.const_int(64 * 1024, false), "")
+                .unwrap();
+            let above = b
+                .build_int_compare(IntPredicate::UGE, address, low, "")
+                .unwrap();
+            let below = b
+                .build_int_compare(IntPredicate::ULT, address, top.into_int_value(), "")
+                .unwrap();
+            let overflow = b.build_and(above, below, "").unwrap();
+            let yes = this.abort_block("panic: stack overflow: calls went too deep, as a function that calls itself with no end\n");
+            let no = this.abort_block("panic: invalid memory access\n");
+            this.builder
+                .build_conditional_branch(overflow, yes, no)
+                .unwrap();
+        });
+        function
+    }
+
+    /// A raw Linux x86-64 syscall: the number, then up to four arguments.
+    fn syscall(&self, args: &[BasicMetadataValueEnum<'ctx>]) {
+        let i64_type = self.context.i64_type();
+        let params: Vec<_> = args
+            .iter()
+            .map(|arg| BasicValueEnum::try_from(*arg).unwrap().get_type().into())
+            .collect();
+        let fn_type = i64_type.fn_type(&params, false);
+        let asm = self.context.create_inline_asm(
+            fn_type,
+            "syscall".to_string(),
+            "={rax},{rax},{rdi},{rsi},{rdx},{r10},~{rcx},~{r11},~{memory}".to_string(),
+            true,
+            false,
+            None,
+            false,
+        );
+        self.builder
+            .build_indirect_call(fn_type, asm, args, "")
+            .unwrap();
+    }
+
     /// `__zeru_start`, which `_start` in start.s calls with no libc under it:
     /// `main`, or for `zeru test` the test its first argument numbers, then
     /// the flush, giving back the exit code 0.
@@ -684,6 +797,9 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             .module
             .add_function("__zeru_start", i32_type.fn_type(&[], false), None);
         self.in_helper(function, |this| {
+            if this.mode.emit_safety_checks() {
+                this.guard_stack();
+            }
             match main {
                 _ if !this.program.tests.is_empty() => {
                     let index = this.call_fn(this.program.runtime.test_index, &[]);
