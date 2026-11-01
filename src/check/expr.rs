@@ -661,7 +661,13 @@ impl FnCx<'_, '_> {
                     _ => (Place::Temp(Box::new(value)), Types::ERROR),
                 }
             }
-            ExpressionKind::Get { object, name } => self.field(object, name, span),
+            ExpressionKind::Get { object, name } => match self.limit(object, name, span) {
+                Some(limit) => {
+                    let ty = limit.ty;
+                    (Place::Temp(Box::new(limit)), ty)
+                }
+                None => self.field(object, name, span),
+            },
             ExpressionKind::Index { left, index } => self.index(left, index, span),
             ExpressionKind::Dereference(pointer) => {
                 let pointer = self.expr(pointer, None);
@@ -905,7 +911,12 @@ impl FnCx<'_, '_> {
                 .help("store the value in a variable first, then change the variable");
         }
         match revived {
-            Some(local) => self.require_var(local, span),
+            Some(local) => {
+                if self.is_view(local) {
+                    self.note_read(local);
+                }
+                self.require_var(local, span)
+            }
             None => self.require_mutable(&place, target, span),
         }
         (place, target_ty)
@@ -1108,7 +1119,9 @@ impl FnCx<'_, '_> {
             operator,
             Token::Eq | Token::NotEq | Token::Lt | Token::Gt | Token::Leq | Token::Geq
         );
-        let hint = expected.filter(|&ty| !comparison && !self.cx.types.contains_var(ty));
+        let hint = self
+            .unwrap_expected(expected)
+            .filter(|&ty| !comparison && !self.cx.types.contains_var(ty));
         let (mut l, mut r) = self.operands(left, right, hint);
         if comparison {
             if l.ty == Types::STRING {
@@ -1414,7 +1427,9 @@ impl FnCx<'_, '_> {
             let inner = self.unwrap_expected(expected);
             return self.int_literal(value, true, inner, span);
         }
-        let expected = expected.filter(|&ty| !self.cx.types.contains_var(ty));
+        let expected = self
+            .unwrap_expected(expected)
+            .filter(|&ty| !self.cx.types.contains_var(ty));
         match operator {
             Token::Minus => {
                 let operand = self.expr(right, expected);

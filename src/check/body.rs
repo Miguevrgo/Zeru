@@ -349,6 +349,11 @@ impl<'c, 'a> FnCx<'c, 'a> {
         self.read[id.0 as usize] = true;
     }
 
+    /// Whether local `id` is a view, so writing it writes what it views.
+    pub(super) fn is_view(&self, id: LocalId) -> bool {
+        self.locals[id.0 as usize].view
+    }
+
     pub(super) fn local_ty(&self, id: LocalId) -> Ty {
         self.locals[id.0 as usize].ty
     }

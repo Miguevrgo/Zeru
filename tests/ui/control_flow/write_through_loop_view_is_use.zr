@@ -1,0 +1,7 @@
+fn main() {
+    var scores: Vec<i32> = Vec[1, 2, 3];
+    for score in &var scores {
+        score *= 10;
+    }
+    println("{}", scores);
+}

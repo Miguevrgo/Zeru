@@ -1,0 +1,7 @@
+fn main() {
+    var kind = match u8.MAX {
+        255 => "full",
+        default => "other",
+    };
+    println("{} {}", u8.MAX.count_ones(), kind);
+}
