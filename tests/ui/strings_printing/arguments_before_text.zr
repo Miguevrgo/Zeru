@@ -8,4 +8,13 @@ fn main() {
     var t = s;
     println("{} {}", s, noisy(3));
     println("{}", t);
+    later();
+}
+fn twice(x: i64) Vec<i64> {
+    println("evaluating twice");
+    return Vec[x, x];
+}
+fn later() {
+    var o: i64? = 5;
+    println("list {} then {} {}", twice(4), o, noisy(5));
 }

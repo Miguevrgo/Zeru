@@ -1567,14 +1567,8 @@ impl FnCx<'_, '_> {
         }
         self.enter();
         let mut stmts = Vec::new();
-        let mut pieces = pieces.into_iter();
+        let mut parts = Vec::new();
         for value in values {
-            let piece = pieces.next().unwrap_or_default();
-            if self.plain_print(value.ty) {
-                stmts.push(self.write(to, vec![piece, Vec::new()], vec![value], span));
-                continue;
-            }
-            stmts.push(self.write(to, vec![piece], Vec::new(), span));
             let ty = value.ty;
             let place = match value.kind {
                 ExprKind::Read(place) if stable(&place) => place,
@@ -1597,6 +1591,17 @@ impl FnCx<'_, '_> {
                     Place::Local(held)
                 }
             };
+            parts.push((place, ty));
+        }
+        let mut pieces = pieces.into_iter();
+        for (place, ty) in parts {
+            let piece = pieces.next().unwrap_or_default();
+            if self.plain_print(ty) {
+                let value = self.mk(ExprKind::Read(place), ty, span);
+                stmts.push(self.write(to, vec![piece, Vec::new()], vec![value], span));
+                continue;
+            }
+            stmts.push(self.write(to, vec![piece], Vec::new(), span));
             self.show(place, ty, false, to, &mut stmts, span);
         }
         let last = pieces.next().unwrap_or_default();
