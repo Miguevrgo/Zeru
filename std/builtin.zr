@@ -25,6 +25,7 @@ const MAP_PRIVATE: i64 = 2;
 const MAP_ANONYMOUS: i64 = 32;
 
 const MREMAP_MAYMOVE: i64 = 1;
+const MREMAP_FIXED: i64 = 2;
 
 fn syscall1(nr: i64, arg1: i64) i64 {
     var result: i64 = 0;
@@ -1514,22 +1515,44 @@ const HEAP_LARGEST: usize = 1048576;
 // How much the heap maps at a time to carve small blocks from.
 const HEAP_CHUNK: usize = 4194304;
 
-// Map `size` fresh bytes.
+// The size of a huge page, which the kernel uses for anonymous memory
+// mapped at a multiple of it: one TLB entry instead of 512.
+const HUGE_PAGE: usize = 2097152;
+
+// Map `size` fresh bytes; from a huge page up, starting at a multiple of
+// one, with what is mapped around it to get there unmapped again.
 fn __zeru_map(size: usize) *u8 {
+    var extra: usize = 0;
+    if size >= HUGE_PAGE {
+        extra = HUGE_PAGE;
+    }
     var prot: i64 = PROT_READ + PROT_WRITE;
     var flags: i64 = MAP_PRIVATE + MAP_ANONYMOUS;
-    var result: i64 = syscall6(SYS_MMAP, 0, size as i64, prot, flags, -1, 0);
+    var result: i64 = syscall6(SYS_MMAP, 0, (size + extra) as i64, prot, flags, -1, 0);
     if result < 0 {
         __zeru_out_of_memory();
     }
-    return result as *u8;
+    var base = result as usize;
+    if extra == 0 {
+        return base as *u8;
+    }
+    var start = (base + HUGE_PAGE - 1) & !(HUGE_PAGE - 1);
+    var end = (start + size + 4095) & !4095;
+    if start > base {
+        syscall2(SYS_MUNMAP, base as i64, (start - base) as i64);
+    }
+    if base + size + extra > end {
+        syscall2(SYS_MUNMAP, end as i64, (base + size + extra - end) as i64);
+    }
+    return start as *u8;
 }
 
 // The program's memory: a block of
 // up to HEAP_LARGEST bytes takes the power of two from 16 bytes that fits
 // it, and a freed one waits in its class's list, linked through its first
 // bytes, for the next allocation of that class. New blocks are carved from
-// mapped chunks. Larger blocks are mapped and unmapped whole. The compiler
+// mapped chunks, each aligned to its size up to a cache line, so that a
+// vector load from one never straddles two lines. Larger blocks are mapped and unmapped whole. The compiler
 // makes one zeroed Heap and passes every allocation through it.
 struct Heap {
     free: Array<*u8, 17>,
@@ -1551,26 +1574,37 @@ struct Heap {
             self.free[class] = *(head as **u8);
             return head;
         }
-        if self.next as usize + bytes > self.end as usize {
+        var align: usize = 64;
+        if bytes < align {
+            align = bytes;
+        }
+        var start = (self.next as usize + align - 1) & !(align - 1);
+        if start + bytes > self.end as usize {
             self.next = __zeru_map(HEAP_CHUNK);
             self.end = self.next + HEAP_CHUNK;
+            start = self.next as usize;
         }
-        var block = self.next;
-        self.next = self.next + bytes;
-        return block;
+        self.next = (start + bytes) as *u8;
+        return start as *u8;
     }
 
     // Move the `old_size` bytes at `old` to a block of `new_size`, freeing
     // the old one; a size of 0 is no block.
     fn realloc(var self, old: *u8, old_size: usize, new_size: usize) *u8 {
         if old_size > HEAP_LARGEST && new_size > HEAP_LARGEST {
+            var flags = MREMAP_MAYMOVE;
+            var to: i64 = 0;
+            if new_size >= HUGE_PAGE {
+                flags = MREMAP_MAYMOVE + MREMAP_FIXED;
+                to = __zeru_map(new_size) as i64;
+            }
             var moved: i64 = syscall5(
                 SYS_MREMAP,
                 old as i64,
                 old_size as i64,
                 new_size as i64,
-                MREMAP_MAYMOVE,
-                0,
+                flags,
+                to,
             );
             if moved < 0 {
                 __zeru_out_of_memory();

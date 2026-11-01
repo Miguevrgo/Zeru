@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: Computing a constant while compiling cannot use the heap or a slice
-     ╭─[ std/builtin.zr:644:67 ]
+     ╭─[ std/builtin.zr:645:67 ]
      │
- 644 │     return OutStream { fd: -1, buffer: [0; 4096], index: 0, text: String.new() };
+ 645 │     return OutStream { fd: -1, buffer: [0; 4096], index: 0, text: String.new() };
      │                                                                   ──────┬─────
      │                                                                         ╰─────── Computing a constant while compiling cannot use the heap or a slice
      │
