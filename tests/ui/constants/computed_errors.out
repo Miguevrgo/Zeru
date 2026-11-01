@@ -7,7 +7,7 @@ Error: Computing a constant while compiling cannot make a Vec: it lives on the h
     │                       ────┬────
     │                           ╰────── Computing a constant while compiling cannot make a Vec: it lives on the heap
     │
- 39 │ const A = heap();
+ 44 │ const A = heap();
     │ ────────┬────────
     │         ╰────────── while computing 'A'
 ────╯
@@ -18,7 +18,7 @@ Error: Computing a constant while compiling cannot print
     │     ──────┬──────
     │           ╰──────── Computing a constant while compiling cannot print
     │
- 40 │ const B = noisy();
+ 45 │ const B = noisy();
     │ ─────────┬────────
     │          ╰────────── while computing 'B'
 ────╯
@@ -31,7 +31,7 @@ Error: A constant takes more than 10000000 steps to compute; it may never end
     │ │
     │ ╰─────────── A constant takes more than 10000000 steps to compute; it may never end
     │
- 41 │     const C = forever();
+ 46 │     const C = forever();
     │     ──────────┬─────────
     │               ╰─────────── while computing 'C'
 ────╯
@@ -42,7 +42,7 @@ Error: A constant's calls go more than 256 deep while computing it
     │            ─────┬─────
     │                 ╰─────── A constant's calls go more than 256 deep while computing it
     │
- 42 │ const D = deep(0);
+ 47 │ const D = deep(0);
     │ ─────────┬────────
     │          ╰────────── while computing 'D'
 ────╯
@@ -53,7 +53,7 @@ Error: Arithmetic overflow of i8 while computing a constant
     │            ──┬──
     │              ╰──── Arithmetic overflow of i8 while computing a constant
     │
- 43 │ const E = overflow();
+ 48 │ const E = overflow();
     │ ──────────┬──────────
     │           ╰──────────── while computing 'E'
 ────╯
@@ -64,7 +64,7 @@ Error: Index 5 is outside 0..3 while computing a constant
     │              ┬
     │              ╰── Index 5 is outside 0..3 while computing a constant
     │
- 44 │ const G = outside();
+ 49 │ const G = outside();
     │ ──────────┬─────────
     │           ╰─────────── while computing 'G'
 ────╯
@@ -82,7 +82,7 @@ Error: Computing a constant while compiling cannot use the heap or a slice
     │            ──────┬─────
     │                  ╰─────── Computing a constant while compiling cannot use the heap or a slice
     │
- 46 │ const H = text();
+ 51 │ const H = text();
     │ ────────┬────────
     │         ╰────────── while computing 'H'
 ────╯
@@ -101,5 +101,16 @@ Error: Function 'unfinished' can finish without returning a value
     │          ╰─────────── it can end after this
     │
     │ Help: return an i32 on every path, or end it with a return after this
+────╯
+Error: Index 2 is outside 0..2 while computing a constant
+    ╭─[ tests/ui/constants/computed_errors.zr:42:32 ]
+    │
+ 42 │     return PAIRS[1][0] + PAIRS[i][0];
+    │                                ┬
+    │                                ╰── Index 2 is outside 0..2 while computing a constant
+    │
+ 54 │ const K = past_table();
+    │ ───────────┬───────────
+    │            ╰───────────── while computing 'K'
 ────╯
 [-] Error: aborting due to previous error

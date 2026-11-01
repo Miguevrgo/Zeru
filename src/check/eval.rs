@@ -488,6 +488,10 @@ impl Eval<'_, '_> {
     }
 
     fn read(&mut self, place: &Place, span: Span) -> Run<Value> {
+        if !matches!(place, Place::Temp(_)) && shape(place).is_some() {
+            let part = self.literal_part(place)?;
+            return self.expr(part);
+        }
         if let Place::Index(base, index) = place {
             let loc = self.loc(base)?;
             if let Value::Text(bytes) = self.at(&loc) {
@@ -507,6 +511,39 @@ impl Eval<'_, '_> {
         }
         let loc = self.loc(place)?;
         Ok(self.get(&loc))
+    }
+
+    /// The part of a written-out array, tuple or struct that `place` picks,
+    /// worked out without building the rest, as a constant read inside
+    /// another one is; `shape` has checked each step fits.
+    fn literal_part<'e>(&mut self, place: &'e Place) -> Run<&'e Expr> {
+        let (base, step) = match place {
+            Place::Temp(expr) => return Ok(expr),
+            Place::Index(base, _) | Place::Field(base, _) => (self.literal_part(base)?, place),
+            _ => unreachable!("shape takes only these"),
+        };
+        Ok(match (step, &base.kind) {
+            (Place::Index(_, index), ExprKind::Array(items)) => {
+                let at = self.int(index)?;
+                if at < 0 || at >= items.len() as i128 {
+                    let len = items.len();
+                    return fail(
+                        format!("Index {at} is outside 0..{len} while computing a constant"),
+                        index.span,
+                    );
+                }
+                &items[at as usize]
+            }
+            (Place::Field(_, at), ExprKind::Tuple(items)) => &items[*at as usize],
+            (Place::Field(_, at), ExprKind::Struct(fields)) => {
+                &fields
+                    .iter()
+                    .find(|(field, _)| field == at)
+                    .expect("each field")
+                    .1
+            }
+            _ => unreachable!("shape checked each step"),
+        })
     }
 
     fn truth(&mut self, cond: &Expr) -> Run<bool> {
@@ -935,4 +972,28 @@ fn bits(op: BitOp, value: i128, int: IntTy, amount: i128) -> Value {
         }
     };
     Value::Int(wrap(result as i128, int))
+}
+
+/// A part of the written-out array, tuple or struct `place` reads, when
+/// every step to it goes into one: the shape every element of it shares.
+fn shape(place: &Place) -> Option<&Expr> {
+    let compound = |expr: &Expr| {
+        matches!(
+            expr.kind,
+            ExprKind::Array(_) | ExprKind::Tuple(_) | ExprKind::Struct(_)
+        )
+    };
+    match place {
+        Place::Temp(expr) => Some(expr.as_ref()).filter(|expr| compound(expr)),
+        Place::Index(base, _) => match &shape(base)?.kind {
+            ExprKind::Array(items) => items.first(),
+            _ => None,
+        },
+        Place::Field(base, at) => match &shape(base)?.kind {
+            ExprKind::Tuple(items) => items.get(*at as usize),
+            ExprKind::Struct(fields) => fields.iter().find(|(f, _)| f == at).map(|(_, e)| e),
+            _ => None,
+        },
+        _ => None,
+    }
 }

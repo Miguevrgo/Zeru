@@ -36,6 +36,11 @@ fn broken() i32 {
 }
 fn unfinished() i32 {
 }
+const PAIRS: Array<Array<i32, 2>, 2> = [[1, 2], [3, 4]];
+fn past_table() i32 {
+    var i = 2;
+    return PAIRS[1][0] + PAIRS[i][0];
+}
 const A = heap();
 const B = noisy();
 const C = forever();
@@ -46,4 +51,5 @@ const LOOP = selfish();
 const H = text();
 const I = broken();
 const J = unfinished();
+const K = past_table();
 fn main() {}
