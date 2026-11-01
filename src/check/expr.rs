@@ -867,8 +867,24 @@ impl FnCx<'_, '_> {
             self.warn("This assigns a value to where it already is", span);
         }
         let (place, target_ty) = self.target(target, span);
-        let checked = self.expr(value, Some(target_ty));
         let compound = operator.compound_base();
+        if let Some(base @ (Token::ShiftLeft | Token::ShiftRight)) = &compound {
+            let current = self.mk(ExprKind::Int(0), target_ty, target.span);
+            let shifted = self.shift(current, base, value, span);
+            let ExprKind::Binary(op, _, amount) = shifted.kind else {
+                return shifted;
+            };
+            return self.mk(
+                ExprKind::CompoundAssign {
+                    op,
+                    place,
+                    value: amount,
+                },
+                Types::VOID,
+                span,
+            );
+        }
+        let checked = self.expr(value, Some(target_ty));
         let mut value = match self.coerce(checked, target_ty) {
             Ok(value) => {
                 if let Some(base) = &compound
@@ -1156,6 +1172,36 @@ impl FnCx<'_, '_> {
         }
     }
 
+    /// `value << amount` or `>>`: the amount may be any integer, and the
+    /// result has the type of the value shifted.
+    pub(super) fn shift(
+        &mut self,
+        value: Expr,
+        operator: &Token,
+        amount: &Expression,
+        span: Span,
+    ) -> Expr {
+        let amount = self.expr(amount, None);
+        let types = &self.cx.types;
+        if types.is_error(value.ty) || types.is_error(amount.ty) {
+            return self.error_expr(span);
+        }
+        for (part, what) in [(&value, "shift"), (&amount, "shift by")] {
+            if self.cx.types.as_int(part.ty).is_none() {
+                let shown = self.ty(part.ty);
+                self.error(format!("Cannot {what} {shown}, only an integer"), part.span);
+                return self.error_expr(span);
+            }
+        }
+        let ty = value.ty;
+        let op = binop(operator);
+        self.mk(
+            ExprKind::Binary(op, Box::new(value), Box::new(amount)),
+            ty,
+            span,
+        )
+    }
+
     fn infix(
         &mut self,
         left: &Expression,
@@ -1171,6 +1217,10 @@ impl FnCx<'_, '_> {
         let hint = self
             .unwrap_expected(expected)
             .filter(|&ty| !comparison && !self.cx.types.contains_var(ty));
+        if matches!(operator, Token::ShiftLeft | Token::ShiftRight) {
+            let value = self.expr(left, hint);
+            return self.shift(value, operator, right, span);
+        }
         let (mut l, mut r) = self.operands(left, right, hint);
         let types = &self.cx.types;
         if matches!(operator, Token::Eq | Token::NotEq)

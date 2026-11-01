@@ -562,9 +562,16 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 return self.checked_arith(op, l, r, signed);
             }
             BinOp::Div | BinOp::Rem if checked => self.check_division(l, r, signed),
-            BinOp::Shl | BinOp::Shr if checked => self.check_shift(r),
+            BinOp::Shl | BinOp::Shr if checked => self.check_shift(r, l.get_type()),
             _ => {}
         }
+        let r = match op {
+            BinOp::Shl | BinOp::Shr => self
+                .builder
+                .build_int_cast_sign_flag(r, l.get_type(), false, "amount")
+                .unwrap(),
+            _ => r,
+        };
         let b = &self.builder;
         match op {
             BinOp::Add | BinOp::AddWrap => b.build_int_add(l, r, "add"),

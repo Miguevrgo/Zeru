@@ -1,0 +1,24 @@
+status: compile error
+-- stderr
+Error: Cannot shift by f64, only an integer
+   ╭─[ tests/ui/arithmetic/shift_operand_errors.zr:4:18 ]
+   │
+ 4 │     var a = x << f;
+   │                  ┬
+   │                  ╰── Cannot shift by f64, only an integer
+───╯
+Error: Cannot shift f64, only an integer
+   ╭─[ tests/ui/arithmetic/shift_operand_errors.zr:5:13 ]
+   │
+ 5 │     var b = f << 2;
+   │             ┬
+   │             ╰── Cannot shift f64, only an integer
+───╯
+Error: Shift by 9 is out of range for u8
+   ╭─[ tests/ui/arithmetic/shift_operand_errors.zr:6:17 ]
+   │
+ 6 │     var c: u8 = 1 << 9;
+   │                 ───┬──
+   │                    ╰──── Shift by 9 is out of range for u8
+───╯
+[-] Error: aborting due to previous error

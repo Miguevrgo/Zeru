@@ -200,9 +200,10 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         self.trap_if(invalid, "division by zero, or MIN / -1");
     }
 
-    pub(super) fn check_shift(&mut self, amount: IntValue<'ctx>) {
-        let int_type = amount.get_type();
-        let width = int_type.const_int(u64::from(int_type.get_bit_width()), false);
+    pub(super) fn check_shift(&mut self, amount: IntValue<'ctx>, shifted: IntType<'ctx>) {
+        let width = amount
+            .get_type()
+            .const_int(u64::from(shifted.get_bit_width()), false);
         let too_wide = self
             .builder
             .build_int_compare(IntPredicate::UGE, amount, width, "shift_wide")

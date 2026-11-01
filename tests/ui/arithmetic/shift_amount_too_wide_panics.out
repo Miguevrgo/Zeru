@@ -1,0 +1,3 @@
+status: signal 6
+-- stderr
+panic at tests/ui/arithmetic/shift_amount_too_wide_panics.zr:5:19: shift by the operand's width or more

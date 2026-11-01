@@ -35,12 +35,12 @@ Error: Operator '&' cannot be applied to f64
     │             ────┬────
     │                 ╰────── Operator '&' cannot be applied to f64
 ────╯
-Error: Operator '<<' cannot be applied to f64
+Error: Cannot shift f64, only an integer
     ╭─[ tests/ui/arithmetic/operators_on_wrong_types.zr:13:13 ]
     │
  13 │     var g = 1.5 << 2.5;
-    │             ─────┬────
-    │                  ╰────── Operator '<<' cannot be applied to f64
+    │             ─┬─
+    │              ╰─── Cannot shift f64, only an integer
 ────╯
 Error: Operator '&&' cannot be applied to i32
     ╭─[ tests/ui/arithmetic/operators_on_wrong_types.zr:19:13 ]

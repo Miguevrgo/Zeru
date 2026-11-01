@@ -1,0 +1,7 @@
+fn main() {
+    var f = 1.5;
+    var x: u64 = 1;
+    var a = x << f;
+    var b = f << 2;
+    var c: u8 = 1 << 9;
+}

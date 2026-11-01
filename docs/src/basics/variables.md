@@ -184,7 +184,9 @@ Escapes: `\n` (new line), `\t` (tab), `\r`, `\0`, `\\`, `\'`, `\"` and
 | `= += -= *= /= %= &= \|= ^= <<= >>=` | assignment |
 
 `>>` on a signed integer keeps the sign; on an unsigned one it fills with
-zeros.
+zeros. The amount of a shift can be any integer type, and the result has
+the type of what is shifted, so `var bit: u64 = 1 << square;` works with
+`square` a `usize`.
 
 Integers also have methods on their bits: `count_ones`, `leading_zeros` and
 `trailing_zeros` count them, as a `usize`; `rotate_left(n)` and

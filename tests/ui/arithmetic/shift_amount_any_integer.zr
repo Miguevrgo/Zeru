@@ -1,0 +1,19 @@
+const K: u64 = 1 << (40 as u8);
+
+fn bits(n: u8) u64 {
+    var x: u64 = 1;
+    x <<= n;
+    return x;
+}
+
+fn main() {
+    var i: usize = 40;
+    var one: u64 = 1;
+    var bit: u64 = 1 << i;
+    var n: u8 = 3;
+    var small: u8 = 200;
+    var a = one << n;
+    var b = small >> n;
+    var c: i32 = -64 >> (2 as u64);
+    println("{} {} {} {} {} {} {}", bit, a, b, c, bits(63), K, 1 << 4);
+}

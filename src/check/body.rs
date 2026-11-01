@@ -4,9 +4,7 @@
 use crate::ast::{Expression, ExpressionKind, Names, Statement, StatementKind};
 use crate::errors::{Span, ZeruError};
 use crate::items::DefId;
-use crate::tir::{
-    self, BinOp, Block, Expr, ExprKind, LocalId, Place, Stmt, StmtKind, Unpack, Walk,
-};
+use crate::tir::{self, Block, Expr, ExprKind, LocalId, Place, Stmt, StmtKind, Unpack, Walk};
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
@@ -584,20 +582,6 @@ impl<'c, 'a> FnCx<'c, 'a> {
         Some(
             match (types.kind(got).clone(), types.kind(target).clone()) {
                 _ if literal && (types.is_number(target) || target == Types::BOOL) => return None,
-                _ if let ExprKind::Binary(op @ (BinOp::Shl | BinOp::Shr), left, right) =
-                    &value.kind
-                    && matches!(left.kind, ExprKind::Int(_))
-                    && int(got)
-                    && int(target) =>
-                {
-                    let sources = self.cx.sources;
-                    let symbol = if *op == BinOp::Shl { "<<" } else { ">>" };
-                    let (l, r) = (sources.text(left.span), sources.text(right.span));
-                    (
-                        "convert the amount instead: both sides of a shift are one type, so the number then takes it",
-                        Some(format!("{l} {symbol} ({r} as {shown})")),
-                    )
-                }
                 _ if types.is_number(got) && types.is_number(target) => {
                     ("convert it with as", Some(format!("{operand} as {shown}")))
                 }
