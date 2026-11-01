@@ -38,6 +38,7 @@ The methods:
 | Method | Gives |
 |---|---|
 | `len()` | the length in bytes |
+| `is_empty()` | whether it has no bytes |
 | `trim()` | the text without spaces, tabs and line breaks around it |
 | `split()` | a `Vec<str>` of the words between runs of spaces, tabs and line breaks |
 | `split(sep)` | a `Vec<str>` of the parts between each `sep`, empty ones included |

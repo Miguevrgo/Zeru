@@ -1,0 +1,29 @@
+status: compile error
+-- stderr
+Error: Cannot compare u8? and u8
+   ╭─[ tests/ui/optionals_results/optional_equality_errors.zr:4:23 ]
+   │
+ 4 │     var ordered = o < 4;
+   │                   ┬   ┬
+   │                   ╰────── this is u8?
+   │                       │
+   │                       ╰── this is u8
+   │
+   │ Help: take the value out first, with ? or .unwrap()
+   │           var ordered = o.unwrap() < 4;
+───╯
+Error: Cannot compare u8? and i64?
+   ╭─[ tests/ui/optionals_results/optional_equality_errors.zr:5:17 ]
+   │
+ 5 │     var mixed = o == w;
+   │                 ───┬──
+   │                    ╰──── Cannot compare u8? and i64?
+───╯
+Error: Cannot compare u8? and str
+   ╭─[ tests/ui/optionals_results/optional_equality_errors.zr:6:16 ]
+   │
+ 6 │     var text = o == "x";
+   │                ────┬───
+   │                    ╰───── Cannot compare u8? and str
+───╯
+[-] Error: aborting due to previous error

@@ -1105,7 +1105,8 @@ impl FnCx<'_, '_> {
         right: &Expression,
         expected: Option<Ty>,
     ) -> (Expr, Expr) {
-        if is_number_literal(left) && !is_number_literal(right) {
+        let open = |e: &Expression| is_number_literal(e) || matches!(e.kind, ExpressionKind::None);
+        if open(left) && !open(right) {
             let right = self.expr(right, expected);
             let left = self.expr(left, Some(right.ty));
             (left, right)
@@ -1113,6 +1114,43 @@ impl FnCx<'_, '_> {
             let left = self.expr(left, expected);
             let right = self.expr(right, Some(left.ty));
             (left, right)
+        }
+    }
+
+    /// `a == b` with a `T?` on a side: the other side becomes one too, and
+    /// they are equal when both are None or both hold equal values.
+    fn optional_eq(&mut self, l: Expr, r: Expr, ty: Ty, negated: bool, span: Span) -> Expr {
+        let TyKind::Optional(inner) = *self.cx.types.kind(ty) else {
+            unreachable!("an optional")
+        };
+        let (l, r) = match (self.coerce(l, ty), self.coerce(r, ty)) {
+            (Ok(l), Ok(r)) => (l, r),
+            (l, r) => {
+                let (l, r) = (l.unwrap_or_else(|l| l), r.unwrap_or_else(|r| r));
+                let (lt, rt) = (self.ty(l.ty), self.ty(r.ty));
+                self.error(format!("Cannot compare {lt} and {rt}"), span);
+                return self.error_expr(span);
+            }
+        };
+        if !self.cx.operator_applies(&Token::Eq, inner) {
+            let shown = self.ty(inner);
+            self.error(format!("Operator '==' cannot be applied to {shown}"), span);
+            return self.error_expr(span);
+        }
+        let def = self.cx.prelude_def("__zeru_optional_eq");
+        let Some(id) = self.call_instance(def, vec![inner], span) else {
+            return self.error_expr(span);
+        };
+        let a = self.address(Place::Temp(Box::new(l)), ty, false, span);
+        let b = self.address(Place::Temp(Box::new(r)), ty, false, span);
+        let equal = self.mk(ExprKind::Call(id, vec![a, b]), Types::BOOL, span);
+        match negated {
+            false => equal,
+            true => self.mk(
+                ExprKind::Unary(UnOp::Not, Box::new(equal)),
+                Types::BOOL,
+                span,
+            ),
         }
     }
 
@@ -1132,6 +1170,16 @@ impl FnCx<'_, '_> {
             .unwrap_expected(expected)
             .filter(|&ty| !comparison && !self.cx.types.contains_var(ty));
         let (mut l, mut r) = self.operands(left, right, hint);
+        let types = &self.cx.types;
+        if matches!(operator, Token::Eq | Token::NotEq)
+            && !types.is_error(l.ty)
+            && !types.is_error(r.ty)
+            && let Some(ty) = [l.ty, r.ty]
+                .into_iter()
+                .find(|&ty| matches!(types.kind(ty), TyKind::Optional(_)))
+        {
+            return self.optional_eq(l, r, ty, *operator == Token::NotEq, span);
+        }
         if comparison {
             if l.ty == Types::STRING {
                 l = self.view(l);
@@ -1324,14 +1372,17 @@ impl FnCx<'_, '_> {
             .iter()
             .any(|e| matches!(e.kind, ExpressionKind::Boolean(_)));
         let types = &self.cx.types;
-        let vec_len = match &l.kind {
+        let held = match &l.kind {
             ExprKind::Builtin(Builtin::Len, args) => match types.kind(args[0].ty) {
-                TyKind::Ref(held) | TyKind::RefMut(held) | TyKind::Ptr(held) => {
-                    matches!(types.kind(*held), TyKind::Vec(_))
-                }
-                kind => matches!(kind, TyKind::Vec(_)),
+                TyKind::Ref(held) | TyKind::RefMut(held) | TyKind::Ptr(held) => Some(*held),
+                _ => Some(args[0].ty),
             },
-            _ => false,
+            _ => None,
+        };
+        let sized = match held {
+            Some(ty) if ty == Types::STR => Some("a str"),
+            Some(ty) if matches!(types.kind(ty), TyKind::Vec(_)) => Some("a Vec"),
+            _ => None,
         };
         let sources = self.cx.sources;
         if let Some(holds) = always {
@@ -1353,8 +1404,14 @@ impl FnCx<'_, '_> {
             )
             .help("drop the comparison")
             .fix(span, written);
-        } else if vec_len && zero(right) && (equality || *operator == Token::Gt) {
-            let warning = self.warn("Write .is_empty() to ask whether a Vec is empty", span);
+        } else if let Some(what) = sized
+            && zero(right)
+            && (equality || *operator == Token::Gt)
+        {
+            let warning = self.warn(
+                format!("Write .is_empty() to ask whether {what} is empty"),
+                span,
+            );
             if let ExpressionKind::Call { function, .. } = &left.kind
                 && let ExpressionKind::Get { object, .. } = &function.kind
             {
@@ -1536,7 +1593,8 @@ impl FnCx<'_, '_> {
 
     /// Whether `as` turns a `from` into a `to`. Nothing becomes an enum: a
     /// number outside its variants would get past an exhaustive `match`. A
-    /// slice gives a pointer to its bytes, never a number.
+    /// slice gives a pointer to its bytes, never a number. A `u8` becomes the
+    /// one-byte text of it.
     fn castable(&self, from: Ty, to: Ty) -> bool {
         let types = &self.cx.types;
         let number = |ty| types.is_number(ty);
@@ -1554,6 +1612,7 @@ impl FnCx<'_, '_> {
             || address(from) && (int(to) || is_ptr(to))
             || is_slice(from) && is_ptr(to)
             || int(from) && is_ptr(to)
+            || from == Types::U8 && to == Types::STR
     }
 
     /// Report that `ty` has no field `name`, read at the end of `span`,

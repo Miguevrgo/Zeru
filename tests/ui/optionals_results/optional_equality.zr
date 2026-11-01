@@ -1,0 +1,23 @@
+struct P {
+    x: i64,
+}
+fn find(n: i64) i64? {
+    if n > 0 {
+        return n;
+    }
+    return None;
+}
+fn main() {
+    var o: u8? = 3;
+    var p: u8? = 3;
+    var none: u8? = None;
+    println("{} {} {} {}", o == None, o == p, o == 3, o != 4);
+    println("{} {} {}", none == None, none == p, none != 3);
+    var s: String? = String.from("hi");
+    println("{} {}", s == String.from("hi"), s == None);
+    var t: str? = "a";
+    println("{} {}", t == "a", t != "b");
+    println("{} {}", find(2) == 2, find(-1) == None);
+    var q: P? = P { x: 1 };
+    println("{} {}", q == None, None == q);
+}

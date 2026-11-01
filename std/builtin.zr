@@ -910,6 +910,20 @@ fn __zeru_is_space(byte: u8) bool {
     return byte == ' ' || byte == '\t' || byte == '\n' || byte == '\r';
 }
 
+// `a == b` on two T?: both None, or both holding equal values.
+fn __zeru_optional_eq<T>(a: &T?, b: &T?) bool {
+    return match (a, b) {
+        (Some(x), Some(y)) => x == y,
+        (None, None) => true,
+        default => false,
+    };
+}
+
+// `s.is_empty()`: whether `s` has no bytes.
+fn __zeru_str_is_empty(s: str) bool {
+    return s.len() == 0;
+}
+
 // `s.starts_with(prefix)`: whether `s` begins with `prefix`.
 fn __zeru_str_starts_with(s: str, prefix: str) bool {
     return prefix.len() <= s.len() && s[..prefix.len()] == prefix;

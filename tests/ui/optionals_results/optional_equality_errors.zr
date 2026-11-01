@@ -1,0 +1,7 @@
+fn main() {
+    var o: u8? = 3;
+    var w: i64? = 3;
+    var ordered = o < 4;
+    var mixed = o == w;
+    var text = o == "x";
+}

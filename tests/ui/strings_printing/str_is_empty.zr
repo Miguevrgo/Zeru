@@ -1,0 +1,8 @@
+fn main() {
+    var s = "ab";
+    var owned = String.from("");
+    println("{} {} {}", s.is_empty(), "".is_empty(), owned.is_empty());
+    if s.len() == 0 {
+        println("none");
+    }
+}

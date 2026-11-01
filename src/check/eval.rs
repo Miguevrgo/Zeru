@@ -785,6 +785,7 @@ impl Eval<'_, '_> {
             (Value::Int(n), Some(int)) => Value::Int(wrap(n, int)),
             (Value::Bool(b), Some(_)) => Value::Int(i128::from(b)),
             (Value::Variant(at, _), Some(int)) => Value::Int(wrap(i128::from(at), int)),
+            (Value::Int(n), None) if to == Types::STR => Value::Text(Rc::from([n as u8])),
             (Value::Int(n), None) if to == Types::F32 => Value::Float(f64::from(n as f32)),
             (Value::Int(n), None) => Value::Float(n as f64),
             (Value::Variant(at, _), None) => Value::Float(f64::from(at)),

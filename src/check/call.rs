@@ -27,6 +27,7 @@ const COPY_FN: &str = "__zeru_copy_bytes";
 const HASH_BITS_FN: &str = "__zeru_hash_bits";
 /// str methods, each the prelude's `__zeru_str_<name>` with the str first.
 const STR_METHODS: &[&str] = &[
+    "is_empty",
     "split",
     "contains",
     "find",

@@ -84,6 +84,7 @@ var t = (1, true);  t.0;
 
 ```zeru,ignore
 var s: str = "hello";               s.len();  s[0];  s[1..3];
+s.is_empty();  b as str;           // b: u8, its one-byte text
 s.split();  s.split(",");  s.lines();  s.contains("a");  s.find("a");  s.trim();  s.starts_with("he");  s.parse_int();
 var owned = String.from("hi");      owned.push_str("!");  owned.push('?');
 println("{} and {}", 1, "two");     println("{}", v);  // [1, 2]
@@ -147,6 +148,7 @@ fn find(..) usize? { return 3; ... return None; }
 fn parse(..) i64! { return 3; ... return Err(EINVAL); }
 fn save(..) ! { ... return Ok(); ... }        // success or an error code
 x.is_some()  x.is_none()  x.is_ok()  x.is_err()  x.unwrap()  x.unwrap_err()
+x == 3  x == None  x != y          // a T? compared with a value, None or another T?
 var n = parse(text)!;    // returns the error from this function
 save(path);              // error: a result is never ignored
 var i = find(list)?;     // returns None from this function

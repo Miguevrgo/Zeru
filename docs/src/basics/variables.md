@@ -112,6 +112,7 @@ println("{}", 300 as u8); // 44
 
 A float becomes an integer by dropping its fraction. An integer converted to
 a narrower one keeps its low bits, as `300 as u8` shows.
+A `u8` also converts to the `str` of that one byte: `'a' as str` is `"a"`.
 
 ### Overflow
 

@@ -141,6 +141,27 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         self.builder.build_store(len_field, len).unwrap();
     }
 
+    /// `byte as str`: the one byte of a table holding each byte value once.
+    fn build_byte_str(&mut self, byte: &Operand, dst: PointerValue<'ctx>) {
+        let all: Vec<u8> = (0..=255).collect();
+        let table = self.const_bytes(&all);
+        let byte = self.operand(byte).imm().into_int_value();
+        let at = self
+            .builder
+            .build_int_z_extend(byte, self.usize_type(), "")
+            .unwrap();
+        let data = unsafe {
+            self.builder
+                .build_gep(self.context.i8_type(), table, &[at], "")
+                .unwrap()
+        };
+        let len = self.usize_type().const_int(1, false);
+        let ptr_field = self.field_ptr(dst, Types::STR, 0);
+        self.builder.build_store(ptr_field, data).unwrap();
+        let len_field = self.field_ptr(dst, Types::STR, 1);
+        self.builder.build_store(len_field, len).unwrap();
+    }
+
     /// Store `value` of type `ty` at `dest`.
     pub(super) fn store(&mut self, dest: &Place, value: Val<'ctx>, ty: Ty) {
         if let Some(local) = dest.as_local()
@@ -223,6 +244,10 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             {
                 let address = self.place(dest);
                 return self.build_str(constant, address);
+            }
+            Rvalue::Cast { value, to, .. } if *to == Types::STR => {
+                let address = self.place(dest);
+                return self.build_byte_str(value, address);
             }
             Rvalue::Aggregate(..)
             | Rvalue::Repeat(..)

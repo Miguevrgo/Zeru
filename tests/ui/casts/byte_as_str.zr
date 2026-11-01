@@ -1,0 +1,21 @@
+const COLON: str = 58 as u8 as str;
+
+fn main() {
+    var c: u8 = 58;
+    var text = "zeru";
+    var out = String.new();
+    for b in text {
+        out.push_str(b as str);
+        out.push_str("-");
+    }
+    println("[{}] [{}] [{}] {}", c as str, text[1] as str, COLON, out);
+    println("{} {}", (c as str).len(), c as str == ":");
+    var all = 0;
+    for i in 0..256 {
+        var s = i as u8 as str;
+        if s[0] == i as u8 && s.len() == 1 {
+            all += 1;
+        }
+    }
+    println("{}", all);
+}
