@@ -77,6 +77,10 @@ var f = 2.5e-3; // exponent
 println("{} {}", d, e); // 1000000 275
 ```
 
+What is around it can be the other side of an operator or the other branch
+of an `if` or `match`: with `v` a `u8`, `v + 1` and `if v > 1 { 5 } else { v }`
+are both `u8`.
+
 Each number type knows its smallest and largest value, handy to start a
 search for the lowest or highest:
 
