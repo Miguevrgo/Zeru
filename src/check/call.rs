@@ -267,6 +267,18 @@ impl FnCx<'_, '_> {
             .filter(|&def| self.cx.items.item(def).kind == ItemKind::Fn)
         else {
             if name == "Some" {
+                let open = expected.is_none_or(|ty| {
+                    matches!(self.cx.types.kind(ty), TyKind::Param(_) | TyKind::Infer(_))
+                });
+                if let ([inner], true) = (args, open) {
+                    let mut value = self.expr(inner, None);
+                    if self.cx.types.is_error(value.ty) {
+                        return value;
+                    }
+                    self.consume(&mut value);
+                    let ty = self.cx.types.intern(TyKind::Optional(value.ty));
+                    return self.mk(ExprKind::Some(Box::new(value)), ty, span);
+                }
                 let sources = self.cx.sources;
                 let error = self.error(
                     "Write the value itself, not Some(..): it becomes a T? wherever one is wanted",

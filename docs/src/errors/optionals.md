@@ -24,7 +24,8 @@ fn main() {
 ```
 
 A plain `usize` becomes a `usize?` on its own wherever one is wanted, so
-`return i;` needs nothing around it.
+`return i;` needs nothing around it. Where nothing says a `T?` is wanted,
+`Some(x)` makes one: `var pair = (Some(3), 2);` is an `(i64?, i64)`.
 
 ## Taking the value out
 

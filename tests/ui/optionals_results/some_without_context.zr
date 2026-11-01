@@ -1,0 +1,9 @@
+fn id<T>(x: T) T {
+    return x;
+}
+fn main() {
+    const pair = (Some(3), 2);
+    var names = Vec[Some(String.from("a")), None];
+    const kept = id(Some(4));
+    println("{} {} {}", pair.0.unwrap(), names.len(), kept.unwrap());
+}
