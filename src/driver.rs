@@ -380,6 +380,7 @@ fn load(path: &Path, user_code: &str, tests: bool) -> (Sources, Vec<SourceModule
     let dir = path.parent().unwrap_or(Path::new("."));
     let mut loaded: HashMap<String, String> = HashMap::new();
     let mut next = 1;
+    let mut std_missing = false;
     while next < modules.len() {
         for (import, span) in imports(&modules[next].program) {
             let short = import.rsplit('.').next().unwrap_or_default().to_string();
@@ -395,10 +396,13 @@ fn load(path: &Path, user_code: &str, tests: bool) -> (Sources, Vec<SourceModule
                 None => {}
             }
             let Some(file) = resolve_import(&import, dir) else {
-                errors.push(ZeruError::semantic(
-                    "The standard library is not beside the compiler; set ZERU_STD_PATH",
-                    span,
-                ));
+                if !std_missing {
+                    errors.push(ZeruError::semantic(
+                        "The standard library is not beside the compiler; set ZERU_STD_PATH",
+                        span,
+                    ));
+                }
+                std_missing = true;
                 continue;
             };
             let Ok(source) = std::fs::read_to_string(&file) else {

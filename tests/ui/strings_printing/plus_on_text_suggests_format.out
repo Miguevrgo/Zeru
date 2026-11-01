@@ -1,0 +1,13 @@
+status: compile error
+-- stderr
+Error: Operator '+' cannot be applied to str
+   ╭─[ tests/ui/strings_printing/plus_on_text_suggests_format.zr:3:20 ]
+   │
+ 3 │     var greeting = "hi " + name;
+   │                    ──────┬─────
+   │                          ╰─────── Operator '+' cannot be applied to str
+   │
+   │ Help: join text with format
+   │           var greeting = format("{}{}", "hi ", name);
+───╯
+[-] Error: aborting due to previous error

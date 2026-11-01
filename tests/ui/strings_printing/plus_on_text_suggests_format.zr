@@ -1,0 +1,4 @@
+fn main() {
+    var name = String.from("ann");
+    var greeting = "hi " + name;
+}

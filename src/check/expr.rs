@@ -1246,10 +1246,17 @@ impl FnCx<'_, '_> {
         }
         if !self.cx.operator_applies(operator, l_ty) {
             let shown = self.ty(l_ty);
-            self.error(
+            let sources = self.cx.sources;
+            let error = self.error(
                 format!("Operator '{operator}' cannot be applied to {shown}"),
                 span,
             );
+            if *operator == Token::Plus && (l_ty == Types::STR || l_ty == Types::STRING) {
+                let (a, b) = (sources.text(left.span), sources.text(right.span));
+                error
+                    .help("join text with format")
+                    .fix(span, format!("format(\"{{}}{{}}\", {a}, {b})"));
+            }
             return self.error_expr(span);
         }
         if comparison {
