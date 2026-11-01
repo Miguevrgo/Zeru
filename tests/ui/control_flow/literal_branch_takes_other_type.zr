@@ -1,0 +1,8 @@
+fn main() {
+    var v: u8 = 3;
+    var big: i64 = 5;
+    var a = if v > 1 { 5 } else { v };
+    var b = match v { 3 => 250, default => v };
+    var c = match v { 0 => 3000000000, default => big };
+    println("{} {} {}", a, b, c);
+}

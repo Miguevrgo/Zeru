@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: Every arm must give i32, this one gives str
-   ╭─[ tests/ui/match/arm_mismatch_does_not_cascade.zr:5:20 ]
+Error: Every arm must give str, this one gives i32
+   ╭─[ tests/ui/match/arm_mismatch_does_not_cascade.zr:4:14 ]
    │
- 5 │         default => "five",
-   │                    ───┬──
-   │                       ╰──── Every arm must give i32, this one gives str
+ 4 │         1 => 5,
+   │              ┬
+   │              ╰── Every arm must give str, this one gives i32
 ───╯
 [-] Error: aborting due to previous error

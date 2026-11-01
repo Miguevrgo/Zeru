@@ -569,10 +569,16 @@ impl FnCx<'_, '_> {
         let cond = self.condition(condition, "If condition must be boolean, got ");
         let wraps = self.wrapper(expected);
         let before = self.diverges;
-        let mut first = self.value_branch(then, expected);
+        let swap = is_number_literal(then) && !is_number_literal(otherwise);
+        let (one, other) = if swap {
+            (otherwise, then)
+        } else {
+            (then, otherwise)
+        };
+        let mut first = self.value_branch(one, expected);
         let first_leaves = std::mem::replace(&mut self.diverges, before);
         let first_ty = (!first_leaves).then_some(first.ty);
-        let second = self.value_branch(otherwise, wraps.or(first_ty).or(expected));
+        let second = self.value_branch(other, wraps.or(first_ty).or(expected));
         let second_leaves = self.diverges;
         self.diverges = first_leaves && second_leaves;
         let second_ty = (!second_leaves).then_some(second.ty);
@@ -589,14 +595,14 @@ impl FnCx<'_, '_> {
                 if closures == [true, true] {
                     self.error(
                         "Each closure is a type of its own, so the branches of an if cannot give two",
-                        otherwise.span,
+                        other.span,
                     )
                     .help("call the closure each branch needs inside that branch");
                 } else if !self.cx.types.is_error(second.ty) && !self.cx.types.is_error(target) {
                     let (want, got) = (self.ty(target), self.ty(second.ty));
                     self.error(
                         format!("Both branches of the if must give {want}; this one gives {got}"),
-                        otherwise.span,
+                        other.span,
                     );
                 }
                 second
@@ -604,6 +610,9 @@ impl FnCx<'_, '_> {
         };
         self.consume(&mut first);
         self.consume(&mut second);
+        if swap {
+            std::mem::swap(&mut first, &mut second);
+        }
         let arms = vec![
             Arm {
                 tags: vec![Test::is(1)],

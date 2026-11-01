@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
-Error: Both branches of the if must give i32; this one gives str
-   ╭─[ tests/ui/control_flow/if_value_branches_differ.zr:2:34 ]
+Error: Both branches of the if must give str; this one gives i32
+   ╭─[ tests/ui/control_flow/if_value_branches_differ.zr:2:23 ]
    │
  2 │     var x = if true { 1 } else { "one" };
-   │                                  ──┬──
-   │                                    ╰──── Both branches of the if must give i32; this one gives str
+   │                       ┬
+   │                       ╰── Both branches of the if must give str; this one gives i32
 ───╯
 [-] Error: aborting due to previous error

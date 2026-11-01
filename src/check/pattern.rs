@@ -8,6 +8,7 @@ use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
 use super::body::{Fixed, FnCx};
+use super::expr::is_number_literal;
 
 /// The binding a match on text tests its values against, a name no code
 /// can write.
@@ -81,9 +82,13 @@ impl FnCx<'_, '_> {
         let mut arm_ty: Option<Ty> = wraps;
         let mut first_block: Option<Span> = None;
         let mut mismatched = false;
-        let mut checked = Vec::new();
+        let mut checked: Vec<Option<Arm>> = arms.iter().map(|_| None).collect();
         let temporary = matches!(scrutinee, Place::Temp(_));
-        for (arm, shape) in arms.iter().zip(patterns) {
+        let mut shapes: Vec<_> = patterns.into_iter().map(Some).collect();
+        let mut order: Vec<usize> = (0..arms.len()).collect();
+        order.sort_by_key(|&at| is_number_literal(&arms[at].body));
+        for at in order {
+            let (arm, shape) = (&arms[at], shapes[at].take().expect("each arm once"));
             let (pattern, body) = (&arm.pattern, &arm.body);
             let take = temporary && arm.guard.is_none();
             self.diverges = before;
@@ -148,7 +153,7 @@ impl FnCx<'_, '_> {
                 }
             }
             self.consume(&mut result);
-            checked.push(Arm {
+            checked[at] = Some(Arm {
                 tags: shape.tags,
                 bindings,
                 guard,
@@ -156,6 +161,10 @@ impl FnCx<'_, '_> {
                 span: pattern.span,
             });
         }
+        let checked = checked
+            .into_iter()
+            .map(|arm| arm.expect("checked"))
+            .collect();
         self.diverges = all_leave;
         let ty = match mismatched {
             true => Types::ERROR,
