@@ -17,6 +17,7 @@ Error: Function 'b::fb' not defined
    │            ──┬──
    │              ╰──── Function 'b::fb' not defined
    │
-   │ Help: no module 'b' is imported
+   │ Help: b is not imported; import it
+   │           import b;
 ───╯
 [-] Error: aborting due to previous error

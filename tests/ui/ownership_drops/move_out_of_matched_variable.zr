@@ -1,0 +1,7 @@
+fn main() {
+    var read: String? = String.from("go");
+    var line = match read {
+        Some(text) => text,
+        None => String.new(),
+    };
+}

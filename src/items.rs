@@ -343,6 +343,16 @@ impl<'a> Items<'a> {
         in_module(ModuleId::PRELUDE, path).filter(|&def| self.visible(def, from))
     }
 
+    /// The full name of a module of the program, outside std, whose last
+    /// part is `short`, as another file imports it.
+    pub fn program_module(&self, short: &str) -> Option<&str> {
+        self.by_name
+            .iter()
+            .filter(|(_, id)| !self.modules[id.0 as usize].std)
+            .map(|(name, _)| name.as_str())
+            .find(|name| name.rsplit('.').next() == Some(short))
+    }
+
     /// The module code in `from` imports as `name`.
     pub fn imported_module(&self, from: ModuleId, name: &str) -> Option<ModuleId> {
         self.modules[from.0 as usize].modules.get(name).copied()

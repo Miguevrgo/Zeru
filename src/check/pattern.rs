@@ -794,7 +794,11 @@ impl FnCx<'_, '_> {
                         "A pattern binds names, as in Some(x); match the value inside again",
                         name.span,
                     );
-                    return None;
+                    let mut inner = Vec::new();
+                    bound_names(name, &mut inner);
+                    for name in inner {
+                        binds.push((name, Types::ERROR, payload(tag as u32, at as u32)));
+                    }
                 }
             }
         }
@@ -981,4 +985,16 @@ fn merged(mut missing: Vec<Vec<Option<i128>>>, listed: &[Vec<String>]) -> Vec<Ve
         missing = kept;
     }
     missing
+}
+
+/// The names `pattern` binds at any depth, so that a pattern rejected for
+/// nesting still declares them and the arm reports nothing more.
+fn bound_names(pattern: &Pattern, out: &mut Vec<String>) {
+    match &pattern.kind {
+        PatternKind::Binding(name) if name != "_" => out.push(name.clone()),
+        PatternKind::Payload { fields: parts, .. } | PatternKind::Tuple(parts) => {
+            parts.iter().for_each(|part| bound_names(part, out));
+        }
+        _ => {}
+    }
 }

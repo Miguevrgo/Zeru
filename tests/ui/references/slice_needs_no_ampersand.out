@@ -1,0 +1,17 @@
+status: compile error
+-- stderr
+Error: 'total' takes 'values' as &[i32], but this is &&[i32]
+    ╭─[ tests/ui/references/slice_needs_no_ampersand.zr:11:25 ]
+    │
+  1 │ fn total(values: &[i32]) i32 {
+    │ ──────────────┬─────────────
+    │               ╰─────────────── 'values' is declared here
+    │
+ 11 │     println("{}", total(&all[..n]));
+    │                         ────┬────
+    │                             ╰────── this is &&[i32]
+    │
+    │ Help: a slice is a reference already; drop the &
+    │           println("{}", total(all[..n]));
+────╯
+[-] Error: aborting due to previous error

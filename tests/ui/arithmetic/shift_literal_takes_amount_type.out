@@ -1,0 +1,13 @@
+status: compile error
+-- stderr
+Error: 'bit' is declared as u64, but its value is i32
+   ╭─[ tests/ui/arithmetic/shift_literal_takes_amount_type.zr:3:20 ]
+   │
+ 3 │     var bit: u64 = 1 << i;
+   │                    ───┬──
+   │                       ╰──── this is i32
+   │
+   │ Help: convert the amount instead: both sides of a shift are one type, so the number then takes it
+   │           var bit: u64 = 1 << (i as u64);
+───╯
+[-] Error: aborting due to previous error

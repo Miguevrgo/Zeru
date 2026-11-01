@@ -4,7 +4,9 @@
 use crate::ast::{Expression, ExpressionKind, Names, Statement, StatementKind};
 use crate::errors::{Span, ZeruError};
 use crate::items::DefId;
-use crate::tir::{self, Block, Expr, ExprKind, LocalId, Place, Stmt, StmtKind, Unpack, Walk};
+use crate::tir::{
+    self, BinOp, Block, Expr, ExprKind, LocalId, Place, Stmt, StmtKind, Unpack, Walk,
+};
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
@@ -394,7 +396,13 @@ impl<'c, 'a> FnCx<'c, 'a> {
             ExprKind::Read(Place::Local(local)) if self.locals[local.0 as usize].view => {
                 let name = self.local_name(*local).to_string();
                 let message = format!("Cannot move '{name}', which is borrowed");
-                self.cannot_move(message, "what it borrows from keeps it", expr, false);
+                let why = match self.fixed[local.0 as usize] {
+                    Some(Fixed::Binding) => {
+                        "a match on a variable only lends its parts; to take them, match a value made for the match, as a call's result"
+                    }
+                    _ => "what it borrows from keeps it",
+                };
+                self.cannot_move(message, why, expr, false);
                 return;
             }
             ExprKind::Read(Place::Local(_)) => {}
@@ -576,6 +584,20 @@ impl<'c, 'a> FnCx<'c, 'a> {
         Some(
             match (types.kind(got).clone(), types.kind(target).clone()) {
                 _ if literal && (types.is_number(target) || target == Types::BOOL) => return None,
+                _ if let ExprKind::Binary(op @ (BinOp::Shl | BinOp::Shr), left, right) =
+                    &value.kind
+                    && matches!(left.kind, ExprKind::Int(_))
+                    && int(got)
+                    && int(target) =>
+                {
+                    let sources = self.cx.sources;
+                    let symbol = if *op == BinOp::Shl { "<<" } else { ">>" };
+                    let (l, r) = (sources.text(left.span), sources.text(right.span));
+                    (
+                        "convert the amount instead: both sides of a shift are one type, so the number then takes it",
+                        Some(format!("{l} {symbol} ({r} as {shown})")),
+                    )
+                }
                 _ if types.is_number(got) && types.is_number(target) => {
                     ("convert it with as", Some(format!("{operand} as {shown}")))
                 }
@@ -602,6 +624,16 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     "a & reference only reads; get a &var reference where this one comes from",
                     None,
                 ),
+                (
+                    TyKind::Ref(inner) | TyKind::RefMut(inner),
+                    TyKind::Slice(_) | TyKind::SliceMut(_),
+                ) if inner == target && text.starts_with('&') => {
+                    let lent = text.trim_start_matches('&').trim_start_matches("var ");
+                    (
+                        "a slice is a reference already; drop the &",
+                        Some(lent.to_string()),
+                    )
+                }
                 (TyKind::Ref(inner) | TyKind::RefMut(inner), _) if inner == target && owns => (
                     "copy the value it refers to",
                     Some(format!("{operand}.copy()")),

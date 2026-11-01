@@ -1,0 +1,10 @@
+status: compile error
+-- stderr
+Error: A pattern binds names, as in Some(x); match the value inside again
+   ╭─[ tests/ui/match/nested_payload_pattern.zr:6:12 ]
+   │
+ 6 │         Ok(Some(value)) => value,
+   │            ─────┬─────
+   │                 ╰─────── A pattern binds names, as in Some(x); match the value inside again
+───╯
+[-] Error: aborting due to previous error

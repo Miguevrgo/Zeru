@@ -1,0 +1,9 @@
+fn read() (i64?)! {
+    return 3;
+}
+fn main() {
+    var n = match read() {
+        Ok(Some(value)) => value,
+        default => 0,
+    };
+}

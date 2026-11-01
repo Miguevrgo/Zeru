@@ -597,6 +597,9 @@ impl FnCx<'_, '_> {
                     let public = items.names_of(id, ItemKind::Fn, true);
                     suggest::did_you_mean(error, function, &public, Some(short));
                 }
+                None if let Some(path) = items.program_module(owner) => {
+                    suggest::suggest_import(sources, error, at, path, None);
+                }
                 None => match suggest::std_modules()
                     .into_iter()
                     .find(|m| m.0.rsplit('.').next() == Some(owner))

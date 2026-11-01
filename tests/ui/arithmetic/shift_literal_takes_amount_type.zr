@@ -1,0 +1,4 @@
+fn main() {
+    var i = 40;
+    var bit: u64 = 1 << i;
+}
