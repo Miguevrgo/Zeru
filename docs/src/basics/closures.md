@@ -79,6 +79,23 @@ println("{}", v); // [5, 4, 3, 1, 1]
 one. `sort_by` puts the Vec in the order the closure gives: a negative
 number when its first element goes before its second.
 
+The closure returns an `i32`, so `b - a` suits small `i32` values; for
+others, compare and give `-1`, `0` or `1`, which never overflows:
+
+```zeru
+var sizes: Vec<i64> = Vec[3_000_000_000, 0, 7];
+sizes.sort_by(fn(a: i64, b: i64) i32 {
+    if a < b {
+        return -1;
+    }
+    if a > b {
+        return 1;
+    }
+    return 0;
+});
+println("{}", sizes); // [0, 7, 3000000000]
+```
+
 ## What a closure is given
 
 A closure is given each value as a `for` is each element: a value that
