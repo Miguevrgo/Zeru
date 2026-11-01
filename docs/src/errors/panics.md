@@ -31,6 +31,7 @@ What panics:
 | `unwrap()` on an error, `unwrap_err()` on a success | `unwrap on Err`, `unwrap_err on Ok` |
 | dereferencing a null pointer | `null pointer dereference` |
 | no memory left | `out of memory` |
+| calls nested deeper than the stack, as endless recursion | `stack overflow`, with no place in the source |
 
 ## assert
 
