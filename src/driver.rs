@@ -184,6 +184,7 @@ extern "C" fn collect_error(info: LLVMDiagnosticInfoRef, errors: *mut c_void) {
 pub fn compile(
     path: &Path,
     mode: SafetyMode,
+    native: bool,
     keep_ir: bool,
     tests: bool,
 ) -> Result<(PathBuf, Vec<(String, String)>), CompileError> {
@@ -237,7 +238,7 @@ pub fn compile(
         );
     }
     let module = context.create_module(name);
-    let machine = crate::lower::host_machine(mode);
+    let machine = crate::lower::host_machine(mode, native);
     crate::lower::lower(
         &program, &bodies, &context, &module, &sources, mode, &machine,
     );
@@ -282,8 +283,13 @@ pub fn compile(
 /// Run each test of `path` whose name holds `filter`, in a process of its
 /// own so a panic fails only that test: the passes as they finish, then the
 /// failures with what they printed. Gives whether every test passed.
-pub fn test(path: &Path, mode: SafetyMode, filter: Option<&str>) -> Result<bool, CompileError> {
-    let (exe_path, tests) = compile(path, mode, false, true)?;
+pub fn test(
+    path: &Path,
+    mode: SafetyMode,
+    native: bool,
+    filter: Option<&str>,
+) -> Result<bool, CompileError> {
+    let (exe_path, tests) = compile(path, mode, native, false, true)?;
     let ((green, reset), (red, _)) = (crate::errors::paint(GREEN), crate::errors::paint(RED));
     let start = std::time::Instant::now();
     let (mut passed, mut failed, mut filtered) = (0, Vec::new(), 0);

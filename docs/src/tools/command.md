@@ -11,8 +11,8 @@
 | `zeru update` | installs the build of the latest commit of `main` |
 | `zeru update --stable` | installs the latest release |
 
-`run`, `build` and `test` take `--release-safe` or `--release-fast`, as the
-[Build Modes](modes.md) page explains. `zeru help <command>` shows each
+`run`, `build` and `test` take `--release-safe` or `--release-fast`, and
+`--native`, as the [Build Modes](modes.md) page explains. `zeru help <command>` shows each
 command's options.
 
 ## Errors

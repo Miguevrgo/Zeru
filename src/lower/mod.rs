@@ -229,17 +229,25 @@ fn reached(program: &Program, bodies: &[Body]) -> Vec<bool> {
 }
 
 /// The target the program is built for: Linux on x86-64-v2, with SSE4.2
-/// and POPCNT, which every x86-64 processor since about 2009 has.
-pub fn host_machine(mode: SafetyMode) -> TargetMachine {
+/// and POPCNT, which every x86-64 processor since about 2009 has; with
+/// `native`, all of the processor compiling it.
+pub fn host_machine(mode: SafetyMode, native: bool) -> TargetMachine {
     Target::initialize_native(&InitializationConfig::default()).expect("a native target");
     let triple = TargetMachine::get_default_triple();
+    let (cpu, features) = match native {
+        true => (
+            TargetMachine::get_host_cpu_name().to_string(),
+            TargetMachine::get_host_cpu_features().to_string(),
+        ),
+        false => ("x86-64-v2".to_string(), String::new()),
+    };
     Target::from_triple(&triple)
         .ok()
         .and_then(|target| {
             target.create_target_machine(
                 &triple,
-                "x86-64-v2",
-                "",
+                &cpu,
+                &features,
                 mode.opt_level(),
                 RelocMode::PIC,
                 CodeModel::Default,

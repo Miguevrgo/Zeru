@@ -57,3 +57,8 @@ folder.
 Every executable is static: it uses no C library and no shared library,
 and runs on any Linux x86-64 machine as it is. It is built for
 x86-64-v2, the instruction set of every x86-64 processor since about 2009.
+
+`--native` builds for the processor compiling it instead, using all it
+has, as AVX2 or AVX-512: number-crunching loops can run a few times
+faster, and the executable may stop with an illegal instruction on an
+older processor. Use it for a program that runs where it is built.

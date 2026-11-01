@@ -35,6 +35,11 @@ struct Mode {
     release_safe: bool,
     #[arg(long, help = "Optimize, drop runtime checks")]
     release_fast: bool,
+    #[arg(
+        long,
+        help = "Use all of this processor: faster, may not run on older ones"
+    )]
+    native: bool,
 }
 
 impl Mode {
@@ -104,14 +109,14 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
             mode,
             emit_ir,
         } => {
-            compile(&file, mode.safety(), emit_ir, false)?;
+            compile(&file, mode.safety(), mode.native, emit_ir, false)?;
         }
         Commands::Run {
             file,
             mode,
             program_args,
         } => {
-            let (executable_path, _) = compile(&file, mode.safety(), false, false)?;
+            let (executable_path, _) = compile(&file, mode.safety(), mode.native, false, false)?;
             status(GREEN, '\u{e7d5}', "Running", executable_path.display());
             let status = std::process::Command::new(&executable_path)
                 .args(program_args)
@@ -123,7 +128,7 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
             );
         }
         Commands::Test { file, filter, mode } => {
-            if !test(&file, mode.safety(), filter.as_deref())? {
+            if !test(&file, mode.safety(), mode.native, filter.as_deref())? {
                 std::process::exit(1);
             }
         }
