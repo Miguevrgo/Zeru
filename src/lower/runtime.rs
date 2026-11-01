@@ -142,7 +142,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     }
 
     /// A call to the LLVM intrinsic `name` at type `ty`.
-    fn intrinsic(
+    pub(super) fn intrinsic(
         &self,
         name: &str,
         ty: BasicTypeEnum<'ctx>,

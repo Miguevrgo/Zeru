@@ -360,7 +360,10 @@ impl<'a> Cx<'a> {
             StatementKind::Asm(asm) => {
                 out.extend(asm.outputs.iter().map(|place| (place.clone(), Role::Write)))
             }
-            StatementKind::CopyBytes(..) | StatementKind::Flush | StatementKind::Print { .. } => {}
+            StatementKind::CopyBytes(..)
+            | StatementKind::SimdStore(..)
+            | StatementKind::Flush
+            | StatementKind::Print { .. } => {}
         }
         out
     }

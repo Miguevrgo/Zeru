@@ -249,6 +249,12 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 let address = self.place(dest);
                 return self.build_byte_str(value, address);
             }
+            Rvalue::Simd(op, operands) if matches!(self.types().kind(ty), TyKind::Array(..)) => {
+                let address = self.place(dest);
+                self.simd(*op, operands, ty, Some(address));
+                return;
+            }
+            Rvalue::Simd(op, operands) => self.simd(*op, operands, ty, None),
             Rvalue::Aggregate(..)
             | Rvalue::Repeat(..)
             | Rvalue::VecRepeat(..)

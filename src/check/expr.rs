@@ -427,6 +427,13 @@ impl FnCx<'_, '_> {
         if let Some((place, ty)) = self.variable(name) {
             return self.mk(ExprKind::Read(place), ty, span);
         }
+        if name == "__ZERU_SIMD_BYTES" {
+            return self.mk(
+                ExprKind::Int(self.cx.simd_bytes as i128),
+                Types::USIZE,
+                span,
+            );
+        }
         if let Some((owner, variant)) = name.rsplit_once("::")
             && let Some(def) = self.cx.items.lookup_type(self.scope.module, owner)
             && self.cx.items.item(def).kind == ItemKind::Enum

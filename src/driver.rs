@@ -86,6 +86,7 @@ type Analysis = Result<(crate::tir::Program, Vec<crate::mir::Body>), Vec<ZeruErr
 fn analyze(
     path: &Path,
     mode: SafetyMode,
+    native: bool,
     tests: bool,
 ) -> Result<(Sources, Analysis), CompileError> {
     let user_code = std::fs::read_to_string(path)?;
@@ -94,7 +95,7 @@ fn analyze(
         return Ok((sources, Err(errors)));
     }
     let items = Items::collect(&modules, &sources);
-    let analysis = Checker::new(&items, &sources)
+    let analysis = Checker::new(&items, &sources, crate::lower::simd_bytes(native))
         .check()
         .and_then(|mut program| {
             let bodies = crate::mir::build(&mut program, &sources, mode)?;
@@ -110,7 +111,7 @@ fn analyze(
 /// errors, or else its warnings, as text or, for editors, as one JSON object
 /// per line.
 pub fn check(path: &Path, json: bool) -> Result<(), CompileError> {
-    let (sources, analysis) = analyze(path, SafetyMode::Debug, true)?;
+    let (sources, analysis) = analyze(path, SafetyMode::Debug, false, true)?;
     let (errors, failed) = match analysis {
         Ok((program, _)) => (program.warnings, false),
         Err(errors) => (errors, true),
@@ -212,7 +213,7 @@ pub fn compile(
         format_args!("v{} ({})", env!("CARGO_PKG_VERSION"), path.display()),
     );
     let start = std::time::Instant::now();
-    let (sources, analysis) = analyze(path, mode, tests)?;
+    let (sources, analysis) = analyze(path, mode, native, tests)?;
     let (program, bodies) = analysis.map_err(|errors| {
         report_errors(&errors, &sources);
         CompileError::Unknown

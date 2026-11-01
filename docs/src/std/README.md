@@ -11,6 +11,7 @@ need, with one way to do each task.
 | [os](os.md) | `import std.os;` | arguments, environment, time, processes, input |
 | [net](net.md) | `import std.net;` | TCP, UDP and Unix sockets |
 | [collections](collections.md) | `import std.collections.hashmap::{HashMap};` ... | hash maps and sets, queues, heaps |
+| [simd](simd.md) | `import std.simd;` | many numbers at once, in the processor's vector registers |
 
 These pages give an overview of each module with examples. Every function
 is documented in full, with its errors and more examples, next to its code

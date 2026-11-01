@@ -11,6 +11,7 @@ mod eval;
 mod expr;
 mod infer;
 mod pattern;
+mod simd;
 pub(crate) mod suggest;
 mod types;
 
@@ -125,6 +126,8 @@ pub struct Checker<'a> {
     unsatisfied: HashSet<(DefId, Vec<Ty>)>,
     adts_seen: HashSet<Ty>,
     unreported: Cell<Option<Span>>,
+    /// The bytes of a std.simd vector on the target being built for.
+    simd_bytes: u64,
 }
 
 /// Where a type, a name or a call is being resolved: in which module, with
@@ -137,7 +140,7 @@ struct Scope {
 }
 
 impl<'a> Checker<'a> {
-    pub fn new(items: &'a Items<'a>, sources: &'a Sources) -> Self {
+    pub fn new(items: &'a Items<'a>, sources: &'a Sources, simd_bytes: u64) -> Self {
         Self {
             items,
             sources,
@@ -160,6 +163,7 @@ impl<'a> Checker<'a> {
             unsatisfied: HashSet::new(),
             adts_seen: HashSet::new(),
             unreported: Cell::new(None),
+            simd_bytes,
         }
     }
 

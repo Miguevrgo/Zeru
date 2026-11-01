@@ -151,7 +151,7 @@ impl FnCx<'_, '_> {
         call
     }
 
-    fn check_args_only(&mut self, args: &[Expression]) {
+    pub(super) fn check_args_only(&mut self, args: &[Expression]) {
         for arg in args {
             if matches!(arg.kind, ExpressionKind::Closure(_)) {
                 continue;
@@ -1007,6 +1007,20 @@ impl FnCx<'_, '_> {
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
+        let name = self
+            .cx
+            .items
+            .item(def)
+            .name
+            .rsplit("::")
+            .next()
+            .unwrap_or_default();
+        if self.cx.items.std_module_of(def) == Some("simd")
+            && let Some(op) = super::simd::simd_op(name)
+        {
+            let name = name.to_string();
+            return self.simd_call(op, &name, args, span);
+        }
         self.inference_root(expected, span, |this| {
             this.generic_call(def, known, receiver, args, expected, span)
         })

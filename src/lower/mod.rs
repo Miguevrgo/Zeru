@@ -9,6 +9,7 @@ mod debug;
 mod glue;
 mod runtime;
 mod rvalue;
+mod simd;
 mod types;
 
 use std::collections::HashMap;
@@ -228,6 +229,18 @@ fn reached(program: &Program, bodies: &[Body]) -> Vec<bool> {
     reached
 }
 
+/// The bytes of a std.simd vector: those of the widest vector registers
+/// the target has, AVX-512's or AVX2's with `native`, SSE's otherwise.
+pub fn simd_bytes(native: bool) -> u64 {
+    let features = TargetMachine::get_host_cpu_features().to_string();
+    let has = |feature: &str| native && features.split(',').any(|f| f == feature);
+    match () {
+        _ if has("+avx512f") => 64,
+        _ if has("+avx2") => 32,
+        _ => 16,
+    }
+}
+
 /// The target the program is built for: Linux on x86-64-v2, with SSE4.2
 /// and POPCNT, which every x86-64 processor since about 2009 has; with
 /// `native`, all of the processor compiling it.
@@ -434,6 +447,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 let count = self.operand(count).imm().into_int_value();
                 self.builder.build_memmove(to, 1, from, 1, count).unwrap();
             }
+            StatementKind::SimdStore(to, value) => self.simd_store(to, value),
             StatementKind::StorageDead(_) => {}
             StatementKind::Flush => {
                 let flush = self.flush.expect("the prelude declares the streams");

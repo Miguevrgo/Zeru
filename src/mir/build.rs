@@ -8,8 +8,8 @@ use std::mem::replace;
 use crate::errors::{Sources, Span, ZeruError, tidy};
 use crate::lower::SafetyMode;
 use crate::tir::{
-    self, Arm, BinOp, Builtin, Expr, ExprKind, FnId, Payload, Program, Reach, Stmt, StmtKind, Test,
-    UnOp,
+    self, Arm, BinOp, Builtin, Expr, ExprKind, FnId, Payload, Program, Reach, SimdOp, Stmt,
+    StmtKind, Test, UnOp,
 };
 use crate::ty::{Ty, TyKind, Types};
 
@@ -1552,6 +1552,7 @@ impl<'a> Builder<'a> {
                 Rvalue::Bits(op, value, amount)
             }
             Builtin::VecWithCapacity => Rvalue::VecNew(Some(operand(self, 0))),
+            Builtin::Simd(op) => return self.simd(dest, op, args),
             _ => {
                 let (held, moved) = self.receiver(&args[0], args.len() > 1);
                 match builtin {
@@ -1616,12 +1617,39 @@ impl<'a> Builder<'a> {
                     | Builtin::CopyBytes
                     | Builtin::VecNew
                     | Builtin::VecWithCapacity
-                    | Builtin::Bits(_) => unreachable!("handled above"),
+                    | Builtin::Bits(_)
+                    | Builtin::Simd(_) => unreachable!("handled above"),
                 }
             }
         };
         if let Some(dest) = dest {
             self.assign(dest, rvalue);
+        }
+    }
+
+    /// A std.simd call. Loading and storing check first that the slice
+    /// holds a whole vector, whose lanes the checker passes for a load.
+    fn simd(&mut self, dest: Option<Place>, op: SimdOp, args: &[Expr]) {
+        if let SimdOp::Load | SimdOp::Store = op {
+            let lanes = match (op, &args[1].kind, self.types().kind(args[1].ty)) {
+                (SimdOp::Load, ExprKind::Int(lanes), _) => *lanes,
+                (_, _, TyKind::Array(_, lanes)) => *lanes as i128,
+                _ => unreachable!("a load says its lanes, a store gives a vector"),
+            };
+            let (slice, _) = self.receiver(&args[0], false);
+            self.check_index(&slice, &constant(lanes - 1, Types::USIZE), BinOp::Lt);
+            if op == SimdOp::Store {
+                let value = self.as_operand(&args[1]);
+                return self.push(StatementKind::SimdStore(Operand::Copy(slice), value));
+            }
+            if let Some(dest) = dest {
+                self.assign(dest, Rvalue::Simd(op, vec![Operand::Copy(slice)]));
+            }
+            return;
+        }
+        let values = args.iter().map(|arg| self.as_operand(arg)).collect();
+        if let Some(dest) = dest {
+            self.assign(dest, Rvalue::Simd(op, values));
         }
     }
 

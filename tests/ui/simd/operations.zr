@@ -1,0 +1,29 @@
+import std.simd;
+
+fn main() {
+    var data: Vec<i16> = Vec.new();
+    for i in 0..100 {
+        data.push(i as i16);
+    }
+    var v = simd::load(data[1..]);
+    var w = simd::add(v, v);
+    var m = simd::madd(v, w);
+    var total = simd::sum(m);
+    var out: Array<i16, simd::LANES_16> = [0; simd::LANES_16];
+    simd::store(&var out[..], simd::max(simd::min(w, [40; simd::LANES_16]), [10; simd::LANES_16]));
+    var mask = simd::gt(v, [4; simd::LANES_16]);
+    var picked = simd::select(mask, v, [0; simd::LANES_16]);
+    var shifted = simd::shl(v, 2);
+    var floats: Array<f32, simd::LANES_32> = [1.5; simd::LANES_32];
+    println("{} {} {} {}", simd::BYTES, w[3], m[0], total);
+    println("{}", out);
+    println("{} {} {}", picked, shifted[3], simd::sum(simd::mul(floats, floats)));
+    var bits: Array<u8, simd::LANES_8> = [0b1100; simd::LANES_8];
+    var other: Array<u8, simd::LANES_8> = [0b1010; simd::LANES_8];
+    println("{} {} {}", simd::and(bits, other)[0], simd::or(bits, other)[0], simd::xor(bits, other)[0]);
+    var neg: Array<i32, simd::LANES_32> = [-64; simd::LANES_32];
+    var low: Array<u32, simd::LANES_32> = [7; simd::LANES_32];
+    var high: Array<u32, simd::LANES_32> = [9; simd::LANES_32];
+    println("{} {} {}", simd::shr(neg, 2)[0], simd::lt(low, high)[0], simd::eq(low, high)[0]);
+    println("{} {}", simd::min(floats, [0.5; simd::LANES_32])[0], simd::sub(neg, neg)[1]);
+}

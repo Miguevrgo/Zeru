@@ -1,0 +1,104 @@
+// Operations on vectors: arrays as wide as the vector registers of the
+// processor the program is built for, each lane worked on at once.
+//
+// A vector is an `Array` of `BYTES` bytes: `Array<i16, simd::LANES_16>`,
+// `Array<f32, simd::LANES_32>` and so on. `BYTES` is 16 for the default
+// build, and with `--native` 32 on a processor with AVX2 or 64 with
+// AVX-512. `[x; simd::LANES_16]` gives a vector of one value. Integer
+// arithmetic wraps around, as `+%` does; a load or a store checks that the
+// slice holds a whole vector, outside `--release-fast`.
+//
+// # Examples
+//
+// ```zeru
+// import std.simd;
+//
+// var values: Vec<i32> = Vec.new();
+// for i in 0..100 {
+//     values.push(i);
+// }
+// var total: Array<i32, simd::LANES_32> = [0; simd::LANES_32];
+// var at: usize = 0;
+// while at + simd::LANES_32 <= values.len() {
+//     total = simd::add(total, simd::load(values[at..]));
+//     at += simd::LANES_32;
+// }
+// var sum = simd::sum(total);
+// while at < values.len() {
+//     sum += values[at];
+//     at += 1;
+// }
+// println("{}", sum); // 4950
+// ```
+
+// The bytes of a vector.
+pub const BYTES: usize = __ZERU_SIMD_BYTES;
+
+// The lanes of a vector of 8-bit numbers: i8, u8.
+pub const LANES_8: usize = BYTES;
+
+// The lanes of a vector of 16-bit numbers: i16, u16.
+pub const LANES_16: usize = BYTES / 2;
+
+// The lanes of a vector of 32-bit numbers: i32, u32, f32.
+pub const LANES_32: usize = BYTES / 4;
+
+// The lanes of a vector of 64-bit numbers: i64, u64, usize, f64.
+pub const LANES_64: usize = BYTES / 8;
+
+// Returns the first lanes of `values` as a vector.
+pub fn load<T, V>(values: &[T]) V {}
+
+// Writes `lanes` over the first elements of `out`.
+pub fn store<T, V>(out: &var [T], lanes: V) {}
+
+// Returns the sums, lane by lane.
+pub fn add<V>(a: V, b: V) V {}
+
+// Returns the differences, lane by lane.
+pub fn sub<V>(a: V, b: V) V {}
+
+// Returns the products, lane by lane; for integers, their low bits.
+pub fn mul<V>(a: V, b: V) V {}
+
+// Returns the smaller of each pair of lanes.
+pub fn min<V>(a: V, b: V) V {}
+
+// Returns the larger of each pair of lanes.
+pub fn max<V>(a: V, b: V) V {}
+
+// Returns the bits set in both, for integer lanes.
+pub fn and<V>(a: V, b: V) V {}
+
+// Returns the bits set in either, for integer lanes.
+pub fn or<V>(a: V, b: V) V {}
+
+// Returns the bits set in one only, for integer lanes.
+pub fn xor<V>(a: V, b: V) V {}
+
+// Returns each integer lane shifted left by `amount`.
+pub fn shl<V, N>(lanes: V, amount: N) V {}
+
+// Returns each integer lane shifted right by `amount`, keeping the sign of
+// a signed one.
+pub fn shr<V, N>(lanes: V, amount: N) V {}
+
+// Returns a mask: each lane all ones where the lanes are equal, else zero,
+// as integers of the lanes' width.
+pub fn eq<V, M>(a: V, b: V) M {}
+
+// Returns a mask of where a lane of `a` is less than that of `b`.
+pub fn lt<V, M>(a: V, b: V) M {}
+
+// Returns a mask of where a lane of `a` is greater than that of `b`.
+pub fn gt<V, M>(a: V, b: V) M {}
+
+// Returns the lane of `a` where `mask` is not zero, else that of `b`.
+pub fn select<M, V>(mask: M, a: V, b: V) V {}
+
+// Returns the sum of the lanes; for integers, wrapping around.
+pub fn sum<V, T>(lanes: V) T {}
+
+// Returns, from two vectors of i16, the vector of i32 whose lane `i` is
+// `a[2i] * b[2i] + a[2i + 1] * b[2i + 1]`.
+pub fn madd<V, W>(a: V, b: V) W {}

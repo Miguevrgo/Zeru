@@ -1,0 +1,66 @@
+status: compile error
+-- stderr
+Error: 'simd::load' takes a slice of numbers, as values[i..]; this is Vec<i16>
+   ╭─[ tests/ui/simd/errors.zr:8:24 ]
+   │
+ 8 │     var a = simd::load(v);
+   │                        ┬
+   │                        ╰── 'simd::load' takes a slice of numbers, as values[i..]; this is Vec<i16>
+───╯
+Error: 'simd::add' takes vectors, arrays of 16 bytes as Array<i32, simd::LANES_32>; this is Array<i16, 4>
+   ╭─[ tests/ui/simd/errors.zr:9:23 ]
+   │
+ 9 │     var b = simd::add(small, small);
+   │                       ──┬──
+   │                         ╰──── 'simd::add' takes vectors, arrays of 16 bytes as Array<i32, simd::LANES_32>; this is Array<i16, 4>
+───╯
+Error: 'simd::add' takes vectors of one type, Array<i16, 8>; this is Array<f32, 4>
+    ╭─[ tests/ui/simd/errors.zr:10:30 ]
+    │
+ 10 │     var c = simd::add(lanes, floats);
+    │                              ───┬──
+    │                                 ╰──── 'simd::add' takes vectors of one type, Array<i16, 8>; this is Array<f32, 4>
+────╯
+Error: 'simd::and' works on integer lanes, not f32
+    ╭─[ tests/ui/simd/errors.zr:11:23 ]
+    │
+ 11 │     var d = simd::and(floats, floats);
+    │                       ───┬──
+    │                          ╰──── 'simd::and' works on integer lanes, not f32
+────╯
+Error: 'simd::madd' takes vectors of i16, not Array<f32, 4>
+    ╭─[ tests/ui/simd/errors.zr:12:24 ]
+    │
+ 12 │     var e = simd::madd(floats, floats);
+    │                        ───┬──
+    │                           ╰──── 'simd::madd' takes vectors of i16, not Array<f32, 4>
+────╯
+Error: 'simd::shl' shifts by an integer, not f64
+    ╭─[ tests/ui/simd/errors.zr:13:30 ]
+    │
+ 13 │     var f = simd::shl(lanes, 1.5);
+    │                              ─┬─
+    │                               ╰─── 'simd::shl' shifts by an integer, not f64
+────╯
+Error: The mask of 'simd::select' is a vector of integers as wide as the lanes, Array<i32, 4>; this is Array<i16, 8>
+    ╭─[ tests/ui/simd/errors.zr:14:26 ]
+    │
+ 14 │     var g = simd::select(lanes, floats, floats);
+    │                          ──┬──
+    │                            ╰──── The mask of 'simd::select' is a vector of integers as wide as the lanes, Array<i32, 4>; this is Array<i16, 8>
+────╯
+Error: 'simd::sum' takes 1 argument(s), but 2 were given
+    ╭─[ tests/ui/simd/errors.zr:15:13 ]
+    │
+ 15 │     var h = simd::sum(lanes, lanes);
+    │             ───────────┬───────────
+    │                        ╰───────────── 'simd::sum' takes 1 argument(s), but 2 were given
+────╯
+Error: 'simd::store' writes into a slice that writes, as &var out[i..]; this is Array<i16, 8>
+    ╭─[ tests/ui/simd/errors.zr:16:17 ]
+    │
+ 16 │     simd::store(lanes, lanes);
+    │                 ──┬──
+    │                   ╰──── 'simd::store' writes into a slice that writes, as &var out[i..]; this is Array<i16, 8>
+────╯
+[-] Error: aborting due to previous error

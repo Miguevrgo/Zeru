@@ -390,6 +390,31 @@ pub enum Builtin {
     HashBits,
     Replace,
     Bits(BitOp),
+    Simd(SimdOp),
+}
+
+/// What a std.simd function does to whole vectors: arrays as wide as the
+/// target's vector registers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SimdOp {
+    Load,
+    Store,
+    Add,
+    Sub,
+    Mul,
+    Min,
+    Max,
+    And,
+    Or,
+    Xor,
+    Shl,
+    Shr,
+    Eq,
+    Lt,
+    Gt,
+    Select,
+    Sum,
+    Madd,
 }
 
 /// What an integer's bit methods do: count its set bits, or the zeros

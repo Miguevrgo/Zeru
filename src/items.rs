@@ -353,6 +353,13 @@ impl<'a> Items<'a> {
             .find(|name| name.rsplit('.').next() == Some(short))
     }
 
+    /// The last part of the name of `def`'s module when it is one of std's,
+    /// as "simd".
+    pub fn std_module_of(&self, def: DefId) -> Option<&str> {
+        let module = &self.modules[self.item(def).module.0 as usize];
+        module.name.as_deref().filter(|_| module.std)
+    }
+
     /// The module code in `from` imports as `name`.
     pub fn imported_module(&self, from: ModuleId, name: &str) -> Option<ModuleId> {
         self.modules[from.0 as usize].modules.get(name).copied()

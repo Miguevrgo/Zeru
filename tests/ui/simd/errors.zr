@@ -1,0 +1,17 @@
+import std.simd;
+
+fn main() {
+    var v: Vec<i16> = Vec[1, 2];
+    var small: Array<i16, 4> = [0; 4];
+    var lanes = simd::load(v[..]);
+    var floats: Array<f32, simd::LANES_32> = [1.0; simd::LANES_32];
+    var a = simd::load(v);
+    var b = simd::add(small, small);
+    var c = simd::add(lanes, floats);
+    var d = simd::and(floats, floats);
+    var e = simd::madd(floats, floats);
+    var f = simd::shl(lanes, 1.5);
+    var g = simd::select(lanes, floats, floats);
+    var h = simd::sum(lanes, lanes);
+    simd::store(lanes, lanes);
+}

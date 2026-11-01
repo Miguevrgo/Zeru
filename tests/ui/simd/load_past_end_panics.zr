@@ -1,0 +1,8 @@
+//@ checked
+import std.simd;
+
+fn main() {
+    var v: Vec<i16> = Vec[1, 2, 3];
+    var lanes = simd::load(v[1..]);
+    println("{}", lanes);
+}

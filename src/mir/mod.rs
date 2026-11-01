@@ -9,7 +9,7 @@ mod build;
 mod elaborate;
 
 use crate::errors::Span;
-use crate::tir::{BinOp, BitOp, FnId, Program, UnOp};
+use crate::tir::{BinOp, BitOp, FnId, Program, SimdOp, UnOp};
 use crate::ty::{Ty, TyKind};
 
 pub use build::build;
@@ -68,6 +68,8 @@ pub enum StatementKind {
     VecReserve(Place, Operand),
     VecShrinkToFit(Place),
     CopyBytes(Operand, Operand, Operand),
+    /// A vector written to the start of a slice that writes.
+    SimdStore(Operand, Operand),
     Flush,
     Asm(Box<Asm>),
     StorageDead(Local),
@@ -197,6 +199,8 @@ pub enum Rvalue {
     Take(Place),
     /// An integer's bit method, with the amount to rotate by if any.
     Bits(BitOp, Operand, Option<Operand>),
+    /// A std.simd operation on vectors, or loading one from a slice.
+    Simd(SimdOp, Vec<Operand>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -246,6 +250,7 @@ impl StatementKind {
             StatementKind::VecPush(_, item) | StatementKind::VecReserve(_, item) => vec![item],
             StatementKind::VecInsert(_, at, item) => vec![at, item],
             StatementKind::CopyBytes(to, from, count) => vec![to, from, count],
+            StatementKind::SimdStore(to, value) => vec![to, value],
             StatementKind::Print { values, .. } => values.iter().collect(),
             StatementKind::Asm(asm) => asm.inputs.iter().collect(),
             StatementKind::VecClear(_)
@@ -268,7 +273,7 @@ impl Rvalue {
             Rvalue::Binary { left, right, .. } | Rvalue::VecRepeat(left, right) => {
                 vec![left, right]
             }
-            Rvalue::Aggregate(_, values) => values.iter().collect(),
+            Rvalue::Aggregate(_, values) | Rvalue::Simd(_, values) => values.iter().collect(),
             Rvalue::Bits(_, value, amount) => std::iter::once(value).chain(amount).collect(),
             Rvalue::VecNew(capacity) => capacity.iter().collect(),
             Rvalue::AddressOf(_)
