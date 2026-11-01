@@ -1544,6 +1544,21 @@ impl Parser {
             }
             self.expect(&Token::Arrow)?;
 
+            let leave = match self.tokens[self.pos].0 {
+                Token::Return => Some(("return", "return x")),
+                Token::Break => Some(("break", "break")),
+                Token::Continue => Some(("continue", "continue")),
+                _ => None,
+            };
+            if let Some((keyword, example)) = leave {
+                if let Some(error) = self.error(
+                    format!("A {keyword} in a match arm goes inside a block"),
+                    self.span(),
+                ) {
+                    error.help(format!("wrap it in braces, as in => {{ {example}; }}"));
+                }
+                return None;
+            }
             let body = match self.at(&Token::LBrace) {
                 true => {
                     let span = self.span();

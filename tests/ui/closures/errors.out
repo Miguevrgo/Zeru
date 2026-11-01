@@ -171,7 +171,7 @@ Error: This closure takes 2 parameters, but it is given 1 value
     │                          ─────┬────
     │                               ╰────── This closure takes 2 parameters, but it is given 1 value
 ────╯
-Error: This closure returns bool, but this value is usize
+Error: This closure must return bool, but this value is usize
     ╭─[ tests/ui/closures/errors.zr:58:35 ]
     │
  58 │     var lens = words.filter(fn(w) w.len());

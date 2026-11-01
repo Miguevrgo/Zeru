@@ -1,0 +1,12 @@
+status: compile error
+-- stderr
+Error: A return in a match arm goes inside a block
+   ╭─[ tests/ui/match/leaving_arm_needs_block.zr:3:20 ]
+   │
+ 3 │         Some(x) => return x,
+   │                    ───┬──
+   │                       ╰──── A return in a match arm goes inside a block
+   │
+   │ Help: wrap it in braces, as in => { return x; }
+───╯
+[-] Error: aborting due to previous error

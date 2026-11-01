@@ -188,7 +188,7 @@ impl FnCx<'_, '_> {
         let mut value = self.value(body, known);
         if let Some(ret) = known {
             value = self.coerce_or(value, ret, body.span, |want, got| {
-                format!("This closure returns {want}, but this value is {got}")
+                format!("This closure must return {want}, but this value is {got}")
             });
         }
         self.set_ret(value.ty);

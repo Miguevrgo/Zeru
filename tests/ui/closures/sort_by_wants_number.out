@@ -1,0 +1,12 @@
+status: compile error
+-- stderr
+Error: This closure must return i32, but this value is bool
+   ╭─[ tests/ui/closures/sort_by_wants_number.zr:3:24 ]
+   │
+ 3 │     v.sort_by(fn(a, b) a < b);
+   │                        ──┬──
+   │                          ╰──── this is bool
+   │
+   │ Help: sort_by wants an i32: below 0 when a goes before b, 0 when they tie, above 0 after; for the values' own order, sort() is enough
+───╯
+[-] Error: aborting due to previous error

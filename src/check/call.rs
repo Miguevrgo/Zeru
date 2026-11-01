@@ -1123,6 +1123,13 @@ impl FnCx<'_, '_> {
             _ => self.value(arg, None),
         };
         if self.cx.types.is_error(value.ty) || self.cx.errors.len() > errors {
+            let sort_by = def == self.cx.prelude_def("__zeru_vec_sort_by");
+            if let Some(error) = self.cx.errors.last_mut()
+                && sort_by
+                && error.message.starts_with("This closure must return i32")
+            {
+                error.help("sort_by wants an i32: below 0 when a goes before b, 0 when they tie, above 0 after; for the values' own order, sort() is enough");
+            }
             return self.error_expr(arg.span);
         }
         let fits = match self.cx.types.closure_sig(value.ty) {

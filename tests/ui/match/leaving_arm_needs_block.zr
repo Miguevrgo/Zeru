@@ -1,0 +1,10 @@
+fn first(o: i64?) i64 {
+    match o {
+        Some(x) => return x,
+        None => {}
+    }
+    return 0;
+}
+fn main() {
+    println("{}", first(None));
+}

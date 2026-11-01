@@ -1,0 +1,4 @@
+fn main() {
+    var v: Vec<i64> = Vec[3, 1];
+    v.sort_by(fn(a, b) a < b);
+}
