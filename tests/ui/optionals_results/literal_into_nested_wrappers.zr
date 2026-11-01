@@ -1,0 +1,6 @@
+fn read() (i64?)! {
+    return 3;
+}
+fn main() {
+    println("{}", read().unwrap().unwrap());
+}
