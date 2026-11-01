@@ -966,8 +966,18 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 }
                 StmtKind::Expr(value)
             }
-            StatementKind::Function { .. }
-            | StatementKind::Struct { .. }
+            StatementKind::Function { name, .. } => {
+                self.error(
+                    format!("A function cannot be declared inside another, and '{name}' is in one"),
+                    span,
+                )
+                .help(format!(
+                    "move it out of this function, or make it a closure kept in a variable: const {name} = fn(..) T {{ .. }};"
+                ));
+                self.declare(name, Types::ERROR, false, false, span);
+                return None;
+            }
+            StatementKind::Struct { .. }
             | StatementKind::Enum { .. }
             | StatementKind::Trait { .. }
             | StatementKind::Import { .. } => {

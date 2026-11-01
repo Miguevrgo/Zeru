@@ -1,0 +1,6 @@
+fn main() {
+    fn helper(x: i64) i64 {
+        return x + 1;
+    }
+    println("{}", helper(2));
+}

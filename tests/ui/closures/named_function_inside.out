@@ -1,0 +1,12 @@
+status: compile error
+-- stderr
+Error: A function cannot be declared inside another, and 'helper' is in one
+   ╭─[ tests/ui/closures/named_function_inside.zr:2:5 ]
+   │
+ 2 │     fn helper(x: i64) i64 {
+   │     ──────────┬──────────
+   │               ╰──────────── A function cannot be declared inside another, and 'helper' is in one
+   │
+   │ Help: move it out of this function, or make it a closure kept in a variable: const helper = fn(..) T { .. };
+───╯
+[-] Error: aborting due to previous error

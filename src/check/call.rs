@@ -288,11 +288,13 @@ impl FnCx<'_, '_> {
                 return self.error_expr(span);
             }
             if let Some((_, ty)) = self.variable(name) {
-                let shown = self.ty(ty);
-                self.error(
-                    format!("'{name}' is {shown}, not a function"),
-                    function_span,
-                );
+                if !self.cx.types.is_error(ty) {
+                    let shown = self.ty(ty);
+                    self.error(
+                        format!("'{name}' is {shown}, not a function"),
+                        function_span,
+                    );
+                }
                 self.check_args_only(args);
                 return self.error_expr(span);
             }
