@@ -414,13 +414,30 @@ impl FnCx<'_, '_> {
         }
 
         match self.cx.types.kind(ty).clone() {
-            TyKind::Slice(_) | TyKind::SliceMut(_) if name == "len" && args.is_empty() => {
+            TyKind::Slice(_) | TyKind::SliceMut(_)
+                if matches!(name, "len" | "is_empty") && args.is_empty() =>
+            {
                 let slice = self.mk(ExprKind::Read(place), ty, object.span);
-                self.mk(
+                let len = self.mk(
                     ExprKind::Builtin(Builtin::Len, vec![slice]),
                     Types::USIZE,
                     span,
+                );
+                if name == "len" {
+                    return len;
+                }
+                let zero = self.mk(ExprKind::Int(0), Types::USIZE, span);
+                self.mk(
+                    ExprKind::Binary(BinOp::Eq, Box::new(len), Box::new(zero)),
+                    Types::BOOL,
+                    span,
                 )
+            }
+            TyKind::Array(_, len) if name == "len" && args.is_empty() => {
+                self.mk(ExprKind::Int(len as i128), Types::USIZE, span)
+            }
+            TyKind::Array(_, len) if name == "is_empty" && args.is_empty() => {
+                self.mk(ExprKind::Bool(len == 0), Types::BOOL, span)
             }
             TyKind::Vec(elem) if elem == Types::U8 && STR_METHODS.contains(&name) => {
                 let text = self.mk(ExprKind::Read(place), ty, object.span);
@@ -705,13 +722,18 @@ impl FnCx<'_, '_> {
             TyKind::Array(..) => SLICE_METHODS
                 .iter()
                 .chain(SLICE_MUT_METHODS)
+                .chain(&["len", "is_empty"])
                 .copied()
                 .collect(),
-            TyKind::Slice(_) => SLICE_METHODS.iter().chain(&["len"]).copied().collect(),
+            TyKind::Slice(_) => SLICE_METHODS
+                .iter()
+                .chain(&["len", "is_empty"])
+                .copied()
+                .collect(),
             TyKind::SliceMut(_) => SLICE_METHODS
                 .iter()
                 .chain(SLICE_MUT_METHODS)
-                .chain(&["len"])
+                .chain(&["len", "is_empty"])
                 .copied()
                 .collect(),
             TyKind::Optional(_) => vec!["is_some", "is_none", "unwrap", "copy"],
@@ -730,10 +752,6 @@ impl FnCx<'_, '_> {
         let what = match self.cx.is_struct(ty) {
             Some(_) => format!("Struct '{shown}'"),
             None => shown,
-        };
-        let length = match *self.cx.types.kind(ty) {
-            TyKind::Array(_, len) if name == "len" => Some(len),
-            _ => None,
         };
         let fixed_length = matches!(
             self.cx.types.kind(ty),
@@ -764,10 +782,6 @@ impl FnCx<'_, '_> {
             }
         } else if fixed_length {
             error.help("a slice cannot change its length; call it on the Vec the slice comes from");
-        } else if let Some(len) = length {
-            error
-                .help(format!("its length is part of its type: {len}"))
-                .fix(span, len.to_string());
         } else if let Some(ours) = suggest::method_alias(name, &methods) {
             error.help(format!("Zeru calls it '{ours}'"));
             if let Some(at) = name_at {

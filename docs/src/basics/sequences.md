@@ -29,9 +29,9 @@ b[0] = 9;
 println("{} {}", a[0], b[0]); // 1 9
 ```
 
-The length is part of the type, so an array has no `len()`: it is the `N`
-you wrote. It has the `Vec` methods that read or reorder the elements
-without changing how many there are, from `sum` to `sort`, listed below:
+`len()` gives the `N` of its type, and `is_empty()` whether it is 0. An array has the `Vec` methods that
+read or reorder the elements without changing how many there are, from
+`sum` to `sort`, listed below:
 
 ```zeru
 var marks: Array<i32, 4> = [7, 3, 9, 5];
@@ -114,7 +114,7 @@ var tail = v[2..];
 println("{} {} {}", middle.len(), middle[0], tail[1]); // 2 20 40
 ```
 
-A slice has the `Vec` methods that only read: `len`, `contains`, `sum`,
+A slice has the `Vec` methods that only read: `len`, `is_empty`, `contains`, `sum`,
 `min`, `max`, `windows`, `chunks`, `map`, `filter`, `any` and `all`:
 
 ```zeru
