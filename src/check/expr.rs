@@ -1130,8 +1130,7 @@ impl FnCx<'_, '_> {
         right: &Expression,
         expected: Option<Ty>,
     ) -> (Expr, Expr) {
-        let open = |e: &Expression| is_number_literal(e) || matches!(e.kind, ExpressionKind::None);
-        if open(left) && !open(right) {
+        if is_number_literal(left) && !is_number_literal(right) {
             let right = self.expr(right, expected);
             let left = self.expr(left, Some(right.ty));
             (left, right)
@@ -1227,6 +1226,28 @@ impl FnCx<'_, '_> {
         if matches!(operator, Token::ShiftLeft | Token::ShiftRight) {
             let value = self.expr(left, hint);
             return self.shift(value, operator, right, span);
+        }
+        if matches!(operator, Token::Eq | Token::NotEq)
+            && let Some(other) = match (&left.kind, &right.kind) {
+                (ExpressionKind::None, _) => Some(right),
+                (_, ExpressionKind::None) => Some(left),
+                _ => None,
+            }
+        {
+            self.expr(other, None);
+            let asked = if *operator == Token::Eq {
+                "is_none"
+            } else {
+                "is_some"
+            };
+            let text = self.cx.sources.text(other.span).to_string();
+            self.error(
+                format!("Ask a T? with .{asked}(), not {operator} None"),
+                span,
+            )
+            .help(format!("write {text}.{asked}()"))
+            .fix(span, format!("{text}.{asked}()"));
+            return self.error_expr(span);
         }
         let (mut l, mut r) = self.operands(left, right, hint);
         let types = &self.cx.types;

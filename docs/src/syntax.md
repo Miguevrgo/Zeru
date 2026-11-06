@@ -148,7 +148,7 @@ fn find(..) usize? { return 3; ... return None; }
 fn parse(..) i64! { return 3; ... return Err(EINVAL); }
 fn save(..) ! { ... return Ok(); ... }        // success or an error code
 x.is_some()  x.is_none()  x.is_ok()  x.is_err()  x.unwrap()  x.unwrap_err()
-x == 3  x == None  x != y          // a T? compared with a value, None or another T?
+x == 3  x != y                    // a T? compared with a value or another T?
 var n = parse(text)!;    // returns the error from this function
 save(path);              // error: a result is never ignored
 var i = find(list)?;     // returns None from this function

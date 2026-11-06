@@ -34,12 +34,14 @@ A plain `usize` becomes a `usize?` on its own wherever one is wanted, so
 | `is_some()`, `is_none()` | whether there is a value |
 | `unwrap()` | the value; stops the program with a panic on `None` |
 
-`==` and `!=` compare a `T?` with a value, with `None` or with another
-`T?`: two are equal when both are `None` or both hold equal values.
+`==` and `!=` compare a `T?` with a value or with another `T?`: two are
+equal when both are `None` or both hold equal values. Whether it holds a
+value at all is asked with `is_some()` or `is_none()`, not compared with
+`None`.
 
 ```zeru
 var found: i32? = 3;
-println("{} {} {}", found == 3, found == None, found != 4); // true false true
+println("{} {} {}", found == 3, found != 4, found.is_none()); // true true false
 ```
 
 `match` handles both cases at once and names the value:
