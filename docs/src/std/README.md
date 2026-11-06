@@ -12,6 +12,7 @@ need, with one way to do each task.
 | [net](net.md) | `import std.net;` | TCP, UDP and Unix sockets |
 | [collections](collections.md) | `import std.collections.hashmap::{HashMap};` ... | hash maps and sets, queues, heaps |
 | [simd](simd.md) | `import std.simd;` | many numbers at once, in the processor's vector registers |
+| [term](term.md) | `import std.term;` | raw mode, the cursor, clearing and keys, for programs that draw the terminal |
 
 These pages give an overview of each module with examples. Every function
 is documented in full, with its errors and more examples, next to its code

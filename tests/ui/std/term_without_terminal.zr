@@ -1,0 +1,16 @@
+import std.term;
+
+fn main() {
+    println("{}", term::raw_enable().unwrap_err());
+    println("{}", term::raw_disable().is_ok());
+    println("{}", term::size().unwrap_err());
+    term::move_to(1, 3);
+    term::clear();
+    term::clear_line();
+    term::clear_down();
+    term::hide_cursor();
+    term::show_cursor();
+    term::flush();
+    println("");
+    println("{}", term::key(1).is_none());
+}

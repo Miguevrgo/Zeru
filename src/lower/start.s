@@ -73,6 +73,13 @@ __zeru_env:
     .p2align 3
 __zeru_stdin:
     .quad 0, 0, 0, 0, 0
+
+# The terminal settings std.term's raw_enable found, to put back, and
+# whether raw mode is on.
+    .globl __zeru_term
+    .p2align 3
+__zeru_term:
+    .quad 0, 0, 0, 0, 0
     .text
 
 # Copies of up to 64 bytes read everything into registers before writing,

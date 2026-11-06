@@ -1,0 +1,212 @@
+// The terminal: raw mode, where each key reaches the program as it is
+// pressed and nothing is echoed, its size, the cursor, clearing the screen
+// and reading keys.
+//
+// The functions that draw write escape sequences through print's buffer,
+// so a whole screen goes out at once with `flush()`. In raw mode the
+// terminal no longer turns "\n" into a new line at the start of the row:
+// write "\r\n", or move the cursor.
+//
+// # Examples
+//
+// ```zeru,ignore
+// import std.term;
+//
+// term::raw_enable().unwrap();
+// term::hide_cursor();
+// term::clear();
+// term::move_to(5, 10);
+// print("press a key");
+// term::flush();
+// var _ = term::key(0);
+// term::show_cursor();
+// term::raw_disable().unwrap();
+// ```
+
+const SYS_IOCTL: i64 = 16;
+const SYS_POLL: i64 = 7;
+const TCGETS: i64 = 0x5401;
+const TCSETS: i64 = 0x5402;
+const TIOCGWINSZ: i64 = 0x5413;
+
+// The terminal's settings, as the kernel keeps them.
+struct Mode {
+    input: u32,
+    output: u32,
+    control: u32,
+    local: u32,
+    line: u8,
+    chars: Array<u8, 19>,
+}
+
+// The settings raw_enable found, kept by the runtime for raw_disable.
+struct Saved {
+    mode: Mode,
+    raw: bool,
+}
+
+fn saved() &var Saved {
+    var at: i64 = 0;
+    asm ("leaq __zeru_term(%rip), $0" : "=r" (at));
+    return &var *(at as *Saved);
+}
+
+// Switches the terminal to raw mode: each key reaches the program as it is
+// pressed, one byte at a time, without echo, and Ctrl-C comes as byte 3
+// instead of stopping the program. Nothing happens when it is on already.
+//
+// # Errors
+//
+// The errno: 25 (ENOTTY) when standard input is not a terminal.
+pub fn raw_enable() ! {
+    var state = saved();
+    if state.raw {
+        return Ok();
+    }
+    sys_result(syscall3(SYS_IOCTL, 0, TCGETS, &var state.mode as i64))!;
+    var mode = state.mode;
+    mode.input &= !0x5EB;
+    mode.output &= !0x1;
+    mode.local &= !0x804B;
+    mode.control = (mode.control & !0x130) | 0x30;
+    mode.chars[5] = 0;
+    mode.chars[6] = 1;
+    sys_result(syscall3(SYS_IOCTL, 0, TCSETS, &mode as i64))!;
+    state.raw = true;
+}
+
+// Puts the terminal back as raw_enable found it. Nothing happens when raw
+// mode is off.
+//
+// # Errors
+//
+// The errno: 25 (ENOTTY) when standard input is not a terminal.
+pub fn raw_disable() ! {
+    var state = saved();
+    if !state.raw {
+        return Ok();
+    }
+    sys_result(syscall3(SYS_IOCTL, 0, TCSETS, &state.mode as i64))!;
+    state.raw = false;
+}
+
+// Returns the rows and columns of the terminal.
+//
+// # Errors
+//
+// The errno: 25 (ENOTTY) when standard output is not a terminal.
+pub fn size() (u16, u16)! {
+    var window: Array<u16, 4> = [0; 4];
+    sys_result(syscall3(SYS_IOCTL, 1, TIOCGWINSZ, &var window as i64))!;
+    return (window[0], window[1]);
+}
+
+// Moves the cursor to `row` and `column`, both counted from 0 at the top
+// left.
+pub fn move_to(row: u16, column: u16) {
+    print("\x1b[{};{}H", row as u32 + 1, column as u32 + 1);
+}
+
+// Clears the whole screen, leaving the cursor where it is.
+pub fn clear() {
+    print("\x1b[2J");
+}
+
+// Clears the row the cursor is on.
+pub fn clear_line() {
+    print("\x1b[2K");
+}
+
+// Clears from the cursor to the end of the screen.
+pub fn clear_down() {
+    print("\x1b[J");
+}
+
+pub fn hide_cursor() {
+    print("\x1b[?25l");
+}
+
+pub fn show_cursor() {
+    print("\x1b[?25h");
+}
+
+// Sends what print and the functions here have written so far.
+pub fn flush() {
+    __zeru_flush();
+}
+
+// A key pressed. Text is read as ASCII: a byte outside it comes as a
+// `Char` of its own.
+pub enum Key {
+    Char(u8),
+    Ctrl(u8),
+    Enter,
+    Tab,
+    Backspace,
+    Escape,
+    Up,
+    Down,
+    Left,
+    Right,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Delete,
+}
+
+// The next byte typed within `ms` milliseconds, or for ever when `ms` is
+// negative, as poll takes it.
+fn byte(ms: i64) u8? {
+    var wanted: Array<i32, 2> = [0, 1];
+    if syscall3(SYS_POLL, &var wanted as i64, 1, ms) <= 0 {
+        return None;
+    }
+    var read: Array<u8, 1> = [0];
+    if syscall3(SYS_READ, 0, &var read as i64, 1) != 1 {
+        return None;
+    }
+    return read[0];
+}
+
+// Returns the next key pressed, waiting up to `ms` milliseconds for it, or
+// for ever when `ms` is 0; None when none came, or when the terminal sent a
+// key not listed in `Key`, as F1. An Escape alone is one that nothing
+// follows at once; with more, it starts the sequence of a key as an arrow.
+pub fn key(ms: u64) Key? {
+    var first = byte(if ms == 0 { -1 } else { ms as i64 })?;
+    if first == 27 {
+        var kind = byte(25);
+        if kind.is_none() {
+            return Key::Escape;
+        }
+        if kind.unwrap() != '[' && kind.unwrap() != 'O' {
+            return None;
+        }
+        var last = byte(25)?;
+        var number: u8 = 0;
+        while last >= '0' && last <= '9' {
+            number = number *% 10 +% (last - '0');
+            last = byte(25)?;
+        }
+        return match (last, number) {
+            ('A', _) => Key::Up,
+            ('B', _) => Key::Down,
+            ('C', _) => Key::Right,
+            ('D', _) => Key::Left,
+            ('H', _) | ('~', 1 | 7) => Key::Home,
+            ('F', _) | ('~', 4 | 8) => Key::End,
+            ('~', 3) => Key::Delete,
+            ('~', 5) => Key::PageUp,
+            ('~', 6) => Key::PageDown,
+            default => None,
+        };
+    }
+    return match first {
+        13 | 10 => Key::Enter,
+        9 => Key::Tab,
+        127 | 8 => Key::Backspace,
+        1..=7 | 11..=12 | 14..=26 => Key::Ctrl(first + 96),
+        default => Key::Char(first),
+    };
+}
