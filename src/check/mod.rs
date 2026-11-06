@@ -712,6 +712,14 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Whether `ty` is a float, or a tuple or struct with one in its parts.
+    pub(crate) fn has_float(&mut self, ty: Ty) -> bool {
+        match self.parts_of(ty) {
+            Some(parts) => parts.into_iter().any(|part| self.has_float(part)),
+            None => self.types.is_float(ty),
+        }
+    }
+
     /// The fields of a struct at the given type arguments.
     pub(crate) fn fields_of(&mut self, ty: Ty) -> Vec<(String, Ty)> {
         let TyKind::Adt(def, args) = self.types.kind(ty).clone() else {

@@ -1,27 +1,28 @@
 status: exit 0
 -- warnings
 Warning: Variable 'i' is never read
-   ╭─[ tests/ui/std/os_run_fails.zr:7:14 ]
-   │
- 7 │     for i in 0..2000 {
-   │              ───┬───
-   │                 ╰───── Variable 'i' is never read
-   │
-   │ Help: remove it, or name it '_i' to keep it unread
-───╯
+    ╭─[ tests/ui/std/os_run_fails.zr:11:14 ]
+    │
+ 11 │     for i in 0..2000 {
+    │              ───┬───
+    │                 ╰───── Variable 'i' is never read
+    │
+    │ Help: remove it, or name it '_i' to keep it unread
+────╯
 Warning: The value this call returns is never used
-   ╭─[ tests/ui/std/os_run_fails.zr:8:9 ]
-   │
- 8 │         os::run("./no-such-file", Vec[]).unwrap_err();
-   │         ──────────────────────┬──────────────────────
-   │                               ╰──────────────────────── The value this call returns is never used
-   │
-   │ Help: use it, or drop it on purpose
-   │           var _ = os::run("./no-such-file", Vec[]).unwrap_err();
-───╯
+    ╭─[ tests/ui/std/os_run_fails.zr:12:9 ]
+    │
+ 12 │         os::run("./no-such-file", Vec[]).unwrap_err();
+    │         ──────────────────────┬──────────────────────
+    │                               ╰──────────────────────── The value this call returns is never used
+    │
+    │ Help: use it, or drop it on purpose
+    │           var _ = os::run("./no-such-file", Vec[]).unwrap_err();
+────╯
 -- stdout
 2
 2
+0
 127
 ok
 0

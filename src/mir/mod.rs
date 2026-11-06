@@ -45,9 +45,12 @@ pub struct Body {
     pub blocks: Vec<BlockData>,
 }
 
+/// A local, with its name if the program gives it one, and whether it is a
+/// `for` loop's variable.
 pub struct LocalDecl {
     pub ty: Ty,
     pub name: Option<String>,
+    pub looped: bool,
 }
 
 pub struct BlockData {

@@ -9,7 +9,7 @@ fn main() {
         out.push_str("-");
     }
     println("[{}] [{}] [{}] {}", c as str, text[1] as str, COLON, out);
-    println("{} {}", (c as str).len(), c as str == ":");
+    println("{} {} {} {}", (c as str).len(), c as str == ":", 'a' as str, 98 as str);
     var all = 0;
     for i in 0..256 {
         const s = i as u8 as str;

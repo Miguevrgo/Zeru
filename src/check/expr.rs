@@ -1387,7 +1387,7 @@ impl FnCx<'_, '_> {
         let zero = |e: &Expression| matches!(e.kind, ExpressionKind::Int(0));
         let unsigned = self.cx.types.as_int(ty).is_some_and(|int| !int.signed());
         let always = match operator {
-            _ if same(left, right) && !self.cx.types.is_float(ty) => {
+            _ if same(left, right) && !self.cx.has_float(ty) => {
                 Some(matches!(operator, Token::Eq | Token::Leq | Token::Geq))
             }
             Token::Lt if unsigned && zero(right) => Some(false),
@@ -1574,9 +1574,10 @@ impl FnCx<'_, '_> {
     }
 
     fn cast(&mut self, value: &Expression, target: &TypeSpec, span: Span) -> Expr {
-        let value = self.expr(value, None);
         let scope = self.scope.clone();
         let to = self.cx.resolve_type(target, &scope, span);
+        let byte = to == Types::STR && matches!(value.kind, ExpressionKind::Int(_));
+        let value = self.expr(value, byte.then_some(Types::U8));
         if self.cx.types.is_error(value.ty) || self.cx.types.is_error(to) {
             return self.error_expr(span);
         }

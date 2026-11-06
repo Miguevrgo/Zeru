@@ -230,6 +230,7 @@ fn add_flags(body: &mut Body, drops: Vec<Option<DropKind>>) {
                 body.locals.push(LocalDecl {
                     ty: Types::BOOL,
                     name: None,
+                    looped: false,
                 });
                 flags[local] = Some(Local(body.locals.len() as u32 - 1));
             }

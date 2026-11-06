@@ -697,14 +697,20 @@ impl<'a> Cx<'a> {
                 .iter()
                 .filter(|&&(loan, _)| self.loans[loan].mutable)
             {
-                let paths = self.loans[loan]
-                    .paths
-                    .iter()
-                    .filter(|path| self.has(path.ty, Part::Ref))
-                    .cloned()
-                    .collect();
-                let flowing = carried.iter().filter(|c| c.0 != loan).copied().collect();
-                escaped.extend(self.hold(facts, paths, flowing));
+                for path in &self.loans[loan].paths {
+                    let flowing = carried
+                        .iter()
+                        .filter(|&&(other, _)| {
+                            let origin = self.loans[other].from.unwrap_or(other);
+                            other != loan
+                                && self
+                                    .program
+                                    .may_point_into(path.ty, self.ty(&self.loans[origin].place))
+                        })
+                        .copied()
+                        .collect();
+                    escaped.extend(self.hold(facts, vec![path.clone()], flowing));
+                }
             }
             if let Some(dest) = dest {
                 let returned = self.derive(b, &returnable, facts, dest);
@@ -1188,12 +1194,12 @@ impl<'a> Cx<'a> {
                 (true, ..) => (
                     format!("Cannot return a reference into {what}, which ends with this function"),
                     format!("this refers into {what}"),
-                    format!("return the {ty} itself, by value, instead of a reference into it"),
+                    Some(format!("return the {ty} itself, by value, instead of a reference into it")),
                 ),
                 (false, None, _) => (
                     "Cannot keep a reference into a temporary value past its statement".to_string(),
                     "this refers into a value that is freed when the statement ends".to_string(),
-                    "store the value in a variable first, and take the reference from that variable".to_string(),
+                    Some("store the value in a variable first, and take the reference from that variable".to_string()),
                 ),
                 (false, Some(name), holder) => (
                     match holder {
@@ -1201,7 +1207,9 @@ impl<'a> Cx<'a> {
                         None => format!("A reference refers into '{name}', which ends with its block first"),
                     },
                     format!("this refers into '{name}'"),
-                    format!("declare '{name}' before the block, so that it lives as long as what refers into it"),
+                    (!self.body.locals[local.0 as usize].looped).then(|| {
+                        format!("declare '{name}' before the block, so that it lives as long as what refers into it")
+                    }),
                 ),
             };
             let later = match holder {
@@ -1210,7 +1218,10 @@ impl<'a> Cx<'a> {
             };
             self.reported.insert(loan);
             let span = self.loans[loan].span;
-            let error = self.error(message, span).label(label).help(help);
+            let error = self.error(message, span).label(label);
+            if let Some(help) = help {
+                error.help(help);
+            }
             if let Some((note, at)) = later {
                 error.note(note, at);
             }

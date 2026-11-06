@@ -1,3 +1,21 @@
+fn check(n: i32) ! {
+    if n < 0 {
+        return Err(EINVAL);
+    }
+    return Ok();
+}
+
+fn route(n: i32) ! {
+    match n {
+        0 => check(-1)!,
+        1 => println("one"),
+        2 => check(n).unwrap(),
+        default => {
+            println("other");
+        }
+    }
+}
+
 fn main() {
     const n = 3;
     var log = 0;
@@ -13,4 +31,8 @@ fn main() {
         }
     }
     println("{}", log);
+    println("{}", route(0).unwrap_err());
+    route(1).unwrap();
+    route(2).unwrap();
+    route(3).unwrap();
 }

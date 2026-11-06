@@ -40,7 +40,7 @@ var line = os::stdin().read_line().unwrap();
 |---|---|
 | `sleep(ms)` | waits `ms` milliseconds |
 | `Clock.now()`, `clock.elapsed()` | nanoseconds passed since `now`, from a clock that only moves forward |
-| `time() i64` | nanoseconds since 1970, the time of day |
+| `time() i64` | seconds since 1970, the time of day |
 
 ```zeru
 import std.os;

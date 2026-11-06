@@ -42,7 +42,7 @@ fn main() {
                 closed.push(index - 1);
             }
         }
-        while closed.len() > 0 {
+        while !closed.is_empty() {
             const gone = clients.remove(closed.pop().unwrap());
             println("{} left", gone.peer_addr().unwrap());
         }

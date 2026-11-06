@@ -13,6 +13,9 @@ fn bump(v: &var Vec<i64>) {
 fn make() Vec<i64> {
     return Vec[1, 2];
 }
+fn text() String {
+    return String.from("a b\nc");
+}
 fn main() {
     println("{}", total(&make()));
     process(&[3, 4]);
@@ -21,4 +24,6 @@ fn main() {
         x += 1;
         println("{}", x);
     }
+    println("{}", text().lines());
+    println("{}", format("{}", text().split()));
 }

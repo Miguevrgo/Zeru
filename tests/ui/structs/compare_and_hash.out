@@ -30,13 +30,6 @@ Warning: The value this call returns is never used
     │ Help: use it, or drop it on purpose
     │           var _ = seen.insert(q);
 ────╯
-Warning: This comparison is always true
-    ╭─[ tests/ui/structs/compare_and_hash.zr:58:31 ]
-    │
- 58 │     println("{} {}", t1 < t2, t1 == t1);
-    │                               ────┬───
-    │                                   ╰───── This comparison is always true
-────╯
 -- stdout
 false true true false
 Ada 20
@@ -46,4 +39,6 @@ Zoe 30
 four-five
 5
 true true
+false true false false false
+true true true
 true 3

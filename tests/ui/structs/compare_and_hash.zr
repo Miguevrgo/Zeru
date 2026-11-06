@@ -56,6 +56,10 @@ fn main() {
     const t1 = Tagged { color: Color::Red, at: p, weight: 1.5 };
     const t2 = Tagged { color: Color::Green, at: p, weight: 0.5 };
     println("{} {}", t1 < t2, t1 == t1);
+    const zero = 0.0;
+    const nan = Tagged { color: Color::Red, at: p, weight: zero / zero };
+    println("{} {} {} {} {}", nan == nan, nan != nan, nan < t1, nan > t1, nan >= t1);
+    println("{} {} {}", (zero / zero, 1) != (zero / zero, 1), t2 > t1, t1 >= t1);
     const vs: Vec<Point> = Vec[q, p];
     println("{} {}", vs.contains(p), vs.max().unwrap().y);
 }

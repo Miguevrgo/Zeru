@@ -509,14 +509,15 @@ pub fn output(program: str, args: Vec<str>) Output! {
     var fds: Array<i32, 4> = [0; 4];
     sys_result(syscall2(SYS_PIPE2, (&fds[0]) as i64, O_CLOEXEC))!;
     var out = fs::File { fd: fds[0] as i64, buffer: Vec.new(), start: 0 };
-    var pid: i64 = 0;
+    var spawned: i64! = 0;
     {
         const out_end = fs::File { fd: fds[1] as i64, buffer: Vec.new(), start: 0 };
         sys_result(syscall2(SYS_PIPE2, (&fds[2]) as i64, O_CLOEXEC))!;
         const err_end = fs::File { fd: fds[3] as i64, buffer: Vec.new(), start: 0 };
-        pid = spawn(path, args, fds[1], fds[3])!;
+        spawned = spawn(path, args, fds[1], fds[3]);
     }
     var err = fs::File { fd: fds[2] as i64, buffer: Vec.new(), start: 0 };
+    const pid = spawned!;
     var result = Output { code: 0, stdout: String.new(), stderr: String.new() };
     var polls: Array<i32, 4> = [fds[0], 1, fds[2], 1];
     var open = 2;

@@ -1,5 +1,5 @@
 status: exit 0
 -- stdout
 [:] [e] [:] z-e-r-u-
-1 true
+1 true a b
 256

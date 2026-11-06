@@ -991,7 +991,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     };
                 } else if value.ty != Types::VOID
                     && !self.cx.types.is_error(value.ty)
-                    && *self.cx.types.kind(value.ty) != TyKind::Tuple(Vec::new())
+                    && !self.cx.types.is_unit(value.ty)
                     && matches!(
                         expr.kind,
                         ExpressionKind::Call { .. } | ExpressionKind::Try { .. }

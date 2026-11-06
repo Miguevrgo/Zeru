@@ -3,7 +3,7 @@
 use crate::ast::{Expression, ExpressionKind, MatchArm, Pattern, PatternKind};
 use crate::errors::Span;
 use crate::items::ItemKind;
-use crate::tir::{Arm, Expr, ExprKind, Payload, Place, Reach, Test};
+use crate::tir::{Arm, Block, Expr, ExprKind, Payload, Place, Reach, Stmt, StmtKind, Test};
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
@@ -110,8 +110,13 @@ impl FnCx<'_, '_> {
             let leaves = self.diverges;
             all_leave &= leaves;
             self.leave();
+            let types = &self.cx.types;
+            let nothing = |ty| ty == Types::VOID || types.is_unit(ty);
             match arm_ty {
                 _ if leaves => {}
+                Some(first) if first != result.ty && nothing(first) && nothing(result.ty) => {
+                    arm_ty = Some(Types::VOID);
+                }
                 None => {
                     arm_ty = Some(result.ty);
                     first_block =
@@ -158,7 +163,16 @@ impl FnCx<'_, '_> {
         }
         let checked = checked
             .into_iter()
-            .map(|arm| arm.expect("checked"))
+            .map(|arm| {
+                let mut arm = arm.expect("checked");
+                if arm_ty == Some(Types::VOID) && self.cx.types.is_unit(arm.body.ty) {
+                    let span = arm.body.span;
+                    let kind = StmtKind::Expr(arm.body);
+                    let stmts = vec![Stmt { kind, span }];
+                    arm.body = self.mk(ExprKind::Block(Block { stmts }), Types::VOID, span);
+                }
+                arm
+            })
             .collect();
         self.diverges = all_leave;
         let ty = match mismatched {

@@ -96,6 +96,7 @@ impl<'a> Builder<'a> {
             locals: vec![LocalDecl {
                 ty: function.ret,
                 name: None,
+                looped: false,
             }],
             blocks: Vec::new(),
             current: None,
@@ -163,7 +164,11 @@ impl<'a> Builder<'a> {
     }
 
     fn local(&mut self, ty: Ty, name: Option<String>) -> Local {
-        self.locals.push(LocalDecl { ty, name });
+        self.locals.push(LocalDecl {
+            ty,
+            name,
+            looped: false,
+        });
         Local(self.locals.len() as u32 - 1)
     }
 
@@ -175,6 +180,13 @@ impl<'a> Builder<'a> {
         let decl = &self.function.locals[local.0 as usize];
         let mir = self.local(decl.ty, Some(decl.name.clone()));
         self.map[local.0 as usize] = Some(mir);
+        mir
+    }
+
+    /// `local` declared as a `for` loop's variable.
+    fn declare_looped(&mut self, local: tir::LocalId) -> Local {
+        let mir = self.declare(local);
+        self.locals[mir.0 as usize].looped = true;
         mir
     }
 
@@ -352,6 +364,9 @@ impl<'a> Builder<'a> {
         }
     }
 
+    /// A statement, whose temporaries end with it. A `let` of a local with
+    /// no name, which print and format make for a value they show within
+    /// their statement, keeps them until its block ends.
     fn stmt(&mut self, stmt: &Stmt) {
         let outer = replace(&mut self.span, stmt.span);
         let mark = self.temps.len();
@@ -360,6 +375,10 @@ impl<'a> Builder<'a> {
                 let mir = self.declare(*local);
                 let mark = self.temps.len();
                 self.expr_into(Some(Place::local(mir)), value);
+                if self.function.locals[local.0 as usize].name.is_empty() {
+                    let kept = self.temps.split_off(mark);
+                    self.scopes.last_mut().unwrap().extend(kept);
+                }
                 for ty in borrowed_temps(value) {
                     let made = &self.temps[mark..];
                     if let Some(at) = made
@@ -494,7 +513,7 @@ impl<'a> Builder<'a> {
     ) {
         let first = self.as_operand(start);
         let bound = reused(self.as_operand(end));
-        let index = self.declare(var);
+        let index = self.declare_looped(var);
         self.own(index);
         self.assign(Place::local(index), Rvalue::Use(first));
         let ty = self.locals[index.0 as usize].ty;
@@ -528,7 +547,7 @@ impl<'a> Builder<'a> {
     fn for_each(&mut self, index: Option<tir::LocalId>, walks: &[tir::Walk], body: &tir::Block) {
         let count = match index {
             Some(index) => {
-                let index = self.declare(index);
+                let index = self.declare_looped(index);
                 self.own(index);
                 index
             }
@@ -594,7 +613,7 @@ impl<'a> Builder<'a> {
             self.views[local.0 as usize] = Some(place.clone());
             return place;
         }
-        let copy = self.declare(local);
+        let copy = self.declare_looped(local);
         self.scopes.last_mut().unwrap().push((copy, false));
         self.assign(Place::local(copy), Rvalue::Use(Operand::Copy(place)));
         Place::local(copy)
@@ -759,7 +778,8 @@ impl<'a> Builder<'a> {
     }
 
     /// How the tuples or structs at `left` and `right` order, -1, 0 or 1:
-    /// the first part that differs decides.
+    /// the first part that differs decides. A float part with NaN gives 2,
+    /// so that only `!=` and none of `== < <=` holds.
     fn tuple_order(&mut self, left: Place, right: Place, ty: Ty) -> Operand {
         let parts = self
             .parts_of(ty)
@@ -777,7 +797,8 @@ impl<'a> Builder<'a> {
         order
     }
 
-    /// How the parts at `l` and `r`, of type `ty`, order: -1, 0 or 1.
+    /// How the parts at `l` and `r`, of type `ty`, order: -1, 0 or 1, or 2
+    /// for floats that do not order.
     fn part_order(&mut self, l: Place, r: Place, ty: Ty) -> Operand {
         if self.parts_of(ty).is_some() {
             return self.tuple_order(l, r, ty);
@@ -787,14 +808,20 @@ impl<'a> Builder<'a> {
             let (on_str, on_string) = (runtime.str_cmp, runtime.string_cmp);
             return self.text_call(on_str, on_string, vec![l, r], ty, Types::I32);
         }
-        let greater = self.binary(
-            BinOp::Gt,
-            Operand::Copy(l.clone()),
-            Operand::Copy(r.clone()),
-        );
-        let less = self.binary(BinOp::Lt, Operand::Copy(l), Operand::Copy(r));
+        let (l, r) = (Operand::Copy(l), Operand::Copy(r));
+        let greater = self.binary(BinOp::Gt, l.clone(), r.clone());
+        let less = self.binary(BinOp::Lt, l.clone(), r.clone());
         let (greater, less) = (self.number(greater), self.number(less));
-        self.arithmetic(BinOp::SubWrap, greater, less)
+        let order = self.arithmetic(BinOp::SubWrap, greater.clone(), less.clone());
+        if !self.types().is_float(ty) {
+            return order;
+        }
+        let differ = self.binary(BinOp::Ne, l, r);
+        let differ = self.number(differ);
+        let decided = self.arithmetic(BinOp::AddWrap, greater, less);
+        let unordered = self.arithmetic(BinOp::SubWrap, differ, decided);
+        let twice = self.arithmetic(BinOp::AddWrap, unordered.clone(), unordered);
+        self.arithmetic(BinOp::AddWrap, order, twice)
     }
 
     /// The bool `flag` as an `i32`, 1 or 0.
@@ -982,8 +1009,13 @@ impl<'a> Builder<'a> {
             }
             ExprKind::Binary(op, left, right) if self.parts_of(left.ty).is_some() => {
                 let (l, r) = (self.as_temp(left), self.as_temp(right));
+                let (op, l, r) = match op {
+                    BinOp::Gt => (BinOp::Lt, r, l),
+                    BinOp::Ge => (BinOp::Le, r, l),
+                    _ => (*op, l, r),
+                };
                 let order = self.tuple_order(Place::local(l), Place::local(r), left.ty);
-                unchecked(*op, order, constant(0, Types::I32))
+                unchecked(op, order, constant(0, Types::I32))
             }
             ExprKind::Binary(op, left, right) => Rvalue::Binary {
                 op: *op,

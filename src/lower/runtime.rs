@@ -717,7 +717,9 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 .build_int_compare(IntPredicate::ULT, address, top.into_int_value(), "")
                 .unwrap();
             let overflow = b.build_and(above, below, "").unwrap();
-            let yes = this.abort_block("panic: stack overflow: calls went too deep, as a function that calls itself with no end\n");
+            let yes = this.abort_block(
+                "panic: stack overflow: calls nested too deep, or locals too big for the stack\n",
+            );
             let no = this.abort_block("panic: invalid memory access\n");
             this.builder
                 .build_conditional_branch(overflow, yes, no)

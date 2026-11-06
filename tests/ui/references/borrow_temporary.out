@@ -6,3 +6,5 @@ status: exit 0
 3
 2
 3
+["a b", "c"]
+["a", "b", "c"]

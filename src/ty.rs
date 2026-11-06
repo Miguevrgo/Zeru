@@ -233,10 +233,15 @@ impl Types {
         ty == Self::ERROR
     }
 
+    /// Whether `ty` is `()`, the value of an `f()!` whose `f` returns `!`.
+    pub fn is_unit(&self, ty: Ty) -> bool {
+        *self.kind(ty) == TyKind::Tuple(Vec::new())
+    }
+
     /// Whether `ty` is `!`, the result of a function that returns nothing
     /// but may fail.
     pub fn is_unit_result(&self, ty: Ty) -> bool {
-        matches!(self.kind(ty), TyKind::Result(ok) if *self.kind(*ok) == TyKind::Tuple(Vec::new()))
+        matches!(self.kind(ty), TyKind::Result(ok) if self.is_unit(*ok))
     }
 
     /// What a pointer or a reference points at.

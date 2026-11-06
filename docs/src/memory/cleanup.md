@@ -20,9 +20,11 @@ of `main`. A value moved somewhere else is freed by its new owner instead,
 and assigning a new value to a variable frees the old one first.
 
 A value no variable holds, as one a function just returned, is freed at
-the end of its statement. When a variable is made a reference to it, as
-`var r = &make();`, or a slice or view of it, the value lives until the
-end of the block instead:
+the end of its statement. Those of an `if` or `while` condition are freed
+once it is decided, before the body runs, while the value a `match` looks
+at lives through its arms, to the end of its statement. When a variable
+is made a reference to it, as `var r = &make();`, or a slice or view of
+it, the value lives until the end of the block instead:
 
 ```zeru
 fn make() Vec<i32> {

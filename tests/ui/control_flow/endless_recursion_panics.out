@@ -2,4 +2,4 @@ status: signal 6
 -- stdout
 before
 -- stderr
-panic: stack overflow: calls went too deep, as a function that calls itself with no end
+panic: stack overflow: calls nested too deep, or locals too big for the stack

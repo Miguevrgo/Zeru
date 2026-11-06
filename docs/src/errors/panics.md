@@ -29,9 +29,10 @@ What panics:
 | a float too big for the integer it is cast to | `float out of range for the integer type` |
 | `unwrap()` on `None` | `unwrap on None` |
 | `unwrap()` on an error, `unwrap_err()` on a success | `unwrap on Err`, `unwrap_err on Ok` |
+| shifting by the integer's bit width or more | `shift by the operand's width or more` |
 | dereferencing a null pointer | `null pointer dereference` |
 | no memory left | `out of memory` |
-| calls nested deeper than the stack, as endless recursion | `stack overflow`, with no place in the source |
+| the stack running out: calls nested too deep, as endless recursion, or locals too big for it | `stack overflow`, with no place in the source |
 
 ## assert
 
