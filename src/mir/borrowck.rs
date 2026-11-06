@@ -581,8 +581,29 @@ impl<'a> Cx<'a> {
         }
     }
 
-    /// The loans the value of `rvalue`, computed at statement `at`, holds,
-    /// with the one it takes there.
+    /// `loans`, with the loans held by what they point into, and so on:
+    /// all that a value holding `loans` reaches.
+    fn reached(&self, mut loans: Vec<(usize, bool)>, facts: &BTreeSet<Fact>) -> Vec<(usize, bool)> {
+        let mut next = 0;
+        while let Some(&(loan, _)) = loans.get(next) {
+            next += 1;
+            for path in &self.loans[loan].paths {
+                if path.steps.contains(&Step::Deref) {
+                    continue;
+                }
+                for held in Self::held(facts, path.root) {
+                    if !loans.contains(&held) {
+                        loans.push(held);
+                    }
+                }
+            }
+        }
+        loans
+    }
+
+    /// The loans the value of `rvalue`, computed at statement `at`, holds.
+    /// A reference taken there holds its own loan only: the loans held by
+    /// what it points at are reached through it.
     fn carried_rvalue(
         &mut self,
         rvalue: &Rvalue,
@@ -591,19 +612,18 @@ impl<'a> Cx<'a> {
     ) -> Vec<(usize, bool)> {
         match rvalue {
             Rvalue::AddressOf(place) | Rvalue::VecGet(place, _) => {
-                let mut carried = self.carried(place, facts);
-                if let Some(&loan) = self.made.get(&at) {
-                    let mut paths = self.canonical(&self.loans[loan].place, facts);
-                    paths.extend(self.loans[loan].paths.iter().cloned());
-                    paths.sort();
-                    paths.dedup();
-                    if paths != self.loans[loan].paths {
-                        let before = std::mem::replace(&mut self.loans[loan].paths, paths);
-                        self.grew |= !before.is_empty();
-                    }
-                    carried.push((loan, false));
+                let Some(&loan) = self.made.get(&at) else {
+                    return self.carried(place, facts);
+                };
+                let mut paths = self.canonical(&self.loans[loan].place, facts);
+                paths.extend(self.loans[loan].paths.iter().cloned());
+                paths.sort();
+                paths.dedup();
+                if paths != self.loans[loan].paths {
+                    let before = std::mem::replace(&mut self.loans[loan].paths, paths);
+                    self.grew |= !before.is_empty();
                 }
-                carried
+                vec![(loan, false)]
             }
             Rvalue::DeepCopy(place)
             | Rvalue::VecPop(place)
@@ -681,12 +701,12 @@ impl<'a> Cx<'a> {
             let mut returnable = Vec::new();
             let mut carried = Vec::new();
             for (at, arg) in args.iter().enumerate() {
-                let loans = self.carried_operand(arg, facts);
+                let loans = self.reached(self.carried_operand(arg, facts), facts);
                 let ty = self.body.operand_ty(self.program, arg);
                 match (self.lent(method, at, ty), arg) {
                     (true, Operand::Copy(place) | Operand::Move(place)) => {
                         let inside = place.clone().project(Projection::Deref);
-                        returnable.extend(self.carried(&inside, facts));
+                        returnable.extend(self.reached(self.carried(&inside, facts), facts));
                     }
                     _ => returnable.extend(loans.iter().map(|&(loan, _)| (loan, true))),
                 }
@@ -987,7 +1007,7 @@ impl<'a> Cx<'a> {
         let carried: Vec<Vec<usize>> = args
             .iter()
             .map(|arg| {
-                self.carried_operand(arg, facts)
+                self.reached(self.carried_operand(arg, facts), facts)
                     .into_iter()
                     .map(|(loan, _)| loan)
                     .collect()

@@ -32,9 +32,12 @@ fn main() {
 
 ## Bounds
 
-Inside a generic function, `T` can only be used in ways every possible
-type allows. A bound after the name, as `T: Ord`, promises more, and the
-compiler checks the promise at each call. Four bounds are built in:
+The body of a generic function, or of a method of a generic struct, is
+checked for each type it is called with, so using `T` in a way that type
+does not allow, as `a > b` for a struct, is an error at that call. A
+bound after the name, as `T: Ord`, says what `T` must allow, and the
+compiler checks it at each call, before the body. Four bounds are built
+in:
 
 | Bound | Allows | Met by |
 |---|---|---|

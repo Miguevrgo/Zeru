@@ -5,5 +5,6 @@ struct Box<T> {
     }
 }
 fn main() {
-    var b: Box<i64> = Box { v: 1 };
+    const b: Box<i64> = Box { v: 1 };
+    println("{}", b.wrap().v.v);
 }

@@ -114,8 +114,10 @@ chapter shows them.
 ## Matching several values at once
 
 A tuple matches all its parts together. Each part of a pattern is a
-pattern for that part, a name that binds it, or `_` for any value, and
-references are matched through as the values they refer to:
+pattern for that part, a name that binds it, or `_` for any value. A part
+that is text, or a tuple itself, takes only a name or `_`, and is compared
+inside the arm. References are matched through as the values they refer
+to:
 
 ```zeru
 enum Value {

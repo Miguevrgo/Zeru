@@ -8,7 +8,7 @@ use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
 use super::body::{Fixed, FnCx};
-use super::expr::is_number_literal;
+use super::expr::takes_branch_type;
 
 /// The binding a match on text tests its values against, a name no code
 /// can write.
@@ -81,7 +81,7 @@ impl FnCx<'_, '_> {
         let temporary = matches!(scrutinee, Place::Temp(_));
         let mut shapes: Vec<_> = patterns.into_iter().map(Some).collect();
         let mut order: Vec<usize> = (0..arms.len()).collect();
-        order.sort_by_key(|&at| is_number_literal(&arms[at].body));
+        order.sort_by_key(|&at| takes_branch_type(&arms[at].body));
         for at in order {
             let (arm, shape) = (&arms[at], shapes[at].take().expect("each arm once"));
             let (pattern, body) = (&arm.pattern, &arm.body);

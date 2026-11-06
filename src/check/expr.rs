@@ -568,7 +568,7 @@ impl FnCx<'_, '_> {
         let cond = self.condition(condition, "If condition must be boolean, got ");
         let wraps = self.wrapper(expected);
         let before = self.diverges;
-        let swap = is_number_literal(then) && !is_number_literal(otherwise);
+        let swap = takes_branch_type(then) && !takes_branch_type(otherwise);
         let (one, other) = if swap {
             (otherwise, then)
         } else {
@@ -2121,6 +2121,12 @@ pub(super) fn is_number_literal(expr: &Expression) -> bool {
         } => is_number_literal(right),
         _ => false,
     }
+}
+
+/// A number written out, or `None`: a branch that takes its type from
+/// the others.
+pub(super) fn takes_branch_type(expr: &Expression) -> bool {
+    matches!(expr.kind, ExpressionKind::None) || is_number_literal(expr)
 }
 
 /// Whether `a` and `b` read the same value: the same variable, field,

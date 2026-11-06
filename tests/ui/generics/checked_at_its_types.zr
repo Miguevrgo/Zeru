@@ -7,8 +7,16 @@ fn bigger<T>(a: T, b: T) T {
     }
     return b;
 }
+struct Stack<T> {
+    items: Vec<T>,
+    fn top(self) T {
+        return self.items[self.items.len() - 1];
+    }
+}
 fn main() {
     var p = P { x: Vec[1] };
     var q = P { x: Vec[2] };
     var r = bigger(p, q);
+    const names: Stack<String> = Stack { items: Vec[String.from("a")] };
+    println("{}", names.top());
 }

@@ -6,4 +6,7 @@ fn main() {
     const names = Vec[Some(String.from("a")), None];
     const kept = id(Some(4));
     println("{} {} {}", pair.0.unwrap(), names.len(), kept.unwrap());
+    const odd = if pair.1 % 2 == 0 { None } else { Some(pair.1) };
+    const arm = match pair.1 { 0 => None, default => Some(pair.1) };
+    println("{} {}", odd.is_none(), arm.unwrap());
 }

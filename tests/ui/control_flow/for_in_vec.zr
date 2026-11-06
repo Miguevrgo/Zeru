@@ -8,4 +8,12 @@ fn main() {
         s += x;
     }
     println("{}", s);
+    const word = String.from("a");
+    const inner: Vec<str> = Vec[word[..]];
+    const list = &inner;
+    var next: Vec<str> = Vec.new();
+    for u in list {
+        next.push(u);
+    }
+    println("{}", next[0]);
 }

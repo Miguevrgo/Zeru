@@ -12,4 +12,16 @@ Error: Cannot change 'v' while the loop still refers into it
    │
    │ Help: the loop walks 'v'; collect the changes in another variable and make them after the loop
 ───╯
+Error: Cannot change 'inner' while the loop still refers into it
+    ╭─[ tests/ui/vec/change_while_iterating.zr:10:9 ]
+    │
+  9 │     for u in list {
+    │              ──┬─
+    │                ╰─── borrowed here
+ 10 │         inner.push(u);
+    │         ──────┬──────
+    │               ╰──────── this can free or move what the loop points at
+    │
+    │ Help: the loop walks 'inner'; collect the changes in another variable and make them after the loop
+────╯
 [-] Error: aborting due to previous error

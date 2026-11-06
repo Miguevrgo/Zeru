@@ -3,4 +3,10 @@ fn main() {
     for x in &var v {
         v.push(2);
     }
+    const word = String.from("a");
+    var inner: Vec<str> = Vec[word[..]];
+    const list = &inner;
+    for u in list {
+        inner.push(u);
+    }
 }

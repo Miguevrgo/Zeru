@@ -804,8 +804,8 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Note that values of `ty` exist, so its layout and, for a generic
-    /// struct, its methods are needed.
+    /// Note that values of `ty` exist, so its layout is needed, and for a
+    /// generic struct its `drop`.
     pub(crate) fn note_adt(&mut self, ty: Ty, span: Span) {
         if !self.types.is_concrete(ty) || !self.adts_seen.insert(ty) {
             return;
@@ -834,17 +834,8 @@ impl<'a> Checker<'a> {
             }
             return;
         }
-        if args.is_empty() {
-            return;
-        }
-        let methods: Vec<DefId> = self.items.methods_of(def).collect();
-        for method in methods {
-            if self
-                .sig(method)
-                .is_some_and(|sig| sig.own_generics == 0 && sig.callables.is_empty())
-            {
-                self.instance(method, args.clone(), span);
-            }
+        if let (false, Some(drop)) = (args.is_empty(), self.items.method(def, "drop")) {
+            self.instance(drop, args, span);
         }
     }
 
