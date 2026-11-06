@@ -1,0 +1,32 @@
+struct Obj {
+    v: str,
+
+    fn set(var self, other: &String) str {
+        self.v = *other;
+        return self.v;
+    }
+}
+
+struct Tool {
+    n: i32,
+
+    fn put(self, out: &var Obj, other: &String) str {
+        out.v = *other;
+        return out.v;
+    }
+}
+
+fn main() {
+    var k: str = "";
+    {
+        var obj = Obj { v: "" };
+        const s = String.from("hello");
+        k = obj.set(&s);
+    }
+    const tool = Tool { n: 0 };
+    var target = Obj { v: "" };
+    var s = String.from("hello");
+    const j = tool.put(&var target, &s);
+    s = String.from("replaced");
+    println("{} {}", k, j);
+}

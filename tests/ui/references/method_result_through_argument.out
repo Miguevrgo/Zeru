@@ -1,0 +1,31 @@
+status: compile error
+-- stderr
+Error: 'k' refers into 's', which ends with its block first
+    ╭─[ tests/ui/references/method_result_through_argument.zr:24:21 ]
+    │
+ 24 │         k = obj.set(&s);
+    │                     ─┬
+    │                      ╰── this refers into 's'
+    │
+ 31 │     println("{} {}", k, j);
+    │                      ┬
+    │                      ╰── 'k' is used later here
+    │
+    │ Help: declare 's' before the block, so that it lives as long as what refers into it
+────╯
+Error: Cannot change 's' while 'j' still refers into it
+    ╭─[ tests/ui/references/method_result_through_argument.zr:30:5 ]
+    │
+ 29 │     const j = tool.put(&var target, &s);
+    │                                     ─┬
+    │                                      ╰── 'j' borrows here
+ 30 │     s = String.from("replaced");
+    │     ─────────────┬─────────────
+    │                  ╰─────────────── this can free or move what 'j' points at
+ 31 │     println("{} {}", k, j);
+    │                         ┬
+    │                         ╰── 'j' is used later here
+    │
+    │ Help: finish with 'j' before this, or keep a copy of the value instead of a reference into 's'
+────╯
+[-] Error: aborting due to previous error

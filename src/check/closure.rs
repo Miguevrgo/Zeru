@@ -148,6 +148,7 @@ impl FnCx<'_, '_> {
             locals: body_locals,
             body,
             span,
+            captures: captures.iter().map(|c| c.outer.name.clone()).collect(),
         };
         self.cx.add_closure(ty, function, fields, false);
 

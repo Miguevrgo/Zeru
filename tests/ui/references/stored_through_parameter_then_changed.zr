@@ -1,0 +1,34 @@
+fn store(out: &var str, src: &var String) {
+    *out = *src;
+    *src = String.from("replaced");
+}
+
+fn collect(out: &var Vec<str>, src: &var String) {
+    out.push(*src);
+    src.clear();
+}
+
+fn fill(out: &var Vec<str>, src: &var String) {
+    src.push_str("!");
+    out.push(*src);
+}
+
+fn main() {
+    var a = String.from("a");
+    var view: str = "";
+    store(&var view, &var a);
+    var b = String.from("b");
+    var views: Vec<str> = Vec.new();
+    collect(&var views, &var b);
+    var c = String.from("c");
+    var more: Vec<str> = Vec.new();
+    fill(&var more, &var c);
+    var d = String.from("d");
+    var seen: str = "";
+    const both = fn() {
+        seen = d;
+        d.push_str(" and more");
+    };
+    both();
+    println("{} {} {} {}", view, views, more, seen);
+}

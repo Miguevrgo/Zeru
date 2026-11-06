@@ -31,7 +31,7 @@ pub fn build(
     let mut errors: Vec<ZeruError> = Vec::new();
     let mut bodies = Vec::new();
     for (at, function) in functions.iter().enumerate() {
-        let mut body = Builder::new(program, sources, function, mode.emit_safety_checks()).build();
+        let body = Builder::new(program, sources, function, mode.emit_safety_checks()).build();
         if body.recurses_forever(FnId(at as u32)) {
             program.warnings.push(ZeruError::warning(
                 format!(
@@ -41,9 +41,14 @@ pub fn build(
                 function.span,
             ));
         }
-        errors.extend(super::borrowck::check(&body, program, sources, &methods));
-        super::elaborate::elaborate(&mut body, program);
         bodies.push(body);
+    }
+    let effects = super::borrowck::effects(&bodies, program, sources, &methods);
+    for body in &mut bodies {
+        errors.extend(super::borrowck::check(
+            body, program, sources, &methods, &effects,
+        ));
+        super::elaborate::elaborate(body, program);
     }
     tidy(&mut errors);
     match errors.is_empty() {
@@ -149,6 +154,7 @@ impl<'a> Builder<'a> {
             span: function.span,
             arg_count: function.params.len(),
             method: function.method,
+            captures: function.captures.clone(),
             locals: self.locals,
             blocks,
         }
@@ -178,7 +184,8 @@ impl<'a> Builder<'a> {
 
     fn declare(&mut self, local: tir::LocalId) -> Local {
         let decl = &self.function.locals[local.0 as usize];
-        let mir = self.local(decl.ty, Some(decl.name.clone()));
+        let name = Some(decl.name.clone()).filter(|name| !name.is_empty());
+        let mir = self.local(decl.ty, name);
         self.map[local.0 as usize] = Some(mir);
         mir
     }
@@ -303,9 +310,8 @@ impl<'a> Builder<'a> {
         });
     }
 
-    /// Drop the temporaries from `temps` on and every value the scopes from
-    /// `scopes` on hold, last made first, for a jump out of them, then end
-    /// them all.
+    /// Drop and end the temporaries from `temps` on and every value the
+    /// scopes from `scopes` on hold, last made first, for a jump out of them.
     fn exit(&mut self, temps: usize, scopes: usize) {
         let ending: Vec<(Local, bool)> = self.temps[temps..]
             .iter()
@@ -313,12 +319,10 @@ impl<'a> Builder<'a> {
             .chain(self.scopes[scopes..].iter().flatten().rev())
             .copied()
             .collect();
-        for &(local, drop) in &ending {
+        for (local, drop) in ending {
             if drop {
                 self.drop(Place::local(local));
             }
-        }
-        for (local, _) in ending {
             self.push(StatementKind::StorageDead(local));
         }
     }

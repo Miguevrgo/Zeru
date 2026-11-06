@@ -136,6 +136,7 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
         locals,
         body: body_block,
         span,
+        captures: Vec::new(),
     }
 }
 

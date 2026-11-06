@@ -1,0 +1,58 @@
+struct Pair {
+    views: Vec<str>,
+    owner: String,
+
+    fn link(var self) {
+        self.views.push(self.owner);
+    }
+
+    fn count(self) usize {
+        return self.views.len();
+    }
+}
+
+struct Lexer {
+    src: String,
+    at: usize,
+    token: str,
+
+    fn next(var self) bool {
+        if self.at >= self.src.len() {
+            return false;
+        }
+        self.token = self.src[self.at..self.at + 1];
+        self.at += 1;
+        return true;
+    }
+}
+
+fn link(t: &var (Vec<str>, String)) {
+    t.0.push(t.1);
+}
+
+fn main() {
+    var pair = Pair { views: Vec.new(), owner: String.from("hello") };
+    pair.link();
+    println("{} {}", pair.views, pair.count());
+    pair.owner = String.from("replaced");
+    println("{}", pair.views[0]);
+
+    var t: (Vec<str>, String) = (Vec.new(), String.from("hello"));
+    link(&var t);
+    t.1 = String.from("replaced");
+    println("{}", t.0);
+
+    var other = Pair { views: Vec.new(), owner: String.from("hello") };
+    const f = fn() {
+        other.views.push(other.owner);
+    };
+    f();
+    other.owner = String.from("replaced");
+    println("{}", other.views);
+
+    var lex = Lexer { src: String.from("abc"), at: 0, token: "" };
+    lex.next();
+    while lex.next() {
+        println("{}", lex.token);
+    }
+}

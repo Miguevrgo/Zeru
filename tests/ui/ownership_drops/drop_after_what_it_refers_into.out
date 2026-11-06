@@ -1,0 +1,39 @@
+status: compile error
+-- stderr
+Error: 'n' runs its drop after 's' is gone, but still refers into it
+    ╭─[ tests/ui/ownership_drops/drop_after_what_it_refers_into.zr:18:14 ]
+    │
+ 18 │     n.name = s;
+    │              ┬
+    │              ╰── this refers into 's'
+    │
+    │ Help: declare 's' before 'n', so that 'n' is dropped first
+────╯
+Error: 'n' runs its drop after 's' is gone, but still refers into it
+    ╭─[ tests/ui/ownership_drops/drop_after_what_it_refers_into.zr:24:14 ]
+    │
+ 24 │     n.name = s;
+    │              ┬
+    │              ╰── this refers into 's'
+    │
+    │ Help: declare 's' before 'n', so that 'n' is dropped first
+────╯
+Error: 'list' runs its drop after 't' is gone, but still refers into it
+    ╭─[ tests/ui/ownership_drops/drop_after_what_it_refers_into.zr:28:29 ]
+    │
+ 28 │     list.push(Noisy { name: t });
+    │                             ┬
+    │                             ╰── this refers into 't'
+    │
+    │ Help: declare 't' before 'list', so that 'list' is dropped first
+────╯
+Error: 'g' runs its drop after 'v' is gone, but still refers into it
+    ╭─[ tests/ui/ownership_drops/drop_after_what_it_refers_into.zr:33:14 ]
+    │
+ 33 │     g.list = &v;
+    │              ─┬
+    │               ╰── this refers into 'v'
+    │
+    │ Help: declare 'v' before 'g', so that 'g' is dropped first
+────╯
+[-] Error: aborting due to previous error

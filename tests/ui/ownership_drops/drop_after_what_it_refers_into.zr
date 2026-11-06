@@ -1,0 +1,37 @@
+struct Noisy {
+    name: str,
+
+    fn drop(var self) {
+        println("dropping {}", self.name);
+    }
+}
+
+struct Guard {
+    list: &Vec<i64>,
+
+    fn drop(var self) {
+        println("{}", self.list.len());
+    }
+}
+
+fn rename(var n: Noisy, s: String) {
+    n.name = s;
+}
+
+fn main() {
+    var n = Noisy { name: "n" };
+    const s = String.from("hello");
+    n.name = s;
+
+    var list: Vec<Noisy> = Vec.new();
+    const t = String.from("hello");
+    list.push(Noisy { name: t });
+
+    const first: Vec<i64> = Vec[1];
+    var g = Guard { list: &first };
+    const v: Vec<i64> = Vec[1, 2];
+    g.list = &v;
+
+    const fine = String.from("fine");
+    const ok = Noisy { name: fine };
+}

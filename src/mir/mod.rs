@@ -20,12 +20,13 @@ pub struct Local(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct BlockId(pub u32);
 
-/// A kind of part a type may have: a reference, a `drop` method, one an
-/// owning step reaches (a Vec's elements or a variant's payload), a variant's
-/// payload.
+/// A kind of part a type may have: a reference, one that writes, a `drop`
+/// method, one an owning step reaches (a Vec's elements or a variant's
+/// payload), a variant's payload.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Part {
     Ref,
+    RefMut,
     Drop,
     Owning,
     Variant,
@@ -35,12 +36,14 @@ enum Part {
 pub const RETURN: Local = Local(0);
 
 /// One function. Local 0 is the return place, the next `arg_count` are the
-/// arguments, the rest are variables and temporaries.
+/// arguments, the rest are variables and temporaries. A closure's first
+/// argument points at the references to the variables it `captures`.
 pub struct Body {
     pub symbol: String,
     pub span: Span,
     pub arg_count: usize,
     method: bool,
+    captures: Vec<String>,
     pub locals: Vec<LocalDecl>,
     pub blocks: Vec<BlockData>,
 }
@@ -409,6 +412,7 @@ impl Program {
                 Part::Ref,
                 TyKind::Ref(_) | TyKind::RefMut(_) | TyKind::Slice(_) | TyKind::SliceMut(_),
             ) => true,
+            (Part::RefMut, TyKind::RefMut(_) | TyKind::SliceMut(_)) => true,
             (Part::Owning, TyKind::Vec(_)) => true,
             (Part::Owning | Part::Variant, TyKind::Optional(_) | TyKind::Result(..)) => true,
             (Part::Owning | Part::Variant, _) => payloads(),

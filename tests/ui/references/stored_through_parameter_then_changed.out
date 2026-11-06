@@ -1,0 +1,39 @@
+status: compile error
+-- stderr
+Error: Cannot change 'src' while 'out' still refers into it
+   ╭─[ tests/ui/references/stored_through_parameter_then_changed.zr:3:5 ]
+   │
+ 2 │     *out = *src;
+   │            ──┬─
+   │              ╰─── 'out' borrows here
+ 3 │     *src = String.from("replaced");
+   │     ───────────────┬──────────────
+   │                    ╰──────────────── this can free or move what 'out' points at
+   │
+   │ Help: finish with 'out' before this, or keep a copy of the value instead of a reference into 'src'
+───╯
+Error: Cannot change 'src' while 'out' still refers into it
+   ╭─[ tests/ui/references/stored_through_parameter_then_changed.zr:8:5 ]
+   │
+ 7 │     out.push(*src);
+   │              ──┬─
+   │                ╰─── 'out' borrows here
+ 8 │     src.clear();
+   │     ─────┬─────
+   │          ╰─────── this can free or move what 'out' points at
+   │
+   │ Help: finish with 'out' before this, or keep a copy of the value instead of a reference into 'src'
+───╯
+Error: Cannot change 'd' while 'seen' still refers into it
+    ╭─[ tests/ui/references/stored_through_parameter_then_changed.zr:30:9 ]
+    │
+ 29 │         seen = d;
+    │                ┬
+    │                ╰── 'seen' borrows here
+ 30 │         d.push_str(" and more");
+    │         ───────────┬───────────
+    │                    ╰───────────── this can free or move what 'seen' points at
+    │
+    │ Help: finish with 'seen' before this, or keep a copy of the value instead of a reference into 'd'
+────╯
+[-] Error: aborting due to previous error

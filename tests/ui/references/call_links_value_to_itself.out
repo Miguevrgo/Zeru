@@ -1,0 +1,50 @@
+status: compile error
+-- stderr
+Error: Cannot change 'pair' while it holds a reference into itself
+    ╭─[ tests/ui/references/call_links_value_to_itself.zr:37:5 ]
+    │
+ 35 │     pair.link();
+    │     ──┬─
+    │       ╰─── 'pair' is given a reference into itself here
+    │
+ 37 │     pair.owner = String.from("replaced");
+    │     ──────────────────┬─────────────────
+    │                       ╰─────────────────── this can free or move what that reference points at
+ 38 │     println("{}", pair.views[0]);
+    │                   ──────┬──────
+    │                         ╰──────── 'pair' is used later here
+    │
+    │ Help: finish with 'pair' before this, or keep a copy of the value instead of a reference into 'pair'
+────╯
+Error: Cannot change 't' while it holds a reference into itself
+    ╭─[ tests/ui/references/call_links_value_to_itself.zr:42:5 ]
+    │
+ 41 │     link(&var t);
+    │          ───┬──
+    │             ╰──── 't' is given a reference into itself here
+ 42 │     t.1 = String.from("replaced");
+    │     ──────────────┬──────────────
+    │                   ╰──────────────── this can free or move what that reference points at
+ 43 │     println("{}", t.0);
+    │     ─────────┬────────
+    │              ╰────────── 't' is used later here
+    │
+    │ Help: finish with 't' before this, or keep a copy of the value instead of a reference into 't'
+────╯
+Error: Cannot change 'other' while it holds a reference into itself
+    ╭─[ tests/ui/references/call_links_value_to_itself.zr:50:5 ]
+    │
+ 47 │         other.views.push(other.owner);
+    │         ──────────────┬──────────────
+    │                       ╰──────────────── 'other' is given a reference into itself here
+    │
+ 50 │     other.owner = String.from("replaced");
+    │     ──────────────────┬──────────────────
+    │                       ╰──────────────────── this can free or move what that reference points at
+ 51 │     println("{}", other.views);
+    │     ─────────────┬────────────
+    │                  ╰────────────── 'other' is used later here
+    │
+    │ Help: finish with 'other' before this, or keep a copy of the value instead of a reference into 'other'
+────╯
+[-] Error: aborting due to previous error

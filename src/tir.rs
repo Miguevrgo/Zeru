@@ -78,6 +78,8 @@ pub struct Function {
     pub locals: Vec<Local>,
     pub body: Block,
     pub span: Span,
+    /// For a closure, the variables it uses, in the order of its fields.
+    pub captures: Vec<String>,
 }
 
 pub struct Local {
