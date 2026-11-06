@@ -1,3 +1,14 @@
 status: exit 0
+-- warnings
+Warning: Variable 'n' is never read
+   ╭─[ tests/ui/control_flow/for_range_is_i32.zr:2:11 ]
+   │
+ 2 │     const n: usize = 3;
+   │           ┬
+   │           ╰── Variable 'n' is never read
+   │
+   │ Help: remove it, or name it '_n' to keep it unread
+   │           const _n: usize = 3;
+───╯
 -- stdout
 6

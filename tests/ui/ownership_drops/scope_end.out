@@ -1,4 +1,25 @@
 status: exit 0
+-- warnings
+Warning: Variable 'a' is never read
+    ╭─[ tests/ui/ownership_drops/scope_end.zr:16:19 ]
+    │
+ 16 │             const a = probe(1, at);
+    │                   ┬
+    │                   ╰── Variable 'a' is never read
+    │
+    │ Help: remove it, or name it '_a' to keep it unread
+    │           const _a = probe(1, at);
+────╯
+Warning: Variable 'b' is never read
+    ╭─[ tests/ui/ownership_drops/scope_end.zr:17:19 ]
+    │
+ 17 │             const b = probe(2, at);
+    │                   ┬
+    │                   ╰── Variable 'b' is never read
+    │
+    │ Help: remove it, or name it '_b' to keep it unread
+    │           const _b = probe(2, at);
+────╯
 -- stdout
 after block
 dropped: 21

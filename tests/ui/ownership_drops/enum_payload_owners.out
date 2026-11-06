@@ -1,4 +1,35 @@
 status: exit 0
+-- warnings
+Warning: Variable 'k' is never read
+    ╭─[ tests/ui/ownership_drops/enum_payload_owners.zr:21:19 ]
+    │
+ 21 │             const k = Kept::Two(probe(1, at), probe(2, at));
+    │                   ┬
+    │                   ╰── Variable 'k' is never read
+    │
+    │ Help: remove it, or name it '_k' to keep it unread
+    │           const _k = Kept::Two(probe(1, at), probe(2, at));
+────╯
+Warning: Variable 'k' is never read
+    ╭─[ tests/ui/ownership_drops/enum_payload_owners.zr:24:17 ]
+    │
+ 24 │             var k = Kept::One(probe(3, at));
+    │                 ┬
+    │                 ╰── Variable 'k' is never read
+    │
+    │ Help: remove it, or name it '_k' to keep it unread
+    │           var _k = Kept::One(probe(3, at));
+────╯
+Warning: Variable 'twin' is never read
+    ╭─[ tests/ui/ownership_drops/enum_payload_owners.zr:25:19 ]
+    │
+ 25 │             const twin = Kept::One(probe(3, at));
+    │                   ──┬─
+    │                     ╰─── Variable 'twin' is never read
+    │
+    │ Help: remove it, or name it '_twin' to keep it unread
+    │           const _twin = Kept::One(probe(3, at));
+────╯
 -- stdout
 reset
 matched 4

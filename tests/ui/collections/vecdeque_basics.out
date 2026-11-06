@@ -1,4 +1,23 @@
 status: exit 0
+-- warnings
+Warning: Variable 'i' is never read
+    ╭─[ tests/ui/collections/vecdeque_basics.zr:11:14 ]
+    │
+ 11 │     for i in 0..5 {
+    │              ──┬─
+    │                ╰─── Variable 'i' is never read
+    │
+    │ Help: remove it, or name it '_i' to keep it unread
+────╯
+Warning: Variable 'i' is never read
+    ╭─[ tests/ui/collections/vecdeque_basics.zr:17:14 ]
+    │
+ 17 │     for i in 0..1000 {
+    │              ───┬───
+    │                 ╰───── Variable 'i' is never read
+    │
+    │ Help: remove it, or name it '_i' to keep it unread
+────╯
 -- stdout
 3 0 2 1
 0 2 1

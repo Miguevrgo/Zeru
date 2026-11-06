@@ -30,13 +30,8 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     /// alignment an array has.
     fn lane_bytes(&mut self, ty: Ty) -> u32 {
         let elem = self.element_ty(ty);
-        match self.llvm_ty(elem) {
-            BasicTypeEnum::IntType(int) => int.get_bit_width() / 8,
-            BasicTypeEnum::FloatType(float) => {
-                float.size_of().get_zero_extended_constant().unwrap_or(8) as u32
-            }
-            _ => unreachable!("lanes are numbers"),
-        }
+        let lane = self.llvm_ty(elem);
+        self.target.get_abi_alignment(&lane)
     }
 
     fn load_vector(&mut self, ty: Ty, address: PointerValue<'ctx>) -> VectorValue<'ctx> {

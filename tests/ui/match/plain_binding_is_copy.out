@@ -1,4 +1,14 @@
 status: exit 0
+-- warnings
+Warning: Variable 'i' is never read
+    ╭─[ tests/ui/match/plain_binding_is_copy.zr:23:14 ]
+    │
+ 23 │     for i in 0..3 {
+    │              ──┬─
+    │                ╰─── Variable 'i' is never read
+    │
+    │ Help: remove it, or name it '_i' to keep it unread
+────╯
 -- stdout
 was 3
 4

@@ -1,4 +1,42 @@
 status: exit 0
+-- warnings
+Warning: The value this call returns is never used
+    ╭─[ tests/ui/structs/compare_and_hash.zr:45:5 ]
+    │
+ 45 │     seen.insert(p);
+    │     ───────┬──────
+    │            ╰──────── The value this call returns is never used
+    │
+    │ Help: use it, or drop it on purpose
+    │           var _ = seen.insert(p);
+────╯
+Warning: The value this call returns is never used
+    ╭─[ tests/ui/structs/compare_and_hash.zr:46:5 ]
+    │
+ 46 │     seen.insert(Point { x: 1, y: 2 });
+    │     ────────────────┬────────────────
+    │                     ╰────────────────── The value this call returns is never used
+    │
+    │ Help: use it, or drop it on purpose
+    │           var _ = seen.insert(Point { x: 1, y: 2 });
+────╯
+Warning: The value this call returns is never used
+    ╭─[ tests/ui/structs/compare_and_hash.zr:47:5 ]
+    │
+ 47 │     seen.insert(q);
+    │     ───────┬──────
+    │            ╰──────── The value this call returns is never used
+    │
+    │ Help: use it, or drop it on purpose
+    │           var _ = seen.insert(q);
+────╯
+Warning: This comparison is always true
+    ╭─[ tests/ui/structs/compare_and_hash.zr:58:31 ]
+    │
+ 58 │     println("{} {}", t1 < t2, t1 == t1);
+    │                               ────┬───
+    │                                   ╰───── This comparison is always true
+────╯
 -- stdout
 false true true false
 Ada 20

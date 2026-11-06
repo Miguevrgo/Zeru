@@ -1,4 +1,25 @@
 status: exit 0
+-- warnings
+Warning: Variable 'p' is never read
+    ╭─[ tests/ui/ownership_drops/shadowing_drops_both.zr:15:15 ]
+    │
+ 15 │         const p = probe(1, at);
+    │               ┬
+    │               ╰── Variable 'p' is never read
+    │
+    │ Help: remove it, or name it '_p' to keep it unread
+    │           const _p = probe(1, at);
+────╯
+Warning: Variable 'p' is never read
+    ╭─[ tests/ui/ownership_drops/shadowing_drops_both.zr:16:15 ]
+    │
+ 16 │         const p = probe(2, at);
+    │               ┬
+    │               ╰── Variable 'p' is never read
+    │
+    │ Help: remove it, or name it '_p' to keep it unread
+    │           const _p = probe(2, at);
+────╯
 -- stdout
 shadowed
 dropped: 21

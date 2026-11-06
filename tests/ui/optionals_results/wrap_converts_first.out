@@ -1,3 +1,14 @@
 status: exit 0
+-- warnings
+Warning: Write .is_empty() to ask whether a Vec is empty
+    ╭─[ tests/ui/optionals_results/wrap_converts_first.zr:11:8 ]
+    │
+ 11 │     if values.len() == 0 {
+    │        ────────┬────────
+    │                ╰────────── Write .is_empty() to ask whether a Vec is empty
+    │
+    │ Help: ask it directly
+    │           if values.is_empty() {
+────╯
 -- stdout
 a None [1, 2]

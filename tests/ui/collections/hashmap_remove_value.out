@@ -1,4 +1,25 @@
 status: exit 0
+-- warnings
+Warning: The value this call returns is never used
+    ╭─[ tests/ui/collections/hashmap_remove_value.zr:24:5 ]
+    │
+ 24 │     owners.remove(&0);
+    │     ────────┬────────
+    │             ╰────────── The value this call returns is never used
+    │
+    │ Help: use it, or drop it on purpose
+    │           var _ = owners.remove(&0);
+────╯
+Warning: The value this call returns is never used
+    ╭─[ tests/ui/collections/hashmap_remove_value.zr:30:5 ]
+    │
+ 30 │     s.insert(3);
+    │     ─────┬─────
+    │          ╰─────── The value this call returns is never used
+    │
+    │ Help: use it, or drop it on purpose
+    │           var _ = s.insert(3);
+────╯
 -- stdout
 40
 true

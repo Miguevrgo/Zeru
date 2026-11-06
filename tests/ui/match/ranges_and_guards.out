@@ -1,4 +1,33 @@
 status: exit 0
+-- warnings
+Warning: Variable 'x' is never read
+    ╭─[ tests/ui/match/ranges_and_guards.zr:56:15 ]
+    │
+ 56 │         const x: u8 = b as u8;
+    │               ┬
+    │               ╰── Variable 'x' is never read
+    │
+    │ Help: remove it, or name it '_x' to keep it unread
+    │           const _x: u8 = b as u8;
+────╯
+Warning: Variable 'v' is never read
+    ╭─[ tests/ui/match/ranges_and_guards.zr:61:14 ]
+    │
+ 61 │     for v in 0..=top {
+    │              ───┬───
+    │                 ╰───── Variable 'v' is never read
+    │
+    │ Help: remove it, or name it '_v' to keep it unread
+────╯
+Warning: Variable 'i' is never read
+    ╭─[ tests/ui/match/ranges_and_guards.zr:64:14 ]
+    │
+ 64 │     for i in 5..=4 {
+    │              ──┬──
+    │                ╰──── Variable 'i' is never read
+    │
+    │ Help: remove it, or name it '_i' to keep it unread
+────╯
 -- stdout
 letter letter digit space space other high
 neg zero small big

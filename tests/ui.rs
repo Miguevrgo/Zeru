@@ -101,6 +101,7 @@ fn observe(source: &Path, mode: &str, scratch: &Path) -> String {
         );
         return out;
     }
+    let warnings = clean(&String::from_utf8_lossy(&built.stderr));
 
     let exe = scratch.join("build").join(source.file_stem().unwrap());
     let mut child = Command::new(exe)
@@ -126,6 +127,7 @@ fn observe(source: &Path, mode: &str, scratch: &Path) -> String {
         _ => "unknown".to_string(),
     };
     out.push_str(&format!("status: {status}\n"));
+    section(&mut out, "warnings", &warnings);
     section(
         &mut out,
         "stdout",

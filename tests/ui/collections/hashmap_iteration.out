@@ -1,4 +1,25 @@
 status: exit 0
+-- warnings
+Warning: The value this call returns is never used
+    ╭─[ tests/ui/collections/hashmap_iteration.zr:16:5 ]
+    │
+ 16 │     counts.remove(&4);
+    │     ────────┬────────
+    │             ╰────────── The value this call returns is never used
+    │
+    │ Help: use it, or drop it on purpose
+    │           var _ = counts.remove(&4);
+────╯
+Warning: The value this call returns is never used
+    ╭─[ tests/ui/collections/hashmap_iteration.zr:23:9 ]
+    │
+ 23 │         seen.insert(n);
+    │         ───────┬──────
+    │                ╰──────── The value this call returns is never used
+    │
+    │ Help: use it, or drop it on purpose
+    │           var _ = seen.insert(n);
+────╯
 -- stdout
 4x3 2x2 7x1
 7x10 2x20

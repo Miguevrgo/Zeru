@@ -1,4 +1,15 @@
 status: exit 0
+-- warnings
+Warning: Variable 'p' is never read
+    ╭─[ tests/ui/ownership_drops/break_and_continue_drop.zr:17:19 ]
+    │
+ 17 │             const p = probe(1 + i, at);
+    │                   ┬
+    │                   ╰── Variable 'p' is never read
+    │
+    │ Help: remove it, or name it '_p' to keep it unread
+    │           const _p = probe(1 + i, at);
+────╯
 -- stdout
 loop done
 dropped: 12

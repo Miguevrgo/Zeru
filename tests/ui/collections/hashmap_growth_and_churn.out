@@ -1,3 +1,14 @@
 status: exit 0
+-- warnings
+Warning: The value this call returns is never used
+    ╭─[ tests/ui/collections/hashmap_growth_and_churn.zr:20:9 ]
+    │
+ 20 │         m.remove(&(-i - 1));
+    │         ─────────┬─────────
+    │                  ╰─────────── The value this call returns is never used
+    │
+    │ Help: use it, or drop it on purpose
+    │           var _ = m.remove(&(-i - 1));
+────╯
 -- stdout
 5000 true

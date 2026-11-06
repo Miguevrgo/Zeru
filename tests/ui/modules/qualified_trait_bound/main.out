@@ -1,1 +1,22 @@
 status: exit 0
+-- warnings
+Warning: Function 'go' is never used
+   ╭─[ tests/ui/modules/qualified_trait_bound/main.zr:4:8 ]
+   │
+ 4 │     fn go(self) i32 {
+   │        ─┬
+   │         ╰── Function 'go' is never used
+   │
+   │ Help: remove it, or name it '_go' to keep it unused
+   │           fn _go(self) i32 {
+───╯
+Warning: Function 'use_it' is never used
+   ╭─[ tests/ui/modules/qualified_trait_bound/main.zr:8:4 ]
+   │
+ 8 │ fn use_it<T: lib::Go>(t: T) i32 {
+   │    ───┬──
+   │       ╰──── Function 'use_it' is never used
+   │
+   │ Help: remove it, or name it '_use_it' to keep it unused
+   │           fn _use_it<T: lib::Go>(t: T) i32 {
+───╯

@@ -1,4 +1,14 @@
 status: exit 0
+-- warnings
+Warning: Variable 'i' is never read
+    ╭─[ tests/ui/casts/runtime_without_libc.zr:21:14 ]
+    │
+ 21 │     for i in 0..500 {
+    │              ───┬──
+    │                 ╰──── Variable 'i' is never read
+    │
+    │ Help: remove it, or name it '_i' to keep it unread
+────╯
 -- stdout
 1.5 -1.5 1.5 0.25
 0.25 -1.5

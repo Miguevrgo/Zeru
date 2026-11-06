@@ -1,4 +1,25 @@
 status: exit 0
+-- warnings
+Warning: Variable 'a' is never read
+    ╭─[ tests/ui/ownership_drops/early_exit_mid_expression.zr:27:11 ]
+    │
+ 27 │     const a = [mk(3), mk(4), D { id: none()? }];
+    │           ┬
+    │           ╰── Variable 'a' is never read
+    │
+    │ Help: remove it, or name it '_a' to keep it unread
+    │           const _a = [mk(3), mk(4), D { id: none()? }];
+────╯
+Warning: Variable 'v' is never read
+    ╭─[ tests/ui/ownership_drops/early_exit_mid_expression.zr:31:11 ]
+    │
+ 31 │     const v: Vec<D> = Vec[mk(5), D { id: none()? }];
+    │           ┬
+    │           ╰── Variable 'v' is never read
+    │
+    │ Help: remove it, or name it '_v' to keep it unread
+    │           const _v: Vec<D> = Vec[mk(5), D { id: none()? }];
+────╯
 -- stdout
 drop 1
 tuple true

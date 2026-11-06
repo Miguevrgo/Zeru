@@ -1,4 +1,25 @@
 status: exit 0
+-- warnings
+Warning: The value this call returns is never used
+    ╭─[ tests/ui/generics/generic_methods.zr:17:5 ]
+    │
+ 17 │     s.bump(1);
+    │     ────┬────
+    │         ╰────── The value this call returns is never used
+    │
+    │ Help: use it, or drop it on purpose
+    │           var _ = s.bump(1);
+────╯
+Warning: The value this call returns is never used
+    ╭─[ tests/ui/generics/generic_methods.zr:18:5 ]
+    │
+ 18 │     s.bump(false);
+    │     ──────┬──────
+    │           ╰──────── The value this call returns is never used
+    │
+    │ Help: use it, or drop it on purpose
+    │           var _ = s.bump(false);
+────╯
 -- stdout
 5 true 2.5
 2

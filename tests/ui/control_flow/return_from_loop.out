@@ -1,3 +1,11 @@
 status: exit 0
+-- warnings
+Warning: This code is never reached
+   ╭─[ tests/ui/control_flow/return_from_loop.zr:9:5 ]
+   │
+ 9 │     return -1;
+   │     ─────┬────
+   │          ╰────── This code is never reached
+───╯
 -- stdout
 12

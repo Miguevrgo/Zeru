@@ -1,3 +1,14 @@
 status: exit 0
+-- warnings
+Warning: Variable 'u' is never read
+   ╭─[ tests/ui/types/unit_and_void.zr:3:11 ]
+   │
+ 3 │     const u: () = ();
+   │           ┬
+   │           ╰── Variable 'u' is never read
+   │
+   │ Help: remove it, or name it '_u' to keep it unread
+   │           const _u: () = ();
+───╯
 -- stdout
 ok

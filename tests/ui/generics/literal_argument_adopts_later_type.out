@@ -1,1 +1,12 @@
 status: exit 0
+-- warnings
+Warning: Variable 'r' is never read
+   ╭─[ tests/ui/generics/literal_argument_adopts_later_type.zr:6:11 ]
+   │
+ 6 │     const r = g(1 + 1, x);
+   │           ┬
+   │           ╰── Variable 'r' is never read
+   │
+   │ Help: remove it, or name it '_r' to keep it unread
+   │           const _r = g(1 + 1, x);
+───╯

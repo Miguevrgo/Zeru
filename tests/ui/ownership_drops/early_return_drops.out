@@ -1,3 +1,24 @@
 status: exit 0
+-- warnings
+Warning: Variable 'first' is never read
+    ╭─[ tests/ui/ownership_drops/early_return_drops.zr:12:11 ]
+    │
+ 12 │     const first = probe(1, at);
+    │           ──┬──
+    │             ╰──── Variable 'first' is never read
+    │
+    │ Help: remove it, or name it '_first' to keep it unread
+    │           const _first = probe(1, at);
+────╯
+Warning: Variable 'second' is never read
+    ╭─[ tests/ui/ownership_drops/early_return_drops.zr:16:11 ]
+    │
+ 16 │     const second = probe(2, at);
+    │           ───┬──
+    │              ╰──── Variable 'second' is never read
+    │
+    │ Help: remove it, or name it '_second' to keep it unread
+    │           const _second = probe(2, at);
+────╯
 -- stdout
 dropped: 121

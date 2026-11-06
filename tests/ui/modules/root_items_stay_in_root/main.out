@@ -1,3 +1,14 @@
 status: exit 0
+-- warnings
+Warning: Function 'sys_result' is never used
+   ╭─[ tests/ui/modules/root_items_stay_in_root/main.zr:3:4 ]
+   │
+ 3 │ fn sys_result(r: i64) i64! {
+   │    ─────┬────
+   │         ╰────── Function 'sys_result' is never used
+   │
+   │ Help: remove it, or name it '_sys_result' to keep it unused
+   │           fn _sys_result(r: i64) i64! {
+───╯
 -- stdout
 error 2

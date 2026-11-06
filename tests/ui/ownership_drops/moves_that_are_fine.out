@@ -1,3 +1,14 @@
 status: exit 0
+-- warnings
+Warning: Variable 'picked' is never read
+    ╭─[ tests/ui/ownership_drops/moves_that_are_fine.zr:24:11 ]
+    │
+ 24 │     const picked = match n {
+    │           ───┬──
+    │              ╰──── Variable 'picked' is never read
+    │
+    │ Help: remove it, or name it '_picked' to keep it unread
+    │           const _picked = match n {
+────╯
 -- stdout
 fine

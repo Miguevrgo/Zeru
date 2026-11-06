@@ -1,1 +1,12 @@
 status: exit 0
+-- warnings
+Warning: Variable 'r' is never read
+   ╭─[ tests/ui/generics/expected_type_infers_argument.zr:5:11 ]
+   │
+ 5 │     const r: i64 = id(5);
+   │           ┬
+   │           ╰── Variable 'r' is never read
+   │
+   │ Help: remove it, or name it '_r' to keep it unread
+   │           const _r: i64 = id(5);
+───╯

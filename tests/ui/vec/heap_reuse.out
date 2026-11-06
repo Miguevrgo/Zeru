@@ -1,4 +1,15 @@
 status: exit 0
+-- warnings
+Warning: The value this call returns is never used
+    ╭─[ tests/ui/vec/heap_reuse.zr:27:13 ]
+    │
+ 27 │             v.pop();
+    │             ───┬───
+    │                ╰───── The value this call returns is never used
+    │
+    │ Help: use it, or drop it on purpose
+    │           var _ = v.pop();
+────╯
 -- stdout
 12 vecs, checksum 4520436075618866694
 after shrinking 12754414

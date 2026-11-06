@@ -1,4 +1,14 @@
 status: exit 0
+-- warnings
+Warning: Variable 'i' is never read
+    ╭─[ tests/ui/vec/std_methods.zr:26:14 ]
+    │
+ 26 │     for i in 0..2000 {
+    │              ───┬───
+    │                 ╰───── Variable 'i' is never read
+    │
+    │ Help: remove it, or name it '_i' to keep it unread
+────╯
 -- stdout
 11 -7 9 true
 -7 -2 0 3 3 5 9

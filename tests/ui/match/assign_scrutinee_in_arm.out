@@ -1,4 +1,15 @@
 status: exit 0
+-- warnings
+Warning: Variable 'v' is never read
+   ╭─[ tests/ui/match/assign_scrutinee_in_arm.zr:4:14 ]
+   │
+ 4 │         Some(v) => {
+   │              ┬
+   │              ╰── Variable 'v' is never read
+   │
+   │ Help: remove it, or name it '_v' to keep it unread
+   │           Some(_v) => {
+───╯
 -- stdout
 2
 true

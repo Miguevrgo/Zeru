@@ -1,1 +1,12 @@
 status: exit 0
+-- warnings
+Warning: Variable 'v' is never read
+   ╭─[ tests/ui/parser/lowercase_struct_literal.zr:5:11 ]
+   │
+ 5 │     const v = p { x: 1 };
+   │           ┬
+   │           ╰── Variable 'v' is never read
+   │
+   │ Help: remove it, or name it '_v' to keep it unread
+   │           const _v = p { x: 1 };
+───╯

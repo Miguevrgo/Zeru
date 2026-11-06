@@ -1,3 +1,14 @@
 status: exit 0
+-- warnings
+Warning: Variable 'pair' is never read
+    ╭─[ tests/ui/ownership_drops/tuple_of_owners.zr:16:19 ]
+    │
+ 16 │             const pair = (probe(1, at), [probe(2, at), probe(3, at)]);
+    │                   ──┬─
+    │                     ╰─── Variable 'pair' is never read
+    │
+    │ Help: remove it, or name it '_pair' to keep it unread
+    │           const _pair = (probe(1, at), [probe(2, at), probe(3, at)]);
+────╯
 -- stdout
 dropped: 123

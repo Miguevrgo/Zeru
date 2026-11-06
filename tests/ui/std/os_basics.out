@@ -1,4 +1,23 @@
 status: exit 0
+-- warnings
+Warning: Variable 'i' is never read
+    ╭─[ tests/ui/std/os_basics.zr:15:14 ]
+    │
+ 15 │     for i in 0..200000 {
+    │              ────┬────
+    │                  ╰────── Variable 'i' is never read
+    │
+    │ Help: remove it, or name it '_i' to keep it unread
+────╯
+Warning: Variable 'i' is never read
+    ╭─[ tests/ui/std/os_basics.zr:28:14 ]
+    │
+ 28 │     for i in 0..1000 {
+    │              ───┬───
+    │                 ╰───── Variable 'i' is never read
+    │
+    │ Help: remove it, or name it '_i' to keep it unread
+────╯
 -- stdout
 300000 200000 0
 from parent

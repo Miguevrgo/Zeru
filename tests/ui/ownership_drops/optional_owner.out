@@ -1,4 +1,25 @@
 status: exit 0
+-- warnings
+Warning: Variable 'some' is never read
+    ╭─[ tests/ui/ownership_drops/optional_owner.zr:16:19 ]
+    │
+ 16 │             const some: Probe? = probe(1, at);
+    │                   ──┬─
+    │                     ╰─── Variable 'some' is never read
+    │
+    │ Help: remove it, or name it '_some' to keep it unread
+    │           const _some: Probe? = probe(1, at);
+────╯
+Warning: Variable 'none' is never read
+    ╭─[ tests/ui/ownership_drops/optional_owner.zr:17:19 ]
+    │
+ 17 │             const none: Probe? = None;
+    │                   ──┬─
+    │                     ╰─── Variable 'none' is never read
+    │
+    │ Help: remove it, or name it '_none' to keep it unread
+    │           const _none: Probe? = None;
+────╯
 -- stdout
 unwrapped 2
 dropped: 12

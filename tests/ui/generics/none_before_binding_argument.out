@@ -1,1 +1,12 @@
 status: exit 0
+-- warnings
+Warning: Variable 'r' is never read
+   ╭─[ tests/ui/generics/none_before_binding_argument.zr:6:11 ]
+   │
+ 6 │     const r = two(None, n);
+   │           ┬
+   │           ╰── Variable 'r' is never read
+   │
+   │ Help: remove it, or name it '_r' to keep it unread
+   │           const _r = two(None, n);
+───╯

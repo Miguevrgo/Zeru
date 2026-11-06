@@ -1,3 +1,23 @@
 status: exit 0
+-- warnings
+Warning: Variable 'client' is never read
+   ╭─[ tests/ui/std/net_write_to_closed_peer.zr:6:15 ]
+   │
+ 6 │         const client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+   │               ───┬──
+   │                  ╰──── Variable 'client' is never read
+   │
+   │ Help: remove it, or name it '_client' to keep it unread
+   │           const _client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+───╯
+Warning: Variable 'i' is never read
+    ╭─[ tests/ui/std/net_write_to_closed_peer.zr:10:14 ]
+    │
+ 10 │     for i in 0..5 {
+    │              ──┬─
+    │                ╰─── Variable 'i' is never read
+    │
+    │ Help: remove it, or name it '_i' to keep it unread
+────╯
 -- stdout
 a write failed: true, and the program goes on

@@ -1,3 +1,13 @@
 status: exit 0
+-- warnings
+Warning: Variable 'k' is never read
+   ╭─[ tests/ui/constants/table_lookup.zr:5:18 ]
+   │
+ 5 │         for k in 0..8 {
+   │                  ──┬─
+   │                    ╰─── Variable 'k' is never read
+   │
+   │ Help: remove it, or name it '_k' to keep it unread
+───╯
 -- stdout
 fbbde695

@@ -1,4 +1,14 @@
 status: exit 0
+-- warnings
+Warning: Variable 'i' is never read
+    ╭─[ tests/ui/match/text_patterns.zr:45:14 ]
+    │
+ 45 │     for i in 0..n {
+    │              ──┬─
+    │                ╰─── Variable 'i' is never read
+    │
+    │ Help: remove it, or name it '_i' to keep it unread
+────╯
 -- stdout
 1 2 3 3 4 5 0
 got a starts with b other

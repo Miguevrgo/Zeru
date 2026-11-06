@@ -1,3 +1,14 @@
 status: exit 0
+-- warnings
+Warning: Write .is_empty() to ask whether a str is empty
+   ╭─[ tests/ui/std/os_args.zr:4:34 ]
+   │
+ 4 │     println("{} {}", args.len(), args[0].len() > 0);
+   │                                  ────────┬────────
+   │                                          ╰────────── Write .is_empty() to ask whether a str is empty
+   │
+   │ Help: ask it directly
+   │           println("{} {}", args.len(), !args[0].is_empty());
+───╯
 -- stdout
 1 true

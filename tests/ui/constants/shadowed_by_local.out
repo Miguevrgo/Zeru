@@ -1,3 +1,34 @@
 status: exit 0
+-- warnings
+Warning: Constant 'N' is never used
+   ╭─[ tests/ui/constants/shadowed_by_local.zr:1:7 ]
+   │
+ 1 │ const N: i32 = 2147483647;
+   │       ┬
+   │       ╰── Constant 'N' is never used
+   │
+   │ Help: remove it, or name it '_N' to keep it unused
+   │           const _N: i32 = 2147483647;
+───╯
+Warning: Constant 'S' is never used
+   ╭─[ tests/ui/constants/shadowed_by_local.zr:2:7 ]
+   │
+ 2 │ const S: i32 = 40;
+   │       ┬
+   │       ╰── Constant 'S' is never used
+   │
+   │ Help: remove it, or name it '_S' to keep it unused
+   │           const _S: i32 = 40;
+───╯
+Warning: Constant 'K' is never used
+   ╭─[ tests/ui/constants/shadowed_by_local.zr:3:7 ]
+   │
+ 3 │ const K: i64 = 9223372036854775807;
+   │       ┬
+   │       ╰── Constant 'K' is never used
+   │
+   │ Help: remove it, or name it '_K' to keep it unused
+   │           const _K: i64 = 9223372036854775807;
+───╯
 -- stdout
 2 6 8 2 6

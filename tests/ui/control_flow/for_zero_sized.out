@@ -1,3 +1,13 @@
 status: exit 0
+-- warnings
+Warning: Variable 't' is never read
+   ╭─[ tests/ui/control_flow/for_zero_sized.zr:8:14 ]
+   │
+ 8 │     for t in v {
+   │              ┬
+   │              ╰── Variable 't' is never read
+   │
+   │ Help: remove it, or name it '_t' to keep it unread
+───╯
 -- stdout
 3 3

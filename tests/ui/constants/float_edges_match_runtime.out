@@ -1,4 +1,15 @@
 status: exit 0
+-- warnings
+Warning: Function 'big' is never used
+   ╭─[ tests/ui/constants/float_edges_match_runtime.zr:7:4 ]
+   │
+ 7 │ fn big() f64 {
+   │    ─┬─
+   │     ╰─── Function 'big' is never used
+   │
+   │ Help: remove it, or name it '_big' to keep it unused
+   │           fn _big() f64 {
+───╯
 -- stdout
 false false true true false
 0.10000000149011612 0.10000000149011612

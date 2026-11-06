@@ -1,3 +1,14 @@
 status: exit 0
+-- warnings
+Warning: Variable 'p' is never read
+    ╭─[ tests/ui/ownership_drops/maybe_in_loop.zr:20:22 ]
+    │
+ 20 │                 Some(p) => {
+    │                      ┬
+    │                      ╰── Variable 'p' is never read
+    │
+    │ Help: remove it, or name it '_p' to keep it unread
+    │           Some(_p) => {
+────╯
 -- stdout
 dropped: 9

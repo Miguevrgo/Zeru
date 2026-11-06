@@ -1,4 +1,14 @@
 status: exit 0
+-- warnings
+Warning: Variable 'k' is never read
+    ╭─[ tests/ui/constants/computed_by_functions.zr:31:18 ]
+    │
+ 31 │         for k in 0..8 {
+    │                  ──┬─
+    │                    ╰─── Variable 'k' is never read
+    │
+    │ Help: remove it, or name it '_k' to keep it unread
+────╯
 -- stdout
 [0, 1, 4, 9, 16, 25, 36, 49, 64, 81] 6765 3 25
 77073096 2d02ef8d [7, 7, 8, 7]

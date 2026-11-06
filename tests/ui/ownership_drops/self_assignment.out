@@ -1,3 +1,11 @@
 status: exit 0
+-- warnings
+Warning: This assigns a value to where it already is
+   ╭─[ tests/ui/ownership_drops/self_assignment.zr:9:5 ]
+   │
+ 9 │     v = v;
+   │     ──┬──
+   │       ╰──── This assigns a value to where it already is
+───╯
 -- stdout
 2 8 1 6

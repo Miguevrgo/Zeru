@@ -1,4 +1,25 @@
 status: exit 0
+-- warnings
+Warning: Variable 't' is never read
+    ╭─[ tests/ui/ownership_drops/replace.zr:32:11 ]
+    │
+ 32 │     const t = State::Open(D { id: 8 });
+    │           ┬
+    │           ╰── Variable 't' is never read
+    │
+    │ Help: remove it, or name it '_t' to keep it unread
+    │           const _t = State::Open(D { id: 8 });
+────╯
+Warning: The value this call returns is never used
+    ╭─[ tests/ui/ownership_drops/replace.zr:33:5 ]
+    │
+ 33 │     replace(&var a, D { id: 9 });
+    │     ──────────────┬─────────────
+    │                   ╰─────────────── The value this call returns is never used
+    │
+    │ Help: use it, or drop it on purpose
+    │           var _ = replace(&var a, D { id: 9 });
+────╯
 -- stdout
 old 1 now 2
 box 3 4
