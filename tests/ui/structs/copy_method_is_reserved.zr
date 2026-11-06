@@ -1,5 +1,6 @@
 struct Holder {
     items: Vec<i64>,
+
     fn copy(self) Holder {
         return Holder { items: Vec[42] };
     }

@@ -3,6 +3,7 @@ trait Printable {
 }
 struct Doc {
     n: i32,
+
     fn print(self) {
         println("doc {}", self.n);
     }

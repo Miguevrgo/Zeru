@@ -1,6 +1,7 @@
 struct Probe {
     id: i64,
     log: *i64,
+
     fn drop(var self) {
         *self.log = *self.log * 10 + self.id;
     }

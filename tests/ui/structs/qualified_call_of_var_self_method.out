@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
 Error: 'S::bump' takes 'self'; call it on a value, as in x.bump()
-   ╭─[ tests/ui/structs/qualified_call_of_var_self_method.zr:9:5 ]
-   │
- 9 │     S.bump(s);
-   │     ────┬────
-   │         ╰────── 'S::bump' takes 'self'; call it on a value, as in x.bump()
-───╯
+    ╭─[ tests/ui/structs/qualified_call_of_var_self_method.zr:10:5 ]
+    │
+ 10 │     S.bump(s);
+    │     ────┬────
+    │         ╰────── 'S::bump' takes 'self'; call it on a value, as in x.bump()
+────╯
 [-] Error: aborting due to previous error

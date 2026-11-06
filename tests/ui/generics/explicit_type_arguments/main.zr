@@ -1,6 +1,7 @@
 import nums;
 struct Box<T> {
     v: T,
+
     fn make(v: T) Box<T> {
         return Box { v: v };
     }

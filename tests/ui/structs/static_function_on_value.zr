@@ -1,5 +1,6 @@
 struct Box {
     n: i32,
+
     fn empty() Box {
         return Box { n: 0 };
     }

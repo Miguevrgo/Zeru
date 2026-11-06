@@ -3,8 +3,10 @@
 //! its outermost group first: a call's arguments one per line, an operator
 //! chain before each operator, a method chain before each `.`; a block may
 //! end a line only as a list's last item. Comments, after a statement or a
-//! `{` too, and single blank lines stay where they were; a comment inside an
-//! expression, which has no place in the new layout, is an error instead.
+//! `{` too, and single blank lines stay where they were; a list holding a
+//! comment breaks one item per line, and an operator chain holding one
+//! breaks before each operator. A comment elsewhere inside an expression,
+//! which has no place in the new layout, is an error instead.
 //! The result is parsed again and must give the same tree and comments, or
 //! nothing changes.
 
@@ -16,7 +18,7 @@ use crate::ast::{
 };
 use crate::errors::{Span, ZeruError};
 use crate::lexer::Lexer;
-use crate::parser::Parser;
+use crate::parser::{Parser, token_precedence};
 use crate::token::Token;
 
 const WIDTH: usize = 100;
@@ -71,12 +73,7 @@ fn list(open: &str, items: Vec<Doc>, close: &str, padded: bool) -> Doc {
             .into_iter()
             .flat_map(|item| [Doc::Hard, item, text(",")])
             .collect();
-        return seq(vec![
-            text(open),
-            Doc::Indent(Box::new(seq(lines))),
-            Doc::Hard,
-            text(close),
-        ]);
+        return broken(open, lines, close);
     }
     let edge = || if padded { Doc::Line } else { Doc::Soft };
     let mut inside = vec![edge()];
@@ -93,6 +90,16 @@ fn list(open: &str, items: Vec<Doc>, close: &str, padded: bool) -> Doc {
         edge(),
         text(close),
     ]))
+}
+
+/// `lines` a level in, with `open` and `close` on lines of their own.
+fn broken(open: &str, lines: Vec<Doc>, close: &str) -> Doc {
+    seq(vec![
+        text(open),
+        Doc::Indent(Box::new(seq(lines))),
+        Doc::Hard,
+        text(close),
+    ])
 }
 
 /// Whether `doc` always spans lines, as a block does.
@@ -263,7 +270,7 @@ impl<'s> Printer<'s> {
         let end = tests.map_or(self.src.len(), |span| span.start);
         let mut lines = self.lines(&program.statements, end, Self::extent, Self::statement);
         if let Some(span) = tests {
-            let close = self.braces(span.end).1.start;
+            let close = self.brackets(span.end, Token::LBrace).1.start;
             let items: Vec<&Statement> = program
                 .tests
                 .iter()
@@ -295,28 +302,36 @@ impl<'s> Printer<'s> {
     /// stops at its signature.
     fn extent(&self, stmt: &Statement) -> Span {
         match stmt.kind {
-            S::Function { .. } => Span::new(stmt.span.start, self.braces(stmt.span.end).1.end),
+            S::Function { .. } => Span::new(
+                stmt.span.start,
+                self.brackets(stmt.span.end, Token::LBrace).1.end,
+            ),
             _ => stmt.span,
         }
     }
 
-    /// The first `{` at or after `from`, and the `}` that closes it.
-    fn braces(&self, from: usize) -> (Span, Span) {
+    /// The first `open` at or after `from`, and the bracket that closes it.
+    fn brackets(&self, from: usize, open: Token) -> (Span, Span) {
         let mut depth = 0;
-        let mut open = None;
+        let mut first = None;
         for &(ref token, span) in self.tokens.iter().filter(|(_, span)| span.start >= from) {
+            if first.is_none() && *token != open {
+                continue;
+            }
             match token {
-                Token::LBrace => {
-                    open.get_or_insert(span);
+                Token::LBrace | Token::LParen | Token::LBracket => {
+                    first.get_or_insert(span);
                     depth += 1;
                 }
-                Token::RBrace if depth == 1 => return (open.unwrap_or(span), span),
-                Token::RBrace => depth -= 1,
+                Token::RBrace | Token::RParen | Token::RBracket if depth == 1 => {
+                    return (first.unwrap_or(span), span);
+                }
+                Token::RBrace | Token::RParen | Token::RBracket => depth -= 1,
                 _ => {}
             }
         }
         let end = Span::new(self.src.len(), self.src.len());
-        (open.unwrap_or(end), end)
+        (first.unwrap_or(end), end)
     }
 
     /// Where each member inside the braces `open` and `close` begins and
@@ -380,8 +395,13 @@ impl<'s> Printer<'s> {
         }
         for item in items {
             let span = extent(self, item);
+            let before = self.next;
             self.comments_before(span.start, &mut out, &mut last);
-            self.newline(&mut out, last, span.start);
+            let gap = last.map_or("\n", |last| &self.src[last..span.start]);
+            match self.next > before && gap.chars().all(|c| c == ' ' || c == '\t') {
+                true => out.push(text(" ")),
+                false => self.newline(&mut out, last, span.start),
+            }
             out.push(print(self, item));
             while let Some(&comment) = self.comments.get(self.next)
                 && comment.start < span.end
@@ -415,6 +435,95 @@ impl<'s> Printer<'s> {
         }
     }
 
+    /// The comments before `at`: the first at the end of the line, the
+    /// others on lines of their own.
+    fn trailing(&mut self, at: usize) -> Vec<Doc> {
+        let mut docs = Vec::new();
+        while let Some(&comment) = self.comments.get(self.next)
+            && comment.start < at
+        {
+            let comment = self.source(comment).trim_end();
+            match docs.is_empty() {
+                true => docs.push(Doc::Suffix(format!(" {comment}"))),
+                false => docs.extend([Doc::Hard, text(comment)]),
+            }
+            self.next += 1;
+        }
+        docs
+    }
+
+    /// `items` as `list` lays them out, or one per line, each with its
+    /// comments, when a comment sits between them inside `within`.
+    fn items<T>(
+        &mut self,
+        (open, close): (&str, &str),
+        items: &[T],
+        within: Span,
+        padded: bool,
+        span: impl Fn(&T) -> Span,
+        print: impl Fn(&mut Self, &T) -> Doc,
+    ) -> Doc {
+        let inside = |at: usize| {
+            items
+                .iter()
+                .any(|item| span(item).start <= at && at < span(item).end)
+        };
+        let between = self.comments[self.next..]
+            .iter()
+            .take_while(|comment| comment.start < within.end)
+            .any(|comment| comment.start > within.start && !inside(comment.start));
+        if !between {
+            let docs = items.iter().map(|item| print(self, item)).collect();
+            return list(open, docs, close, padded);
+        }
+        let lines = self.lines(
+            items,
+            within.end,
+            |_, item| span(item),
+            |p, item| seq(vec![print(p, item), text(",")]),
+        );
+        broken(open, lines, close)
+    }
+
+    /// `head(params) ret`: how a function and a trait method begin, the
+    /// parameters in the first parentheses from `from`.
+    fn signature(
+        &mut self,
+        head: String,
+        from: usize,
+        params: &[(String, TypeSpec, bool)],
+        ret: &Option<TypeSpec>,
+    ) -> Vec<Doc> {
+        let parens = self.brackets(from, Token::LParen);
+        let begins = |at: usize| matches!(self.tokens[at - 1].0, Token::LParen | Token::Comma);
+        let spans = self.members(parens, begins, |_| false);
+        let params: Vec<_> = spans.into_iter().zip(params).collect();
+        let within = Span::new(parens.0.start, parens.1.end);
+        let params = self.items(
+            ("(", ")"),
+            &params,
+            within,
+            false,
+            |param| param.0,
+            |_, param| text(param_text(param.1)),
+        );
+        vec![text(head), params, text(return_text(ret))]
+    }
+
+    /// `cond` and the space before its block, or a line break when `cond`
+    /// is an operator or method chain that breaks, so the `{` stands apart
+    /// from the chain's last line.
+    fn condition(&mut self, cond: &Expression) -> Doc {
+        let list = matches!(
+            cond.kind,
+            E::ArrayLiteral(_) | E::VecLiteral(_) | E::Tuple(_)
+        );
+        match self.expr(cond) {
+            Doc::Group(doc) if !list => group(seq(vec![*doc, Doc::Line])),
+            doc => seq(vec![doc, text(" ")]),
+        }
+    }
+
     /// A line break, after a blank line when the source has one between
     /// `last` and `at`.
     fn newline(&self, out: &mut Vec<Doc>, last: Option<usize>, at: usize) {
@@ -429,13 +538,7 @@ impl<'s> Printer<'s> {
     fn braced(&self, head: Doc, lines: Vec<Doc>) -> Doc {
         match lines.is_empty() {
             true => seq(vec![head, text("{}")]),
-            false => seq(vec![
-                head,
-                text("{"),
-                Doc::Indent(Box::new(seq(lines))),
-                Doc::Hard,
-                text("}"),
-            ]),
+            false => seq(vec![head, broken("{", lines, "}")]),
         }
     }
 
@@ -476,8 +579,7 @@ impl<'s> Printer<'s> {
             S::Continue => text("continue;"),
             S::While { cond, body } => seq(vec![
                 text("while "),
-                self.expr(cond),
-                text(" "),
+                self.condition(cond),
                 self.statement(body),
             ]),
             S::ForIn {
@@ -490,8 +592,7 @@ impl<'s> Printer<'s> {
                     Some(index) => format!("for {index}, {} in ", names_text(variable)),
                     None => format!("for {} in ", names_text(variable)),
                 }),
-                self.expr(iterable),
-                text(" "),
+                self.condition(iterable),
                 self.statement(body),
             ]),
             S::Expression(expr) if matches!(expr.kind, E::Match { .. }) => self.expr(expr),
@@ -504,7 +605,7 @@ impl<'s> Printer<'s> {
                 return_type,
                 body,
             } => {
-                let close = self.braces(stmt.span.end).1;
+                let close = self.brackets(stmt.span.end, Token::LBrace).1;
                 if name.starts_with('!') {
                     let at = self.tokens.iter().find(|(token, span)| {
                         span.start > stmt.span.start && matches!(token, Token::StringLit(_))
@@ -514,7 +615,7 @@ impl<'s> Printer<'s> {
                     return seq(vec![head, self.block(body, close.start)]);
                 }
                 let head = format!("{public}fn {name}{}", generics(type_params));
-                let mut parts = signature(head, params, return_type);
+                let mut parts = self.signature(head, stmt.span.start, params, return_type);
                 parts.extend([text(" "), self.block(body, close.start)]);
                 seq(parts)
             }
@@ -524,32 +625,32 @@ impl<'s> Printer<'s> {
                 fields,
                 methods,
             } => {
-                let braces = self.braces(stmt.span.start);
+                let braces = self.brackets(stmt.span.start, Token::LBrace);
                 let field = |at: usize| {
                     matches!(self.tokens[at].0, Token::Identifier(_))
                         && matches!(self.tokens.get(at + 1), Some((Token::Colon, _)))
                 };
                 let spans = self.members(braces, field, |t| matches!(t, Token::Fn | Token::Pub));
-                let fields = spans
-                    .into_iter()
-                    .zip(fields)
-                    .map(|(span, field)| (span, Ok(field)));
-                let methods = methods.iter().map(|m| (self.extent(m), Err(m)));
-                let members: Vec<_> = fields.chain(methods).collect();
-                let lines = self.lines(
-                    &members,
-                    braces.1.start,
-                    |_, member| member.0,
-                    |p, member| match member.1 {
-                        Ok((name, ty)) => text(format!("{name}: {},", ty_text(ty))),
-                        Err(method) => p.statement(method),
-                    },
+                let fields: Vec<_> = spans.into_iter().zip(fields).collect();
+                let end = match methods.is_empty() {
+                    true => braces.1.start,
+                    false => fields.last().map_or(braces.0.end, |(span, _)| span.end),
+                };
+                let mut lines = self.lines(
+                    &fields,
+                    end,
+                    |_, field| field.0,
+                    |_, (_, (name, ty))| text(format!("{name}: {},", ty_text(ty))),
                 );
+                if !fields.is_empty() && !methods.is_empty() {
+                    lines.push(Doc::Hard);
+                }
+                lines.extend(self.lines(methods, braces.1.start, Self::extent, Self::statement));
                 let head = format!("{public}struct {name}{} ", generics(type_params));
                 self.braced(text(head), lines)
             }
             S::Enum { name, variants } => {
-                let braces = self.braces(stmt.span.start);
+                let braces = self.brackets(stmt.span.start, Token::LBrace);
                 let variant = |at: usize| matches!(self.tokens[at].0, Token::Identifier(_));
                 let spans = self.members(braces, variant, |_| false);
                 let variants: Vec<_> = spans.into_iter().zip(variants).collect();
@@ -565,7 +666,7 @@ impl<'s> Printer<'s> {
                 self.braced(text(format!("{public}enum {name} ")), lines)
             }
             S::Trait { name, methods } => {
-                let braces = self.braces(stmt.span.start);
+                let braces = self.brackets(stmt.span.start, Token::LBrace);
                 let method = |at: usize| self.tokens[at].0 == Token::Fn;
                 let spans = self.members(braces, method, |_| false);
                 let methods: Vec<_> = spans.into_iter().zip(methods).collect();
@@ -573,9 +674,10 @@ impl<'s> Printer<'s> {
                     &methods,
                     braces.1.start,
                     |_, method| method.0,
-                    |_, (_, method)| {
+                    |p, (span, method)| {
                         let head = format!("fn {}", method.name);
-                        let mut parts = signature(head, &method.params, &method.return_type);
+                        let (params, ret) = (&method.params, &method.return_type);
+                        let mut parts = p.signature(head, span.start, params, ret);
                         parts.push(text(";"));
                         seq(parts)
                     },
@@ -589,12 +691,17 @@ impl<'s> Printer<'s> {
             } => {
                 let mut parts = vec![
                     text("if "),
-                    self.expr(condition),
-                    text(" "),
+                    self.condition(condition),
                     self.statement(then_branch),
                 ];
                 if let Some(else_branch) = else_branch {
-                    parts.extend([text(" else "), self.statement(else_branch)]);
+                    let comments = self.trailing(else_branch.span.start);
+                    let gap = match comments.is_empty() {
+                        true => text(" "),
+                        false => Doc::Hard,
+                    };
+                    parts.extend(comments);
+                    parts.extend([gap, text("else "), self.statement(else_branch)]);
                 }
                 seq(parts)
             }
@@ -636,24 +743,52 @@ impl<'s> Printer<'s> {
                 let space = if doubled { " " } else { "" };
                 seq(vec![text(format!("{operator}{space}")), self.expr(right)])
             }
-            E::Infix {
-                left,
-                operator,
-                right,
-            } => {
-                let right = seq(vec![
-                    Doc::Line,
-                    text(format!("{operator} ")),
-                    self.expr(right),
-                ]);
-                group(seq(vec![self.expr(left), nest(right)]))
+            E::Infix { .. } => {
+                let mut rest = Vec::new();
+                let mut first = expr;
+                while let E::Infix {
+                    left,
+                    operator,
+                    right,
+                } = &first.kind
+                {
+                    rest.push((operator, right));
+                    first = left;
+                    let chained = matches!(&left.kind, E::Infix { operator: inner, .. }
+                        if token_precedence(inner) == token_precedence(operator));
+                    if !chained || self.parens.contains(&left.span) {
+                        break;
+                    }
+                }
+                let first = self.expr(first);
+                let mut parts = Vec::new();
+                let mut commented = false;
+                for (operator, right) in rest.into_iter().rev() {
+                    let comments = self.trailing(right.span.start);
+                    commented |= !comments.is_empty();
+                    parts.push((comments, operator, self.expr(right)));
+                }
+                let parts = parts.into_iter().flat_map(|(comments, operator, right)| {
+                    let line = if commented { Doc::Hard } else { Doc::Line };
+                    comments
+                        .into_iter()
+                        .chain([line, text(format!("{operator} ")), right])
+                });
+                match commented {
+                    true => seq(vec![first, Doc::Indent(Box::new(seq(parts.collect())))]),
+                    false => group(seq(vec![first, nest(seq(parts.collect()))])),
+                }
             }
             E::StructLiteral { name, fields } => {
-                let fields = fields
-                    .iter()
-                    .map(|(field, value)| seq(vec![text(format!("{field}: ")), self.expr(value)]))
-                    .collect();
-                seq(vec![text(format!("{name} ")), list("{", fields, "}", true)])
+                let fields = self.items(
+                    ("{", "}"),
+                    fields,
+                    expr.span,
+                    true,
+                    |(_, value)| value.span,
+                    |p, (field, value)| seq(vec![text(format!("{field}: ")), p.expr(value)]),
+                );
+                seq(vec![text(format!("{name} ")), fields])
             }
             E::Call { .. } | E::Get { .. } | E::Index { .. } | E::Slice { .. } | E::Try { .. } => {
                 self.chain(expr)
@@ -664,8 +799,8 @@ impl<'s> Printer<'s> {
                 } else {
                     "["
                 };
-                let items = items.iter().map(|item| self.expr(item)).collect();
-                list(open, items, "]", false)
+                let span = |item: &Expression| item.span;
+                self.items((open, "]"), items, expr.span, false, span, Self::expr)
             }
             E::ArrayRepeat { value, count } | E::VecRepeat { value, count } => {
                 let open = if matches!(expr.kind, E::VecRepeat { .. }) {
@@ -760,8 +895,8 @@ impl<'s> Printer<'s> {
                 seq(vec![text("("), self.expr(&items[0]), text(",)")])
             }
             E::Tuple(items) => {
-                let items = items.iter().map(|item| self.expr(item)).collect();
-                list("(", items, ")", false)
+                let span = |item: &Expression| item.span;
+                self.items(("(", ")"), items, expr.span, false, span, Self::expr)
             }
             E::Closure(closure) => {
                 let params = closure
@@ -814,22 +949,25 @@ impl<'s> Printer<'s> {
             .filter(|link| matches!(link.kind, E::Get { .. }));
         let method = |link: &&Expression| matches!(&link.kind, E::Call { function, .. } if matches!(function.kind, E::Get { .. }));
         let breaks = dots.count() >= 2 && links.iter().any(method);
+        let root = self.expr(root);
         let mut parts = Vec::new();
         for link in links.into_iter().rev() {
             parts.push(match &link.kind {
                 E::Get { name, .. } if breaks => seq(vec![Doc::Soft, text(format!(".{name}"))]),
                 E::Get { name, .. } => text(format!(".{name}")),
                 E::Call {
+                    function,
                     type_args,
                     arguments,
-                    ..
                 } => {
-                    let args = arguments.iter().map(|arg| self.expr(arg)).collect();
+                    let within = Span::new(function.span.end, link.span.end);
+                    let span = |arg: &Expression| arg.span;
+                    let args = self.items(("(", ")"), arguments, within, false, span, Self::expr);
                     let type_args = match type_args.is_empty() {
                         true => String::new(),
                         false => format!("<{}>", types(type_args)),
                     };
-                    seq(vec![text(type_args), list("(", args, ")", false)])
+                    seq(vec![text(type_args), args])
                 }
                 E::Index { index, .. } => seq(vec![text("["), self.expr(index), text("]")]),
                 E::Slice { start, end, .. } => {
@@ -844,7 +982,6 @@ impl<'s> Printer<'s> {
                 _ => unreachable!(),
             });
         }
-        let root = self.expr(root);
         match breaks {
             true => group(seq(vec![root, nest(seq(parts))])),
             false => seq(std::iter::once(root).chain(parts).collect()),
@@ -895,20 +1032,6 @@ fn return_text(ty: &Option<TypeSpec>) -> String {
         Some(ty) => format!(" {}", ty_text(ty)),
         None => String::new(),
     }
-}
-
-/// `head(params) ret`: how a function and a trait method begin.
-fn signature(
-    head: String,
-    params: &[(String, TypeSpec, bool)],
-    ret: &Option<TypeSpec>,
-) -> Vec<Doc> {
-    let params = params.iter().map(|p| text(param_text(p))).collect();
-    vec![
-        text(head),
-        list("(", params, ")", false),
-        text(return_text(ret)),
-    ]
 }
 
 fn names_text(names: &Names) -> String {
@@ -1015,6 +1138,7 @@ fn main() {
 struct Point {
     x: i32, // across
     y: i32,
+
     fn sum(self) i32 {
         return self.x + self.y;
     }
@@ -1051,7 +1175,99 @@ fn main() {
 }
 ";
         assert_eq!(format(source).unwrap(), expected);
-        assert!(format("fn main() { f(1, /* here */ 2); }").is_err());
+        assert!(format("fn main() { x = /* here */ 2; }").is_err());
+    }
+
+    #[test]
+    fn keeps_comments_in_lists_operators_and_signatures() {
+        let source = "struct P {
+    x: i32, // trailing x
+    /* y */ y: i32,
+    fn get(self) i32 { return self.x; }
+}
+
+fn f(
+    a: i32, // first
+    b: i32,
+) i32 {
+    return a + b;
+}
+
+fn main() {
+    const p = P { x: 1, // one
+        // before y
+        y: 2 };
+    println(\"{}\", f(p.x, // arg a
+        p.y));
+    const v: Vec<i32> = Vec[1, /* a */ 2];
+    const sum = 1 + // plus
+        2;
+    if p.x > 0 {
+        f(1, 2);
+    } // between
+    else {
+        f(2, 1);
+    }
+    if p.first_condition > 100 && p.second_condition > 100 && p.third_condition_with_a_long_name > 1 {
+        f(3, 4);
+    }
+    const total = p.width * p.height * p.depth + p.width * p.height + p.width * p.depth + p.height + 1;
+}
+";
+        let expected = "struct P {
+    x: i32, // trailing x
+    /* y */ y: i32,
+
+    fn get(self) i32 {
+        return self.x;
+    }
+}
+
+fn f(
+    a: i32, // first
+    b: i32,
+) i32 {
+    return a + b;
+}
+
+fn main() {
+    const p = P {
+        x: 1, // one
+        // before y
+        y: 2,
+    };
+    println(\"{}\", f(
+        p.x, // arg a
+        p.y,
+    ));
+    const v: Vec<i32> = Vec[
+        1, /* a */
+        2,
+    ];
+    const sum = 1 // plus
+        + 2;
+    if p.x > 0 {
+        f(1, 2);
+    } // between
+    else {
+        f(2, 1);
+    }
+    if p.first_condition > 100
+        && p.second_condition > 100
+        && p.third_condition_with_a_long_name > 1
+    {
+        f(3, 4);
+    }
+    const total = p.width * p.height * p.depth
+        + p.width * p.height
+        + p.width * p.depth
+        + p.height
+        + 1;
+}
+";
+        let formatted = format(source).unwrap();
+        assert_eq!(formatted, expected);
+        assert_eq!(format(&formatted).unwrap(), formatted);
     }
 
     #[test]

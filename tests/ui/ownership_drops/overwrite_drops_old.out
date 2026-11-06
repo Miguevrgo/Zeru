@@ -1,9 +1,9 @@
 status: exit 0
 -- warnings
 Warning: Variable 'p' is never read
-    ╭─[ tests/ui/ownership_drops/overwrite_drops_old.zr:15:13 ]
+    ╭─[ tests/ui/ownership_drops/overwrite_drops_old.zr:16:13 ]
     │
- 15 │         var p = probe(1, at);
+ 16 │         var p = probe(1, at);
     │             ┬
     │             ╰── Variable 'p' is never read
     │

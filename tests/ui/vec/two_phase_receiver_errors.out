@@ -1,9 +1,9 @@
 status: compile error
 -- stderr
 Error: Cannot change 'vs' while a reference into it is still in use
-    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:20:21 ]
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:21:21 ]
     │
- 20 │     vs[0].push(grow(&var vs));
+ 21 │     vs[0].push(grow(&var vs));
     │     ────────────┬──────┬─────
     │                 ╰────────────── borrowed here
     │                        │
@@ -12,9 +12,9 @@ Error: Cannot change 'vs' while a reference into it is still in use
     │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'vs'
 ────╯
 Error: Cannot change 'vs' while a reference into it is still in use
-    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:21:30 ]
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:22:30 ]
     │
- 21 │     println("{}", vs[0][grow(&var vs)]);
+ 22 │     println("{}", vs[0][grow(&var vs)]);
     │                   ──────────┬───┬─────
     │                             ╰─────────── borrowed here
     │                                 │
@@ -23,9 +23,9 @@ Error: Cannot change 'vs' while a reference into it is still in use
     │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'vs'
 ────╯
 Error: Cannot change 'cs' while a reference into it is still in use
-    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:23:23 ]
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:24:23 ]
     │
- 23 │     cs[0].add(grow_cs(&var cs));
+ 24 │     cs[0].add(grow_cs(&var cs));
     │     ──┬──────────┬───────┬─────
     │       ╰────────────────────────── borrowed here
     │                  │       │
@@ -36,9 +36,9 @@ Error: Cannot change 'cs' while a reference into it is still in use
     │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'cs'
 ────╯
 Error: Cannot change 'cs' while a reference into it is still in use
-    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:24:38 ]
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:25:38 ]
     │
- 24 │     println("{}", cs[0].size(grow_cs(&var cs)));
+ 25 │     println("{}", cs[0].size(grow_cs(&var cs)));
     │                   ──┬───────────┬───────┬─────
     │                     ╰─────────────────────────── borrowed here
     │                                 │       │
@@ -49,15 +49,15 @@ Error: Cannot change 'cs' while a reference into it is still in use
     │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'cs'
 ────╯
 Error: Cannot change 'v' while 'e' still refers into it
-    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:29:5 ]
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:30:5 ]
     │
- 28 │     var e = &v[0];
+ 29 │     var e = &v[0];
     │             ──┬──
     │               ╰──── 'e' borrows here
- 29 │     v.push(1);
+ 30 │     v.push(1);
     │     ────┬────
     │         ╰────── this can free or move what 'e' points at
- 30 │     println("{}", *e);
+ 31 │     println("{}", *e);
     │                    ┬
     │                    ╰── 'e' is used later here
     │

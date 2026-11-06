@@ -1,23 +1,23 @@
 status: compile error
 -- stderr
 Error: A 'drop' method takes only 'var self' and returns nothing
-   ╭─[ tests/ui/ownership_drops/drop_signature.zr:3:5 ]
+   ╭─[ tests/ui/ownership_drops/drop_signature.zr:4:5 ]
    │
- 3 │     fn drop(self) {}
+ 4 │     fn drop(self) {}
    │     ──────┬──────
    │           ╰──────── A 'drop' method takes only 'var self' and returns nothing
 ───╯
 Error: A 'drop' method takes only 'var self' and returns nothing
-   ╭─[ tests/ui/ownership_drops/drop_signature.zr:7:5 ]
+   ╭─[ tests/ui/ownership_drops/drop_signature.zr:9:5 ]
    │
- 7 │     fn drop(var self, x: i32) {}
+ 9 │     fn drop(var self, x: i32) {}
    │     ────────────┬────────────
    │                 ╰────────────── A 'drop' method takes only 'var self' and returns nothing
 ───╯
 Error: A 'drop' method takes only 'var self' and returns nothing
-    ╭─[ tests/ui/ownership_drops/drop_signature.zr:11:5 ]
+    ╭─[ tests/ui/ownership_drops/drop_signature.zr:14:5 ]
     │
- 11 │     fn drop(var self) i32 {
+ 14 │     fn drop(var self) i32 {
     │     ──────────┬──────────
     │               ╰──────────── A 'drop' method takes only 'var self' and returns nothing
 ────╯

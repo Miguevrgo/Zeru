@@ -7,18 +7,18 @@ Error: Operator '>' cannot be applied to P
     │        ──┬──
     │          ╰──── Operator '>' cannot be applied to P
     │
- 19 │     var r = bigger(p, q);
+ 20 │     var r = bigger(p, q);
     │             ──────┬─────
     │                   ╰─────── in 'bigger<P>', instantiated here
 ────╯
 Error: Cannot move a value out of a field, an element or a pointer
-    ╭─[ tests/ui/generics/checked_at_its_types.zr:13:16 ]
+    ╭─[ tests/ui/generics/checked_at_its_types.zr:14:16 ]
     │
- 13 │         return self.items[self.items.len() - 1];
+ 14 │         return self.items[self.items.len() - 1];
     │                ────────────────┬───────────────
     │                                ╰───────────────── what holds it would be left without it
     │
- 21 │     println("{}", names.top());
+ 22 │     println("{}", names.top());
     │                   ─────┬─────
     │                        ╰─────── in 'Stack::top<String>', instantiated here
     │

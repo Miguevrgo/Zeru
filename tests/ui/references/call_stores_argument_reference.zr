@@ -1,5 +1,6 @@
 struct Bag {
     items: Vec<&i64>,
+
     fn add(var self, r: &i64) {
         self.items.push(r);
     }

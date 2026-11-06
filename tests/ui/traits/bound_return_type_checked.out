@@ -1,13 +1,13 @@
 status: compile error
 -- stderr
 Error: 'f' asks for T: Tr, which A does not satisfy
-    ╭─[ tests/ui/traits/bound_return_type_checked.zr:14:13 ]
+    ╭─[ tests/ui/traits/bound_return_type_checked.zr:15:13 ]
     │
-  6 │     fn go(self) bool {
+  7 │     fn go(self) bool {
     │     ────────┬───────
     │             ╰───────── A has fn go(self) bool here
     │
- 14 │     var r = f(A { x: 1 });
+ 15 │     var r = f(A { x: 1 });
     │             ──────┬──────
     │                   ╰──────── 'f' asks for T: Tr, which A does not satisfy
     │

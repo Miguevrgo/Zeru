@@ -1,5 +1,6 @@
 struct W {
     v: &var Vec<i64>,
+
     fn grow(self) {
         self.v.push(2);
     }

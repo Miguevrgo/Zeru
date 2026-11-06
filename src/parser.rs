@@ -2004,7 +2004,7 @@ impl Parser {
 /// Loosest first. Bitwise operators bind tighter than comparison, so
 /// `flags & MASK == 0` groups the way it reads.
 #[derive(PartialEq, PartialOrd)]
-enum Precedence {
+pub(crate) enum Precedence {
     Lowest,
     Assignment,
     LogicalOr,
@@ -2023,7 +2023,7 @@ enum Precedence {
     Index,
 }
 
-fn token_precedence(token: &Token) -> Precedence {
+pub(crate) fn token_precedence(token: &Token) -> Precedence {
     match token {
         Token::Assign => Precedence::Assignment,
         token if token.compound_base().is_some() => Precedence::Assignment,

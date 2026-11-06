@@ -1,9 +1,9 @@
 status: exit 0
 -- warnings
 Warning: Variable 'p' is never read
-    ╭─[ tests/ui/ownership_drops/maybe_in_loop.zr:20:22 ]
+    ╭─[ tests/ui/ownership_drops/maybe_in_loop.zr:21:22 ]
     │
- 20 │                 Some(p) => {
+ 21 │                 Some(p) => {
     │                      ┬
     │                      ╰── Variable 'p' is never read
     │

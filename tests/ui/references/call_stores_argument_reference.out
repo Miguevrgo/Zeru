@@ -1,47 +1,47 @@
 status: compile error
 -- stderr
 Error: Cannot change 'v' while 'slot' still refers into it
-    ╭─[ tests/ui/references/call_stores_argument_reference.zr:14:5 ]
+    ╭─[ tests/ui/references/call_stores_argument_reference.zr:15:5 ]
     │
- 13 │         set(&var slot, &v[0]);
+ 14 │         set(&var slot, &v[0]);
     │                        ──┬──
     │                          ╰──── 'slot' borrows here
- 14 │         v.push(2);
+ 15 │         v.push(2);
     │         ────┬────
     │             ╰────── this can free or move what 'slot' points at
- 15 │ ╭─▶     match slot {
+ 16 │ ╭─▶     match slot {
     ┆ ┆
- 20 │ ├─▶     }
+ 21 │ ├─▶     }
     │ │
     │ ╰─────────── 'slot' is used later here
     │
     │     Help: finish with 'slot' before this, or keep a copy of the value instead of a reference into 'v'
 ────╯
 Error: Cannot change 'w' while 'bag' still refers into it
-    ╭─[ tests/ui/references/call_stores_argument_reference.zr:25:5 ]
+    ╭─[ tests/ui/references/call_stores_argument_reference.zr:26:5 ]
     │
- 24 │     bag.add(&w[0]);
+ 25 │     bag.add(&w[0]);
     │             ──┬──
     │               ╰──── 'bag' borrows here
- 25 │     w.push(2);
+ 26 │     w.push(2);
     │     ────┬────
     │         ╰────── this can free or move what 'bag' points at
- 26 │     println("{}", *bag.items[0]);
+ 27 │     println("{}", *bag.items[0]);
     │                    ──────┬─────
     │                          ╰─────── 'bag' is used later here
     │
     │ Help: finish with 'bag' before this, or keep a copy of the value instead of a reference into 'w'
 ────╯
 Error: 'kept' refers into 'x', which ends with its block first
-    ╭─[ tests/ui/references/call_stores_argument_reference.zr:31:24 ]
+    ╭─[ tests/ui/references/call_stores_argument_reference.zr:32:24 ]
     │
- 31 │             set(&var kept, &x);
+ 32 │             set(&var kept, &x);
     │                            ─┬
     │                             ╰── this refers into 'x'
     │
- 33 │ ╭─▶     match kept {
+ 34 │ ╭─▶     match kept {
     ┆ ┆
- 38 │ ├─▶     }
+ 39 │ ├─▶     }
     │ │
     │ ╰─────────── 'kept' is used later here
     │

@@ -1,5 +1,6 @@
 struct S {
     f: i32,
+
     fn bump(var self) {
         self.f += 1;
     }

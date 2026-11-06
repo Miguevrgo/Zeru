@@ -1,5 +1,6 @@
 struct Box<T> {
     v: T,
+
     fn get(self) T {
         return self.v;
     }

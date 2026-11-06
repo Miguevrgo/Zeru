@@ -1,9 +1,9 @@
 status: exit 0
 -- warnings
 Warning: Variable 'a' is never read
-    ╭─[ tests/ui/ownership_drops/scope_end.zr:16:19 ]
+    ╭─[ tests/ui/ownership_drops/scope_end.zr:17:19 ]
     │
- 16 │             const a = probe(1, at);
+ 17 │             const a = probe(1, at);
     │                   ┬
     │                   ╰── Variable 'a' is never read
     │
@@ -11,9 +11,9 @@ Warning: Variable 'a' is never read
     │           const _a = probe(1, at);
 ────╯
 Warning: Variable 'b' is never read
-    ╭─[ tests/ui/ownership_drops/scope_end.zr:17:19 ]
+    ╭─[ tests/ui/ownership_drops/scope_end.zr:18:19 ]
     │
- 17 │             const b = probe(2, at);
+ 18 │             const b = probe(2, at);
     │                   ┬
     │                   ╰── Variable 'b' is never read
     │

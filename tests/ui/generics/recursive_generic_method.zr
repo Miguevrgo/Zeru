@@ -1,5 +1,6 @@
 struct Box<T> {
     v: T,
+
     fn wrap(self) Box<Box<T>> {
         return Box { v: self };
     }

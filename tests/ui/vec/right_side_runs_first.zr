@@ -1,5 +1,6 @@
 struct Growing {
     v: Vec<i64>,
+
     fn grow(var self) i64 {
         var i: i64 = 0;
         while i < 100000 {

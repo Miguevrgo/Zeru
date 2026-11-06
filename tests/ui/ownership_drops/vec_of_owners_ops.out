@@ -1,9 +1,9 @@
 status: exit 0
 -- warnings
 Warning: Variable 'last' is never read
-    ╭─[ tests/ui/ownership_drops/vec_of_owners_ops.zr:19:15 ]
+    ╭─[ tests/ui/ownership_drops/vec_of_owners_ops.zr:20:15 ]
     │
- 19 │         const last = v.pop().unwrap();
+ 20 │         const last = v.pop().unwrap();
     │               ──┬─
     │                 ╰─── Variable 'last' is never read
     │
@@ -11,9 +11,9 @@ Warning: Variable 'last' is never read
     │           const _last = v.pop().unwrap();
 ────╯
 Warning: Variable 'mid' is never read
-    ╭─[ tests/ui/ownership_drops/vec_of_owners_ops.zr:20:15 ]
+    ╭─[ tests/ui/ownership_drops/vec_of_owners_ops.zr:21:15 ]
     │
- 20 │         const mid = v.remove(1);
+ 21 │         const mid = v.remove(1);
     │               ─┬─
     │                ╰─── Variable 'mid' is never read
     │

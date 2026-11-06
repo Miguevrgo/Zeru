@@ -11,9 +11,9 @@ Error: Cannot move 'v', which is borrowed
    │           eat(v.copy());
 ───╯
 Error: Cannot move 'self', which is borrowed
-    ╭─[ tests/ui/ownership_drops/borrowed_cannot_move.zr:12:16 ]
+    ╭─[ tests/ui/ownership_drops/borrowed_cannot_move.zr:13:16 ]
     │
- 12 │         return self;
+ 13 │         return self;
     │                ──┬─
     │                  ╰─── what it borrows from keeps it
     │

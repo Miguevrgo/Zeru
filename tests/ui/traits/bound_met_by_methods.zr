@@ -3,12 +3,14 @@ trait Area {
 }
 struct Sq {
     s: i64,
+
     fn area(self) i64 {
         return self.s * self.s;
     }
 }
 struct Wrap<T: Area> {
     inner: T,
+
     fn doubled(self) i64 {
         return self.inner.area() * 2;
     }

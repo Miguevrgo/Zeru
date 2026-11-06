@@ -1,6 +1,7 @@
 import std.collections.hashmap::{HashMap};
 struct P {
     x: i64,
+
     fn twice(self) i64 {
         return self.x * 2;
     }

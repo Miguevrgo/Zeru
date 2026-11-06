@@ -1575,8 +1575,12 @@ struct Heap {
             }
             return moved as *u8;
         }
-        if old_size > 0 && new_size > 0 && old_size <= HEAP_LARGEST && new_size <= HEAP_LARGEST
-            && Heap.class_of(old_size) == Heap.class_of(new_size) {
+        if old_size > 0
+            && new_size > 0
+            && old_size <= HEAP_LARGEST
+            && new_size <= HEAP_LARGEST
+            && Heap.class_of(old_size) == Heap.class_of(new_size)
+        {
             return old;
         }
         const new = self.alloc(new_size);

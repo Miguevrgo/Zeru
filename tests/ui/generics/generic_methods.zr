@@ -1,5 +1,6 @@
 struct S {
     n: i64,
+
     fn id<T>(self, x: T) T {
         return x;
     }

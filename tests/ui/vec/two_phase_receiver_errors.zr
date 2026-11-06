@@ -1,5 +1,6 @@
 struct C {
     v: Vec<i64>,
+
     fn add(var self, x: i64) {
         self.v.push(x);
     }

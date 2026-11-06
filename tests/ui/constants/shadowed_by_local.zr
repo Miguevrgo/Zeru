@@ -9,6 +9,7 @@ fn g(S: i32) i32 {
 }
 struct M {
     a: i64,
+
     fn twice(self) i64 {
         const K: i64 = 1;
         return K * 2;

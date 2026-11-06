@@ -1,6 +1,7 @@
 struct Pair<T: Eq> {
     first: T,
     second: T,
+
     fn same(self) bool {
         return self.first == self.second;
     }

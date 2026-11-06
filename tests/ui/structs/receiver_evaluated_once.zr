@@ -1,5 +1,6 @@
 struct Counter {
     n: i32,
+
     fn get(self) i32 {
         return self.n;
     }

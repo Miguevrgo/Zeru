@@ -1,9 +1,9 @@
 status: exit 0
 -- warnings
 Warning: Variable 'p' is never read
-    ╭─[ tests/ui/ownership_drops/break_and_continue_drop.zr:17:19 ]
+    ╭─[ tests/ui/ownership_drops/break_and_continue_drop.zr:18:19 ]
     │
- 17 │             const p = probe(1 + i, at);
+ 18 │             const p = probe(1 + i, at);
     │                   ┬
     │                   ╰── Variable 'p' is never read
     │

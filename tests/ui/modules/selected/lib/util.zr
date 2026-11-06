@@ -3,6 +3,7 @@ pub fn twice(x: i32) i32 {
 }
 pub struct Counter {
     n: i32,
+
     pub fn bump(var self) {
         self.n += 1;
     }

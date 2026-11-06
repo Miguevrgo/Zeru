@@ -1,5 +1,6 @@
 struct H {
     v: Vec<i64>,
+
     fn refill(var self) Vec<i64> {
         return Vec[7, 8];
     }

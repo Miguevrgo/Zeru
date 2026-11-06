@@ -3,6 +3,7 @@ trait Area {
 }
 struct S {
     f: i64,
+
     fn area(self) Nope {
         return self.f;
     }

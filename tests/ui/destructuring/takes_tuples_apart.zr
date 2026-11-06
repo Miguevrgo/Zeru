@@ -1,5 +1,6 @@
 struct N {
     id: i32,
+
     fn drop(var self) {
         println("drop {}", self.id);
     }

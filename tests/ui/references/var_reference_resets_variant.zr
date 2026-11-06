@@ -15,6 +15,7 @@ fn var_reference_resets_variant() {
 
 struct S {
     o: (&i64)?,
+
     fn reset(var self) {
         self.o = None;
     }

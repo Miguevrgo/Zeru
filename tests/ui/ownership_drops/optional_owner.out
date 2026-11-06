@@ -1,9 +1,9 @@
 status: exit 0
 -- warnings
 Warning: Variable 'some' is never read
-    ╭─[ tests/ui/ownership_drops/optional_owner.zr:16:19 ]
+    ╭─[ tests/ui/ownership_drops/optional_owner.zr:17:19 ]
     │
- 16 │             const some: Probe? = probe(1, at);
+ 17 │             const some: Probe? = probe(1, at);
     │                   ──┬─
     │                     ╰─── Variable 'some' is never read
     │
@@ -11,9 +11,9 @@ Warning: Variable 'some' is never read
     │           const _some: Probe? = probe(1, at);
 ────╯
 Warning: Variable 'none' is never read
-    ╭─[ tests/ui/ownership_drops/optional_owner.zr:17:19 ]
+    ╭─[ tests/ui/ownership_drops/optional_owner.zr:18:19 ]
     │
- 17 │             const none: Probe? = None;
+ 18 │             const none: Probe? = None;
     │                   ──┬─
     │                     ╰─── Variable 'none' is never read
     │

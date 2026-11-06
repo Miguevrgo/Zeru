@@ -7,9 +7,9 @@ Error: 'lib::Thing::secret' is private to module 'lib'
    │             ─────┬────
    │                  ╰────── 'lib::Thing::secret' is private to module 'lib'
    │
-   ├─[ tests/ui/modules/private_method/lib.zr:3:5 ]
+   ├─[ tests/ui/modules/private_method/lib.zr:4:5 ]
    │
- 3 │     fn secret(self) i32 {
+ 4 │     fn secret(self) i32 {
    │     ─────────┬─────────
    │              ╰─────────── declared here, without pub
    │

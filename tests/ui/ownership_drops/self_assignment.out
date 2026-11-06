@@ -1,9 +1,9 @@
 status: exit 0
 -- warnings
 Warning: This method never changes self; take self
-   ╭─[ tests/ui/ownership_drops/self_assignment.zr:3:15 ]
+   ╭─[ tests/ui/ownership_drops/self_assignment.zr:4:15 ]
    │
- 3 │     fn refill(var self) Vec<i64> {
+ 4 │     fn refill(var self) Vec<i64> {
    │               ─┬─
    │                ╰─── This method never changes self; take self
    │
@@ -11,11 +11,11 @@ Warning: This method never changes self; take self
    │           fn refill(self) Vec<i64> {
 ───╯
 Warning: This assigns a value to where it already is
-   ╭─[ tests/ui/ownership_drops/self_assignment.zr:9:5 ]
-   │
- 9 │     v = v;
-   │     ──┬──
-   │       ╰──── This assigns a value to where it already is
-───╯
+    ╭─[ tests/ui/ownership_drops/self_assignment.zr:10:5 ]
+    │
+ 10 │     v = v;
+    │     ──┬──
+    │       ╰──── This assigns a value to where it already is
+────╯
 -- stdout
 2 8 1 6

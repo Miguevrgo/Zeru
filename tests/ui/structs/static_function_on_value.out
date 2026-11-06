@@ -1,10 +1,10 @@
 status: compile error
 -- stderr
 Error: 'Box::empty' takes no 'self'; call it on the type, not a value
-   ╭─[ tests/ui/structs/static_function_on_value.zr:9:13 ]
-   │
- 9 │     var c = b.empty();
-   │             ────┬────
-   │                 ╰────── 'Box::empty' takes no 'self'; call it on the type, not a value
-───╯
+    ╭─[ tests/ui/structs/static_function_on_value.zr:10:13 ]
+    │
+ 10 │     var c = b.empty();
+    │             ────┬────
+    │                 ╰────── 'Box::empty' takes no 'self'; call it on the type, not a value
+────╯
 [-] Error: aborting due to previous error

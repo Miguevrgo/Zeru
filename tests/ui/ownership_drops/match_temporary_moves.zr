@@ -2,6 +2,7 @@ import std.collections.hashmap::{HashMap};
 
 struct D {
     id: i32,
+
     fn drop(var self) {
         println("drop {}", self.id);
     }

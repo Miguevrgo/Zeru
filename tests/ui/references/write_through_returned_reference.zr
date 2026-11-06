@@ -8,6 +8,7 @@ struct Account {
 }
 struct Bank {
     accounts: Vec<Account>,
+
     fn slot(var self, i: usize) &var Account {
         return &var self.accounts[i];
     }

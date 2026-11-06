@@ -1,6 +1,7 @@
 import lib::{Hidden};
 struct S {
     n: i32,
+
     fn go(self) i32 {
         return 1;
     }

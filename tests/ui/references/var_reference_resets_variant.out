@@ -16,15 +16,15 @@ Error: Cannot change 'o' while 'r' still refers into it
     │ Help: finish with 'r' before this, or keep a copy of the value instead of a reference into 'o'
 ────╯
 Error: Cannot change 's' while 'r' still refers into it
-    ╭─[ tests/ui/references/var_reference_resets_variant.zr:27:13 ]
+    ╭─[ tests/ui/references/var_reference_resets_variant.zr:28:13 ]
     │
- 26 │         Some(r) => {
+ 27 │         Some(r) => {
     │         ───┬───
     │            ╰───── 'r' borrows here
- 27 │             s.reset();
+ 28 │             s.reset();
     │             ────┬────
     │                 ╰────── this can free or move what 'r' points at
- 28 │             println("{}", *r);
+ 29 │             println("{}", *r);
     │                            ┬
     │                            ╰── 'r' is used later here
     │
