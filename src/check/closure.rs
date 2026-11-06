@@ -132,6 +132,7 @@ impl FnCx<'_, '_> {
         };
         let ret = inner.ret_ty();
         inner.warn_unread(locals.len());
+        inner.warn_unchanged(locals.len());
         let captures = std::mem::take(&mut inner.captures);
         let body_locals = inner.take_locals();
         drop(inner);
@@ -172,10 +173,12 @@ impl FnCx<'_, '_> {
             let (place, ty) = self
                 .variable(name)
                 .expect("a capture is visible where it was made");
-            if let Place::Capture(outer) = place
-                && captured.mutable
-            {
-                self.captures[outer as usize].mutable = true;
+            match place {
+                Place::Capture(outer) if captured.mutable => {
+                    self.captures[outer as usize].mutable = true;
+                }
+                Place::Local(local) if captured.mutable => self.note_changed(local),
+                _ => {}
             }
             values.push((at as u32, self.address(place, ty, captured.mutable, head)));
         }

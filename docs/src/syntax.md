@@ -6,14 +6,14 @@ explains it.
 ## Variables and types ([more](basics/variables.md))
 
 ```zeru,ignore
-var count = 0;                    // i32 unless a type is given
-var (q, r) = divide(7, 2);        // a tuple taken apart; (q: i32, _) works too
+const ratio: f64 = 0.5;           // never changes; i32 or f64 unless a type is given
+var count = 0;                    // changes; a var that never does is warned about
+const (q, r) = divide(7, 2);      // a tuple taken apart; (q: i32, _) works too
 (a, b) = (b, a);                  // assigned at once
-var ratio: f64 = 0.5;
-const LIMIT: i32 = 10;            // never changes; also at top level
+const LIMIT: i32 = 10;            // also at top level
 const TABLE: Array<u32, 256> = make_table();   // top level: computed while compiling
-var input = "42";
-var input = input.parse_int();    // a new variable hiding the old one
+const input = "42";
+const input = input.parse_int();  // a new name hiding the old one
 var _ = list.pop();               // a value dropped on purpose
 
 i8 i16 i32 i64 u8 u16 u32 u64 usize f32 f64 bool str

@@ -309,6 +309,11 @@ impl FnCx<'_, '_> {
                 let values: Vec<Expr> = inputs.iter().map(|op| self.expr(&op.expr, None)).collect();
                 for (value, input) in values.iter().zip(inputs) {
                     self.asm_operand(value.ty, value.span);
+                    if let ExprKind::AddressOf(place) = &value.kind
+                        && let Some(local) = place.root()
+                    {
+                        self.note_changed(local);
+                    }
                     if input.constraint.is_empty() || input.constraint.starts_with(['=', '+', '~'])
                     {
                         self.error(
@@ -331,7 +336,7 @@ impl FnCx<'_, '_> {
                             output.expr.span,
                         );
                     }
-                    let (place, ty) = self.place(&output.expr);
+                    let (place, ty) = self.target(&output.expr, output.expr.span);
                     self.asm_operand(ty, output.expr.span);
                     places.push(place);
                 }
@@ -1667,6 +1672,14 @@ impl FnCx<'_, '_> {
                 error.help("only an enum whose variants carry no values casts to a number");
             }
             return self.error_expr(span);
+        }
+        if let ExprKind::AddressOf(place) | ExprKind::Read(place) = &value.kind
+            && let Some(local) = place.root()
+            && (self.cx.types.as_int(to).is_some()
+                || matches!(self.cx.types.kind(to), TyKind::Ptr(_)))
+            && !self.cx.types.is_number(value.ty)
+        {
+            self.note_changed(local);
         }
         self.mk(ExprKind::Cast(Box::new(value)), to, span)
     }

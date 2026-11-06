@@ -2,18 +2,19 @@
 
 ## Variables
 
-`var` declares a variable. Its type comes from the value, or is written
-after a colon:
+`const` declares a value that never changes, and `var` a variable that
+does. The type comes from the value, or is written after a colon:
 
 ```zeru
 var count = 3;
-var price: f64 = 9.5;
+const price: f64 = 9.5;
 count = count + 1;
 println("{} {}", count, price); // 4 9.5
 ```
 
-`const` declares a value that never changes. Assigning to it again is an
-error. Constants can also live outside any function:
+Assigning to a `const` again is an error, and the compiler warns about a
+`var` that never changes, so a `var` always marks a value that does.
+Constants can also live outside any function:
 
 ```zeru
 const LIMIT: i32 = 10;
@@ -51,8 +52,8 @@ Declaring a variable again with the same name hides the old one from then
 on, which is handy when a value changes type:
 
 ```zeru
-var input = "42";
-var input = input.parse_int().unwrap();
+const input = "42";
+const input = input.parse_int().unwrap();
 println("{}", input + 1); // 43
 ```
 
@@ -68,12 +69,12 @@ println("{}", input + 1); // 43
 around it to decide its type is an `i32`, or an `f64` if it has a point:
 
 ```zeru
-var a = 7; // i32
-var b = 2.5; // f64
-var c: u8 = 255;
-var d = 1_000_000; // underscores separate digits
-var e = 0xff + 0b101 + 0o17; // hex, binary, octal
-var f = 2.5e-3; // exponent
+const a = 7; // i32
+const b = 2.5; // f64
+const c: u8 = 255;
+const d = 1_000_000; // underscores separate digits
+const e = 0xff + 0b101 + 0o17; // hex, binary, octal
+const f = 2.5e-3; // exponent
 println("{} {}", d, e); // 1000000 275
 ```
 
@@ -103,8 +104,8 @@ Zeru never converts one number type into another on its own. Adding an
 `as` converts explicitly:
 
 ```zeru
-var small: i32 = 7;
-var big: i64 = 1000;
+const small: i32 = 7;
+const big: i64 = 1000;
 println("{}", small as i64 + big); // 1007
 println("{}", 3.9 as i32); // 3
 println("{}", 300 as u8); // 44
@@ -152,8 +153,8 @@ println("{}", 7.0 / 2.0); // 3.5
 `bool` is `true` or `false`, combined with `&&`, `||` and `!`:
 
 ```zeru
-var sunny = true;
-var warm = false;
+const sunny = true;
+const warm = false;
 println("{}", sunny && !warm); // true
 ```
 
@@ -164,7 +165,7 @@ unless a type is given. Text is made of bytes, so characters are mostly
 compared with the bytes of a string:
 
 ```zeru
-var letter: u8 = 'a';
+const letter: u8 = 'a';
 println("{} {}", letter, 'A' + 1); // 97 66
 println("{}", "zeru"[0] == 'z'); // true
 ```
@@ -194,8 +195,8 @@ Integers also have methods on their bits: `count_ones`, `leading_zeros` and
 order of the bytes.
 
 ```zeru
-var flags: u8 = 0b1011_0000;
-var word: u16 = 0x1234;
+const flags: u8 = 0b1011_0000;
+const word: u16 = 0x1234;
 println("{} {} {}", flags.count_ones(), flags.leading_zeros(), flags.trailing_zeros()); // 3 0 4
 println("{:08b} {:x}", flags.rotate_left(2), word.swap_bytes()); // 11000010 3412
 ```

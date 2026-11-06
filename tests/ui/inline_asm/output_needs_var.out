@@ -1,0 +1,13 @@
+status: compile error
+-- stderr
+Error: Cannot change 'at', which is declared with const
+   ╭─[ tests/ui/inline_asm/output_needs_var.zr:3:33 ]
+   │
+ 3 │     asm ("movq $$7, $0" : "=r" (at));
+   │                                 ─┬
+   │                                  ╰── Cannot change 'at', which is declared with const
+   │
+   │ Help: declare it with var to change it
+   │           var at: i64 = 0;
+───╯
+[-] Error: aborting due to previous error

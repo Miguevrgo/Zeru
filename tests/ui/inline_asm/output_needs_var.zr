@@ -1,0 +1,5 @@
+fn main() {
+    const at: i64 = 0;
+    asm ("movq $$7, $0" : "=r" (at));
+    println("{}", at);
+}

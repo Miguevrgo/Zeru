@@ -25,6 +25,7 @@ pub(super) struct FnCx<'c, 'a> {
     fixed: Vec<Option<Fixed>>,
     borrowed: Vec<bool>,
     read: Vec<bool>,
+    changed: Vec<bool>,
     declared: Vec<Span>,
     names: Vec<(String, LocalId)>,
     marks: Vec<usize>,
@@ -121,6 +122,7 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
             ));
     }
     fx.warn_unread(params.len());
+    fx.warn_unchanged(params.len());
     let locals = std::mem::take(&mut fx.locals);
 
     if !args.is_empty() {
@@ -158,6 +160,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             fixed: Vec::new(),
             borrowed: Vec::new(),
             read: Vec::new(),
+            changed: Vec::new(),
             declared: Vec::new(),
             names: Vec::new(),
             marks: Vec::new(),
@@ -212,6 +215,39 @@ impl<'c, 'a> FnCx<'c, 'a> {
 
     /// Warn about each variable after the first `params` locals that is
     /// never read. A name that starts with `_` is left alone.
+    /// Note that local `id` may change: a closure writes it, or its address
+    /// leaves as a raw pointer or a number.
+    pub(super) fn note_changed(&mut self, id: LocalId) {
+        self.changed[id.0 as usize] = true;
+    }
+
+    /// Warn about each `var` statement after the first `params` locals
+    /// whose names never change: they could be `const`. A name that starts
+    /// with `_` is left alone.
+    pub(super) fn warn_unchanged(&mut self, params: usize) {
+        let mut statements: Vec<(Span, bool)> = Vec::new();
+        for at in params..self.locals.len() {
+            let name = &self.locals[at].name;
+            if name.is_empty() || name.starts_with('_') || self.fixed[at].is_some() {
+                continue;
+            }
+            let declared = self.declared[at];
+            match statements.iter_mut().find(|(span, _)| *span == declared) {
+                Some((_, changed)) => *changed |= self.changed[at],
+                None => statements.push((declared, self.changed[at])),
+            }
+        }
+        for (declared, changed) in statements {
+            if changed || !self.cx.sources.text(declared).starts_with("var ") {
+                continue;
+            }
+            let keyword = Span::new(declared.start, declared.start + 3);
+            self.warn("This var never changes; declare it with const", keyword)
+                .help("write const, so that a var marks what does change")
+                .fix(keyword, "const");
+        }
+    }
+
     pub(super) fn warn_unread(&mut self, params: usize) {
         for at in params..self.locals.len() {
             let name = &self.locals[at].name;
@@ -262,6 +298,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
         self.fixed.push((!mutable).then_some(Fixed::Const));
         self.borrowed.push(false);
         self.read.push(false);
+        self.changed.push(false);
         self.declared.push(span);
         self.names.push((name.to_string(), id));
         id
@@ -675,6 +712,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// with the change to its declaration that lets it be when there is one.
     pub(super) fn require_var(&mut self, local: LocalId, span: Span) {
         let Some(why) = self.fixed[local.0 as usize] else {
+            self.changed[local.0 as usize] = true;
             return;
         };
         let name = self.local_name(local).to_string();

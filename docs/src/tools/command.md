@@ -48,7 +48,8 @@ is likely a mistake. A warning never stops a build:
 
 | Warning | Example |
 |---|---|
-| a variable never read | `var count = 0;` and no read of `count` |
+| a variable never read | `const count = 0;` and no read of `count` |
+| a `var` that never changes, which could be `const` | `var name = "Ann";` and no assignment to `name` |
 | a private function or constant never used | `fn helper() { }` that nothing calls |
 | a returned value left unused | `v.pop();`; `var _ = v.pop();` drops it on purpose |
 | code after `return`, `break`, `continue`, `exit` or `assert(false)` | `return; println("done");` |
@@ -58,7 +59,7 @@ is likely a mistake. A warning never stops a build:
 | longer code for what the language or std has | `v.len() == 0`, `flag == true`, `if c { true } else { false }`, `if a < b { a } else { b }` |
 
 A variable, function or constant whose name starts with `_` gets no
-warning for being unused.
+warning for being unused, nor for never changing.
 
 ## Tests
 
@@ -81,7 +82,7 @@ fn main() {
     }
 
     test("text becomes a number") {
-        var n = "42".parse_int()!;
+        const n = "42".parse_int()!;
         assert(n == twice(20));
     }
 
