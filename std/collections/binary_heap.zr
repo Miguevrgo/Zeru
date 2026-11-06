@@ -35,7 +35,7 @@ pub struct BinaryHeap<T: Ord> {
         self.data.push(val);
         var idx = self.data.len() - 1;
         while idx > 0 {
-            var parent = (idx - 1) / 2;
+            const parent = (idx - 1) / 2;
             if self.data[idx] <= self.data[parent] {
                 break;
             }
@@ -62,7 +62,7 @@ pub struct BinaryHeap<T: Ord> {
         if self.data.len() > 1 {
             self.data.swap(0, self.data.len() - 1);
         }
-        var largest = self.data.pop();
+        const largest = self.data.pop();
         __zeru_sift(&var self.data, 0, 0, self.data.len(), fn(a, b) a < b);
         return largest;
     }

@@ -16,4 +16,8 @@ fn main() {
     s.push(2);
     const top = s.pop().unwrap();
     println("{} {}", top, s.size());
+    var owners: Stack<Vec<i64>> = Stack { items: Vec.new() };
+    owners.push(Vec[1, 2]);
+    owners.push(Vec[3]);
+    println("{}", owners.size());
 }

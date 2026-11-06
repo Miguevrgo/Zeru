@@ -108,7 +108,7 @@ pub enum TyKind {
     Ref(Ty),
     RefMut(Ty),
     Optional(Ty),
-    Result(Ty, Ty),
+    Result(Ty),
     Tuple(Vec<Ty>),
     /// A closure, each its own type; [`Types::closure_sig`] gives what it
     /// takes and returns.
@@ -225,7 +225,7 @@ impl Types {
         self.names.insert(def, name);
     }
 
-    pub fn adt_name(&self, def: DefId) -> &str {
+    fn adt_name(&self, def: DefId) -> &str {
         self.names.get(&def).map_or("?", String::as_str)
     }
 
@@ -236,7 +236,23 @@ impl Types {
     /// Whether `ty` is `!`, the result of a function that returns nothing
     /// but may fail.
     pub fn is_unit_result(&self, ty: Ty) -> bool {
-        matches!(self.kind(ty), TyKind::Result(ok, _) if *self.kind(*ok) == TyKind::Tuple(Vec::new()))
+        matches!(self.kind(ty), TyKind::Result(ok) if *self.kind(*ok) == TyKind::Tuple(Vec::new()))
+    }
+
+    /// What a pointer or a reference points at.
+    pub fn pointee(&self, ty: Ty) -> Option<Ty> {
+        match self.kind(ty) {
+            TyKind::Ptr(inner) | TyKind::Ref(inner) | TyKind::RefMut(inner) => Some(*inner),
+            _ => None,
+        }
+    }
+
+    /// What a reference refers to.
+    pub fn referent(&self, ty: Ty) -> Option<Ty> {
+        match self.kind(ty) {
+            TyKind::Ref(inner) | TyKind::RefMut(inner) => Some(*inner),
+            _ => None,
+        }
     }
 
     /// The element type of an array, a Vec or a slice.
@@ -267,10 +283,10 @@ impl Types {
 
     /// The types written inside `ty`, its arguments, elements or pointee,
     /// or None when it is a leaf.
-    fn args(&self, ty: Ty) -> Option<Vec<Ty>> {
+    pub fn args(&self, ty: Ty) -> Option<Vec<Ty>> {
         Some(match self.kind(ty) {
             TyKind::Adt(_, args) | TyKind::Tuple(args) => args.clone(),
-            TyKind::Result(ok, err) => vec![*ok, *err],
+            TyKind::Result(ok) => vec![*ok, Self::I32],
             TyKind::Array(inner, _)
             | TyKind::Vec(inner)
             | TyKind::Slice(inner)
@@ -339,9 +355,7 @@ impl Types {
         let kind = match self.kind(ty).clone() {
             TyKind::Adt(def, inner) => TyKind::Adt(def, self.replace_all(&inner, leaf)),
             TyKind::Tuple(inner) => TyKind::Tuple(self.replace_all(&inner, leaf)),
-            TyKind::Result(ok, err) => {
-                TyKind::Result(self.replace(ok, leaf), self.replace(err, leaf))
-            }
+            TyKind::Result(ok) => TyKind::Result(self.replace(ok, leaf)),
             TyKind::Array(inner, len) => TyKind::Array(self.replace(inner, leaf), len),
             TyKind::Vec(inner) => TyKind::Vec(self.replace(inner, leaf)),
             TyKind::Slice(inner) => TyKind::Slice(self.replace(inner, leaf)),
@@ -401,7 +415,7 @@ impl Types {
             TyKind::RefMut(inner) => format!("&var {}", self.show(*inner)),
             TyKind::Optional(inner) => format!("{}?", self.show_operand(*inner)),
             TyKind::Result(..) if self.is_unit_result(ty) => "!".into(),
-            TyKind::Result(ok, _) => format!("{}!", self.show_operand(*ok)),
+            TyKind::Result(ok) => format!("{}!", self.show_operand(*ok)),
             TyKind::Tuple(items) if items.len() == 1 => format!("({},)", list(items)),
             TyKind::Tuple(items) => format!("({})", list(items)),
             TyKind::Closure(at) => match &self.closures[*at as usize] {

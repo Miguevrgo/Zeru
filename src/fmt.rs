@@ -190,18 +190,9 @@ fn fits(room: usize, doc: &Doc, rest: &[(usize, bool, &Doc)]) -> bool {
 /// layout has no place for.
 pub fn format(source: &str) -> Result<String, Vec<ZeruError>> {
     let (program, comments, parens) = parse(source)?;
-    let mut lexer = Lexer::at(source, 0);
-    let mut tokens = Vec::new();
-    loop {
-        let (token, span) = lexer.next_token();
-        if token == Token::Eof {
-            break;
-        }
-        tokens.push((token, span));
-    }
     let mut printer = Printer {
         src: source,
-        tokens,
+        tokens: Lexer::at(source, 0).tokens(),
         comments: comments.clone(),
         next: 0,
         parens: parens.into_iter().collect(),
@@ -522,16 +513,10 @@ impl<'s> Printer<'s> {
                     let head = text(format!("test({}) ", self.source(at)));
                     return seq(vec![head, self.block(body, close.start)]);
                 }
-                let params = params.iter().map(|param| text(param_text(param))).collect();
-                let ret = return_type
-                    .as_ref()
-                    .map_or(String::new(), |ty| format!(" {}", return_text(ty)));
-                seq(vec![
-                    text(format!("{public}fn {name}{}", generics(type_params))),
-                    list("(", params, ")", false),
-                    text(format!("{ret} ")),
-                    self.block(body, close.start),
-                ])
+                let head = format!("{public}fn {name}{}", generics(type_params));
+                let mut parts = signature(head, params, return_type);
+                parts.extend([text(" "), self.block(body, close.start)]);
+                seq(parts)
             }
             S::Struct {
                 name,
@@ -589,16 +574,10 @@ impl<'s> Printer<'s> {
                     braces.1.start,
                     |_, method| method.0,
                     |_, (_, method)| {
-                        let params = method.params.iter().map(|p| text(param_text(p))).collect();
-                        let ret = method
-                            .return_type
-                            .as_ref()
-                            .map_or(String::new(), |ty| format!(" {}", return_text(ty)));
-                        seq(vec![
-                            text(format!("fn {}", method.name)),
-                            list("(", params, ")", false),
-                            text(format!("{ret};")),
-                        ])
+                        let head = format!("fn {}", method.name);
+                        let mut parts = signature(head, &method.params, &method.return_type);
+                        parts.push(text(";"));
+                        seq(parts)
                     },
                 );
                 self.braced(text(format!("{public}trait {name} ")), lines)
@@ -800,10 +779,7 @@ impl<'s> Printer<'s> {
                 match &closure.body {
                     ClosureBody::Expression(body) => parts.extend([text(" "), self.expr(body)]),
                     ClosureBody::Block(body) => {
-                        let ret = closure
-                            .return_type
-                            .as_ref()
-                            .map_or(String::new(), |ty| format!(" {}", return_text(ty)));
+                        let ret = return_text(&closure.return_type);
                         parts
                             .extend([text(format!("{ret} ")), self.block(body, expr.span.end - 1)]);
                     }
@@ -912,12 +888,27 @@ impl<'s> Printer<'s> {
     }
 }
 
-/// A return type, `()!` written as `!`.
-fn return_text(ty: &TypeSpec) -> String {
+/// A return type after a space, `()!` written as `!`, or nothing.
+fn return_text(ty: &Option<TypeSpec>) -> String {
     match ty {
-        TypeSpec::Result(inner) if **inner == TypeSpec::Tuple(Vec::new()) => "!".into(),
-        _ => ty_text(ty),
+        Some(TypeSpec::Result(inner)) if **inner == TypeSpec::Tuple(Vec::new()) => " !".into(),
+        Some(ty) => format!(" {}", ty_text(ty)),
+        None => String::new(),
     }
+}
+
+/// `head(params) ret`: how a function and a trait method begin.
+fn signature(
+    head: String,
+    params: &[(String, TypeSpec, bool)],
+    ret: &Option<TypeSpec>,
+) -> Vec<Doc> {
+    let params = params.iter().map(|p| text(param_text(p))).collect();
+    vec![
+        text(head),
+        list("(", params, ")", false),
+        text(return_text(ret)),
+    ]
 }
 
 fn names_text(names: &Names) -> String {

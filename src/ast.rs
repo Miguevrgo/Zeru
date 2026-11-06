@@ -327,13 +327,13 @@ pub struct Spec {
 }
 
 /// The most decimals a `{:.n}` writes.
-pub const MAX_PRECISION: usize = 100;
+const MAX_PRECISION: usize = 100;
 
 const SPEC_FORM: &str =
     "A format spec is written as in {:>8}, {:<5}, {:*^7}, {:08.3}, {:.2}, {:x}, {:X}, {:o} or {:b}";
 
 /// A format taken apart: the text around each `{}`, and the spec of each.
-pub type Pieces = (Vec<Vec<u8>>, Vec<Option<Spec>>);
+type Pieces = (Vec<Vec<u8>>, Vec<Option<Spec>>);
 
 /// The text of a `print` format around each `{}`: one piece more than there
 /// are values, and the spec each `{}` gives, if any. `{{` and `}}` stand

@@ -19,9 +19,9 @@ use super::{Checker, Receiver, Scope};
 pub(super) struct FnCx<'c, 'a> {
     pub(super) cx: &'c mut Checker<'a>,
     pub(super) scope: Scope,
-    ret: Ty,
+    pub(super) ret: Ty,
     pub(super) in_instance: bool,
-    locals: Vec<tir::Local>,
+    pub(super) locals: Vec<tir::Local>,
     fixed: Vec<Option<Fixed>>,
     borrowed: Vec<bool>,
     read: Vec<bool>,
@@ -101,25 +101,11 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
         })
         .collect();
     let mut body_block = fx.block(body);
-    if fx.cx.types.is_unit_result(ret) && !fx.diverges {
-        let ok = fx.unit_ok(ret, span);
-        body_block.stmts.push(tir::Stmt {
-            kind: StmtKind::Return(Some(ok)),
-            span,
-        });
-    } else if ret != Types::VOID && !fx.diverges {
-        let at = body.last().map_or(span, |stmt| stmt.span);
-        let shown = fx.cx.types.show(ret);
-        fx.cx
-            .error(
-                format!("Function '{name}' can finish without returning a value"),
-                at,
-            )
-            .label("it can end after this")
-            .help(format!(
-                "return {} on every path, or end it with a return after this",
-                crate::errors::with_article(&shown)
-            ));
+    let at = body.last().map_or(span, |stmt| stmt.span);
+    let what = format!("Function '{name}'");
+    let also = ", or end it with a return after this";
+    if let Some(error) = fx.end_body(&mut body_block, span, &what, at, also) {
+        error.label("it can end after this");
     }
     fx.warn_unread(params.len());
     fx.warn_unchanged(params.len());
@@ -127,7 +113,7 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
 
     if !args.is_empty() {
         let id = fx.cx.instances[&(def, args.to_vec())];
-        let origin = fx.cx.instance_origin(id);
+        let origin = fx.cx.queued[id.0 as usize].from;
         let shown = match symbol.len() > 120 {
             true => format!("{}...", &symbol[..120]),
             false => symbol.clone(),
@@ -177,23 +163,9 @@ impl<'c, 'a> FnCx<'c, 'a> {
         }
     }
 
-    /// The context a global constant's value is checked in: no locals, and
-    /// nothing to return.
-    pub(super) fn for_constant(cx: &'c mut Checker<'a>, scope: Scope) -> Self {
-        Self::new(cx, scope, Types::VOID)
-    }
-
     /// Which of its locals are views.
     pub(super) fn views(&self) -> Vec<bool> {
         self.locals.iter().map(|local| local.view).collect()
-    }
-
-    pub(super) fn ret_ty(&self) -> Ty {
-        self.ret
-    }
-
-    pub(super) fn set_ret(&mut self, ret: Ty) {
-        self.ret = ret;
     }
 
     pub(super) fn fix(&mut self, id: LocalId, why: Fixed) {
@@ -213,8 +185,39 @@ impl<'c, 'a> FnCx<'c, 'a> {
         self.cx.warn(message, span)
     }
 
-    /// Warn about each variable after the first `params` locals that is
-    /// never read. A name that starts with `_` is left alone.
+    /// End `block`, a whole body at `span`: with `Ok` when it returns `!`,
+    /// or, when it must return a value and can reach its end, with the
+    /// error at `at` that `what` can finish without one, its help ending
+    /// with `also`.
+    pub(super) fn end_body(
+        &mut self,
+        block: &mut Block,
+        span: Span,
+        what: &str,
+        at: Span,
+        also: &str,
+    ) -> Option<&mut ZeruError> {
+        let ret = self.ret;
+        if self.diverges || ret == Types::VOID {
+            return None;
+        }
+        if self.cx.types.is_unit_result(ret) {
+            let ok = self.unit_ok(ret, span);
+            let kind = StmtKind::Return(Some(ok));
+            block.stmts.push(Stmt { kind, span });
+            return None;
+        }
+        let shown = self.cx.types.show(ret);
+        let help = format!(
+            "return {} on every path{also}",
+            crate::errors::with_article(&shown)
+        );
+        Some(
+            self.error(format!("{what} can finish without returning a value"), at)
+                .help(help),
+        )
+    }
+
     /// Note that local `id` may change: a closure writes it, or its address
     /// leaves as a raw pointer or a number.
     pub(super) fn note_changed(&mut self, id: LocalId) {
@@ -248,6 +251,8 @@ impl<'c, 'a> FnCx<'c, 'a> {
         }
     }
 
+    /// Warn about each variable after the first `params` locals that is
+    /// never read. A name that starts with `_` is left alone.
     pub(super) fn warn_unread(&mut self, params: usize) {
         for at in params..self.locals.len() {
             let name = &self.locals[at].name;
@@ -368,11 +373,6 @@ impl<'c, 'a> FnCx<'c, 'a> {
         Some((Place::Capture(at), ty))
     }
 
-    /// The locals the function was checked with, taken out of it.
-    pub(super) fn take_locals(&mut self) -> Vec<tir::Local> {
-        std::mem::take(&mut self.locals)
-    }
-
     pub(super) fn local(&self, name: &str) -> Option<LocalId> {
         self.names
             .iter()
@@ -417,14 +417,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
         match &mut expr.kind {
             ExprKind::Some(value) | ExprKind::Ok(value) => return self.consume(value),
             ExprKind::Read(Place::Temp(value)) => {
-                let value = std::mem::replace(
-                    value.as_mut(),
-                    Expr {
-                        kind: ExprKind::Void,
-                        ty: Types::ERROR,
-                        span: expr.span,
-                    },
-                );
+                let value = std::mem::replace(value.as_mut(), Expr::error(expr.span));
                 *expr = value;
                 return;
             }
@@ -449,11 +442,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             }
             ExprKind::Read(place @ Place::Field(..)) if self.field_of_temporary(place) => {}
             ExprKind::Read(place @ (Place::Field(..) | Place::Index(..) | Place::Deref(_))) => {
-                let mut root = &*place;
-                while let Place::Field(base, _) | Place::Index(base, _) = root {
-                    root = base;
-                }
-                let replaceable = matches!(root, Place::Local(local)
+                let replaceable = matches!(place.base(), Place::Local(local)
                     if self.fixed[local.0 as usize].is_none() && !self.locals[local.0 as usize].view);
                 let message = "Cannot move a value out of a field, an element or a pointer";
                 let why = "what holds it would be left without it";
@@ -527,10 +516,9 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 ExprKind::AddressOf(_) => value,
                 _ => self.mk(ExprKind::AddressOf(Place::Deref(Box::new(value))), ty, span),
             };
-            let from = self.mk(ExprKind::Int(0), Types::USIZE, span);
-            let all = ExprKind::Builtin(tir::Builtin::Slice, vec![address, from]);
             let target = self.resolve(target);
-            return Ok(self.mk(all, target, span));
+            let kind = self.cx.types.kind(target).clone();
+            return Ok(self.whole(address, kind, span));
         }
         if self.fits(target, value.ty, false) {
             value.ty = self.resolve(target);
@@ -539,7 +527,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
         let target = self.resolve(target);
         let (inner, wrap): (Ty, fn(Box<Expr>) -> ExprKind) = match *self.cx.types.kind(target) {
             TyKind::Optional(inner) => (inner, ExprKind::Some),
-            TyKind::Result(inner, _) => (inner, ExprKind::Ok),
+            TyKind::Result(inner) => (inner, ExprKind::Ok),
             _ => return Err(value),
         };
         let value = self.coerce(value, inner)?;
@@ -601,13 +589,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
     fn conversion(&mut self, value: &Expr, target: Ty) -> Option<(&'static str, Option<String>)> {
         let (got, target) = (self.resolve(value.ty), self.resolve(target));
         let text = self.cx.sources.text(value.span).to_string();
-        let simple = text
-            .chars()
-            .all(|c| c.is_alphanumeric() || "_.[]()".contains(c));
-        let operand = match simple {
-            true => text.clone(),
-            false => format!("({text})"),
-        };
+        let operand = operand(&text);
         let shown = self.ty(target);
         let owns = self.cx.owns_heap(target);
         let types = &self.cx.types;
@@ -626,7 +608,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     "take the value out: .unwrap() stops the program when there is none, and ? passes the None on",
                     Some(format!("{operand}.unwrap()")),
                 ),
-                (TyKind::Result(inner, _), _) if inner == target => (
+                (TyKind::Result(inner), _) if inner == target => (
                     "take the value out: .unwrap() stops the program on an error, and ! passes the error on",
                     Some(format!("{operand}.unwrap()")),
                 ),
@@ -978,23 +960,20 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 iterable,
                 body,
             } => self.for_in(index.as_deref(), variable, iterable, body),
-            StatementKind::Break | StatementKind::Continue if self.breaks.is_empty() => {
-                let word = match statement.kind {
-                    StatementKind::Break => "break",
-                    _ => "continue",
-                };
-                self.error(format!("'{word}' is only allowed inside a loop"), span)
-                    .help("to leave a function early, write return");
-                return None;
-            }
             StatementKind::Break | StatementKind::Continue => {
+                let breaking = matches!(statement.kind, StatementKind::Break);
+                let Some(breaks) = self.breaks.last_mut() else {
+                    let word = if breaking { "break" } else { "continue" };
+                    self.error(format!("'{word}' is only allowed inside a loop"), span)
+                        .help("to leave a function early, write return");
+                    return None;
+                };
+                *breaks |= breaking;
                 self.diverges = true;
-                match statement.kind {
-                    StatementKind::Break => {
-                        *self.breaks.last_mut().unwrap() = true;
-                        StmtKind::Break
-                    }
-                    _ => StmtKind::Continue,
+                if breaking {
+                    StmtKind::Break
+                } else {
+                    StmtKind::Continue
                 }
             }
             StatementKind::Expression(expr) => {
@@ -1238,22 +1217,17 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// Make the key a loop over a map names unchangeable, as changing it
     /// would lose the entry.
     fn fix_key(&mut self, unpack: &Unpack) {
-        fn locals(unpack: &Unpack, found: &mut Vec<LocalId>) {
+        fn fix_all(fx: &mut FnCx<'_, '_>, unpack: &Unpack) {
             match unpack {
-                Unpack::Declare(local) => found.push(*local),
-                Unpack::Tuple(parts) => parts.iter().for_each(|part| locals(part, found)),
+                Unpack::Declare(local) => fx.fix(*local, Fixed::Key),
+                Unpack::Tuple(parts) => parts.iter().for_each(|part| fix_all(fx, part)),
                 Unpack::Skip | Unpack::Store(_) => {}
             }
         }
-        let Unpack::Tuple(parts) = unpack else {
-            return;
-        };
-        let mut keys = Vec::new();
-        if let Some(key) = parts.first() {
-            locals(key, &mut keys);
-        }
-        for key in keys {
-            self.fix(key, Fixed::Key);
+        if let Unpack::Tuple(parts) = unpack
+            && let Some(key) = parts.first()
+        {
+            fix_all(self, key);
         }
     }
 
@@ -1338,22 +1312,18 @@ impl<'c, 'a> FnCx<'c, 'a> {
 
     /// Report a name `names` gives twice, which would hide the first.
     fn named_once(&mut self, names: &[Names], span: Span) {
-        fn collect<'n>(names: &'n [Names], seen: &mut Vec<&'n str>) -> Option<&'n str> {
+        fn collect<'n>(names: &'n [Names], all: &mut Vec<&'n String>) {
             for names in names {
                 match names {
-                    Names::One(name, _) if seen.contains(&name.as_str()) => return Some(name),
-                    Names::One(name, _) => seen.push(name),
-                    Names::Tuple(inner) => {
-                        if let Some(twice) = collect(inner, seen) {
-                            return Some(twice);
-                        }
-                    }
+                    Names::One(name, _) => all.push(name),
+                    Names::Tuple(inner) => collect(inner, all),
                     Names::Skip => {}
                 }
             }
-            None
         }
-        if let Some(name) = collect(names, &mut Vec::new()) {
+        let mut all = Vec::new();
+        collect(names, &mut all);
+        if let Some(name) = super::first_duplicate(all) {
             self.error(format!("'{name}' is named twice"), span);
         }
     }
@@ -1379,30 +1349,21 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// The parts of a tuple of type `ty` that `names` declare, `mutable`
     /// for `var`, each checked against its written type.
     fn declare_names(&mut self, names: &[Names], ty: Ty, mutable: bool, span: Span) -> Unpack {
-        let parts = self.parts(names.len(), ty, span);
-        let parts = names
-            .iter()
-            .zip(parts)
-            .map(|(names, part)| match names {
-                Names::Skip => Unpack::Skip,
-                Names::Tuple(inner) => self.declare_names(inner, part, mutable, span),
-                Names::One(name, spec) => {
-                    let written = spec.as_ref().and_then(|_| self.names_type(names));
-                    if let Some(want) = written
-                        && want != part
-                        && !self.cx.types.is_error(part)
-                    {
-                        let (want, got) = (self.ty(want), self.ty(part));
-                        self.error(
-                            format!("Type mismatch for variable '{name}'. Annotated as {want} but got {got}"),
-                            span,
-                        );
-                    }
-                    Unpack::Declare(self.declare(name, part, mutable, false, span))
-                }
-            })
-            .collect();
-        Unpack::Tuple(parts)
+        self.unpack(names, ty, span, &mut |fx, names, name, part| {
+            if let Some(want) = fx.names_type(names)
+                && want != part
+                && !fx.cx.types.is_error(part)
+            {
+                let (want, got) = (fx.ty(want), fx.ty(part));
+                fx.error(
+                    format!(
+                        "Type mismatch for variable '{name}'. Annotated as {want} but got {got}"
+                    ),
+                    span,
+                );
+            }
+            fx.declare(name, part, mutable, false, span)
+        })
     }
 
     /// The local a `for` names `name` for each element, or a part of one.
@@ -1417,17 +1378,29 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// The parts of each element of type `ty` a `for` names, each a view of
     /// the element's part or a copy of it, as the element itself would be.
     fn view_names(&mut self, names: &[Names], ty: Ty, writable: bool, span: Span) -> Unpack {
+        self.unpack(names, ty, span, &mut |fx, _, name, part| {
+            let view = writable || fx.cx.owns_heap(part);
+            fx.element(name, part, writable, view, span)
+        })
+    }
+
+    /// The parts of a tuple of type `ty` that `names` take apart, `leaf`
+    /// making the local for each name, given with the type of its part.
+    fn unpack(
+        &mut self,
+        names: &[Names],
+        ty: Ty,
+        span: Span,
+        leaf: &mut dyn FnMut(&mut Self, &Names, &str, Ty) -> LocalId,
+    ) -> Unpack {
         let parts = self.parts(names.len(), ty, span);
         let parts = names
             .iter()
             .zip(parts)
             .map(|(names, part)| match names {
                 Names::Skip => Unpack::Skip,
-                Names::Tuple(inner) => self.view_names(inner, part, writable, span),
-                Names::One(name, _) => {
-                    let view = writable || self.cx.owns_heap(part);
-                    Unpack::Declare(self.element(name, part, writable, view, span))
-                }
+                Names::Tuple(inner) => self.unpack(inner, part, span, leaf),
+                Names::One(name, _) => Unpack::Declare(leaf(self, names, name, part)),
             })
             .collect();
         Unpack::Tuple(parts)
@@ -1477,14 +1450,22 @@ pub(super) enum Fixed {
     Binding,
 }
 
+/// `text` as an operand: in parentheses unless it is names, calls and
+/// indexing alone.
+pub(super) fn operand(text: &str) -> String {
+    match text
+        .chars()
+        .all(|c| c.is_alphanumeric() || "_.[]()".contains(c))
+    {
+        true => text.to_string(),
+        false => format!("({text})"),
+    }
+}
+
 /// Whether `place` is part of a temporary value, not reached through a
 /// pointer.
 pub(super) fn in_temporary(place: &Place) -> bool {
-    match place {
-        Place::Field(base, _) | Place::Index(base, _) => in_temporary(base),
-        Place::Temp(_) => true,
-        Place::Local(_) | Place::Deref(_) | Place::Capture(_) => false,
-    }
+    matches!(place.base(), Place::Temp(_))
 }
 
 /// How a `for` walks what it is given: as the list it is, or by the

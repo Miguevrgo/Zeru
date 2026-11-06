@@ -69,14 +69,15 @@ impl<'ctx> Lower<'_, 'ctx> {
                     });
                 }
                 let cap = self.load_field(value, ty, 2).into_int_value();
-                self.free_buffer(data, elem, cap);
+                let size = self.bytes_for(elem, cap);
+                self.resize_buffer(data, size, self.usize_type().const_zero());
             }
             TyKind::Array(elem, len) => {
                 self.each_element(&[value], ty, elem, len, |this, parts| {
                     this.call_drop(parts[0], elem)
                 })
             }
-            TyKind::Optional(inner) | TyKind::Result(inner, _) => {
+            TyKind::Optional(inner) | TyKind::Result(inner) => {
                 self.if_tag_set(value, ty, |this| {
                     let payload = this.field_ptr(value, ty, 1);
                     if this.program.needs_drop(inner) {
@@ -122,17 +123,15 @@ impl<'ctx> Lower<'_, 'ctx> {
                 } else {
                     self.move_elements(fresh, data, elem, len);
                 }
-                let ptr_field = self.field_ptr(dst, ty, 0);
-                self.builder.build_store(ptr_field, fresh).unwrap();
-                let cap_field = self.field_ptr(dst, ty, 2);
-                self.builder.build_store(cap_field, len).unwrap();
+                self.store_field(dst, ty, 0, fresh);
+                self.store_field(dst, ty, 2, len);
             }
             TyKind::Array(elem, len) => {
                 self.each_element(&[dst, src], ty, elem, len, |this, parts| {
                     this.call_copy(parts[0], parts[1], elem)
                 })
             }
-            TyKind::Optional(inner) | TyKind::Result(inner, _) => {
+            TyKind::Optional(inner) | TyKind::Result(inner) => {
                 self.if_tag_set(src, ty, |this| {
                     if this.program.needs_drop(inner) {
                         let to = this.field_ptr(dst, ty, 1);

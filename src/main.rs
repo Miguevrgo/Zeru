@@ -162,7 +162,7 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
 fn main() {
     let compiler = std::thread::Builder::new().stack_size(1 << 30).spawn(|| {
         if let Err(err) = run_compiler(Cli::parse()) {
-            let (red, reset) = crate::errors::paint(RED);
+            let (red, reset) = errors::paint(RED);
             eprintln!("{red}[-] Error: {err}{reset}");
             std::process::exit(1);
         }

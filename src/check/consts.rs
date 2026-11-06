@@ -20,11 +20,7 @@ impl Checker<'_> {
             Some(ConstState::Checking) => {
                 let name = self.items.item(def).name.clone();
                 self.error(format!("'{name}' is defined in terms of itself"), used);
-                return Expr {
-                    kind: ExprKind::Void,
-                    ty: Types::ERROR,
-                    span: used,
-                };
+                return Expr::error(used);
             }
             None => {}
         }
@@ -45,7 +41,7 @@ impl Checker<'_> {
             .as_ref()
             .map(|spec| self.resolve_type(spec, &scope, span));
         let errors = self.errors.len();
-        let mut cx = FnCx::for_constant(self, scope);
+        let mut cx = FnCx::new(self, scope, Types::VOID);
         let checked = cx.expr(value, expected);
         let mut checked = match expected {
             Some(ty) => cx.coerce_or(checked, ty, span, |want, got| {
@@ -57,11 +53,7 @@ impl Checker<'_> {
         if !is_constant(value) && self.errors.len() == errors {
             checked = match self.run_constant(&checked, &views, name, span) {
                 Some(value) => value,
-                None => Expr {
-                    kind: ExprKind::Void,
-                    ty: Types::ERROR,
-                    span,
-                },
+                None => Expr::error(span),
             };
         }
         self.consts.insert(def, ConstState::Done(checked.clone()));

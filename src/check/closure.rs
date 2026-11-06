@@ -9,8 +9,8 @@ use crate::items::DefId;
 use crate::tir::{self, Block, Expr, ExprKind, Place, Stmt, StmtKind};
 use crate::ty::{Ty, TyKind, Types};
 
-use super::Checker;
 use super::body::{Fixed, FnCx};
+use super::call::arity_message;
 
 impl FnCx<'_, '_> {
     /// A closure, given the parameter types and the return type `expected`
@@ -110,31 +110,16 @@ impl FnCx<'_, '_> {
             ClosureBody::Block(statements) => {
                 inner.infer_ret = known.is_none();
                 let mut block = inner.block(statements);
-                let ret = inner.ret_ty();
-                if inner.cx.types.is_unit_result(ret) && !inner.diverges {
-                    let ok = inner.unit_ok(ret, span);
-                    block.stmts.push(Stmt {
-                        kind: StmtKind::Return(Some(ok)),
-                        span,
-                    });
-                } else if ret != Types::VOID && !inner.diverges {
-                    let shown = inner.cx.types.show(ret);
-                    inner
-                        .error("This closure can finish without returning a value", span)
-                        .help(format!(
-                            "return {} on every path",
-                            crate::errors::with_article(&shown)
-                        ));
-                }
+                inner.end_body(&mut block, span, "This closure", span, "");
                 block
             }
             ClosureBody::Expression(body) => inner.short_body(body, known),
         };
-        let ret = inner.ret_ty();
+        let ret = inner.ret;
         inner.warn_unread(locals.len());
         inner.warn_unchanged(locals.len());
         let captures = std::mem::take(&mut inner.captures);
-        let body_locals = inner.take_locals();
+        let body_locals = std::mem::take(&mut inner.locals);
         drop(inner);
 
         self.cx.types.set_closure_ret(ty, ret);
@@ -156,7 +141,7 @@ impl FnCx<'_, '_> {
             })
             .collect();
         let function = tir::Function {
-            symbol: format!("closure{}", self.cx.closure_count()),
+            symbol: format!("closure{}", self.cx.closures.len()),
             params: locals,
             method: false,
             ret,
@@ -194,7 +179,7 @@ impl FnCx<'_, '_> {
                 format!("This closure must return {want}, but this value is {got}")
             });
         }
-        self.set_ret(value.ty);
+        self.ret = value.ty;
         let kind = match value.ty == Types::VOID {
             true => StmtKind::Expr(value),
             false => {
@@ -249,14 +234,8 @@ impl FnCx<'_, '_> {
     ) -> Expr {
         let (params, ret) = self.cx.types.closure_sig(ty).expect("a closure");
         if args.len() != params.len() {
-            let (wanted, given) = (params.len(), args.len());
-            let plural = if wanted == 1 { "" } else { "s" };
-            let given = match given {
-                1 => "1 was given".to_string(),
-                given => format!("{given} were given"),
-            };
             self.error(
-                format!("This closure takes {wanted} argument{plural}, but {given}"),
+                arity_message("This closure", params.len(), args.len()),
                 span,
             );
             for arg in args {
@@ -327,12 +306,6 @@ impl FnCx<'_, '_> {
     }
 }
 
-impl Checker<'_> {
-    fn closure_count(&self) -> usize {
-        self.closures.len()
-    }
-}
-
 /// Whether `ty` keeps a closure inside another value, as `Vec<fn(i32)>`
 /// would, which no closure may outlive its references in.
 pub(super) fn holds_closure(types: &Types, ty: Ty) -> bool {
@@ -343,8 +316,10 @@ pub(super) fn holds_closure(types: &Types, ty: Ty) -> bool {
 pub(super) fn holds(types: &Types, ty: Ty, is: &dyn Fn(Ty) -> bool) -> bool {
     let inside = |inner: &Ty| is(*inner) || holds(types, *inner, is);
     match types.kind(ty) {
-        TyKind::Vec(inner) | TyKind::Array(inner, _) | TyKind::Optional(inner) => inside(inner),
-        TyKind::Result(ok, err) => inside(ok) || inside(err),
+        TyKind::Vec(inner)
+        | TyKind::Array(inner, _)
+        | TyKind::Optional(inner)
+        | TyKind::Result(inner) => inside(inner),
         TyKind::Tuple(parts) | TyKind::Adt(_, parts) => parts.iter().any(inside),
         _ => false,
     }

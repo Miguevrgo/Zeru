@@ -53,7 +53,7 @@ fn c_path(path: str, buf: *u8) i64! {
     }
     for byte in path {
         if byte == 0 {
-            return Err(22);
+            return Err(EINVAL);
         }
     }
     __zeru_copy_bytes(buf, path as *u8, path.len());
@@ -297,7 +297,11 @@ pub struct File {
     // println("{}", fs::File.open("missing.txt").is_err()); // true
     // ```
     pub fn open(path: str) File! {
-        const fd = open_path(path, O_RDONLY, 0)!;
+        return File.from_fd(open_path(path, O_RDONLY, 0)!);
+    }
+
+    // A file over `fd`, with nothing read ahead.
+    fn from_fd(fd: i64) File {
         return File { fd: fd, buffer: Vec.new(), start: 0 };
     }
 
@@ -311,8 +315,7 @@ pub struct File {
     // The errno: 2 (ENOENT) when the directory it goes in is missing, 13
     // (EACCES) without permission, 21 (EISDIR) when `path` is a directory.
     pub fn create(path: str) File! {
-        const fd = open_path(path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)!;
-        return File { fd: fd, buffer: Vec.new(), start: 0 };
+        return File.from_fd(open_path(path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)!);
     }
 
     // Creates a file at `path` for writing, failing when one is there.
@@ -335,8 +338,7 @@ pub struct File {
     // println("{}", fs::File.create_new("app.lock").unwrap_err()); // 17
     // ```
     pub fn create_new(path: str) File! {
-        const fd = open_path(path, O_WRONLY | O_CREAT | O_EXCL, 0o644)!;
-        return File { fd: fd, buffer: Vec.new(), start: 0 };
+        return File.from_fd(open_path(path, O_WRONLY | O_CREAT | O_EXCL, 0o644)!);
     }
 
     // Opens the file at `path` to write at its end, creating it when
@@ -360,8 +362,7 @@ pub struct File {
     // println("{}", fs::read_file("log.txt").unwrap().len()); // 8
     // ```
     pub fn append(path: str) File! {
-        const fd = open_path(path, O_WRONLY | O_CREAT | O_APPEND, 0o644)!;
-        return File { fd: fd, buffer: Vec.new(), start: 0 };
+        return File.from_fd(open_path(path, O_WRONLY | O_CREAT | O_APPEND, 0o644)!);
     }
 
     // Reads up to `count` bytes, adds them at the end of `buf` and returns
@@ -388,7 +389,7 @@ pub struct File {
     // println("{} {}", buf.len(), buf[5] == 'f'); // 6 true
     // ```
     pub fn read(var self, buf: &var String, count: usize) usize! {
-        var end = __zeru_room(buf, count);
+        const end = __zeru_room(buf, count);
         const held = self.buffer.len() - self.start;
         if held > 0 {
             var n = count;
@@ -454,7 +455,7 @@ pub struct File {
                 at = kept;
                 self.start = 0;
             }
-            var end = __zeru_room(&var self.buffer, CHUNK);
+            const end = __zeru_room(&var self.buffer, CHUNK);
             const n = sys_result(syscall3(SYS_READ, self.fd, end as i64, CHUNK as i64))! as usize;
             __zeru_filled(&var self.buffer, n);
             if n == 0 {
@@ -600,17 +601,13 @@ pub fn rename(from: str, to: str) ! {
 // ```
 pub fn copy_file(from: str, to: str) ! {
     const source = File.open(from)!;
-    const target = File {
-        fd: open_path(to, O_WRONLY | O_CREAT, 0o644)!,
-        buffer: Vec.new(),
-        start: 0,
-    };
+    const target = File.from_fd(open_path(to, O_WRONLY | O_CREAT, 0o644)!);
     var read: Array<i64, 18> = [0; 18];
     var written: Array<i64, 18> = [0; 18];
     sys_result(syscall2(SYS_FSTAT, source.fd, (&read[0]) as i64))!;
     sys_result(syscall2(SYS_FSTAT, target.fd, (&written[0]) as i64))!;
     if read[0] == written[0] && read[1] == written[1] {
-        return Err(22);
+        return Err(EINVAL);
     }
     sys_result(syscall2(SYS_FTRUNCATE, target.fd, 0))!;
     sys_result(syscall2(SYS_FCHMOD, target.fd, metadata_of(read).mode as i64))!;
@@ -851,11 +848,11 @@ pub struct Entry {
 // println("{} {}", fs::read_dir("box").unwrap().len(), files); // 2 1
 // ```
 pub fn read_dir(path: str) Vec<Entry>! {
-    const dir = File { fd: open_path(path, O_RDONLY | O_DIRECTORY, 0)!, buffer: Vec.new(), start: 0 };
+    const dir = File.from_fd(open_path(path, O_RDONLY | O_DIRECTORY, 0)!);
     const fd = dir.fd;
     var entries: Vec<Entry> = Vec.new();
     var space = String.new();
-    var batch = __zeru_room(&var space, DIR_BATCH);
+    const batch = __zeru_room(&var space, DIR_BATCH);
     while true {
         const got = sys_result(
             syscall3(SYS_GETDENTS64, fd, batch as i64, DIR_BATCH as i64),
@@ -867,7 +864,7 @@ pub fn read_dir(path: str) Vec<Entry>! {
         while at < got {
             const record = batch + at;
             const size = *((record + 16) as *u16) as usize;
-            var name = record + 19;
+            const name = record + 19;
             const text = __zeru_c_text(name);
             at += size;
             if text == "." || text == ".." {
@@ -1027,10 +1024,8 @@ pub fn hard_link(target: str, path: str) ! {
 // println("{} {}", path.starts_with("/"), path.ends_with("/deep")); // true true
 // ```
 pub fn real_path(path: str) String! {
-    const opened = File { fd: open_path(path, O_PATH, 0)!, buffer: Vec.new(), start: 0 };
-    var link = String.from("/proc/self/fd/");
-    link.push_str(__zeru_format_int(opened.fd as i64, false, 10, false, ' ', '>', false, 0));
-    return read_link(link);
+    const opened = File.from_fd(open_path(path, O_PATH, 0)!);
+    return read_link(format("/proc/self/fd/{}", opened.fd));
 }
 
 // Returns the working directory, which relative paths start from.

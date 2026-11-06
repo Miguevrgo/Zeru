@@ -196,29 +196,39 @@ pub(crate) fn std_modules() -> Vec<(String, String)> {
     found
 }
 
-/// The std module an import names `short`, as `std.math` for `math`, when
-/// it declares a public `name`.
-pub(crate) fn std_module_with(short: &str, name: &str) -> Option<String> {
+/// The std module that declares a public `name` at its top level, one an
+/// import names `short`, as `std.math` for `math`, when that is given.
+pub(crate) fn std_home(short: Option<&str>, name: &str) -> Option<String> {
     std_modules()
         .into_iter()
         .find(|(module, source)| {
-            module.rsplit('.').next() == Some(short)
-                && source.lines().any(|line| declares(line, name))
+            short.is_none_or(|short| module.rsplit('.').next() == Some(short))
+                && source.lines().any(|line| declared(line) == Some(name))
         })
         .map(|(module, _)| module)
 }
 
-/// The std module that declares a public `name` at its top level.
-pub(crate) fn std_home(name: &str) -> Option<String> {
-    std_modules()
-        .into_iter()
-        .find(|(_, source)| source.lines().any(|line| declares(line, name)))
-        .map(|(module, _)| module)
-}
-
-/// Whether `line` declares a public `name` at the top level of a file.
-pub(crate) fn declares(line: &str, name: &str) -> bool {
-    declared(line) == Some(name)
+/// Help for the unknown `name` written at `span`: the std module to import
+/// for it, as `module::name` or alone, or the closest of `candidates`,
+/// fixed at `at`.
+pub(crate) fn unknown_name(
+    sources: &Sources,
+    error: &mut ZeruError,
+    name: &str,
+    span: Span,
+    candidates: &[String],
+    at: Option<Span>,
+) {
+    if let Some(module) = name
+        .split_once("::")
+        .and_then(|(short, item)| std_home(Some(short), item))
+    {
+        suggest_import(sources, error, span, &module, None);
+    } else if let Some(module) = std_home(None, name) {
+        suggest_import(sources, error, span, &module, Some(name));
+    } else {
+        did_you_mean(error, name, candidates, at);
+    }
 }
 
 /// The public names a file declares at its top level.

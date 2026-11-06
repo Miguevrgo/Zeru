@@ -23,7 +23,7 @@ impl Span {
     }
 }
 
-impl From<Span> for std::ops::Range<usize> {
+impl From<Span> for Range<usize> {
     fn from(span: Span) -> Self {
         span.start..span.end
     }
@@ -41,13 +41,13 @@ pub enum ErrorKind {
 /// to fix it, with the edit that does when it is a single one.
 #[derive(Debug, Clone)]
 pub struct ZeruError {
-    pub kind: ErrorKind,
+    kind: ErrorKind,
     pub message: String,
     pub span: Span,
-    pub label: Option<String>,
+    label: Option<String>,
     pub notes: Vec<(String, Span)>,
     pub help: Option<String>,
-    pub fix: Option<(Span, String)>,
+    fix: Option<(Span, String)>,
 }
 
 /// Sort `errors` by where they point and drop the repeats, and those an
@@ -322,7 +322,7 @@ fn whole(text: &str, at: usize, len: usize) -> bool {
 }
 
 /// Whether stderr is a terminal, so output to it may be coloured.
-pub fn colored() -> bool {
+fn colored() -> bool {
     use std::io::IsTerminal;
     std::io::stderr().is_terminal()
 }

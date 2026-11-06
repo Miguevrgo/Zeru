@@ -4,4 +4,6 @@ struct Point {
 fn main() {
     var p = Point { x: 1.0 };
     var val = p.z;
+    var q = Point { x: 1.0, y: 2.0 };
+    p.unknown_method();
 }

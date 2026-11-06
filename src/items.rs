@@ -143,13 +143,7 @@ impl<'a> Items<'a> {
                 ItemKind::Fn => format!("Function '{shown}' is already defined"),
                 ItemKind::Const => format!("'{shown}' is already defined"),
             };
-            let first = self.sources.first_line(self.item(first).decl.span);
-            let mut error = ZeruError::semantic(message, self.sources.first_line(statement.span));
-            error
-                .note("first defined here", first)
-                .help("rename one of them");
-            self.errors.push(error);
-            return;
+            return self.defined_twice(message, first, statement.span);
         }
         let def = self.push(Item {
             name: shown.clone(),
@@ -170,15 +164,8 @@ impl<'a> Items<'a> {
             };
             let full = format!("{shown}::{name}");
             if let Some(&first) = self.methods.get(&(def, name.clone())) {
-                let first = self.sources.first_line(self.item(first).decl.span);
-                let mut error = ZeruError::semantic(
-                    format!("Function '{full}' is already defined"),
-                    self.sources.first_line(method.span),
-                );
-                error
-                    .note("first defined here", first)
-                    .help("rename one of them");
-                self.errors.push(error);
+                let message = format!("Function '{full}' is already defined");
+                self.defined_twice(message, first, method.span);
                 continue;
             }
             let method_def = self.push(Item {
@@ -191,6 +178,16 @@ impl<'a> Items<'a> {
             });
             self.methods.insert((def, name.clone()), method_def);
         }
+    }
+
+    /// Report the item declared at `again` that `first` already defines.
+    fn defined_twice(&mut self, message: String, first: DefId, again: Span) {
+        let first = self.sources.first_line(self.item(first).decl.span);
+        let mut error = ZeruError::semantic(message, self.sources.first_line(again));
+        error
+            .note("first defined here", first)
+            .help("rename one of them");
+        self.errors.push(error);
     }
 
     fn push(&mut self, item: Item<'a>) -> DefId {
@@ -316,7 +313,7 @@ impl<'a> Items<'a> {
         })
     }
 
-    pub fn module_name(&self, module: ModuleId) -> Option<&str> {
+    fn module_name(&self, module: ModuleId) -> Option<&str> {
         self.modules[module.0 as usize].name.as_deref()
     }
 

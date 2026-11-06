@@ -3,6 +3,9 @@ struct C {
     fn add(var self, x: i64) {
         self.v.push(x);
     }
+    fn size(self, n: i64) i64 {
+        return self.v.len() as i64 + n;
+    }
 }
 fn grow(vs: &var Vec<Vec<i64>>) i64 {
     vs.push(Vec[1]);
@@ -18,6 +21,9 @@ fn main() {
     println("{}", vs[0][grow(&var vs)]);
     var cs: Vec<C> = Vec[C { v: Vec[] }];
     cs[0].add(grow_cs(&var cs));
+    println("{}", cs[0].size(grow_cs(&var cs)));
+    cs[0].add(cs.len() as i64);
+    println("{}", cs[0].size(cs.len() as i64));
     var v: Vec<i64> = Vec[1];
     var e = &v[0];
     v.push(1);

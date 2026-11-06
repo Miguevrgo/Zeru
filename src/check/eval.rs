@@ -159,6 +159,17 @@ fn fail<T>(message: impl Into<String>, span: Span) -> Run<T> {
     Err(Exit::Fail(message.into(), span))
 }
 
+/// `at` as an index into `len` values, or the error that it is outside them.
+fn inside(at: i128, len: usize, span: Span) -> Run<usize> {
+    if at < 0 || at >= len as i128 {
+        return fail(
+            format!("Index {at} is outside 0..{len} while computing a constant"),
+            span,
+        );
+    }
+    Ok(at as usize)
+}
+
 /// What a constant cannot do at compile time, as the error says it.
 fn cannot<T>(what: &str, span: Span) -> Run<T> {
     fail(
@@ -466,13 +477,7 @@ impl Eval<'_, '_> {
                     Value::Text(_) => return cannot("index text in place", index.span),
                     _ => return cannot("index a Vec: it lives on the heap", index.span),
                 };
-                if at < 0 || at >= len as i128 {
-                    return fail(
-                        format!("Index {at} is outside 0..{len} while computing a constant"),
-                        index.span,
-                    );
-                }
-                loc.path.push(at as usize);
+                loc.path.push(inside(at, len, index.span)?);
                 loc
             }
             Place::Deref(pointer) => match self.expr(pointer)? {
@@ -496,17 +501,8 @@ impl Eval<'_, '_> {
             let loc = self.loc(base)?;
             if let Value::Text(bytes) = self.at(&loc) {
                 let bytes = bytes.clone();
-                let at = self.int(index)?;
-                return match bytes.get(at as usize).filter(|_| at >= 0) {
-                    Some(&byte) => Ok(Value::Int(i128::from(byte))),
-                    None => fail(
-                        format!(
-                            "Index {at} is outside 0..{} while computing a constant",
-                            bytes.len()
-                        ),
-                        span,
-                    ),
-                };
+                let at = inside(self.int(index)?, bytes.len(), span)?;
+                return Ok(Value::Int(i128::from(bytes[at])));
             }
         }
         let loc = self.loc(place)?;
@@ -524,15 +520,7 @@ impl Eval<'_, '_> {
         };
         Ok(match (step, &base.kind) {
             (Place::Index(_, index), ExprKind::Array(items)) => {
-                let at = self.int(index)?;
-                if at < 0 || at >= items.len() as i128 {
-                    let len = items.len();
-                    return fail(
-                        format!("Index {at} is outside 0..{len} while computing a constant"),
-                        index.span,
-                    );
-                }
-                &items[at as usize]
+                &items[inside(self.int(index)?, items.len(), index.span)?]
             }
             (Place::Field(_, at), ExprKind::Tuple(items)) => &items[*at as usize],
             (Place::Field(_, at), ExprKind::Struct(fields)) => {

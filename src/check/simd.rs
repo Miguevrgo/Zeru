@@ -4,7 +4,7 @@
 
 use crate::ast::{Expression, ExpressionKind};
 use crate::errors::Span;
-use crate::tir::{Builtin, Expr, ExprKind, SimdOp};
+use crate::tir::{Expr, ExprKind, SimdOp};
 use crate::ty::{IntTy, Ty, TyKind, Types};
 
 use super::body::FnCx;
@@ -116,13 +116,15 @@ impl FnCx<'_, '_> {
         Some((first, second))
     }
 
+    /// The arguments of a std.simd call and the type it gives, or None
+    /// after reporting what is wrong.
     pub(super) fn simd_call(
         &mut self,
         op: SimdOp,
         name: &str,
         args: &[Expression],
         span: Span,
-    ) -> Expr {
+    ) -> Option<(Vec<Expr>, Ty)> {
         let wanted = match op {
             SimdOp::Load | SimdOp::Sum => 1,
             SimdOp::Select => 3,
@@ -135,23 +137,8 @@ impl FnCx<'_, '_> {
                 span,
             );
             self.check_args_only(args);
-            return self.error_expr(span);
+            return None;
         }
-        match self.simd_checked(op, name, args, span) {
-            Some((values, ty)) => self.mk(ExprKind::Builtin(Builtin::Simd(op), values), ty, span),
-            None => self.error_expr(span),
-        }
-    }
-
-    /// The arguments of a std.simd call and the type it gives, or None
-    /// after reporting what is wrong.
-    fn simd_checked(
-        &mut self,
-        op: SimdOp,
-        name: &str,
-        args: &[Expression],
-        span: Span,
-    ) -> Option<(Vec<Expr>, Ty)> {
         match op {
             SimdOp::Load => {
                 let slice = self.value(&args[0], None);

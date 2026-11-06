@@ -1,8 +1,8 @@
 //! Calls: functions, methods, generic inference, the constructors of enums,
 //! results and Vecs, the built-in methods, and `print`.
 
-use crate::ast::{Expression, ExpressionKind, Spec, StatementKind, TypeSpec, format_pieces};
-use crate::errors::Span;
+use crate::ast::{Expression, ExpressionKind, Spec, TypeSpec, format_pieces};
+use crate::errors::{Span, ZeruError};
 use crate::items::{DefId, ItemKind};
 use crate::tir::{
     Arm, BinOp, BitOp, Block, Builtin, Expr, ExprKind, Payload, Place, Sink, Stmt, StmtKind, Test,
@@ -39,28 +39,9 @@ const STR_METHODS: &[&str] = &[
     "parse_float",
 ];
 
-/// Vec methods written in the prelude, each `__zeru_vec_<name>` taking a
-/// reference to the Vec first.
-const VEC_STD_METHODS: &[&str] = &[
-    "sort",
-    "sort_by",
-    "swap",
-    "reverse",
-    "rotate_left",
-    "rotate_right",
-    "dedup",
-    "chunks",
-    "windows",
-    "contains",
-    "sum",
-    "min",
-    "max",
-    "map",
-    "filter",
-    "any",
-    "all",
-    "push_str",
-];
+/// The Vec methods written in the prelude besides the slice ones, each
+/// `__zeru_vec_<name>` taking a reference to the Vec first.
+const VEC_STD_METHODS: &[&str] = &["dedup", "push_str"];
 
 /// The prelude's methods that only read the elements: slices have them, and
 /// a Vec reaches them through a slice of all of it.
@@ -82,16 +63,11 @@ const SLICE_MUT_METHODS: &[&str] = &[
     "rotate_right",
 ];
 
-/// The `Vec` methods that change it, so need a receiver declared `var`.
+/// The `Vec` methods besides the slice ones that change it, so need a
+/// receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
-    "sort",
-    "sort_by",
-    "reverse",
-    "rotate_left",
-    "rotate_right",
     "dedup",
     "push_str",
-    "swap",
     "push",
     "pop",
     "clear",
@@ -99,6 +75,21 @@ const VEC_MUTATORS: &[&str] = &[
     "remove",
     "reserve",
     "shrink_to_fit",
+];
+
+/// The `Vec` methods the compiler builds in.
+const VEC_BUILTINS: &[(&str, Builtin)] = &[
+    ("len", Builtin::Len),
+    ("capacity", Builtin::VecCapacity),
+    ("is_empty", Builtin::VecIsEmpty),
+    ("push", Builtin::VecPush),
+    ("insert", Builtin::VecInsert),
+    ("remove", Builtin::VecRemove),
+    ("pop", Builtin::VecPop),
+    ("get", Builtin::VecGet),
+    ("clear", Builtin::VecClear),
+    ("reserve", Builtin::VecReserve),
+    ("shrink_to_fit", Builtin::VecShrinkToFit),
 ];
 
 impl FnCx<'_, '_> {
@@ -132,13 +123,11 @@ impl FnCx<'_, '_> {
                 )
                 .help("drop the !")
                 .fix(function.span, name);
-                self.check_args_only(args);
-                return self.error_expr(span);
+                return self.reject_args(args, span);
             }
             _ => {
                 self.error("Only a function or a method can be called", function.span);
-                self.check_args_only(args);
-                return self.error_expr(span);
+                return self.reject_args(args, span);
             }
         };
         let takes_types = matches!(
@@ -151,6 +140,31 @@ impl FnCx<'_, '_> {
         call
     }
 
+    /// The error for `args` given where `subject` takes `wanted`: on the
+    /// arguments not taken, with a fix removing them, or at `span` when some
+    /// are missing.
+    fn arity_error(
+        &mut self,
+        subject: &str,
+        wanted: usize,
+        args: &[Expression],
+        span: Span,
+    ) -> &mut ZeruError {
+        let message = arity_message(subject, wanted, args.len());
+        let Some(extra) = args.get(wanted) else {
+            return self.error(message, span);
+        };
+        let last = args.last().map_or(extra.span, |arg| arg.span);
+        let removed = match wanted {
+            0 => Span::new(extra.span.start, last.end),
+            _ => Span::new(args[wanted - 1].span.end, last.end),
+        };
+        self.error(message, Span::new(extra.span.start, last.end))
+            .label("not taken")
+            .help("remove what it does not take")
+            .fix(removed, "")
+    }
+
     pub(super) fn check_args_only(&mut self, args: &[Expression]) {
         for arg in args {
             if matches!(arg.kind, ExpressionKind::Closure(_)) {
@@ -158,6 +172,12 @@ impl FnCx<'_, '_> {
             }
             self.expr(arg, None);
         }
+    }
+
+    /// Check `args` of a call already reported as wrong, and stand in for it.
+    fn reject_args(&mut self, args: &[Expression], span: Span) -> Expr {
+        self.check_args_only(args);
+        self.error_expr(span)
     }
 
     fn named_call(
@@ -189,8 +209,7 @@ impl FnCx<'_, '_> {
                 "zip walks two sequences side by side in a for: for (a, b) in zip(xs, ys)",
                 span,
             );
-            self.check_args_only(args);
-            return self.error_expr(span);
+            return self.reject_args(args, span);
         }
         if name == HASH_BITS_FN && self.local(name).is_none() {
             let [key] = args else {
@@ -218,8 +237,7 @@ impl FnCx<'_, '_> {
                     format!("{COPY_FN} takes a destination, a source and a count"),
                     span,
                 );
-                self.check_args_only(args);
-                return self.error_expr(span);
+                return self.reject_args(args, span);
             }
             let values = args
                 .iter()
@@ -247,8 +265,7 @@ impl FnCx<'_, '_> {
                         format!("Call a struct's function with '.': {owner}.{variant}()"),
                         function_span,
                     );
-                    self.check_args_only(args);
-                    return self.error_expr(span);
+                    return self.reject_args(args, span);
                 }
                 _ => {}
             }
@@ -308,16 +325,14 @@ impl FnCx<'_, '_> {
                         function_span,
                     );
                 }
-                self.check_args_only(args);
-                return self.error_expr(span);
+                return self.reject_args(args, span);
             }
             self.no_function(name, function_span, args, span);
             return self.error_expr(span);
         };
         self.cx.check_visible(def, module, span);
         let Some(known) = self.known_type_args(def, Vec::new(), type_args, span) else {
-            self.check_args_only(args);
-            return self.error_expr(span);
+            return self.reject_args(args, span);
         };
         let call = self.call_def(def, known, None, args, expected, span);
         if def == self.cx.prelude_def("exit") {
@@ -342,14 +357,12 @@ impl FnCx<'_, '_> {
                 return self.vec_static(name, type_args, args, expected, span);
             }
             if self.enum_dot(object, name, span) {
-                self.check_args_only(args);
-                return self.error_expr(span);
+                return self.reject_args(args, span);
             }
             if type_name == "String" {
                 if !type_args.is_empty() {
                     self.error("'String' takes no type arguments", span);
-                    self.check_args_only(args);
-                    return self.error_expr(span);
+                    return self.reject_args(args, span);
                 }
                 if name == "from" {
                     let def = self.cx.prelude_def("__zeru_string_from");
@@ -363,8 +376,7 @@ impl FnCx<'_, '_> {
                 let Some((method, known)) =
                     self.static_callee(def, type_name, name, type_args, expected, span)
                 else {
-                    self.check_args_only(args);
-                    return self.error_expr(span);
+                    return self.reject_args(args, span);
                 };
                 return self.call_def(method, known, None, args, expected, span);
             }
@@ -373,8 +385,7 @@ impl FnCx<'_, '_> {
         let (place, ty) = self.place(object);
         let types = &self.cx.types;
         if types.is_error(ty) {
-            self.check_args_only(args);
-            return self.error_expr(span);
+            return self.reject_args(args, span);
         }
         let name_at = self
             .cx
@@ -384,14 +395,14 @@ impl FnCx<'_, '_> {
         if name == "copy"
             && args.is_empty()
             && let TyKind::Optional(reference) = *self.cx.types.kind(ty)
-            && let TyKind::Ref(inner) | TyKind::RefMut(inner) = *self.cx.types.kind(reference)
+            && let Some(inner) = self.cx.types.referent(reference)
         {
             if self.copies_drop(inner, span) {
                 return self.error_expr(span);
             }
             return self.copy_referent(place, reference, inner, span);
         }
-        let through = matches!(self.cx.types.kind(ty), TyKind::Ref(_) | TyKind::RefMut(_));
+        let through = self.cx.types.referent(ty).is_some();
         let (place, ty) = self.through_ref(place, ty, object.span);
         if name == "copy" && args.is_empty() {
             if self.copies_drop(ty, span) {
@@ -445,7 +456,7 @@ impl FnCx<'_, '_> {
                 self.str_method(text, name, args, expected, span)
             }
             TyKind::Vec(elem) => {
-                let mutable = VEC_MUTATORS.contains(&name);
+                let mutable = SLICE_MUT_METHODS.contains(&name) || VEC_MUTATORS.contains(&name);
                 if mutable {
                     self.require_mutable(&place, object, span);
                 }
@@ -455,7 +466,10 @@ impl FnCx<'_, '_> {
                     self.error(format!("push_str() needs a String, not {shown}"), span);
                     return self.error_expr(span);
                 }
-                if VEC_STD_METHODS.contains(&name) {
+                if SLICE_METHODS.contains(&name)
+                    || SLICE_MUT_METHODS.contains(&name)
+                    || VEC_STD_METHODS.contains(&name)
+                {
                     let whole = match (SLICE_METHODS.contains(&name), mutable) {
                         (true, _) => Some(TyKind::Slice(elem)),
                         (false, true) if SLICE_MUT_METHODS.contains(&name) => {
@@ -543,16 +557,14 @@ impl FnCx<'_, '_> {
                 };
                 let Some(def) = self.cx.items.method(owner, name) else {
                     self.no_method(struct_ty, name, name_at, span);
-                    self.check_args_only(args);
-                    return self.error_expr(span);
+                    return self.reject_args(args, span);
                 };
                 if name == "drop" {
                     self.error(
                         "drop runs on its own when the value goes away; it is never called by hand",
                         span,
                     );
-                    self.check_args_only(args);
-                    return self.error_expr(span);
+                    return self.reject_args(args, span);
                 }
                 self.cx.check_visible(def, self.scope.module, span);
                 let sig = self.cx.sig(def);
@@ -564,15 +576,13 @@ impl FnCx<'_, '_> {
                             format!("'{full}' takes no 'self'; call it on the type, not a value"),
                             span,
                         );
-                        self.check_args_only(args);
-                        return self.error_expr(span);
+                        return self.reject_args(args, span);
                     }
                     Some(Receiver::Mutable) => self.require_mutable(&place, object, span),
                     _ => {}
                 }
                 let Some(known) = self.known_type_args(def, struct_args, type_args, span) else {
-                    self.check_args_only(args);
-                    return self.error_expr(span);
+                    return self.reject_args(args, span);
                 };
                 let mutable = receiver == Some(Receiver::Mutable);
                 let receiver = self.address(place, struct_ty, mutable, object.span);
@@ -652,7 +662,7 @@ impl FnCx<'_, '_> {
             error
                 .help("it is a method; call it on the value")
                 .fix(span, call);
-        } else if let Some(path) = suggest::std_home(name) {
+        } else if let Some(path) = suggest::std_home(None, name) {
             let short = path.rsplit('.').next().unwrap_or_default().to_string();
             match items.imported_module(module, &short) {
                 Some(_) => {
@@ -674,20 +684,6 @@ impl FnCx<'_, '_> {
 
     /// The methods a value of `ty` has.
     pub(super) fn methods_of(&mut self, ty: Ty) -> Vec<String> {
-        const VEC_METHODS: &[&str] = &[
-            "len",
-            "capacity",
-            "is_empty",
-            "push",
-            "insert",
-            "remove",
-            "pop",
-            "get",
-            "clear",
-            "reserve",
-            "shrink_to_fit",
-            "copy",
-        ];
         let names: Vec<&str> = match self.cx.types.kind(ty).clone() {
             TyKind::Ref(inner) | TyKind::RefMut(inner) | TyKind::Ptr(inner) => {
                 return self.methods_of(inner);
@@ -711,7 +707,16 @@ impl FnCx<'_, '_> {
                 let text = elem == Types::U8;
                 let std = VEC_STD_METHODS.iter().filter(|&&m| text || m != "push_str");
                 let strs = STR_METHODS.iter().filter(|_| text);
-                VEC_METHODS.iter().chain(std).chain(strs).copied().collect()
+                VEC_BUILTINS
+                    .iter()
+                    .map(|(name, _)| name)
+                    .chain(&["copy"])
+                    .chain(SLICE_MUT_METHODS)
+                    .chain(SLICE_METHODS)
+                    .chain(std)
+                    .chain(strs)
+                    .copied()
+                    .collect()
             }
             TyKind::Slice(_) if ty == Types::STR => STR_METHODS
                 .iter()
@@ -719,7 +724,7 @@ impl FnCx<'_, '_> {
                 .chain(&["len"])
                 .copied()
                 .collect(),
-            TyKind::Array(..) => SLICE_METHODS
+            TyKind::Array(..) | TyKind::SliceMut(_) => SLICE_METHODS
                 .iter()
                 .chain(SLICE_MUT_METHODS)
                 .chain(&["len", "is_empty"])
@@ -730,15 +735,9 @@ impl FnCx<'_, '_> {
                 .chain(&["len", "is_empty"])
                 .copied()
                 .collect(),
-            TyKind::SliceMut(_) => SLICE_METHODS
-                .iter()
-                .chain(SLICE_MUT_METHODS)
-                .chain(&["len", "is_empty"])
-                .copied()
-                .collect(),
             TyKind::Optional(_) => vec!["is_some", "is_none", "unwrap", "copy"],
             TyKind::Result(..) => vec!["is_ok", "is_err", "unwrap", "unwrap_err"],
-            TyKind::Int(_) => BIT_METHODS.to_vec(),
+            TyKind::Int(_) => BIT_METHODS.iter().map(|&(name, _)| name).collect(),
             _ => Vec::new(),
         };
         names.into_iter().map(String::from).collect()
@@ -815,8 +814,7 @@ impl FnCx<'_, '_> {
                     "nothing"
                 };
                 self.error(format!("{name} takes {wanted}"), span);
-                self.check_args_only(args);
-                return self.error_expr(span);
+                return self.reject_args(args, span);
             }
         }
         let ty = match rotates || op == BitOp::SwapBytes {
@@ -895,7 +893,7 @@ impl FnCx<'_, '_> {
     }
 
     /// A slice of `kind` over all of what `receiver` points at.
-    fn whole(&mut self, receiver: Expr, kind: TyKind, span: Span) -> Expr {
+    pub(super) fn whole(&mut self, receiver: Expr, kind: TyKind, span: Span) -> Expr {
         let from = self.mk(ExprKind::Int(0), Types::USIZE, span);
         let slice = self.cx.types.intern(kind);
         self.mk(
@@ -1019,7 +1017,12 @@ impl FnCx<'_, '_> {
             && let Some(op) = super::simd::simd_op(name)
         {
             let name = name.to_string();
-            return self.simd_call(op, &name, args, span);
+            return match self.simd_call(op, &name, args, span) {
+                Some((values, ty)) => {
+                    self.mk(ExprKind::Builtin(Builtin::Simd(op), values), ty, span)
+                }
+                None => self.error_expr(span),
+            };
         }
         self.inference_root(expected, span, |this| {
             this.generic_call(def, known, receiver, args, expected, span)
@@ -1042,50 +1045,25 @@ impl FnCx<'_, '_> {
         let skip = usize::from(receiver.is_some());
         let wanted = sig.params.len() - skip;
         if args.len() != wanted {
-            let items = self.cx.items;
-            let item = items.item(def);
-            let StatementKind::Function { params, .. } = &item.decl.kind else {
-                unreachable!("a call is to a function")
-            };
+            let (params, decl) = self.cx.params_of(def);
             let names: Vec<String> = params[skip..]
                 .iter()
                 .map(|(name, spec, _)| format!("{name}: {}", crate::fmt::ty_text(spec)))
                 .collect();
-            let decl = self.cx.sources.first_line(item.decl.span);
-            let in_std = self.cx.sources.in_std(decl);
-            let plural = if wanted == 1 { "" } else { "s" };
-            let given = match args.len() {
-                1 => "1 was given".to_string(),
-                count => format!("{count} were given"),
-            };
-            let message = format!("'{full}' takes {wanted} argument{plural}, but {given}");
-            let error = match args.get(wanted) {
-                Some(extra) => {
-                    let last = args.last().map_or(extra.span, |arg| arg.span);
-                    let removed = match wanted {
-                        0 => Span::new(extra.span.start, last.end),
-                        _ => Span::new(args[wanted - 1].span.end, last.end),
-                    };
-                    self.error(message, Span::new(extra.span.start, last.end))
-                        .label("not taken")
-                        .help("remove what it does not take")
-                        .fix(removed, "")
-                }
-                None => {
-                    let missing = names[args.len()..].join(", ");
-                    self.error(message, span)
-                        .label(format!("missing {missing}"))
-                        .help(format!("pass {missing} too"))
-                }
-            };
-            if !in_std {
+            let error = self.arity_error(&format!("'{full}'"), wanted, args, span);
+            if args.len() < wanted {
+                let missing = names[args.len()..].join(", ");
+                error
+                    .label(format!("missing {missing}"))
+                    .help(format!("pass {missing} too"));
+            }
+            if let Some(decl) = decl {
                 error.note(
                     format!("'{full}' is declared here, taking ({})", names.join(", ")),
                     decl,
                 );
             }
-            self.check_args_only(args);
-            return self.error_expr(span);
+            return self.reject_args(args, span);
         }
         let mut generics = known;
         for param in &sig.generics[generics.len()..] {
@@ -1176,12 +1154,8 @@ impl FnCx<'_, '_> {
             None => false,
         };
         if !fits {
-            let items = self.cx.items;
-            let callee = items.shown(def);
-            let StatementKind::Function { params, .. } = &items.item(def).decl.kind else {
-                unreachable!("a call is to a function")
-            };
-            let name = params[callable.param].0.clone();
+            let callee = self.cx.items.shown(def);
+            let name = self.cx.params_of(def).0[callable.param].0.clone();
             let shown: Vec<String> = wanted.iter().map(|&ty| self.ty(ty)).collect();
             let returns = match self.resolve(ret) {
                 ty if ty == Types::VOID => String::new(),
@@ -1224,19 +1198,13 @@ impl FnCx<'_, '_> {
         let value = match self.coerce(value, param) {
             Ok(value) => value,
             Err(value) => {
-                let items = self.cx.items;
-                let item = items.item(def);
-                let callee = items.shown(def);
-                let StatementKind::Function { params, .. } = &item.decl.kind else {
-                    unreachable!("a call is to a function")
-                };
+                let callee = self.cx.items.shown(def);
+                let (params, decl) = self.cx.params_of(def);
                 let name = params.get(at).map_or("", |(name, ..)| name.as_str());
-                let decl = self.cx.sources.first_line(item.decl.span);
-                let in_std = self.cx.sources.in_std(decl);
                 let error = self.mismatch(&value, param, arg.span, |want, got| {
                     format!("'{callee}' takes '{name}' as {want}, but this is {got}")
                 });
-                if !in_std {
+                if let Some(decl) = decl {
                     error.note(format!("'{name}' is declared here"), decl);
                 }
                 value
@@ -1244,10 +1212,7 @@ impl FnCx<'_, '_> {
         };
         let mut value = value;
         let param = self.resolve(param);
-        if !matches!(
-            self.cx.types.kind(param),
-            TyKind::Ref(_) | TyKind::RefMut(_)
-        ) {
+        if self.cx.types.referent(param).is_none() {
             self.consume(&mut value);
         }
         value
@@ -1267,8 +1232,7 @@ impl FnCx<'_, '_> {
         let ty = self.cx.types.intern(TyKind::Adt(def, Vec::new()));
         let Some(index) = variants.iter().position(|(v, _)| v == variant) else {
             self.error(format!("Enum '{owner}' has no variant '{variant}'"), span);
-            self.check_args_only(args);
-            return self.error_expr(span);
+            return self.reject_args(args, span);
         };
         let fields = variants[index].1.clone();
         if args.len() != fields.len() {
@@ -1318,22 +1282,19 @@ impl FnCx<'_, '_> {
                 .help("drop the Ok")
                 .fix(span, sources.text(inner.span));
         }
-        self.check_args_only(args);
-        self.error_expr(span)
+        self.reject_args(args, span)
     }
 
     fn err(&mut self, args: &[Expression], expected: Option<Ty>, span: Span) -> Expr {
         let [arg] = args else {
             self.error("Err() takes exactly one argument, the error", span);
-            self.check_args_only(args);
-            return self.error_expr(span);
+            return self.reject_args(args, span);
         };
         if expected.is_some_and(|ty| self.cx.types.is_error(ty)) {
-            self.check_args_only(args);
-            return self.error_expr(span);
+            return self.reject_args(args, span);
         }
         let Some((ty, err)) = expected.and_then(|ty| match self.cx.types.kind(ty) {
-            TyKind::Result(_, err) => Some((ty, *err)),
+            TyKind::Result(_) => Some((ty, Types::I32)),
             _ => None,
         }) else {
             self.expr(arg, None);
@@ -1373,23 +1334,20 @@ impl FnCx<'_, '_> {
                     format!("'Vec' takes 1 type argument(s), got {}", type_args.len()),
                     span,
                 );
-                self.check_args_only(args);
-                return self.error_expr(span);
+                return self.reject_args(args, span);
             }
         }
         let (ty, elem) = match expected.map(|ty| (ty, self.cx.types.kind(ty).clone())) {
             Some((ty, TyKind::Vec(elem))) => (ty, elem),
             Some((ty, _)) if self.cx.types.is_error(ty) => {
-                self.check_args_only(args);
-                return self.error_expr(span);
+                return self.reject_args(args, span);
             }
             _ => {
                 self.error(
                     "Cannot infer Vec element type. Please add a type annotation",
                     span,
                 );
-                self.check_args_only(args);
-                return self.error_expr(span);
+                return self.reject_args(args, span);
             }
         };
         let builtin = match name {
@@ -1414,28 +1372,7 @@ impl FnCx<'_, '_> {
         let vec = self.cx.types.intern(TyKind::Vec(elem));
         let owner = self.ty(vec);
         if args.len() != arity {
-            let plural = if arity == 1 { "" } else { "s" };
-            let given = match args.len() {
-                1 => "1 was given".to_string(),
-                count => format!("{count} were given"),
-            };
-            let message = format!("{owner}.{name}() takes {arity} argument{plural}, but {given}");
-            match args.get(arity) {
-                Some(extra) => {
-                    let last = args.last().map_or(extra.span, |arg| arg.span);
-                    let removed = match arity {
-                        0 => Span::new(extra.span.start, last.end),
-                        _ => Span::new(args[arity - 1].span.end, last.end),
-                    };
-                    self.error(message, Span::new(extra.span.start, last.end))
-                        .label("not taken")
-                        .help("remove what it does not take")
-                        .fix(removed, "");
-                }
-                None => {
-                    self.error(message, span);
-                }
-            }
+            self.arity_error(&format!("{owner}.{name}()"), arity, args, span);
             self.check_args_only(args);
             return Vec::new();
         }
@@ -1472,24 +1409,11 @@ impl FnCx<'_, '_> {
         name_at: Option<Span>,
         span: Span,
     ) -> Expr {
-        let builtin = match name {
-            "len" => Builtin::Len,
-            "capacity" => Builtin::VecCapacity,
-            "is_empty" => Builtin::VecIsEmpty,
-            "push" => Builtin::VecPush,
-            "insert" => Builtin::VecInsert,
-            "remove" => Builtin::VecRemove,
-            "pop" => Builtin::VecPop,
-            "get" => Builtin::VecGet,
-            "clear" => Builtin::VecClear,
-            "reserve" => Builtin::VecReserve,
-            "shrink_to_fit" => Builtin::VecShrinkToFit,
-            _ => {
-                self.check_args_only(args);
-                let vec = self.cx.types.intern(TyKind::Vec(elem));
-                self.no_method(vec, name, name_at, span);
-                return self.error_expr(span);
-            }
+        let Some(&(_, builtin)) = VEC_BUILTINS.iter().find(|(known, _)| *known == name) else {
+            self.check_args_only(args);
+            let vec = self.cx.types.intern(TyKind::Vec(elem));
+            self.no_method(vec, name, name_at, span);
+            return self.error_expr(span);
         };
         let mut values = vec![receiver];
         values.extend(self.vec_args(name, elem, args, span));
@@ -1521,10 +1445,8 @@ impl FnCx<'_, '_> {
             (TyKind::Optional(_), "is_none") => (Builtin::IsNone, Types::BOOL),
             (TyKind::Result(..), "is_ok") => (Builtin::IsOk, Types::BOOL),
             (TyKind::Result(..), "is_err") => (Builtin::IsErr, Types::BOOL),
-            (TyKind::Optional(inner) | TyKind::Result(inner, _), "unwrap") => {
-                (Builtin::Unwrap, inner)
-            }
-            (TyKind::Result(_, err), "unwrap_err") => (Builtin::UnwrapErr, err),
+            (TyKind::Optional(inner) | TyKind::Result(inner), "unwrap") => (Builtin::Unwrap, inner),
+            (TyKind::Result(_), "unwrap_err") => (Builtin::UnwrapErr, Types::I32),
             _ => return None,
         };
         if !args.is_empty() {
@@ -1630,32 +1552,31 @@ impl FnCx<'_, '_> {
             let piece = pieces.next().unwrap_or_default();
             if self.plain_print(ty) {
                 let value = self.mk(ExprKind::Read(place), ty, span);
-                stmts.push(self.write(to, vec![piece, Vec::new()], vec![value], span));
+                stmts.push(self.write(to, false, vec![piece, Vec::new()], vec![value], span));
                 continue;
             }
-            stmts.push(self.write(to, vec![piece], Vec::new(), span));
+            stmts.push(self.write(to, false, vec![piece], Vec::new(), span));
             self.show(place, ty, false, to, &mut stmts, span);
         }
         let last = pieces.next().unwrap_or_default();
-        let kind = ExprKind::Print {
-            to,
-            newline,
-            pieces: vec![last],
-            values: Vec::new(),
-        };
-        stmts.push(Stmt {
-            kind: StmtKind::Expr(self.mk(kind, Types::VOID, span)),
-            span,
-        });
+        stmts.push(self.write(to, newline, vec![last], Vec::new(), span));
         self.leave();
         self.mk(ExprKind::Block(Block { stmts }), Types::VOID, span)
     }
 
-    /// A statement writing `values` between `pieces`, with no line break.
-    fn write(&mut self, to: Sink, pieces: Vec<Vec<u8>>, values: Vec<Expr>, span: Span) -> Stmt {
+    /// A statement writing `values` between `pieces`, and a line break
+    /// after when `newline`.
+    fn write(
+        &mut self,
+        to: Sink,
+        newline: bool,
+        pieces: Vec<Vec<u8>>,
+        values: Vec<Expr>,
+        span: Span,
+    ) -> Stmt {
         let kind = ExprKind::Print {
             to,
-            newline: false,
+            newline,
             pieces,
             values,
         };
@@ -1680,7 +1601,7 @@ impl FnCx<'_, '_> {
             | TyKind::Slice(part)
             | TyKind::SliceMut(part) => self.printable(*part),
             TyKind::Optional(part)
-            | TyKind::Result(part, _)
+            | TyKind::Result(part)
             | TyKind::Ref(part)
             | TyKind::RefMut(part) => self.printable(*part),
             TyKind::Tuple(parts) => parts.iter().all(|&part| self.printable(part)),
@@ -1728,13 +1649,13 @@ impl FnCx<'_, '_> {
                     }
                     false => value,
                 };
-                out.push(self.write(to, vec![Vec::new(), Vec::new()], vec![value], span));
+                out.push(self.write(to, false, vec![Vec::new(), Vec::new()], vec![value], span));
             }
             TyKind::Vec(item)
             | TyKind::Array(item, _)
             | TyKind::Slice(item)
             | TyKind::SliceMut(item) => {
-                out.push(self.write(to, vec![text(b"[")], Vec::new(), span));
+                out.push(self.write(to, false, vec![text(b"[")], Vec::new(), span));
                 let index = self.declare("", Types::USIZE, false, false, span);
                 let view = self.cx.owns_heap(item);
                 let var = self.declare("", item, false, view, span);
@@ -1745,7 +1666,7 @@ impl FnCx<'_, '_> {
                     Types::BOOL,
                     span,
                 );
-                let comma = self.write(to, vec![text(b", ")], Vec::new(), span);
+                let comma = self.write(to, false, vec![text(b", ")], Vec::new(), span);
                 let mut stmts = vec![Stmt {
                     kind: StmtKind::If {
                         cond,
@@ -1768,13 +1689,13 @@ impl FnCx<'_, '_> {
                     },
                     span,
                 });
-                out.push(self.write(to, vec![text(b"]")], Vec::new(), span));
+                out.push(self.write(to, false, vec![text(b"]")], Vec::new(), span));
             }
             TyKind::Tuple(parts) => {
-                out.push(self.write(to, vec![text(b"(")], Vec::new(), span));
+                out.push(self.write(to, false, vec![text(b"(")], Vec::new(), span));
                 for (at, &part) in parts.iter().enumerate() {
                     if at > 0 {
-                        out.push(self.write(to, vec![text(b", ")], Vec::new(), span));
+                        out.push(self.write(to, false, vec![text(b", ")], Vec::new(), span));
                     }
                     let field = Place::Field(Box::new(place.clone()), at as u32);
                     self.show(field, part, true, to, out, span);
@@ -1784,9 +1705,9 @@ impl FnCx<'_, '_> {
                 } else {
                     text(b")")
                 };
-                out.push(self.write(to, vec![close], Vec::new(), span));
+                out.push(self.write(to, false, vec![close], Vec::new(), span));
             }
-            TyKind::Optional(inner) | TyKind::Result(inner, _) => {
+            TyKind::Optional(inner) | TyKind::Result(inner) => {
                 let optional = matches!(self.cx.types.kind(ty), TyKind::Optional(_));
                 let value = self.declare("", inner, false, true, span);
                 let mut stmts = Vec::new();
@@ -1805,14 +1726,14 @@ impl FnCx<'_, '_> {
                 }];
                 let (tags, bindings, written) = match optional {
                     true => {
-                        let none = self.write(to, vec![text(b"None")], Vec::new(), span);
+                        let none = self.write(to, false, vec![text(b"None")], Vec::new(), span);
                         (Vec::new(), Vec::new(), none)
                     }
                     false => {
                         let code = self.declare("", Types::I32, false, true, span);
                         let read = self.mk(ExprKind::Read(Place::Local(code)), Types::I32, span);
                         let pieces = vec![text(b"Err("), text(b")")];
-                        let err = self.write(to, pieces, vec![read], span);
+                        let err = self.write(to, false, pieces, vec![read], span);
                         (
                             vec![Test::is(0)],
                             vec![(code, vec![Payload::ErrValue.into()])],
@@ -1845,7 +1766,7 @@ impl FnCx<'_, '_> {
             }
             _ => {
                 let read = self.mk(ExprKind::Read(place), ty, span);
-                out.push(self.write(to, vec![Vec::new(), Vec::new()], vec![read], span));
+                out.push(self.write(to, false, vec![Vec::new(), Vec::new()], vec![read], span));
             }
         }
     }
@@ -1858,8 +1779,7 @@ impl FnCx<'_, '_> {
                 "replace takes a &var to a place and the value to put there",
                 span,
             );
-            self.check_args_only(args);
-            return self.error_expr(span);
+            return self.reject_args(args, span);
         };
         let target = self.expr(place, None);
         let pointer = self.resolve(target.ty);
@@ -2081,26 +2001,22 @@ impl FnCx<'_, '_> {
     }
 }
 
-const BIT_METHODS: &[&str] = &[
-    "count_ones",
-    "leading_zeros",
-    "trailing_zeros",
-    "rotate_left",
-    "rotate_right",
-    "swap_bytes",
+/// The bit methods of an integer.
+const BIT_METHODS: &[(&str, BitOp)] = &[
+    ("count_ones", BitOp::CountOnes),
+    ("leading_zeros", BitOp::LeadingZeros),
+    ("trailing_zeros", BitOp::TrailingZeros),
+    ("rotate_left", BitOp::RotateLeft),
+    ("rotate_right", BitOp::RotateRight),
+    ("swap_bytes", BitOp::SwapBytes),
 ];
 
 /// The bit method of an integer called `name`.
 fn bit_op(name: &str) -> Option<BitOp> {
-    Some(match name {
-        "count_ones" => BitOp::CountOnes,
-        "leading_zeros" => BitOp::LeadingZeros,
-        "trailing_zeros" => BitOp::TrailingZeros,
-        "rotate_left" => BitOp::RotateLeft,
-        "rotate_right" => BitOp::RotateRight,
-        "swap_bytes" => BitOp::SwapBytes,
-        _ => return None,
-    })
+    BIT_METHODS
+        .iter()
+        .find(|(known, _)| *known == name)
+        .map(|&(_, op)| op)
 }
 
 /// A number written out, `None`, or arithmetic, an array or a tuple of
@@ -2130,4 +2046,14 @@ fn stable(place: &Place) -> bool {
         Place::Temp(_) => false,
         Place::Capture(_) => true,
     }
+}
+
+/// `subject takes N argument(s), but M was/were given`.
+pub(super) fn arity_message(subject: &str, wanted: usize, given: usize) -> String {
+    let plural = if wanted == 1 { "" } else { "s" };
+    let given = match given {
+        1 => "1 was given".to_string(),
+        count => format!("{count} were given"),
+    };
+    format!("{subject} takes {wanted} argument{plural}, but {given}")
 }

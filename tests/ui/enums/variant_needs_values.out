@@ -1,9 +1,16 @@
 status: compile error
 -- stderr
-Error: 'S::A' carries 1 value(s): write S::A(...)
+Error: 'S::A' carries 1 value(s), got 2
    ╭─[ tests/ui/enums/variant_needs_values.zr:6:13 ]
    │
- 6 │     var s = S::A;
+ 6 │     var t = S::A(1, 2);
+   │             ─────┬────
+   │                  ╰────── 'S::A' carries 1 value(s), got 2
+───╯
+Error: 'S::A' carries 1 value(s): write S::A(...)
+   ╭─[ tests/ui/enums/variant_needs_values.zr:7:13 ]
+   │
+ 7 │     var s = S::A;
    │             ──┬─
    │               ╰─── 'S::A' carries 1 value(s): write S::A(...)
 ───╯

@@ -41,7 +41,7 @@ pub struct HashSet<K: Hash> {
     // println("{}", tags.insert(1)); // false
     // ```
     pub fn insert(var self, key: K) bool {
-        var before = self.members.len();
+        const before = self.members.len();
         self.members.insert(key, true);
         return self.members.len() > before;
     }

@@ -1,4 +1,0 @@
-fn main() {
-    const v: Vec<i32> = Vec[4, 5];
-    println("{} {}", v.get(1).unwrap(), v.get(9).is_none());
-}

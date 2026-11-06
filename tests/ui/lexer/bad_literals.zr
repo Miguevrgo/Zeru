@@ -1,4 +1,5 @@
 fn main() {
     var a = "\q";
     var b = '';
+    var c = "\xZ1";
 }

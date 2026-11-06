@@ -68,6 +68,20 @@ struct Loan {
     multi: bool,
 }
 
+impl Loan {
+    /// A loan of `place` taken at `span`, its paths not known yet.
+    fn new(place: Place, mutable: bool, span: Span, from: Option<usize>) -> Self {
+        Loan {
+            place,
+            paths: Vec::new(),
+            mutable,
+            span,
+            from,
+            multi: false,
+        }
+    }
+}
+
 type Fact = (Local, usize, bool);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,36 +100,6 @@ enum Rule {
     Move,
     Owning,
     Variant,
-}
-
-#[derive(Clone, PartialEq)]
-struct BitSet(Vec<u64>);
-
-impl BitSet {
-    fn new(size: usize) -> Self {
-        Self(vec![0; size.div_ceil(64)])
-    }
-
-    fn insert(&mut self, at: usize) {
-        self.0[at / 64] |= 1 << (at % 64);
-    }
-
-    fn remove(&mut self, at: usize) {
-        self.0[at / 64] &= !(1 << (at % 64));
-    }
-
-    fn contains(&self, at: usize) -> bool {
-        self.0[at / 64] >> (at % 64) & 1 == 1
-    }
-
-    fn union(&mut self, other: &Self) -> bool {
-        let mut changed = false;
-        for (word, more) in self.0.iter_mut().zip(&other.0) {
-            changed |= *word | more != *word;
-            *word |= more;
-        }
-        changed
-    }
 }
 
 const EXACT: usize = 16;
@@ -191,7 +175,7 @@ impl<'a> Cx<'a> {
         for arg in 1..=body.arg_count {
             let local = Local(arg as u32);
             let ty = body.locals[arg].ty;
-            if let TyKind::Ref(pointee) | TyKind::RefMut(pointee) = *program.types.kind(ty) {
+            if let Some(pointee) = program.types.referent(ty) {
                 let place = Place::local(local).project(Projection::Deref);
                 let path = Path {
                     root: local,
@@ -201,13 +185,10 @@ impl<'a> Cx<'a> {
                     anchor: None,
                 };
                 cx.start.insert((local, cx.loans.len(), false));
+                let mutable = matches!(program.types.kind(ty), TyKind::RefMut(_));
                 cx.loans.push(Loan {
-                    place,
                     paths: vec![path],
-                    mutable: matches!(program.types.kind(ty), TyKind::RefMut(_)),
-                    span: body.span,
-                    from: None,
-                    multi: false,
+                    ..Loan::new(place, mutable, body.span, None)
                 });
             }
         }
@@ -227,14 +208,9 @@ impl<'a> Cx<'a> {
                     _ => continue,
                 };
                 cx.made.insert((b, at), cx.loans.len());
-                cx.loans.push(Loan {
-                    place,
-                    paths: Vec::new(),
-                    mutable: matches!(cx.kind(cx.ty(dest)), TyKind::RefMut(_)),
-                    span: statement.span,
-                    from: None,
-                    multi: false,
-                });
+                let mutable = matches!(cx.kind(cx.ty(dest)), TyKind::RefMut(_));
+                cx.loans
+                    .push(Loan::new(place, mutable, statement.span, None));
             }
             for at in 0..=block.statements.len() {
                 for (place, role) in cx.accesses(b, at) {
@@ -269,10 +245,7 @@ impl<'a> Cx<'a> {
     }
 
     fn is_ref(&self, place: &Place) -> bool {
-        matches!(
-            self.kind(self.ty(place)),
-            TyKind::Ref(_) | TyKind::RefMut(_)
-        )
+        self.program.types.referent(self.ty(place)).is_some()
     }
 
     /// Whether moves out of `local` are followed: it owns something.
@@ -483,9 +456,7 @@ impl<'a> Cx<'a> {
                 if path.steps.contains(&Step::Deref) {
                     continue;
                 }
-                for &(_, held, deep) in
-                    facts.range((path.root, 0, false)..=(path.root, usize::MAX, true))
-                {
+                for (held, deep) in Self::held(facts, path.root) {
                     if kept.insert((path.root, held, deep)) {
                         work.push((path.root, held, deep));
                     }
@@ -784,14 +755,14 @@ impl<'a> Cx<'a> {
                 continue;
             }
             let derived = *self.derived.entry((b, origin)).or_insert_with(|| {
-                self.loans.push(Loan {
-                    place: self.loans[origin].place.clone(),
-                    paths: Vec::new(),
-                    mutable: self.loans[origin].mutable,
-                    span: self.loans[origin].span,
-                    from: Some(origin),
-                    multi: false,
-                });
+                let Loan {
+                    place,
+                    mutable,
+                    span,
+                    ..
+                } = &self.loans[origin];
+                let loan = Loan::new(place.clone(), *mutable, *span, Some(origin));
+                self.loans.push(loan);
                 self.loans.len() - 1
             });
             let paths: Vec<Path> = self.loans[origin]
@@ -864,9 +835,9 @@ impl<'a> Cx<'a> {
     }
 
     /// The moves that may have happened before each block.
-    fn moved(&self) -> Vec<BitSet> {
+    fn moved(&self) -> Vec<Vec<bool>> {
         let count = self.body.blocks.len();
-        let mut entry = vec![BitSet::new(self.moves.len()); count];
+        let mut entry = vec![vec![false; self.moves.len()]; count];
         let mut seen = vec![false; count];
         let mut queued = vec![false; count];
         let mut work = VecDeque::from([0]);
@@ -877,8 +848,12 @@ impl<'a> Cx<'a> {
                 self.apply_moves(&mut moved, b, at);
             }
             for next in self.successors(b) {
-                let changed =
-                    entry[next].union(&moved) || !std::mem::replace(&mut seen[next], true);
+                let before = entry[next].clone();
+                entry[next]
+                    .iter_mut()
+                    .zip(&moved)
+                    .for_each(|(a, &b)| *a |= b);
+                let changed = entry[next] != before || !std::mem::replace(&mut seen[next], true);
                 if changed && !std::mem::replace(&mut queued[next], true) {
                     work.push_back(next);
                 }
@@ -887,20 +862,20 @@ impl<'a> Cx<'a> {
         entry
     }
 
-    fn apply_moves(&self, moved: &mut BitSet, b: usize, at: usize) {
+    fn apply_moves(&self, moved: &mut [bool], b: usize, at: usize) {
         for (place, role) in self.accesses(b, at) {
             if Self::defines(&place, role) {
                 for &site in &self.moves_of[place.local.0 as usize] {
-                    moved.remove(site);
+                    moved[site] = false;
                 }
             }
         }
         for &site in self.moves_at.get(&(b, at)).into_iter().flatten() {
-            moved.insert(site);
+            moved[site] = true;
         }
     }
 
-    fn check_block(&mut self, b: usize, mut facts: BTreeSet<Fact>, mut moved: BitSet) {
+    fn check_block(&mut self, b: usize, mut facts: BTreeSet<Fact>, mut moved: Vec<bool>) {
         let live = self.live_through(b);
         for (at, live) in live.iter().enumerate() {
             let span = self.span(b, at);
@@ -932,11 +907,11 @@ impl<'a> Cx<'a> {
         }
     }
 
-    fn check_moved(&mut self, local: Local, moved: &BitSet, span: Span) {
+    fn check_moved(&mut self, local: Local, moved: &[bool], span: Span) {
         let mut sites = self.moves_of[local.0 as usize]
             .iter()
             .copied()
-            .filter(|&site| moved.contains(site));
+            .filter(|&site| moved[site]);
         let Some(first) = sites.next() else {
             return;
         };
@@ -1161,18 +1136,13 @@ impl<'a> Cx<'a> {
     /// at is not reached by what it returns, though the references a `T`
     /// holds may be.
     fn lent(&self, method: bool, at: usize, ty: Ty) -> bool {
-        method
-            && at > 0
-            && matches!(
-                self.program.types.kind(ty),
-                TyKind::Ref(_) | TyKind::RefMut(_)
-            )
+        method && at > 0 && self.program.types.referent(ty).is_some()
     }
 
     /// A method returning a reference into an argument other than `self`
     /// that its callers lend for the call only.
     fn check_return(&mut self, facts: &BTreeSet<Fact>) {
-        for &(_, loan, _) in facts.iter().filter(|fact| fact.0 == RETURN) {
+        for (loan, _) in Self::held(facts, RETURN) {
             let lent = self.loans[loan]
                 .paths
                 .iter()

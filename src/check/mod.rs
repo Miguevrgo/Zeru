@@ -257,10 +257,7 @@ impl<'a> Checker<'a> {
         let owning = self
             .types
             .all()
-            .filter(|&ty| self.types.is_concrete(ty))
-            .collect::<Vec<_>>()
-            .into_iter()
-            .filter(|&ty| self.owns_heap(ty))
+            .filter(|&ty| self.types.is_concrete(ty) && self.owns_heap(ty))
             .collect();
 
         let mut errors = self.errors;
@@ -399,12 +396,6 @@ impl<'a> Checker<'a> {
         id
     }
 
-    /// Where the instance was first asked for, to point there when its body
-    /// fails to check.
-    fn instance_origin(&self, id: FnId) -> Span {
-        self.queued[id.0 as usize].from
-    }
-
     fn scope_of(&self, def: DefId, args: &[Ty]) -> Scope {
         let item = self.items.item(def);
         let generics = match item.kind {
@@ -454,11 +445,7 @@ impl<'a> Checker<'a> {
         let span = item.decl.span;
         let full = item.name.clone();
         let generics = self.generics_of_fn(def);
-        let scope = Scope {
-            module: item.module,
-            generics: generics.iter().map(|g| g.name.clone()).collect(),
-            args: Vec::new(),
-        };
+        let scope = self.scope_of(def, &[]);
 
         if let Some(owner) = item.owner {
             let shadowed = type_params.iter().find(|own| {
@@ -478,15 +465,13 @@ impl<'a> Checker<'a> {
                 return None;
             }
         }
-        let names: Vec<String> = params.iter().map(|(n, _, _)| n.clone()).collect();
-        if let Some(dup) = first_duplicate(&names) {
+        if let Some(dup) = first_duplicate(params.iter().map(|(n, _, _)| n)) {
             self.error(
                 format!("Function '{full}' declares parameter '{dup}' twice"),
                 span,
             );
         }
-        let generic_names: Vec<String> = type_params.iter().map(|p| p.name.clone()).collect();
-        if let Some(dup) = first_duplicate(&generic_names) {
+        if let Some(dup) = first_duplicate(type_params.iter().map(|p| &p.name)) {
             self.error(
                 format!("Function '{full}' declares type parameter '{dup}' twice"),
                 span,
@@ -594,13 +579,11 @@ impl<'a> Checker<'a> {
             };
             self.structs.insert(def, StructDef { fields: Vec::new() });
             self.types.name_adt(def, item.name.clone());
-            let names: Vec<String> = fields.iter().map(|(f, _)| f.clone()).collect();
-            if let Some(dup) = first_duplicate(&names) {
+            if let Some(dup) = first_duplicate(fields.iter().map(|(f, _)| f)) {
                 let message = format!("Struct '{}' declares field '{dup}' twice", item.name);
                 self.error(message, item.decl.span);
             }
-            let generic_names: Vec<String> = type_params.iter().map(|p| p.name.clone()).collect();
-            if let Some(dup) = first_duplicate(&generic_names) {
+            if let Some(dup) = first_duplicate(type_params.iter().map(|p| &p.name)) {
                 let message = format!(
                     "Struct '{}' declares type parameter '{dup}' twice",
                     item.name
@@ -636,8 +619,7 @@ impl<'a> Checker<'a> {
                     variants: Vec::new(),
                 },
             );
-            let names: Vec<String> = variants.iter().map(|(v, _)| v.clone()).collect();
-            if let Some(dup) = first_duplicate(&names) {
+            if let Some(dup) = first_duplicate(variants.iter().map(|(v, _)| v)) {
                 let message = format!("Enum '{}' declares variant '{dup}' twice", item.name);
                 self.error(message, item.decl.span);
             }
@@ -667,8 +649,7 @@ impl<'a> Checker<'a> {
         };
         let scope = self.scope_of(def, &[]);
         let span = item.decl.span;
-        let names: Vec<String> = methods.iter().map(|m| m.name.clone()).collect();
-        if let Some(dup) = first_duplicate(&names) {
+        if let Some(dup) = first_duplicate(methods.iter().map(|m| &m.name)) {
             let message = format!("Trait '{}' declares method '{dup}' twice", item.name);
             self.error(message, span);
         }
@@ -808,7 +789,7 @@ impl<'a> Checker<'a> {
             TyKind::Tuple(parts) => parts
                 .into_iter()
                 .any(|part| self.owns_past(part, vec, seen)),
-            TyKind::Array(inner, _) | TyKind::Optional(inner) | TyKind::Result(inner, _) => {
+            TyKind::Array(inner, _) | TyKind::Optional(inner) | TyKind::Result(inner) => {
                 self.owns_past(inner, vec, seen)
             }
             _ => false,
@@ -859,23 +840,12 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(crate) fn note_types_in(&mut self, ty: Ty, span: Span) {
-        match self.types.kind(ty).clone() {
-            TyKind::Adt(..) => self.note_adt(ty, span),
-            TyKind::Tuple(parts) => parts.into_iter().for_each(|p| self.note_types_in(p, span)),
-            TyKind::Result(ok, err) => {
-                self.note_types_in(ok, span);
-                self.note_types_in(err, span);
-            }
-            TyKind::Array(inner, _)
-            | TyKind::Vec(inner)
-            | TyKind::Slice(inner)
-            | TyKind::SliceMut(inner)
-            | TyKind::Optional(inner)
-            | TyKind::Ptr(inner)
-            | TyKind::Ref(inner)
-            | TyKind::RefMut(inner) => self.note_types_in(inner, span),
-            _ => {}
+    fn note_types_in(&mut self, ty: Ty, span: Span) {
+        if matches!(self.types.kind(ty), TyKind::Adt(..)) {
+            return self.note_adt(ty, span);
+        }
+        for arg in self.types.args(ty).unwrap_or_default() {
+            self.note_types_in(arg, span);
         }
     }
 
@@ -1024,13 +994,22 @@ impl<'a> Checker<'a> {
         match self.types.kind(ty) {
             TyKind::Adt(def, _) => out.push(*def),
             TyKind::Tuple(parts) => parts.iter().for_each(|&p| self.inline_adts(p, out)),
-            TyKind::Optional(inner) | TyKind::Array(inner, _) => self.inline_adts(*inner, out),
-            TyKind::Result(ok, err) => {
-                self.inline_adts(*ok, out);
-                self.inline_adts(*err, out);
+            TyKind::Optional(inner) | TyKind::Result(inner) | TyKind::Array(inner, _) => {
+                self.inline_adts(*inner, out)
             }
             _ => {}
         }
+    }
+
+    /// The parameters function `def` declares, and the first line of its
+    /// declaration, for a note pointing there, unless std has it.
+    fn params_of(&self, def: DefId) -> (&'a [(String, TypeSpec, bool)], Option<Span>) {
+        let decl = self.items.item(def).decl;
+        let StatementKind::Function { params, .. } = &decl.kind else {
+            unreachable!("a call is to a function")
+        };
+        let line = self.sources.first_line(decl.span);
+        (params, (!self.sources.in_std(line)).then_some(line))
     }
 
     /// A function the prelude defines for the compiler's use.
@@ -1040,8 +1019,7 @@ impl<'a> Checker<'a> {
             .expect("the prelude defines it")
     }
 
-    /// An instance of the prelude's non-generic function `name`.
-    pub(super) fn prelude_type(&mut self, name: &str) -> Ty {
+    fn prelude_type(&mut self, name: &str) -> Ty {
         let def = self
             .items
             .lookup_type(ModuleId::PRELUDE, name)
@@ -1049,7 +1027,8 @@ impl<'a> Checker<'a> {
         self.types.intern(TyKind::Adt(def, Vec::new()))
     }
 
-    pub(super) fn prelude_fn(&mut self, name: &str) -> FnId {
+    /// An instance of the prelude's non-generic function `name`.
+    fn prelude_fn(&mut self, name: &str) -> FnId {
         let def = self.prelude_def(name);
         self.instance(def, Vec::new(), Span::default())
     }
@@ -1105,7 +1084,8 @@ fn generics_of(decl: &Statement) -> &[TypeParameter] {
     }
 }
 
-fn first_duplicate(names: &[String]) -> Option<&String> {
+/// The first of `names` that an earlier one repeats.
+fn first_duplicate<'n>(names: impl IntoIterator<Item = &'n String>) -> Option<&'n String> {
     let mut seen = HashSet::new();
-    names.iter().find(|name| !seen.insert(*name))
+    names.into_iter().find(|&name| !seen.insert(name))
 }

@@ -135,10 +135,8 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         };
         let data = self.const_bytes(bytes);
         let len = self.usize_type().const_int(bytes.len() as u64, false);
-        let ptr_field = self.field_ptr(dst, constant.ty, 0);
-        self.builder.build_store(ptr_field, data).unwrap();
-        let len_field = self.field_ptr(dst, constant.ty, 1);
-        self.builder.build_store(len_field, len).unwrap();
+        self.store_field(dst, constant.ty, 0, data);
+        self.store_field(dst, constant.ty, 1, len);
     }
 
     /// `byte as str`: the one byte of a table holding each byte value once.
@@ -156,10 +154,8 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 .unwrap()
         };
         let len = self.usize_type().const_int(1, false);
-        let ptr_field = self.field_ptr(dst, Types::STR, 0);
-        self.builder.build_store(ptr_field, data).unwrap();
-        let len_field = self.field_ptr(dst, Types::STR, 1);
-        self.builder.build_store(len_field, len).unwrap();
+        self.store_field(dst, Types::STR, 0, data);
+        self.store_field(dst, Types::STR, 1, len);
     }
 
     /// Store `value` of type `ty` at `dest`.
@@ -249,12 +245,13 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 let address = self.place(dest);
                 return self.build_byte_str(value, address);
             }
-            Rvalue::Simd(op, operands) if matches!(self.types().kind(ty), TyKind::Array(..)) => {
-                let address = self.place(dest);
-                self.simd(*op, operands, ty, Some(address));
-                return;
-            }
-            Rvalue::Simd(op, operands) => self.simd(*op, operands, ty, None),
+            Rvalue::Simd(op, operands) => match self.simd_value(*op, operands, ty) {
+                BasicValueEnum::VectorValue(lanes) => {
+                    let address = self.place(dest);
+                    return self.store_vector(ty, address, lanes);
+                }
+                value => Val::Imm(value),
+            },
             Rvalue::Aggregate(..)
             | Rvalue::Repeat(..)
             | Rvalue::VecRepeat(..)
@@ -408,8 +405,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             }
             Aggregate::Variant(index) => {
                 let tag = self.context.i32_type().const_int(u64::from(index), false);
-                let tag_field = self.field_ptr(dst, ty, 0);
-                self.builder.build_store(tag_field, tag).unwrap();
+                self.store_field(dst, ty, 0, tag);
                 for (at, value) in values.iter().enumerate() {
                     let slot = self.variant_field_ptr(dst, ty, index, at as u32);
                     put(self, slot, value);
@@ -431,22 +427,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
 
     pub(super) fn store_tag(&mut self, dst: PointerValue<'ctx>, ty: Ty, set: bool) {
         let tag = self.context.bool_type().const_int(u64::from(set), false);
-        let field = self.field_ptr(dst, ty, 0);
-        self.builder.build_store(field, tag).unwrap();
-    }
-
-    /// `index` as a usize, extended by its sign.
-    pub(super) fn widen(&self, index: IntValue<'ctx>, signed: bool) -> IntValue<'ctx> {
-        let usize_type = self.usize_type();
-        if index.get_type().get_bit_width() >= usize_type.get_bit_width() {
-            return index;
-        }
-        let b = &self.builder;
-        if signed {
-            b.build_int_s_extend(index, usize_type, "index").unwrap()
-        } else {
-            b.build_int_z_extend(index, usize_type, "index").unwrap()
-        }
+        self.store_field(dst, ty, 0, tag);
     }
 
     fn binary(
@@ -467,7 +448,16 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 };
                 let elem = self.llvm_ty(pointee);
                 let right_ty = self.operand_ty(right);
-                let offset = self.widen(r.into_int_value(), self.is_signed(right_ty));
+                let signed = self.is_signed(right_ty);
+                let offset = self
+                    .builder
+                    .build_int_cast_sign_flag(
+                        r.into_int_value(),
+                        self.usize_type(),
+                        signed,
+                        "index",
+                    )
+                    .unwrap();
                 let step = match op {
                     BinOp::PtrSub => self.builder.build_int_neg(offset, "back").unwrap(),
                     _ => offset,

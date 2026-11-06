@@ -11,7 +11,6 @@ use inkwell::{
     types::{BasicType, BasicTypeEnum, IntType},
     values::{
         BasicMetadataValueEnum, BasicValueEnum, FloatValue, FunctionValue, IntValue, PointerValue,
-        ValueKind,
     },
 };
 
@@ -62,15 +61,11 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         args: &[BasicMetadataValueEnum<'ctx>],
     ) -> Option<BasicValueEnum<'ctx>> {
         let value = self.functions[function.0 as usize];
-        match self
-            .builder
+        self.builder
             .build_call(value, args, "call")
             .unwrap()
             .try_as_basic_value()
-        {
-            ValueKind::Basic(value) => Some(value),
-            ValueKind::Instruction(_) => None,
-        }
+            .basic()
     }
 
     /// What every failed check calls: flush what was printed, write the
@@ -379,7 +374,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         }
     }
 
-    fn bytes_for(&mut self, elem: Ty, count: IntValue<'ctx>) -> IntValue<'ctx> {
+    pub(super) fn bytes_for(&mut self, elem: Ty, count: IntValue<'ctx>) -> IntValue<'ctx> {
         let size = self.size_of(elem);
         self.builder.build_int_mul(count, size, "bytes").unwrap()
     }
@@ -401,7 +396,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             .into_pointer_value()
     }
 
-    fn resize_buffer(
+    pub(super) fn resize_buffer(
         &self,
         data: PointerValue<'ctx>,
         old: IntValue<'ctx>,
@@ -414,16 +409,6 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         )
         .unwrap()
         .into_pointer_value()
-    }
-
-    pub(super) fn free_buffer(
-        &mut self,
-        data: PointerValue<'ctx>,
-        elem: Ty,
-        capacity: IntValue<'ctx>,
-    ) {
-        let size = self.bytes_for(elem, capacity);
-        self.resize_buffer(data, size, self.usize_type().const_zero());
     }
 
     /// Copy `count` elements from `src` to `dst`; the two may overlap.
@@ -446,14 +431,9 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         len: IntValue<'ctx>,
         cap: IntValue<'ctx>,
     ) {
-        for (at, value) in [
-            (0, BasicValueEnum::from(data)),
-            (1, len.into()),
-            (2, cap.into()),
-        ] {
-            let field = self.field_ptr(dst, ty, at);
-            self.builder.build_store(field, value).unwrap();
-        }
+        self.store_field(dst, ty, 0, data);
+        self.store_field(dst, ty, 1, len);
+        self.store_field(dst, ty, 2, cap);
     }
 
     /// Make room for `needed` elements: half as many again plus eight, or
@@ -486,10 +466,8 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             let old_size = this.bytes_for(elem, cap);
             let new_size = this.bytes_to_allocate(elem, new_cap);
             let resized = this.resize_buffer(data, old_size, new_size);
-            let ptr_field = this.field_ptr(vec, ty, 0);
-            this.builder.build_store(ptr_field, resized).unwrap();
-            let cap_field = this.field_ptr(vec, ty, 2);
-            this.builder.build_store(cap_field, new_cap).unwrap();
+            this.store_field(vec, ty, 0, resized);
+            this.store_field(vec, ty, 2, new_cap);
         });
     }
 
@@ -517,8 +495,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             self.move_elements(after, slot, elem, tail);
         }
         self.store_val(slot, staged, elem);
-        let len_field = self.field_ptr(vec, ty, 1);
-        self.builder.build_store(len_field, grown).unwrap();
+        self.store_field(vec, ty, 1, grown);
     }
 
     /// `remove(at)`, the bounds already checked.
@@ -536,8 +513,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         let tail = self.builder.build_int_sub(current, next, "tail").unwrap();
         self.move_elements(slot, after, elem, tail);
         let shrunk = self.builder.build_int_sub(current, one, "shrunk").unwrap();
-        let len_field = self.field_ptr(vec, ty, 1);
-        self.builder.build_store(len_field, shrunk).unwrap();
+        self.store_field(vec, ty, 1, shrunk);
         self.load_val(removed, elem)
     }
 
@@ -554,27 +530,16 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         let usize_type = self.usize_type();
         let one = usize_type.const_int(1, false);
         let current = self.load_field(vec, vec_ty, 1).into_int_value();
-        let present = match index {
-            Some(index) => self
-                .builder
-                .build_int_compare(IntPredicate::ULT, index, current, "in_bounds")
-                .unwrap(),
-            None => self
-                .builder
-                .build_int_compare(
-                    IntPredicate::NE,
-                    current,
-                    usize_type.const_zero(),
-                    "has_elem",
-                )
-                .unwrap(),
-        };
+        let first = index.unwrap_or(usize_type.const_zero());
+        let present = self
+            .builder
+            .build_int_compare(IntPredicate::ULT, first, current, "in_bounds")
+            .unwrap();
         self.store_tag(dst, ty, false);
         self.if_then(present, |this| {
             let index = index.unwrap_or_else(|| {
                 let last = this.builder.build_int_sub(current, one, "new_len").unwrap();
-                let len_field = this.field_ptr(vec, vec_ty, 1);
-                this.builder.build_store(len_field, last).unwrap();
+                this.store_field(vec, vec_ty, 1, last);
                 last
             });
             let data = this.load_field(vec, vec_ty, 0).into_pointer_value();
@@ -600,10 +565,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 this.call_drop(item, elem);
             });
         }
-        let len_field = self.field_ptr(vec, ty, 1);
-        self.builder
-            .build_store(len_field, self.usize_type().const_zero())
-            .unwrap();
+        self.store_field(vec, ty, 1, self.usize_type().const_zero());
     }
 
     pub(super) fn vec_reserve(&mut self, place: &Place, more: &Operand) {

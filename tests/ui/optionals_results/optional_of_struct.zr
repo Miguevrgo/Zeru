@@ -1,8 +1,0 @@
-struct P {
-    x: i32,
-}
-fn main() {
-    const o: P? = P { x: 3 };
-    const p = o.unwrap();
-    println("{}", p.x);
-}

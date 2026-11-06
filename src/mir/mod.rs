@@ -10,7 +10,7 @@ mod elaborate;
 
 use crate::errors::Span;
 use crate::tir::{BinOp, BitOp, FnId, Program, SimdOp, UnOp};
-use crate::ty::{Ty, TyKind};
+use crate::ty::{Ty, TyKind, Types};
 
 pub use build::build;
 
@@ -40,7 +40,7 @@ pub struct Body {
     pub symbol: String,
     pub span: Span,
     pub arg_count: usize,
-    pub method: bool,
+    method: bool,
     pub locals: Vec<LocalDecl>,
     pub blocks: Vec<BlockData>,
 }
@@ -231,7 +231,7 @@ impl Place {
         }
     }
 
-    pub fn project(mut self, projection: Projection) -> Self {
+    fn project(mut self, projection: Projection) -> Self {
         self.projection.push(projection);
         self
     }
@@ -244,7 +244,7 @@ impl Place {
 
 impl StatementKind {
     /// The operands it reads, in order.
-    pub fn operands(&self) -> Vec<&Operand> {
+    fn operands(&self) -> Vec<&Operand> {
         match self {
             StatementKind::Assign(_, rvalue) => rvalue.operands(),
             StatementKind::VecPush(_, item) | StatementKind::VecReserve(_, item) => vec![item],
@@ -262,7 +262,7 @@ impl StatementKind {
 }
 
 impl Rvalue {
-    pub fn operands(&self) -> Vec<&Operand> {
+    fn operands(&self) -> Vec<&Operand> {
         match self {
             Rvalue::Use(value)
             | Rvalue::Unary(_, value)
@@ -290,7 +290,7 @@ impl Rvalue {
 impl Body {
     /// Whether every path from the start calls function `me`, this body's
     /// own, before it can return: a recursion that never ends.
-    pub fn recurses_forever(&self, me: FnId) -> bool {
+    fn recurses_forever(&self, me: FnId) -> bool {
         let mut seen = vec![false; self.blocks.len()];
         let mut stack = vec![BlockId(0)];
         let mut recursed = false;
@@ -338,7 +338,7 @@ impl TerminatorKind {
         }
     }
 
-    pub fn successors_mut(&mut self) -> Vec<&mut BlockId> {
+    fn successors_mut(&mut self) -> Vec<&mut BlockId> {
         match self {
             TerminatorKind::Goto(target)
             | TerminatorKind::Call { target, .. }
@@ -358,7 +358,7 @@ impl TerminatorKind {
 
 impl Program {
     /// The type `projection` reaches from a value of `ty`.
-    pub fn projected(&self, mut ty: Ty, projection: &[Projection]) -> Ty {
+    fn projected(&self, mut ty: Ty, projection: &[Projection]) -> Ty {
         let mut variant = None;
         for &step in projection {
             ty = self.project_ty(ty, step, &mut variant);
@@ -368,10 +368,7 @@ impl Program {
 
     pub fn project_ty(&self, ty: Ty, projection: Projection, variant: &mut Option<u32>) -> Ty {
         match (projection, self.types.kind(ty)) {
-            (
-                Projection::Deref,
-                TyKind::Ptr(inner) | TyKind::Ref(inner) | TyKind::RefMut(inner),
-            ) => *inner,
+            (Projection::Deref, _) => self.types.pointee(ty).expect("only a pointer is followed"),
             (
                 Projection::Index(_),
                 TyKind::Array(elem, _)
@@ -388,8 +385,8 @@ impl Program {
                 self.enums[&ty].variants[chosen as usize][at as usize]
             }
             (Projection::Field(at), TyKind::Tuple(parts)) => parts[at as usize],
-            (Projection::Field(1), TyKind::Optional(inner) | TyKind::Result(inner, _)) => *inner,
-            (Projection::Field(2), TyKind::Result(_, error)) => *error,
+            (Projection::Field(1), TyKind::Optional(inner) | TyKind::Result(inner)) => *inner,
+            (Projection::Field(2), TyKind::Result(_)) => Types::I32,
             (Projection::Field(at), _) => self.structs[&ty].fields[at as usize],
             _ => unreachable!("{} has no such part", self.types.show(ty)),
         }
@@ -428,7 +425,7 @@ impl Program {
     fn parts(&self, ty: Ty) -> Vec<Ty> {
         match self.types.kind(ty) {
             TyKind::Vec(inner) | TyKind::Array(inner, _) | TyKind::Optional(inner) => vec![*inner],
-            TyKind::Result(value, error) => vec![*value, *error],
+            TyKind::Result(value) => vec![*value, Types::I32],
             TyKind::Tuple(parts) => parts.clone(),
             TyKind::Adt(..) | TyKind::Closure(_) => match self.structs.get(&ty) {
                 Some(layout) => layout.fields.clone(),
@@ -444,7 +441,7 @@ impl Program {
     /// Whether a value of `view` may point into memory a value of `owner`
     /// holds: always through a `&` or `&var`, and through a slice only when
     /// `owner` itself stores elements of the slice's type.
-    pub fn may_point_into(&self, view: Ty, owner: Ty) -> bool {
+    fn may_point_into(&self, view: Ty, owner: Ty) -> bool {
         let mut stack = vec![view];
         let mut seen = Vec::new();
         while let Some(ty) = stack.pop() {

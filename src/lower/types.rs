@@ -8,10 +8,10 @@
 use inkwell::{
     AddressSpace,
     types::{BasicType, BasicTypeEnum, IntType, PointerType, StructType},
-    values::{BasicValueEnum, IntValue, PointerValue},
+    values::{BasicValue, BasicValueEnum, IntValue, PointerValue},
 };
 
-use crate::ty::{Ty, TyKind};
+use crate::ty::{Ty, TyKind, Types};
 
 use super::Lower;
 
@@ -75,8 +75,8 @@ impl<'ctx> Lower<'_, 'ctx> {
                     .struct_type(&[context.bool_type().into(), inner], false)
                     .into()
             }
-            TyKind::Result(ok, err) => {
-                let (ok, err) = (self.llvm_ty(ok), self.llvm_ty(err));
+            TyKind::Result(ok) => {
+                let (ok, err) = (self.llvm_ty(ok), self.llvm_ty(Types::I32));
                 context
                     .struct_type(&[context.bool_type().into(), ok, err], false)
                     .into()
@@ -127,7 +127,7 @@ impl<'ctx> Lower<'_, 'ctx> {
 
     /// The values a variant carries, laid out as one struct in the payload
     /// area of its enum.
-    pub(super) fn payload_type(&mut self, fields: &[Ty]) -> Option<StructType<'ctx>> {
+    fn payload_type(&mut self, fields: &[Ty]) -> Option<StructType<'ctx>> {
         let fields: Vec<BasicTypeEnum> = fields.iter().map(|&f| self.llvm_ty(f)).collect();
         (!fields.is_empty()).then(|| self.context.struct_type(&fields, false))
     }
@@ -159,6 +159,17 @@ impl<'ctx> Lower<'_, 'ctx> {
         let field = self.field_ptr(base, ty, at);
         let field_type = shape.get_field_type_at_index(at).unwrap();
         self.builder.build_load(field_type, field, "field").unwrap()
+    }
+
+    pub(super) fn store_field(
+        &mut self,
+        base: PointerValue<'ctx>,
+        ty: Ty,
+        at: u32,
+        value: impl BasicValue<'ctx>,
+    ) {
+        let field = self.field_ptr(base, ty, at);
+        self.builder.build_store(field, value).unwrap();
     }
 
     /// The element type of an array, a Vec or a slice.

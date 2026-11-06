@@ -85,9 +85,7 @@ impl FnCx<'_, '_> {
                 self.fits(t, a, false)
             }
             (TyKind::Array(t, n), TyKind::Array(a, m)) => n == m && self.fits(t, a, exact),
-            (TyKind::Result(t, te), TyKind::Result(a, ae)) => {
-                self.fits(t, a, exact) && self.fits(te, ae, exact)
-            }
+            (TyKind::Result(t), TyKind::Result(a)) => self.fits(t, a, exact),
             (TyKind::Tuple(ts), TyKind::Tuple(parts)) => {
                 ts.len() == parts.len()
                     && ts

@@ -1,5 +1,0 @@
-fn main() {
-    var o: i32? = 3;
-    var a = o == None;
-    var b = None != o;
-}

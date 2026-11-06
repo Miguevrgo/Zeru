@@ -3,10 +3,19 @@ enum Shape {
     Rect(i32, i32),
     Line(i32),
 }
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
 fn main() {
     var s = Shape::Dot;
     match s {
         Shape::Dot => {}
+    }
+    var c = Color::Red;
+    match c {
+        Color::Red => {}
     }
     var n = 3;
     match n {

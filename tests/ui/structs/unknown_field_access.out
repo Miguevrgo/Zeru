@@ -9,4 +9,18 @@ Error: Struct 'Point' has no field 'z'
    │
    │ Help: its fields are x
 ───╯
+Error: Unknown field 'y' in struct 'Point'
+   ╭─[ tests/ui/structs/unknown_field_access.zr:7:29 ]
+   │
+ 7 │     var q = Point { x: 1.0, y: 2.0 };
+   │                             ┬
+   │                             ╰── Unknown field 'y' in struct 'Point'
+───╯
+Error: Struct 'Point' has no method 'unknown_method'
+   ╭─[ tests/ui/structs/unknown_field_access.zr:8:7 ]
+   │
+ 8 │     p.unknown_method();
+   │       ───────┬──────
+   │              ╰──────── Struct 'Point' has no method 'unknown_method'
+───╯
 [-] Error: aborting due to previous error

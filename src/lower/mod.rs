@@ -38,7 +38,7 @@ use crate::ty::{Ty, Types};
 /// A lowered value: nothing, an SSA scalar, or the address of an aggregate.
 /// An address may point into a place; whoever keeps the value copies it.
 #[derive(Clone, Copy)]
-pub(super) enum Val<'ctx> {
+enum Val<'ctx> {
     Unit,
     Imm(BasicValueEnum<'ctx>),
     Mem(PointerValue<'ctx>),
@@ -51,7 +51,7 @@ enum Slot<'ctx> {
     Mem(PointerValue<'ctx>),
 }
 
-pub struct Lower<'a, 'ctx> {
+struct Lower<'a, 'ctx> {
     context: &'ctx Context,
     module: &'a Module<'ctx>,
     builder: Builder<'ctx>,
@@ -296,9 +296,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             });
         }
         match ret {
-            ret if ret == Types::VOID || self.in_memory(ret) => {
-                self.context.void_type().fn_type(&params, false)
-            }
+            ret if !self.is_scalar(ret) => self.context.void_type().fn_type(&params, false),
             ret => self.llvm_ty(ret).fn_type(&params, false),
         }
     }
@@ -345,7 +343,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 .contains(&at)
                 .then(|| args.next().unwrap());
             let slot = match (at, arg) {
-                (0, _) if sret.is_some() => Slot::Mem(sret.unwrap()),
+                (0, _) if let Some(sret) = sret => Slot::Mem(sret),
                 (_, None) if let Some(constant) = fixed[at] => match self.constant(constant) {
                     Val::Mem(global) => Slot::Mem(global),
                     _ => unreachable!("parts are kept in memory"),
@@ -501,7 +499,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             TerminatorKind::Return => {
                 let body = self.body();
                 let ret = body.locals[0].ty;
-                if ret == Types::VOID || self.in_memory(ret) {
+                if !self.is_scalar(ret) {
                     self.builder.build_return(None).unwrap();
                 } else {
                     let value = self.read(&Place::local(RETURN)).imm();
@@ -604,10 +602,6 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     /// A slot for a `ty` at the top of the entry block.
     fn alloca(&mut self, ty: Ty, name: &str) -> PointerValue<'ctx> {
         let llvm = self.llvm_ty(ty);
-        self.entry_builder().build_alloca(llvm, name).unwrap()
-    }
-
-    fn entry_builder(&self) -> Builder<'ctx> {
         let builder = self.context.create_builder();
         let entry = self
             .current
@@ -617,7 +611,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             Some(first) => builder.position_before(&first),
             None => builder.position_at_end(entry),
         }
-        builder
+        builder.build_alloca(llvm, name).unwrap()
     }
 
     fn if_then(&mut self, condition: IntValue<'ctx>, then: impl FnOnce(&mut Self)) {
@@ -695,7 +689,7 @@ impl SafetyMode {
         matches!(self, SafetyMode::Debug | SafetyMode::ReleaseSafe)
     }
 
-    pub const fn opt_level(&self) -> OptimizationLevel {
+    const fn opt_level(&self) -> OptimizationLevel {
         match self {
             Self::Debug => OptimizationLevel::None,
             Self::ReleaseSafe => OptimizationLevel::Default,

@@ -28,14 +28,7 @@ const MREMAP_MAYMOVE: i64 = 1;
 const MREMAP_FIXED: i64 = 2;
 
 fn syscall1(nr: i64, arg1: i64) i64 {
-    var result: i64 = 0;
-    asm volatile (
-        "syscall"
-        : "={rax}" (result)
-        : "{rax}" (nr), "{rdi}" (arg1)
-        : "rcx", "r11", "memory"
-    );
-    return result;
+    return syscall6(nr, arg1, 0, 0, 0, 0, 0);
 }
 
 // A raw syscall return as a result: negative values are -errno.
@@ -83,44 +76,15 @@ pub fn exit(code: i32) {
 }
 
 fn syscall2(nr: i64, arg1: i64, arg2: i64) i64 {
-    var result: i64 = 0;
-    asm volatile (
-        "syscall"
-        : "={rax}" (result)
-        : "{rax}" (nr), "{rdi}" (arg1), "{rsi}" (arg2)
-        : "rcx", "r11", "memory"
-    );
-    return result;
+    return syscall6(nr, arg1, arg2, 0, 0, 0, 0);
 }
 
 fn syscall3(nr: i64, arg1: i64, arg2: i64, arg3: i64) i64 {
-    var result: i64 = 0;
-    asm volatile (
-        "syscall"
-        :   "={rax}" (result)
-        :   "{rax}" (nr),
-            "{rdi}" (arg1),
-            "{rsi}" (arg2),
-            "{rdx}" (arg3)
-        : "rcx", "r11", "memory"
-    );
-    return result;
+    return syscall6(nr, arg1, arg2, arg3, 0, 0, 0);
 }
 
 fn syscall5(nr: i64, arg1: i64, arg2: i64, arg3: i64, arg4: i64, arg5: i64) i64 {
-    var result: i64 = 0;
-    asm volatile (
-        "syscall"
-        :   "={rax}" (result)
-        :   "{rax}" (nr),
-            "{rdi}" (arg1),
-            "{rsi}" (arg2),
-            "{rdx}" (arg3),
-            "{r10}" (arg4),
-            "{r8}" (arg5)
-        : "rcx", "r11", "memory"
-    );
-    return result;
+    return syscall6(nr, arg1, arg2, arg3, arg4, arg5, 0);
 }
 
 fn syscall6(nr: i64, arg1: i64, arg2: i64, arg3: i64, arg4: i64, arg5: i64, arg6: i64) i64 {
@@ -255,14 +219,14 @@ struct OutStream {
         var hidden: u64 = 0;
         var lowest: i64 = 0;
         if single {
-            var narrow: f32 = rest as f32;
+            const narrow: f32 = rest as f32;
             const bits = *((&narrow) as *u32) as u64;
             hidden = 1 << 23;
             lowest = -149;
             mantissa = bits & (hidden - 1);
             exponent = ((bits >> 23) & 255) as i64;
         } else {
-            var wide = rest;
+            const wide = rest;
             const bits = *((&wide) as *u64);
             hidden = 1 << 52;
             lowest = -1074;
@@ -809,7 +773,7 @@ fn __zeru_c_text(text: *u8) str {
     while *(text + len) != 0 {
         len += 1;
     }
-    var parts = (text, len);
+    const parts = (text, len);
     return *((&parts) as *str);
 }
 
@@ -945,7 +909,7 @@ fn __zeru_str_parse_int(s: str) i64! {
         start = 1;
     }
     if start == s.len() {
-        return Err(22);
+        return Err(EINVAL);
     }
     var limit: u64 = 9223372036854775807;
     if negative {
@@ -954,7 +918,7 @@ fn __zeru_str_parse_int(s: str) i64! {
     var value: u64 = 0;
     for i in start..s.len() {
         if s[i] < '0' || s[i] > '9' {
-            return Err(22);
+            return Err(EINVAL);
         }
         const digit = (s[i] - '0') as u64;
         if value > (limit - digit) / 10 {
@@ -1008,7 +972,7 @@ fn __zeru_str_parse_float(s: str) f64! {
         at += 1;
     }
     if !seen {
-        return Err(22);
+        return Err(EINVAL);
     }
     if at < s.len() && (s[at] == 'e' || s[at] == 'E') {
         var power = __zeru_str_parse_int(s[at + 1..])!;
@@ -1021,7 +985,7 @@ fn __zeru_str_parse_float(s: str) f64! {
         at = s.len();
     }
     if at != s.len() {
-        return Err(22);
+        return Err(EINVAL);
     }
     var value: f64 = 0.0;
     if mantissa != 0 && exponent > 309 {
@@ -1180,7 +1144,7 @@ fn __zeru_quick<T>(v: &var [T], low: usize, high: usize, depth: usize, less: fn(
             return;
         }
         left -= 1;
-        var mid = lo + (hi - lo) / 2;
+        const mid = lo + (hi - lo) / 2;
         if less(v[mid], v[lo]) {
             __zeru_vec_swap(v, mid, lo);
         }
@@ -1227,7 +1191,7 @@ fn __zeru_quick<T>(v: &var [T], low: usize, high: usize, depth: usize, less: fn(
 
 // Heapsort `v[low..high]`.
 fn __zeru_heap<T>(v: &var [T], low: usize, high: usize, less: fn(T, T) bool) {
-    var count = high - low;
+    const count = high - low;
     var start = count / 2;
     while start > 0 {
         start -= 1;
@@ -1276,7 +1240,7 @@ fn __zeru_vec_rotate_left<T>(v: &var [T], n: usize) {
     if v.len() == 0 {
         return;
     }
-    var at = n % v.len();
+    const at = n % v.len();
     __zeru_flip(v, 0, at);
     __zeru_flip(v, at, v.len());
     __zeru_flip(v, 0, v.len());
@@ -1352,14 +1316,14 @@ fn __zeru_vec_swap<T>(v: &var [T], i: usize, j: usize) {
     if i < j {
         gap = j - i;
     } else {
-        var held = a;
+        const held = a;
         a = b;
         b = held;
         gap = i - j;
     }
-    var size = (b as usize - a as usize) / gap;
+    const size = (b as usize - a as usize) / gap;
     for k in 0..size {
-        var byte = *(a + k);
+        const byte = *(a + k);
         *(a + k) = *(b + k);
         *(b + k) = byte;
     }
@@ -1382,7 +1346,7 @@ fn __zeru_vec_push_str<T>(v: &var Vec<T>, text: str) {
 // to fill before `__zeru_filled` counts them.
 fn __zeru_room<T>(v: &var Vec<T>, count: usize) *u8 {
     v.reserve(count);
-    var header = v as *usize;
+    const header = v as *usize;
     return *(header as **u8) + *(header + 1);
 }
 
@@ -1397,7 +1361,7 @@ fn __zeru_filled<T>(v: &var Vec<T>, count: usize) {
 // nothing.
 fn __zeru_borrowed_string(text: str) String {
     var shown = String.new();
-    var header = &var shown as *usize;
+    const header = &var shown as *usize;
     *(header as **u8) = text as *u8;
     *(header + 1) = text.len();
     return shown;
@@ -1569,7 +1533,7 @@ struct Heap {
         }
         const class = Heap.class_of(size);
         const bytes: usize = 16 << class;
-        var head = self.free[class];
+        const head = self.free[class];
         if head as usize != 0 {
             self.free[class] = *(head as **u8);
             return head;

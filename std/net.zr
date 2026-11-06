@@ -171,11 +171,6 @@ fn unix_addr(path: str) Raw! {
     return raw;
 }
 
-// `n` in `base` at the end of `out`, hex digits in lowercase.
-fn push_number(out: &var String, n: u64, base: u64) {
-    out.push_str(__zeru_format_int(n as i64, true, base, false, ' ', '>', false, 0));
-}
-
 // `raw` as text: "1.2.3.4:80", "[::1]:80" with the longest run of zero
 // groups left out, or the path of a Unix socket, empty for one without.
 fn addr_text(raw: &Raw) String {
@@ -194,7 +189,7 @@ fn addr_text(raw: &Raw) String {
             if i > 4 {
                 text.push('.');
             }
-            push_number(&var text, raw.bytes[i] as u64, 10);
+            text.push_str(format("{}", raw.bytes[i]));
         }
     } else {
         var group: Array<u64, 8> = [0; 8];
@@ -223,13 +218,13 @@ fn addr_text(raw: &Raw) String {
             if i > 0 && i != skip + skipped {
                 text.push(':');
             }
-            push_number(&var text, group[i], 16);
+            text.push_str(format("{:x}", group[i]));
             i += 1;
         }
         text.push(']');
     }
     text.push(':');
-    push_number(&var text, ((raw.bytes[2] as u64) << 8) | raw.bytes[3] as u64, 10);
+    text.push_str(format("{}", ((raw.bytes[2] as u64) << 8) | raw.bytes[3] as u64));
     return text;
 }
 
@@ -244,7 +239,7 @@ fn timed(r: i64) i64! {
 // A socket of `kind` bound to `addr`, listening when it is a stream.
 fn bound(addr: &Raw, kind: i64) i64! {
     const fd = sys_result(syscall3(SYS_SOCKET, addr.bytes[0] as i64, kind, 0))!;
-    var one: i32 = 1;
+    const one: i32 = 1;
     if kind == SOCK_STREAM {
         syscall5(SYS_SETSOCKOPT, fd, SOL_SOCKET, SO_REUSEADDR, (&one) as i64, 4);
     }
@@ -316,7 +311,7 @@ fn accept(fd: i64) i64! {
 
 // Up to `count` bytes from `fd` at the end of `buf`; how many came.
 fn receive(fd: i64, buf: &var String, count: usize, flags: i64) usize! {
-    var end = __zeru_room(buf, count);
+    const end = __zeru_room(buf, count);
     const n = timed(syscall6(SYS_RECVFROM, fd, end as i64, count as i64, flags, 0, 0))! as usize;
     __zeru_filled(buf, n);
     return n;
@@ -350,7 +345,7 @@ fn datagram(fd: i64, flags: i64) Datagram! {
     const size = timed(syscall6(SYS_RECVFROM, fd, 0, 0, MSG_PEEK | MSG_TRUNC, 0, 0))! as usize;
     var data = String.new();
     var from = empty();
-    var end = __zeru_room(&var data, size);
+    const end = __zeru_room(&var data, size);
     timed(
         syscall6(
             SYS_RECVFROM,
@@ -383,10 +378,7 @@ fn set_timeout(fd: i64, ms: u64?) ! {
 
 // Turns the socket option `name` of `level` on or off.
 fn set_flag(fd: i64, level: i64, name: i64, on: bool) ! {
-    var value: i32 = 0;
-    if on {
-        value = 1;
-    }
+    const value = on as i32;
     sys_result(syscall5(SYS_SETSOCKOPT, fd, level, name, (&value) as i64, 4))!;
 }
 
@@ -774,7 +766,7 @@ pub struct UdpSocket {
     // println("{}", b.recv().unwrap().data); // one
     // ```
     pub fn connect(self, addr: str) ! {
-        var raw = ip_addr(addr)!;
+        const raw = ip_addr(addr)!;
         sys_result(syscall3(SYS_CONNECT, self.fd, (&raw.bytes[0]) as i64, raw.len as i64))!;
     }
 

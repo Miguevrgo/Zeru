@@ -9,13 +9,13 @@ use crate::{
     token::Token,
 };
 
-/// A recursive descent parser over the whole token list of a file. Each
-/// `parse_*` starts on the first token of what it reads and stops after its
-/// last one.
 /// Tokens replaced while parsing, so a rewind can put them back: where,
 /// the ones taken out, and how many went in.
 type Rewrite = (usize, Vec<(Token, Span)>, usize);
 
+/// A recursive descent parser over the whole token list of a file. Each
+/// `parse_*` starts on the first token of what it reads and stops after its
+/// last one.
 pub struct Parser {
     tokens: Vec<(Token, Span)>,
     pos: usize,
@@ -72,17 +72,8 @@ const STATEMENT_STARTS: [Token; 10] = [
 
 impl Parser {
     pub fn new(mut lexer: Lexer) -> Self {
-        let mut tokens = Vec::new();
-        loop {
-            let (token, span) = lexer.next_token();
-            let end = token == Token::Eof;
-            tokens.push((token, span));
-            if end {
-                break;
-            }
-        }
         let mut p = Self {
-            tokens,
+            tokens: lexer.tokens(),
             pos: 0,
             errors: Vec::new(),
             panic_mode: false,
@@ -202,28 +193,14 @@ impl Parser {
             }
             (Token::Semicolon, _) => {
                 let in_arm = found == Token::RBrace && self.arm_blocks.last() == Some(&self.depth);
+                let starts = self.at_any(&STATEMENT_STARTS)
+                    || self.at_any(&ITEM_STARTS)
+                    || matches!(
+                        found,
+                        Token::Identifier(_) | Token::Match | Token::Break | Token::Continue
+                    );
                 let error =
                     self.error(format!("Expected ';' after this, found '{found}'"), before)?;
-                let starts = matches!(
-                    found,
-                    Token::Identifier(_)
-                        | Token::Var
-                        | Token::Const
-                        | Token::If
-                        | Token::While
-                        | Token::For
-                        | Token::Return
-                        | Token::Match
-                        | Token::Break
-                        | Token::Continue
-                        | Token::RBrace
-                        | Token::Fn
-                        | Token::Pub
-                        | Token::Struct
-                        | Token::Enum
-                        | Token::Trait
-                        | Token::Import
-                );
                 if starts {
                     error
                         .label("the statement ends here")
@@ -572,19 +549,18 @@ impl Parser {
     fn parse_var_statement(&mut self, is_const: bool) -> Option<Statement> {
         let start = self.span();
         self.bump();
-        let (name, type_annotation) = match self.parse_names(true)? {
+        let names = self.parse_names(true)?;
+        if matches!(names, Names::Tuple(_)) && self.at(&Token::Colon) {
+            if let Some(error) = self.error("A type goes after each name it is for", self.span()) {
+                error.help("write var (a: usize, b: usize) = ..");
+            }
+            return None;
+        }
+        self.expect(&Token::Assign)?;
+        let value = self.parse_expression(Precedence::Lowest)?;
+        self.expect(&Token::Semicolon)?;
+        let (name, type_annotation) = match names {
             Names::Tuple(names) => {
-                if self.at(&Token::Colon) {
-                    if let Some(error) =
-                        self.error("A type goes after each name it is for", self.span())
-                    {
-                        error.help("write var (a: usize, b: usize) = ..");
-                    }
-                    return None;
-                }
-                self.expect(&Token::Assign)?;
-                let value = self.parse_expression(Precedence::Lowest)?;
-                self.expect(&Token::Semicolon)?;
                 let kind = StatementKind::VarTuple {
                     names,
                     is_const,
@@ -595,10 +571,6 @@ impl Parser {
             Names::One(name, ty) => (name, ty),
             Names::Skip => ("_".to_string(), None),
         };
-        self.expect(&Token::Assign)?;
-        let value = self.parse_expression(Precedence::Lowest)?;
-        self.expect(&Token::Semicolon)?;
-
         let kind = StatementKind::Var {
             name,
             is_const,
@@ -1943,24 +1915,22 @@ impl Parser {
             && *self.ahead(2) == Token::Colon;
         let body = match self.at(&Token::LBrace) && !literal {
             true => ClosureBody::Block(self.parse_block_statement()?),
-            false if literal => {
-                self.rewind(saved);
-                let body = self.parse_expression(Precedence::Lowest)?;
-                let name = match &return_type {
-                    Some(TypeSpec::Named(name)) => name.clone(),
-                    _ => "S".to_string(),
-                };
-                if let Some(error) = self.error(
-                    "A closure body that is one struct literal goes in parentheses, or it reads as a return type and a block",
-                    body.span,
-                ) {
-                    error.help(format!("write it as fn(..) ({name} {{ .. }})"));
-                }
-                ClosureBody::Expression(Box::new(body))
-            }
             false => {
                 self.rewind(saved);
-                ClosureBody::Expression(Box::new(self.parse_expression(Precedence::Lowest)?))
+                let body = self.parse_expression(Precedence::Lowest)?;
+                if literal {
+                    let name = match &return_type {
+                        Some(TypeSpec::Named(name)) => name.clone(),
+                        _ => "S".to_string(),
+                    };
+                    if let Some(error) = self.error(
+                        "A closure body that is one struct literal goes in parentheses, or it reads as a return type and a block",
+                        body.span,
+                    ) {
+                        error.help(format!("write it as fn(..) ({name} {{ .. }})"));
+                    }
+                }
+                ClosureBody::Expression(Box::new(body))
             }
         };
         let closure = Closure {

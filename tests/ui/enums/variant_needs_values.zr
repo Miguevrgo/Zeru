@@ -3,5 +3,6 @@ enum S {
     B,
 }
 fn main() {
+    var t = S::A(1, 2);
     var s = S::A;
 }

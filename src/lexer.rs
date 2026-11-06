@@ -57,10 +57,7 @@ impl<'a> Lexer<'a> {
                             self.advance();
                             self.advance();
 
-                            while let Some(&c) = self.peek() {
-                                if c == '\n' {
-                                    break;
-                                }
+                            while self.peek().is_some_and(|&c| c != '\n') {
                                 self.advance();
                             }
                             self.comments.push(Span::new(start, self.pos));
@@ -74,8 +71,7 @@ impl<'a> Lexer<'a> {
                             loop {
                                 let at = self.pos;
                                 match self.advance() {
-                                    Some('*') if self.peek() == Some(&'/') => {
-                                        self.advance();
+                                    Some('*') if self.eat('/') => {
                                         self.comments.push(Span::new(start, self.pos));
                                         if let Some(inner) = inner {
                                             self.nested.push((inner, self.pos));
@@ -99,16 +95,33 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
-    fn match_next(&mut self, expected: char, if_match: Token, default: Token) -> Token {
-        if self.peek() == Some(&expected) {
+    /// Whether the next character is `c`, taking it if so.
+    fn eat(&mut self, c: char) -> bool {
+        let next = self.peek() == Some(&c);
+        if next {
             self.advance();
+        }
+        next
+    }
+
+    fn match_next(&mut self, expected: char, if_match: Token, default: Token) -> Token {
+        if self.eat(expected) {
             if_match
         } else {
             default
         }
     }
 
-    pub fn next_token(&mut self) -> (Token, Span) {
+    /// Every token, up to and including `Eof`.
+    pub fn tokens(&mut self) -> Vec<(Token, Span)> {
+        let mut tokens = vec![self.next_token()];
+        while tokens[tokens.len() - 1].0 != Token::Eof {
+            tokens.push(self.next_token());
+        }
+        tokens
+    }
+
+    fn next_token(&mut self) -> (Token, Span) {
         if let Err(start) = self.skip_whitespace() {
             let message = "Unterminated block comment".to_string();
             return (Token::Illegal(message), Span::new(start, start + 2));
@@ -121,74 +134,29 @@ impl<'a> Lexer<'a> {
         };
 
         let token = match ch {
-            '=' => {
-                if self.peek() == Some(&'=') {
-                    self.advance();
-                    Token::Eq
-                } else if self.peek() == Some(&'>') {
-                    self.advance();
-                    Token::Arrow
-                } else {
-                    Token::Assign
-                }
-            }
+            '=' if self.eat('=') => Token::Eq,
+            '=' if self.eat('>') => Token::Arrow,
+            '=' => Token::Assign,
             '!' => self.match_next('=', Token::NotEq, Token::Bang),
-            '+' if self.peek() == Some(&'%') => {
-                self.advance();
-                self.match_next('=', Token::PlusWrapEq, Token::PlusWrap)
-            }
-            '-' if self.peek() == Some(&'%') => {
-                self.advance();
-                self.match_next('=', Token::MinusWrapEq, Token::MinusWrap)
-            }
-            '*' if self.peek() == Some(&'%') => {
-                self.advance();
-                self.match_next('=', Token::StarWrapEq, Token::StarWrap)
-            }
+            '+' if self.eat('%') => self.match_next('=', Token::PlusWrapEq, Token::PlusWrap),
+            '-' if self.eat('%') => self.match_next('=', Token::MinusWrapEq, Token::MinusWrap),
+            '*' if self.eat('%') => self.match_next('=', Token::StarWrapEq, Token::StarWrap),
             '+' => self.match_next('=', Token::PlusEq, Token::Plus),
             '-' => self.match_next('=', Token::MinusEq, Token::Minus),
             '*' => self.match_next('=', Token::StarEq, Token::Star),
             '/' => self.match_next('=', Token::SlashEq, Token::Slash),
             '%' => self.match_next('=', Token::ModEq, Token::Mod),
             '^' => self.match_next('=', Token::BitXorEq, Token::BitXor),
-            '&' => {
-                if self.peek() == Some(&'=') {
-                    self.advance();
-                    Token::BitAndEq
-                } else {
-                    self.match_next('&', Token::And, Token::BitAnd)
-                }
-            }
-            '|' => {
-                if self.peek() == Some(&'=') {
-                    self.advance();
-                    Token::BitOrEq
-                } else {
-                    self.match_next('|', Token::Or, Token::BitOr)
-                }
-            }
-            '<' => {
-                if self.peek() == Some(&'=') {
-                    self.advance();
-                    Token::Leq
-                } else if self.peek() == Some(&'<') {
-                    self.advance();
-                    self.match_next('=', Token::BitLShiftEq, Token::ShiftLeft)
-                } else {
-                    Token::Lt
-                }
-            }
-            '>' => {
-                if self.peek() == Some(&'=') {
-                    self.advance();
-                    Token::Geq
-                } else if self.peek() == Some(&'>') {
-                    self.advance();
-                    self.match_next('=', Token::BitRShiftEq, Token::ShiftRight)
-                } else {
-                    Token::Gt
-                }
-            }
+            '&' if self.eat('=') => Token::BitAndEq,
+            '&' => self.match_next('&', Token::And, Token::BitAnd),
+            '|' if self.eat('=') => Token::BitOrEq,
+            '|' => self.match_next('|', Token::Or, Token::BitOr),
+            '<' if self.eat('=') => Token::Leq,
+            '<' if self.eat('<') => self.match_next('=', Token::BitLShiftEq, Token::ShiftLeft),
+            '<' => Token::Lt,
+            '>' if self.eat('=') => Token::Geq,
+            '>' if self.eat('>') => self.match_next('=', Token::BitRShiftEq, Token::ShiftRight),
+            '>' => Token::Gt,
             '(' => Token::LParen,
             ')' => Token::RParen,
             '{' => Token::LBrace,
@@ -198,10 +166,8 @@ impl<'a> Lexer<'a> {
             ':' => self.match_next(':', Token::DoubleColon, Token::Colon),
             ';' => Token::Semicolon,
             ',' => Token::Comma,
-            '.' => match self.match_next('.', Token::DotDot, Token::Dot) {
-                Token::DotDot => self.match_next('=', Token::DotDotEq, Token::DotDot),
-                dot => dot,
-            },
+            '.' if self.eat('.') => self.match_next('=', Token::DotDotEq, Token::DotDot),
+            '.' => Token::Dot,
             '?' => Token::Question,
             '#' => match self.read_identifier(ch) {
                 Token::Identifier(word) => {
@@ -230,12 +196,11 @@ impl<'a> Lexer<'a> {
     fn read_identifier(&mut self, ch: char) -> Token {
         let mut literal = String::from(ch);
 
-        while let Some(&ch) = self.peek() {
-            if ch.is_ascii_alphanumeric() || ch == '_' {
-                literal.push(self.advance().unwrap());
-            } else {
-                break;
-            }
+        while self
+            .peek()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || *c == '_')
+        {
+            literal.push(self.advance().unwrap());
         }
 
         match literal.as_str() {

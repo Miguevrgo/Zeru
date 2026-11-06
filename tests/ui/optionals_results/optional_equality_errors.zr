@@ -4,4 +4,6 @@ fn main() {
     var ordered = o < 4;
     var mixed = o == w;
     var text = o == "x";
+    var a = o == None;
+    var b = None != o;
 }

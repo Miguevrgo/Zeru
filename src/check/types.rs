@@ -75,7 +75,7 @@ impl Checker<'_> {
             TypeSpec::SliceMut(inner) => self.wrap(inner, scope, span, TyKind::SliceMut),
             TypeSpec::Ref(inner) => self.wrap(inner, scope, span, TyKind::Ref),
             TypeSpec::RefMut(inner) => self.wrap(inner, scope, span, TyKind::RefMut),
-            TypeSpec::Result(ok) => self.wrap(ok, scope, span, |ok| TyKind::Result(ok, Types::I32)),
+            TypeSpec::Result(ok) => self.wrap(ok, scope, span, TyKind::Result),
             TypeSpec::Fn(..) => {
                 self.error("A fn(..) type is written only as a function's parameter", span)
                     .help("a closure is passed as an argument or kept in a variable, never returned or kept inside another value");
@@ -124,16 +124,7 @@ impl Checker<'_> {
         }
         if let Some(def) = self.items.lookup_type(scope.module, name) {
             self.check_visible(def, scope.module, span);
-            let generics = super::generics_of(self.items.item(def).decl).len();
-            if generics > 0 {
-                let base = self.items.item(def).name.clone();
-                self.error(
-                    format!("'{base}' takes {generics} type argument(s), got 0"),
-                    span,
-                );
-                return Types::ERROR;
-            }
-            return self.types.intern(TyKind::Adt(def, Vec::new()));
+            return self.generic_adt(def, Vec::new(), span);
         }
         if name != "str"
             && let Some(ty) = self.types.primitive(name)
@@ -170,15 +161,8 @@ impl Checker<'_> {
             if let Some(at) = at {
                 error.fix(at, ours);
             }
-        } else if let Some(module) = name
-            .split_once("::")
-            .and_then(|(short, item)| suggest::std_module_with(short, item))
-        {
-            suggest::suggest_import(sources, error, span, &module, None);
-        } else if let Some(module) = suggest::std_home(name) {
-            suggest::suggest_import(sources, error, span, &module, Some(name));
         } else {
-            suggest::did_you_mean(error, name, &candidates, at);
+            suggest::unknown_name(sources, error, name, span, &candidates, at);
         }
         Types::ERROR
     }

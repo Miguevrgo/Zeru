@@ -10,7 +10,7 @@ use crate::tir::{Arm, Asm, BinOp, Builtin, Expr, ExprKind, Place, Test, UnOp, Un
 use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
-use super::body::FnCx;
+use super::body::{FnCx, operand};
 use super::{Checker, suggest};
 
 impl FnCx<'_, '_> {
@@ -24,7 +24,7 @@ impl FnCx<'_, '_> {
         if self.cx.errors.is_empty() && self.cx.unreported.get().is_none() {
             self.cx.unreported.set(Some(span));
         }
-        self.mk(ExprKind::Void, Types::ERROR, span)
+        Expr::error(span)
     }
 
     /// Report an asm operand of type `ty` that does not fit a register: only
@@ -34,10 +34,7 @@ impl FnCx<'_, '_> {
         let fits = types.is_number(ty)
             || ty == Types::BOOL
             || types.is_error(ty)
-            || matches!(
-                types.kind(ty),
-                TyKind::Ptr(_) | TyKind::Ref(_) | TyKind::RefMut(_)
-            );
+            || types.pointee(ty).is_some();
         if !fits {
             let shown = self.ty(ty);
             self.error(
@@ -55,12 +52,7 @@ impl FnCx<'_, '_> {
             _ => Place::Temp(Box::new(text)),
         };
         let address = self.address(place, Types::STRING, false, span);
-        let from = self.mk(ExprKind::Int(0), Types::USIZE, span);
-        self.mk(
-            ExprKind::Builtin(Builtin::Slice, vec![address, from]),
-            Types::STR,
-            span,
-        )
+        self.whole(address, TyKind::Slice(Types::U8), span)
     }
 
     /// `left[start..end]`: the elements of an array, Vec or slice, or the
@@ -121,7 +113,7 @@ impl FnCx<'_, '_> {
 
     /// `Ok()` of the `!` type `ret`.
     pub(super) fn unit_ok(&self, ret: Ty, span: Span) -> Expr {
-        let TyKind::Result(unit, _) = *self.cx.types.kind(ret) else {
+        let TyKind::Result(unit) = *self.cx.types.kind(ret) else {
             unreachable!("a ! type")
         };
         let unit = self.mk(ExprKind::Tuple(Vec::new()), unit, span);
@@ -162,7 +154,7 @@ impl FnCx<'_, '_> {
     /// The expected type a literal takes its own from: a `T?` hands down `T`.
     fn unwrap_expected(&self, expected: Option<Ty>) -> Option<Ty> {
         match expected.map(|ty| self.cx.types.kind(ty)) {
-            Some(TyKind::Optional(inner) | TyKind::Result(inner, _)) => {
+            Some(TyKind::Optional(inner) | TyKind::Result(inner)) => {
                 self.unwrap_expected(Some(*inner))
             }
             _ => expected,
@@ -181,7 +173,7 @@ impl FnCx<'_, '_> {
             }
             ExpressionKind::None => match expected.map(|ty| (ty, self.cx.types.kind(ty))) {
                 Some((ty, TyKind::Optional(_))) => self.mk(ExprKind::None, ty, span),
-                Some((_, &TyKind::Result(ok, _)))
+                Some((_, &TyKind::Result(ok)))
                     if matches!(self.cx.types.kind(ok), TyKind::Optional(_)) =>
                 {
                     self.mk(ExprKind::None, ok, span)
@@ -493,15 +485,8 @@ impl FnCx<'_, '_> {
                     error
                         .help(format!("Zeru writes it '{ours}'"))
                         .fix(span, ours);
-                } else if let Some(module) = name
-                    .split_once("::")
-                    .and_then(|(short, item)| suggest::std_module_with(short, item))
-                {
-                    suggest::suggest_import(sources, error, span, &module, None);
-                } else if let Some(module) = suggest::std_home(name) {
-                    suggest::suggest_import(sources, error, span, &module, Some(name));
                 } else {
-                    suggest::did_you_mean(error, name, &candidates, Some(span));
+                    suggest::unknown_name(sources, error, name, span, &candidates, Some(span));
                 }
                 self.error_expr(span)
             }
@@ -671,19 +656,11 @@ impl FnCx<'_, '_> {
     fn place_expecting(&mut self, e: &Expression, expected: Option<Ty>) -> (Place, Ty) {
         let span = e.span;
         if let ExpressionKind::Identifier(name) = &e.kind
-            && self.local(name).is_none()
-            && let Some((at, ty)) = self.capture(name)
+            && let Some(variable) = self.variable(name)
         {
-            return (Place::Capture(at), ty);
+            return variable;
         }
         match &e.kind {
-            ExpressionKind::Identifier(name) if self.local(name).is_some() => {
-                let value = self.identifier(name, span);
-                match value.kind {
-                    ExprKind::Read(place) => (place, value.ty),
-                    _ => (Place::Temp(Box::new(value)), Types::ERROR),
-                }
-            }
             ExpressionKind::Get { object, name } => match self.limit(object, name, span) {
                 Some(limit) => {
                     let ty = limit.ty;
@@ -808,10 +785,11 @@ impl FnCx<'_, '_> {
 
     /// What the pointer of type `ty` read from `place` points at.
     pub(super) fn deref(&mut self, place: Place, ty: Ty, span: Span) -> (Place, Ty) {
-        let pointee = match *self.cx.types.kind(ty) {
-            TyKind::Ptr(inner) | TyKind::Ref(inner) | TyKind::RefMut(inner) => inner,
-            _ => unreachable!("only a pointer is followed"),
-        };
+        let pointee = self
+            .cx
+            .types
+            .pointee(ty)
+            .expect("only a pointer is followed");
         let pointer = self.mk(ExprKind::Read(place), ty, span);
         (Place::Deref(Box::new(pointer)), pointee)
     }
@@ -819,9 +797,9 @@ impl FnCx<'_, '_> {
     /// `place` itself, or what it refers to when it holds a reference: a
     /// field, an element or a method is reached through a `&T`.
     pub(super) fn through_ref(&mut self, place: Place, ty: Ty, span: Span) -> (Place, Ty) {
-        match self.cx.types.kind(ty) {
-            TyKind::Ref(_) | TyKind::RefMut(_) => self.deref(place, ty, span),
-            _ => (place, ty),
+        match self.cx.types.referent(ty) {
+            Some(_) => self.deref(place, ty, span),
+            None => (place, ty),
         }
     }
 
@@ -832,10 +810,7 @@ impl FnCx<'_, '_> {
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
-        let pointee = expected.and_then(|ty| match self.cx.types.kind(ty) {
-            TyKind::Ptr(inner) | TyKind::Ref(inner) | TyKind::RefMut(inner) => Some(*inner),
-            _ => None,
-        });
+        let pointee = expected.and_then(|ty| self.cx.types.pointee(ty));
         let (place, ty) = self.place_expecting(inner, pointee);
         if ty == Types::VOID {
             self.error(
@@ -1097,7 +1072,7 @@ impl FnCx<'_, '_> {
 
     /// Whether `place` of type `ty`, written as `ast`, is a temporary value
     /// that is not a constant's.
-    pub(super) fn temporary(&self, place: &Place, ty: Ty, ast: &Expression) -> bool {
+    fn temporary(&self, place: &Place, ty: Ty, ast: &Expression) -> bool {
         super::body::in_temporary(place)
             && !self.cx.types.is_error(ty)
             && self.constant_written(place, ast).is_none()
@@ -1118,10 +1093,7 @@ impl FnCx<'_, '_> {
                 let base = self.place_ty(base)?;
                 self.cx.types.elem(base)?
             }
-            Place::Deref(pointer) => match self.cx.types.kind(pointer.ty) {
-                TyKind::Ptr(inner) | TyKind::Ref(inner) | TyKind::RefMut(inner) => *inner,
-                _ => return None,
-            },
+            Place::Deref(pointer) => self.cx.types.pointee(pointer.ty)?,
             Place::Temp(value) => value.ty,
             Place::Capture(at) => self.captures[*at as usize].outer.ty,
         })
@@ -1173,25 +1145,12 @@ impl FnCx<'_, '_> {
         let a = self.address(Place::Temp(Box::new(l)), ty, false, span);
         let b = self.address(Place::Temp(Box::new(r)), ty, false, span);
         let equal = self.mk(ExprKind::Call(id, vec![a, b]), Types::BOOL, span);
-        match negated {
-            false => equal,
-            true => self.mk(
-                ExprKind::Unary(UnOp::Not, Box::new(equal)),
-                Types::BOOL,
-                span,
-            ),
-        }
+        not_if(negated, equal)
     }
 
     /// `value << amount` or `>>`: the amount may be any integer, and the
     /// result has the type of the value shifted.
-    pub(super) fn shift(
-        &mut self,
-        value: Expr,
-        operator: &Token,
-        amount: &Expression,
-        span: Span,
-    ) -> Expr {
+    fn shift(&mut self, value: Expr, operator: &Token, amount: &Expression, span: Span) -> Expr {
         let amount = self.expr(amount, None);
         let types = &self.cx.types;
         if types.is_error(value.ty) || types.is_error(amount.ty) {
@@ -1328,15 +1287,7 @@ impl FnCx<'_, '_> {
                     false => (&r, lt.clone()),
                 };
                 let sources = self.cx.sources;
-                let text = sources.text(convert.span);
-                let operand = match text
-                    .chars()
-                    .all(|c| c.is_alphanumeric() || "_.[]()".contains(c))
-                {
-                    true => text.to_string(),
-                    false => format!("({text})"),
-                };
-                let fix = format!("{operand} as {into}");
+                let fix = format!("{} as {into}", operand(sources.text(convert.span)));
                 let convert_span = convert.span;
                 let wrapped_side = [(&l, l.ty), (&r, r_ty)].into_iter().find(|(_, ty)| {
                     matches!(types.kind(*ty), TyKind::Optional(_) | TyKind::Result(..))
@@ -1412,14 +1363,7 @@ impl FnCx<'_, '_> {
             Token::Eq | Token::NotEq if l_ty == Types::STR => {
                 let eq = self.cx.prelude_fn("__zeru_str_eq");
                 let equal = self.mk(ExprKind::Call(eq, vec![l, r]), Types::BOOL, span);
-                match operator {
-                    Token::Eq => equal,
-                    _ => self.mk(
-                        ExprKind::Unary(UnOp::Not, Box::new(equal)),
-                        Types::BOOL,
-                        span,
-                    ),
-                }
+                not_if(matches!(operator, Token::NotEq), equal)
             }
             _ => {
                 let ty = if comparison { Types::BOOL } else { l_ty };
@@ -1458,10 +1402,9 @@ impl FnCx<'_, '_> {
             .any(|e| matches!(e.kind, ExpressionKind::Boolean(_)));
         let types = &self.cx.types;
         let held = match &l.kind {
-            ExprKind::Builtin(Builtin::Len, args) => match types.kind(args[0].ty) {
-                TyKind::Ref(held) | TyKind::RefMut(held) | TyKind::Ptr(held) => Some(*held),
-                _ => Some(args[0].ty),
-            },
+            ExprKind::Builtin(Builtin::Len, args) => {
+                Some(types.pointee(args[0].ty).unwrap_or(args[0].ty))
+            }
             _ => None,
         };
         let sized = match held {
@@ -1548,16 +1491,14 @@ impl FnCx<'_, '_> {
             ) => {
                 let greater = matches!(operator, Token::Gt | Token::Geq);
                 let zero = matches!(right.kind, E::Int(0));
+                let picks = |larger| match larger {
+                    true => "This if picks the larger value; write max(a, b) from std.math",
+                    false => "This if picks the smaller value; write min(a, b) from std.math",
+                };
                 if same(then, left) && same(otherwise, right) {
-                    match greater {
-                        true => "This if picks the larger value; write max(a, b) from std.math",
-                        false => "This if picks the smaller value; write min(a, b) from std.math",
-                    }
+                    picks(greater)
                 } else if same(then, right) && same(otherwise, left) {
-                    match greater {
-                        true => "This if picks the smaller value; write min(a, b) from std.math",
-                        false => "This if picks the larger value; write max(a, b) from std.math",
-                    }
+                    picks(!greater)
                 } else if zero
                     && (greater && same(then, left) && negated(otherwise, left)
                         || !greater && negated(then, left) && same(otherwise, left))
@@ -1692,12 +1633,7 @@ impl FnCx<'_, '_> {
         let types = &self.cx.types;
         let number = |ty| types.is_number(ty);
         let int = |ty| types.as_int(ty).is_some();
-        let address = |ty| {
-            matches!(
-                types.kind(ty),
-                TyKind::Ptr(_) | TyKind::Ref(_) | TyKind::RefMut(_)
-            )
-        };
+        let address = |ty| types.pointee(ty).is_some();
         let is_ptr = |ty| matches!(types.kind(ty), TyKind::Ptr(_));
         let is_slice = |ty| matches!(types.kind(ty), TyKind::Slice(_) | TyKind::SliceMut(_));
         (number(from) || self.cx.is_enum(from).is_some()) && number(to)
@@ -1757,7 +1693,7 @@ impl FnCx<'_, '_> {
                 .items
                 .names_of(self.scope.module, ItemKind::Struct, false);
             let error = self.error(format!("Unknown struct type '{name}'"), at.unwrap_or(span));
-            match suggest::std_home(name) {
+            match suggest::std_home(None, name) {
                 Some(module) => suggest::suggest_import(sources, error, span, &module, Some(name)),
                 None => suggest::did_you_mean(error, name, &structs, at),
             }
@@ -1973,13 +1909,8 @@ impl FnCx<'_, '_> {
         let hint = self.element_hint(expected);
         let Some((first, rest)) = elements.split_first() else {
             return match expected {
-                Some(ty) if hint.is_some() => {
-                    let elem = hint.unwrap();
-                    let ty = if let TyKind::Array(_, 0) = self.cx.types.kind(ty) {
-                        ty
-                    } else {
-                        self.cx.types.intern(TyKind::Array(elem, 0))
-                    };
+                Some(_) if let Some(elem) = hint => {
+                    let ty = self.cx.types.intern(TyKind::Array(elem, 0));
                     self.mk(ExprKind::Array(Vec::new()), ty, span)
                 }
                 Some(ty) if self.cx.types.is_error(ty) => self.error_expr(span),
@@ -2056,21 +1987,13 @@ impl FnCx<'_, '_> {
     }
 
     /// A tuple literal, each element checked against its part of `hints`.
-    pub(super) fn tuple(
-        &mut self,
-        elements: &[Expression],
-        hints: Vec<Option<Ty>>,
-        span: Span,
-    ) -> Expr {
-        let wanted = (!hints.is_empty()).then_some(hints);
-        if let Some(wanted) = &wanted
-            && wanted.len() != elements.len()
-        {
+    fn tuple(&mut self, elements: &[Expression], hints: Vec<Option<Ty>>, span: Span) -> Expr {
+        if !hints.is_empty() && hints.len() != elements.len() {
             self.error(
                 format!(
                     "Tuple has {} elements, but expected {}",
                     elements.len(),
-                    wanted.len()
+                    hints.len()
                 ),
                 span,
             );
@@ -2081,9 +2004,7 @@ impl FnCx<'_, '_> {
         }
         let mut values = Vec::new();
         for (at, element) in elements.iter().enumerate() {
-            let hint = wanted
-                .as_ref()
-                .and_then(|parts| parts.get(at).copied().flatten());
+            let hint = hints.get(at).copied().flatten();
             let mut value = self.value(element, hint);
             if let Some(hint) = hint {
                 value = match self.coerce(value, hint) {
@@ -2105,7 +2026,7 @@ impl FnCx<'_, '_> {
     fn try_expr(&mut self, operator: &Token, value: &Expression, span: Span) -> Expr {
         let mut value = self.expr(value, None);
         let ok = match (operator, self.cx.types.kind(value.ty)) {
-            (Token::Question, TyKind::Optional(ok)) | (Token::Bang, TyKind::Result(ok, _)) => *ok,
+            (Token::Question, TyKind::Optional(ok)) | (Token::Bang, TyKind::Result(ok)) => *ok,
             (_, TyKind::Error) => return self.error_expr(span),
             (_, kind) => {
                 let other = match kind {
@@ -2129,7 +2050,7 @@ impl FnCx<'_, '_> {
                 return self.error_expr(span);
             }
         };
-        let ret = self.ret_ty();
+        let ret = self.ret;
         let passes = matches!(
             (operator, self.cx.types.kind(ret)),
             (Token::Question, TyKind::Optional(_)) | (Token::Bang, TyKind::Result(..))
@@ -2218,7 +2139,7 @@ fn same(a: &Expression, b: &Expression) -> bool {
     }
 }
 
-pub(super) fn binop(operator: &Token) -> BinOp {
+fn binop(operator: &Token) -> BinOp {
     match operator {
         Token::Plus => BinOp::Add,
         Token::Minus => BinOp::Sub,
@@ -2240,5 +2161,17 @@ pub(super) fn binop(operator: &Token) -> BinOp {
         Token::Gt => BinOp::Gt,
         Token::Geq => BinOp::Ge,
         other => unreachable!("'{other}' is not a binary operator"),
+    }
+}
+
+/// The bool `value`, or its negation when `negated`.
+fn not_if(negated: bool, value: Expr) -> Expr {
+    match negated {
+        false => value,
+        true => Expr {
+            span: value.span,
+            ty: Types::BOOL,
+            kind: ExprKind::Unary(UnOp::Not, Box::new(value)),
+        },
     }
 }

@@ -225,6 +225,15 @@ pub enum ExprKind {
 }
 
 impl Expr {
+    /// The expression standing for one that failed to check.
+    pub fn error(span: Span) -> Expr {
+        Expr {
+            kind: ExprKind::Void,
+            ty: Types::ERROR,
+            span,
+        }
+    }
+
     /// Call `f` on each expression directly inside this one, those in its
     /// places included and those in the statements of a block not.
     pub fn for_each_child(&mut self, f: &mut impl FnMut(&mut Expr)) {
@@ -298,10 +307,17 @@ impl Place {
     /// The local it starts from, unless it starts from a pointer or a
     /// temporary.
     pub fn root(&self) -> Option<LocalId> {
-        match self {
+        match self.base() {
             Place::Local(local) => Some(*local),
-            Place::Field(base, _) | Place::Index(base, _) => base.root(),
-            Place::Deref(_) | Place::Temp(_) | Place::Capture(_) => None,
+            _ => None,
+        }
+    }
+
+    /// What it is a field or an element of, at any depth, or itself.
+    pub fn base(&self) -> &Place {
+        match self {
+            Place::Field(base, _) | Place::Index(base, _) => base.base(),
+            _ => self,
         }
     }
 

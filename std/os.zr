@@ -98,11 +98,11 @@ fn find_env(table: *Vec<String>, name: str) usize? {
 // NUL in it.
 fn check_name(name: str) ! {
     if name.len() == 0 {
-        return Err(22);
+        return Err(EINVAL);
     }
     for byte in name {
         if byte == '=' || byte == 0 {
-            return Err(22);
+            return Err(EINVAL);
         }
     }
 }
@@ -155,7 +155,7 @@ pub fn set_env(name: str, value: str) ! {
     check_name(name)!;
     for byte in value {
         if byte == 0 {
-            return Err(22);
+            return Err(EINVAL);
         }
     }
     var entry = String.from(name);
@@ -356,12 +356,12 @@ fn locate(program: str) String! {
         var full = String.from(dir);
         full.push('/');
         full.push_str(program);
-        var c = c_string(full);
+        const c = c_string(full);
         if syscall2(SYS_ACCESS, (&c[0]) as i64, 1) == 0 {
             return full;
         }
     }
-    return Err(2);
+    return Err(ENOENT);
 }
 
 // The NUL-terminated copies of `texts` packed in one String, and the
@@ -397,8 +397,8 @@ fn spawn(path: str, args: Vec<str>, out: i32, err: i32) i64! {
     }
     var argv_packed = String.new();
     var env_packed = String.new();
-    var argv = c_list(&argv_texts, &var argv_packed);
-    var envp = c_list(&env_texts, &var env_packed);
+    const argv = c_list(&argv_texts, &var argv_packed);
+    const envp = c_list(&env_texts, &var env_packed);
     var ends: Array<i32, 2> = [0; 2];
     sys_result(syscall2(SYS_PIPE2, (&ends[0]) as i64, O_CLOEXEC))!;
     const report = fs::File { fd: ends[0] as i64, buffer: Vec.new(), start: 0 };
@@ -414,7 +414,7 @@ fn spawn(path: str, args: Vec<str>, out: i32, err: i32) i64! {
             if err >= 0 {
                 syscall2(SYS_DUP2, err as i64, 2);
             }
-            var failed = 0
+            const failed = 0
                 - syscall3(SYS_EXECVE, argv[0] as i64, (&argv[0]) as i64, (&envp[0]) as i64);
             syscall3(SYS_WRITE, reported.fd, (&failed) as i64, 8);
             syscall1(SYS_EXIT, 127);

@@ -26,4 +26,24 @@ Error: Cannot compare u8? and str
    │                ────┬───
    │                    ╰───── Cannot compare u8? and str
 ───╯
+Error: Ask a T? with .is_none(), not == None
+   ╭─[ tests/ui/optionals_results/optional_equality_errors.zr:7:13 ]
+   │
+ 7 │     var a = o == None;
+   │             ────┬────
+   │                 ╰────── Ask a T? with .is_none(), not == None
+   │
+   │ Help: write o.is_none()
+   │           var a = o.is_none();
+───╯
+Error: Ask a T? with .is_some(), not != None
+   ╭─[ tests/ui/optionals_results/optional_equality_errors.zr:8:13 ]
+   │
+ 8 │     var b = None != o;
+   │             ────┬────
+   │                 ╰────── Ask a T? with .is_some(), not != None
+   │
+   │ Help: write o.is_some()
+   │           var b = o.is_some();
+───╯
 [-] Error: aborting due to previous error

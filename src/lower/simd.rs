@@ -50,7 +50,12 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         lanes
     }
 
-    fn store_vector(&mut self, ty: Ty, address: PointerValue<'ctx>, value: VectorValue<'ctx>) {
+    pub(super) fn store_vector(
+        &mut self,
+        ty: Ty,
+        address: PointerValue<'ctx>,
+        value: VectorValue<'ctx>,
+    ) {
         let align = self.lane_bytes(ty);
         let store = self.builder.build_store(address, value).unwrap();
         let _ = store.set_alignment(align);
@@ -92,25 +97,13 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     }
 
     /// The vector, or for `sum` the number, a std.simd operation gives, of
-    /// type `ty`, written to `dest` when it is a vector.
-    pub(super) fn simd(
+    /// type `ty`.
+    pub(super) fn simd_value(
         &mut self,
         op: SimdOp,
         operands: &[Operand],
         ty: Ty,
-        dest: Option<PointerValue<'ctx>>,
-    ) -> Val<'ctx> {
-        let value = self.simd_value(op, operands, ty);
-        match (dest, value) {
-            (Some(address), BasicValueEnum::VectorValue(lanes)) => {
-                self.store_vector(ty, address, lanes);
-                Val::Unit
-            }
-            (_, value) => Val::Imm(value),
-        }
-    }
-
-    fn simd_value(&mut self, op: SimdOp, operands: &[Operand], ty: Ty) -> BasicValueEnum<'ctx> {
+    ) -> BasicValueEnum<'ctx> {
         if op == SimdOp::Load {
             let data = self.slice_data(&operands[0]);
             return self.load_vector(ty, data).into();

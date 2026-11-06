@@ -197,6 +197,20 @@ impl<'a> Builder<'a> {
         self.push(StatementKind::Assign(place, rvalue));
     }
 
+    /// Assign `rvalue` to `dest`, if there is one.
+    fn assign_to(&mut self, dest: Option<Place>, rvalue: Rvalue) {
+        if let Some(dest) = dest {
+            self.assign(dest, rvalue);
+        }
+    }
+
+    /// A new temporary holding `rvalue`.
+    fn held(&mut self, ty: Ty, rvalue: Rvalue) -> Local {
+        let local = self.temp(ty);
+        self.assign(Place::local(local), rvalue);
+        local
+    }
+
     /// End the current block with `kind`; what follows is unreachable until
     /// another block is entered.
     fn terminate(&mut self, kind: TerminatorKind) {
@@ -529,8 +543,7 @@ impl<'a> Builder<'a> {
                 .elem(self.place_ty(&seq))
                 .expect("only an array, a Vec or a slice is walked");
             let pointer = self.program.types.intern(TyKind::Ref(elem));
-            let len = self.temp(Types::USIZE);
-            self.assign(Place::local(len), Rvalue::Len(seq.clone()));
+            let len = self.held(Types::USIZE, Rvalue::Len(seq.clone()));
             let at = self.local(pointer, Some("for".to_string()));
             let element = seq.project(Projection::Index(count));
             self.assign(Place::local(at), Rvalue::AddressOf(element));
@@ -669,21 +682,11 @@ impl<'a> Builder<'a> {
                         .any(|p| matches!(p, Projection::Index(_)))
                 {
                     let pointer = self.program.types.intern(TyKind::Ref(self.place_ty(&base)));
-                    let held = self.temp(pointer);
-                    self.assign(Place::local(held), Rvalue::AddressOf(base));
+                    let held = self.held(pointer, Rvalue::AddressOf(base));
                     base = Place::local(held).project(Projection::Deref);
                 }
                 let at = self.index(index);
-                if self.checks {
-                    let len = self.temp(Types::USIZE);
-                    self.assign(Place::local(len), Rvalue::Len(base.clone()));
-                    let inside = self.binary(
-                        BinOp::Lt,
-                        Operand::Copy(Place::local(at)),
-                        Operand::Move(Place::local(len)),
-                    );
-                    self.assert(inside, Panic::Bounds);
-                }
+                self.check_index(&base, &Operand::Copy(Place::local(at)), BinOp::Lt);
                 base.project(Projection::Index(at))
             }
             tir::Place::Deref(pointer) => {
@@ -853,8 +856,7 @@ impl<'a> Builder<'a> {
                 let args = places
                     .into_iter()
                     .map(|place| {
-                        let held = self.temp(pointer);
-                        self.assign(Place::local(held), Rvalue::AddressOf(place));
+                        let held = self.held(pointer, Rvalue::AddressOf(place));
                         Operand::Move(Place::local(held))
                     })
                     .collect();
@@ -877,9 +879,7 @@ impl<'a> Builder<'a> {
 
     /// A new temporary of type `ty` holding `rvalue`.
     fn computed(&mut self, ty: Ty, rvalue: Rvalue) -> Operand {
-        let value = self.temp(ty);
-        self.assign(Place::local(value), rvalue);
-        Operand::Copy(Place::local(value))
+        Operand::Copy(Place::local(self.held(ty, rvalue)))
     }
 
     fn constant(&self, expr: &Expr) -> Option<Constant> {
@@ -961,10 +961,7 @@ impl<'a> Builder<'a> {
 
     fn value_into(&mut self, dest: Option<Place>, expr: &Expr) {
         if let Some(constant) = self.constant(expr) {
-            if let Some(dest) = dest {
-                self.assign(dest, Rvalue::Use(Operand::Constant(constant)));
-            }
-            return;
+            return self.assign_to(dest, Rvalue::Use(Operand::Constant(constant)));
         }
         let rvalue = match &expr.kind {
             ExprKind::Read(place) => Rvalue::Use(Operand::Copy(self.as_place(place))),
@@ -1104,9 +1101,7 @@ impl<'a> Builder<'a> {
             | ExprKind::Str(_)
             | ExprKind::Void => unreachable!("a constant"),
         };
-        if let Some(dest) = dest {
-            self.assign(dest, rvalue);
-        }
+        self.assign_to(dest, rvalue);
     }
 
     /// Whether `op` on a `ty` is checked: integer arithmetic that can
@@ -1214,8 +1209,7 @@ impl<'a> Builder<'a> {
                     TyKind::Adt(..) => Types::I32,
                     _ => ty,
                 };
-                let tag = self.temp(tag_ty);
-                self.assign(Place::local(tag), Rvalue::Discriminant(tested));
+                let tag = self.held(tag_ty, Rvalue::Discriminant(tested));
                 (slot, tag, tag_ty)
             })
             .collect();
@@ -1337,11 +1331,7 @@ impl<'a> Builder<'a> {
                     copy && this.program.needs_drop(this.locals[binding.0 as usize].ty)
                 };
                 if take && locals.iter().any(|&local| owned(self, local)) {
-                    let taken = self.temp(subject);
-                    self.assign(
-                        Place::local(taken),
-                        Rvalue::Use(Operand::Move(place.clone())),
-                    );
+                    let taken = self.held(subject, Rvalue::Use(Operand::Move(place.clone())));
                     from = Place::local(taken);
                     let bound: Vec<Reach> = arm.bindings.iter().map(|(_, r)| r[at]).collect();
                     for part in self.parts(subject, checks, &bound) {
@@ -1409,10 +1399,7 @@ impl<'a> Builder<'a> {
         let mut at = place.clone();
         if let Some(slot) = reach.slot {
             at = at.project(Projection::Field(slot));
-            let refers = matches!(
-                self.types().kind(self.place_ty(&at)),
-                TyKind::Ref(_) | TyKind::RefMut(_)
-            );
+            let refers = self.types().referent(self.place_ty(&at)).is_some();
             if refers && reach.payload != Payload::Whole {
                 at = at.project(Projection::Deref);
             }
@@ -1488,8 +1475,7 @@ impl<'a> Builder<'a> {
         let held = self.temp(value.ty);
         self.expr_into(Some(Place::local(held)), value);
         let held = Place::local(held);
-        let tag = self.temp(Types::BOOL);
-        self.assign(Place::local(tag), Rvalue::Discriminant(held.clone()));
+        let tag = self.held(Types::BOOL, Rvalue::Discriminant(held.clone()));
         let ok = self.new_block();
         let failed = self.new_block();
         self.switch(Operand::Move(Place::local(tag)), vec![(0, failed)], ok);
@@ -1524,9 +1510,8 @@ impl<'a> Builder<'a> {
         let receiver = match &arg.kind {
             ExprKind::AddressOf(place) if borrowed => {
                 let place = self.as_place(place);
-                let pointer = self.temp(arg.ty);
                 self.span = outer;
-                self.assign(Place::local(pointer), Rvalue::AddressOf(place));
+                let pointer = self.held(arg.ty, Rvalue::AddressOf(place));
                 (Place::local(pointer).project(Projection::Deref), false)
             }
             ExprKind::AddressOf(place) | ExprKind::Read(place) => (self.as_place(place), false),
@@ -1559,8 +1544,7 @@ impl<'a> Builder<'a> {
                     Builtin::Len => Rvalue::Len(held),
                     Builtin::VecCapacity => Rvalue::Capacity(held),
                     Builtin::VecIsEmpty => {
-                        let len = self.temp(Types::USIZE);
-                        self.assign(Place::local(len), Rvalue::Len(held));
+                        let len = self.held(Types::USIZE, Rvalue::Len(held));
                         unchecked(
                             BinOp::Eq,
                             Operand::Move(Place::local(len)),
@@ -1569,8 +1553,7 @@ impl<'a> Builder<'a> {
                     }
                     Builtin::IsSome | Builtin::IsOk => Rvalue::Discriminant(held),
                     Builtin::IsNone | Builtin::IsErr => {
-                        let tag = self.temp(Types::BOOL);
-                        self.assign(Place::local(tag), Rvalue::Discriminant(held));
+                        let tag = self.held(Types::BOOL, Rvalue::Discriminant(held));
                         Rvalue::Unary(UnOp::Not, Operand::Move(Place::local(tag)))
                     }
                     Builtin::Unwrap | Builtin::UnwrapErr => self.unwrap(builtin, held, moved),
@@ -1608,23 +1591,15 @@ impl<'a> Builder<'a> {
                     Builtin::HashBits => Rvalue::Use(self.hash_bits(held, args[0].ty)),
                     Builtin::Replace => {
                         let new = operand(self, 1);
-                        let old = self.temp(self.place_ty(&held));
-                        self.assign(Place::local(old), Rvalue::Take(held.clone()));
+                        let old = self.held(self.place_ty(&held), Rvalue::Take(held.clone()));
                         self.assign(held, Rvalue::Use(new));
                         Rvalue::Use(Operand::Move(Place::local(old)))
                     }
-                    Builtin::Flush
-                    | Builtin::CopyBytes
-                    | Builtin::VecNew
-                    | Builtin::VecWithCapacity
-                    | Builtin::Bits(_)
-                    | Builtin::Simd(_) => unreachable!("handled above"),
+                    _ => unreachable!("handled above"),
                 }
             }
         };
-        if let Some(dest) = dest {
-            self.assign(dest, rvalue);
-        }
+        self.assign_to(dest, rvalue);
     }
 
     /// A std.simd call. Loading and storing check first that the slice
@@ -1642,23 +1617,17 @@ impl<'a> Builder<'a> {
                 let value = self.as_operand(&args[1]);
                 return self.push(StatementKind::SimdStore(Operand::Copy(slice), value));
             }
-            if let Some(dest) = dest {
-                self.assign(dest, Rvalue::Simd(op, vec![Operand::Copy(slice)]));
-            }
-            return;
+            return self.assign_to(dest, Rvalue::Simd(op, vec![Operand::Copy(slice)]));
         }
         let values = args.iter().map(|arg| self.as_operand(arg)).collect();
-        if let Some(dest) = dest {
-            self.assign(dest, Rvalue::Simd(op, values));
-        }
+        self.assign_to(dest, Rvalue::Simd(op, values));
     }
 
     /// The elements of `held` from `args[1]` up to `args[2]`, or to its end
     /// when there is none, checked to lie within it; `mutable` for a slice
     /// that writes them.
     fn slice(&mut self, held: Place, args: &[Expr], mutable: bool) -> Rvalue {
-        let len = self.temp(Types::USIZE);
-        self.assign(Place::local(len), Rvalue::Len(held.clone()));
+        let len = self.held(Types::USIZE, Rvalue::Len(held.clone()));
         let from = self.as_temp(&args[1]);
         let to = match args.get(2) {
             Some(end) => self.as_temp(end),
@@ -1684,11 +1653,9 @@ impl<'a> Builder<'a> {
             true => self.program.types.intern(TyKind::RefMut(elem)),
             false => self.program.types.intern(TyKind::Ref(elem)),
         };
-        let data = self.temp(pointer);
-        self.assign(Place::local(data), Rvalue::AddressOf(first));
-        let count = self.temp(Types::USIZE);
-        self.assign(
-            Place::local(count),
+        let data = self.held(pointer, Rvalue::AddressOf(first));
+        let count = self.held(
+            Types::USIZE,
             unchecked(
                 BinOp::Sub,
                 Operand::Copy(Place::local(to)),
@@ -1707,8 +1674,7 @@ impl<'a> Builder<'a> {
     /// `unwrap()` or `unwrap_err()` of the `T?` or `T!` at `held`, checked.
     fn unwrap(&mut self, builtin: Builtin, held: Place, moved: bool) -> Rvalue {
         if self.checks {
-            let tag = self.temp(Types::BOOL);
-            self.assign(Place::local(tag), Rvalue::Discriminant(held.clone()));
+            let tag = self.held(Types::BOOL, Rvalue::Discriminant(held.clone()));
             let panic = match (builtin, self.types().kind(self.place_ty(&held))) {
                 (Builtin::UnwrapErr, _) => Panic::UnwrapErr,
                 (_, TyKind::Optional(_)) => Panic::UnwrapNone,
@@ -1716,8 +1682,7 @@ impl<'a> Builder<'a> {
             };
             let mut cond = Operand::Move(Place::local(tag));
             if panic == Panic::UnwrapErr {
-                let not = self.temp(Types::BOOL);
-                self.assign(Place::local(not), Rvalue::Unary(UnOp::Not, cond));
+                let not = self.held(Types::BOOL, Rvalue::Unary(UnOp::Not, cond));
                 cond = Operand::Move(Place::local(not));
             }
             self.assert(cond, panic);
@@ -1739,8 +1704,7 @@ impl<'a> Builder<'a> {
         if !self.checks {
             return;
         }
-        let len = self.temp(Types::USIZE);
-        self.assign(Place::local(len), Rvalue::Len(vec.clone()));
+        let len = self.held(Types::USIZE, Rvalue::Len(vec.clone()));
         let inside = self.binary(op, reused(at.clone()), Operand::Move(Place::local(len)));
         self.assert(inside, Panic::Bounds);
     }
@@ -1795,7 +1759,7 @@ fn unchecked(op: BinOp, left: Operand, right: Operand) -> Rvalue {
 /// slice or a view of one, outermost first: `var r = &make();` keeps them
 /// until the block ends.
 fn borrowed_temps(value: &Expr) -> Vec<Ty> {
-    let mut place = match &value.kind {
+    let place = match &value.kind {
         ExprKind::AddressOf(place) => place,
         ExprKind::Builtin(Builtin::Slice, args) => match &args[0].kind {
             ExprKind::AddressOf(place) => place,
@@ -1803,17 +1767,10 @@ fn borrowed_temps(value: &Expr) -> Vec<Ty> {
         },
         _ => return Vec::new(),
     };
-    loop {
-        match place {
-            tir::Place::Temp(value) => {
-                let mut temps = vec![value.ty];
-                temps.extend(borrowed_temps(value));
-                return temps;
-            }
-            tir::Place::Field(base, _) | tir::Place::Index(base, _) => place = base,
-            tir::Place::Local(_) | tir::Place::Deref(_) | tir::Place::Capture(_) => {
-                return Vec::new();
-            }
-        }
-    }
+    let tir::Place::Temp(value) = place.base() else {
+        return Vec::new();
+    };
+    let mut temps = vec![value.ty];
+    temps.extend(borrowed_temps(value));
+    temps
 }

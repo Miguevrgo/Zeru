@@ -1,5 +1,0 @@
-import std.net;
-fn main() {
-    const udp = net::UdpSocket.bind("127.0.0.1:0").unwrap();
-    println("{}", udp.local_addr().unwrap().starts_with("127.0.0.1:"));
-}

@@ -14,4 +14,11 @@ Error: Empty character literal
    │             ─┬
    │              ╰── Empty character literal
 ───╯
+Error: '\x' takes two hex digits, as in '\x41'
+   ╭─[ tests/ui/lexer/bad_literals.zr:4:13 ]
+   │
+ 4 │     var c = "\xZ1";
+   │             ───┬──
+   │                ╰──── '\x' takes two hex digits, as in '\x41'
+───╯
 [-] Error: aborting due to previous error

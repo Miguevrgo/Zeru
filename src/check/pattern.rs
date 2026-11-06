@@ -20,15 +20,10 @@ type PayloadAt = fn(u32, u32) -> Payload;
 /// What an arm's pattern stands for: the values it takes, each alternative
 /// the tests that must all hold, to find repeats and gaps, and the names it
 /// binds, with where each finds its value for each alternative.
-#[derive(Default)]
 struct Shape {
     tags: Vec<Vec<Test>>,
     binds: Vec<(String, Ty, Vec<Reach>)>,
 }
-
-/// One alternative of a pattern: the values it takes, from the first to
-/// the second, and what it binds.
-type Alternative = ((i128, i128), Vec<(String, Ty, Payload)>);
 
 /// The names an alternative binds, with their types and where each finds
 /// its value.
@@ -270,21 +265,7 @@ impl FnCx<'_, '_> {
     /// covered, by a `default` or by listing them all. A value no arm takes
     /// has nowhere to go at runtime.
     fn patterns(&mut self, subject: Ty, arms: &[MatchArm], span: Span) -> Vec<Shape> {
-        let none = || {
-            arms.iter()
-                .map(|arm| {
-                    let mut names = Vec::new();
-                    first_bindings(&arm.pattern, &mut names);
-                    Shape {
-                        tags: Vec::new(),
-                        binds: names
-                            .into_iter()
-                            .map(|name| (name, Types::ERROR, vec![Payload::SomeValue.into()]))
-                            .collect(),
-                    }
-                })
-                .collect()
-        };
+        let none = || arms.iter().map(|arm| failed(&arm.pattern)).collect();
         let mut elements = Vec::new();
         let all: Option<Vec<String>> = match self.cx.types.kind(subject).clone() {
             TyKind::Error => return none(),
@@ -570,17 +551,7 @@ impl FnCx<'_, '_> {
                 shape.tags.push(tests);
             }
         }
-        shape.unwrap_or_else(|| {
-            let mut names = Vec::new();
-            first_bindings(pattern, &mut names);
-            Shape {
-                tags: Vec::new(),
-                binds: names
-                    .into_iter()
-                    .map(|name| (name, Types::ERROR, vec![Payload::SomeValue.into()]))
-                    .collect(),
-            }
-        })
+        shape.unwrap_or_else(|| failed(pattern))
     }
 
     /// The alternatives a pattern with no `|` at its top makes: one, or for
@@ -592,18 +563,9 @@ impl FnCx<'_, '_> {
                 self.error(format!("This pattern cannot match {shown}"), pattern.span);
                 return Vec::new();
             }
-            let Some(((low, high), binds)) = self.pattern(pattern, subject) else {
+            let Some((test, binds)) = self.pattern(pattern, subject, None) else {
                 return Vec::new();
             };
-            let test = Test {
-                slot: None,
-                low,
-                high,
-            };
-            let binds = binds
-                .into_iter()
-                .map(|(name, ty, payload)| (name, ty, payload.into()))
-                .collect();
             return vec![(vec![test], binds)];
         };
         let PatternKind::Tuple(parts) = &pattern.kind else {
@@ -698,40 +660,37 @@ impl FnCx<'_, '_> {
                 );
                 return None;
             }
-            let ((low, high), binds) = self.pattern(tested, ty)?;
-            let test = Test {
-                slot: Some(slot),
-                low,
-                high,
-            };
-            let binds = binds
-                .into_iter()
-                .map(|(name, ty, payload)| {
-                    (
-                        name,
-                        ty,
-                        Reach {
-                            slot: Some(slot),
-                            payload,
-                        },
-                    )
-                })
-                .collect();
+            let (test, binds) = self.pattern(tested, ty, Some(slot))?;
             options.push((Some(test), binds));
         }
         Some(options)
     }
 
     /// One alternative: a literal, a constant or a variant, `Some(x)`,
-    /// `Ok(x)`, `Err(e)` or `Shape::Circle(r)`.
-    fn pattern(&mut self, pattern: &Pattern, subject: Ty) -> Option<Alternative> {
+    /// `Ok(x)`, `Err(e)` or `Shape::Circle(r)`, of the tuple element `slot`
+    /// or of the whole value.
+    fn pattern(
+        &mut self,
+        pattern: &Pattern,
+        subject: Ty,
+        slot: Option<u32>,
+    ) -> Option<(Test, Binds)> {
         let subject_kind = self.cx.types.kind(subject).clone();
         let (path, names) = match &pattern.kind {
             PatternKind::Payload { path, fields } => (path, fields),
             PatternKind::Constant(Expression {
                 kind: ExpressionKind::None,
                 ..
-            }) if matches!(subject_kind, TyKind::Optional(_)) => return Some(((0, 0), Vec::new())),
+            }) if matches!(subject_kind, TyKind::Optional(_)) => {
+                return Some((
+                    Test {
+                        slot,
+                        low: 0,
+                        high: 0,
+                    },
+                    Vec::new(),
+                ));
+            }
             PatternKind::Constant(value) => {
                 if let Some(name) = whole_binding(pattern)
                     && self.local(name).is_none()
@@ -748,9 +707,16 @@ impl FnCx<'_, '_> {
                     return None;
                 }
                 let tag = self.value_pattern(value, subject)?;
-                return Some(((tag, tag), Vec::new()));
+                return Some((
+                    Test {
+                        slot,
+                        low: tag,
+                        high: tag,
+                    },
+                    Vec::new(),
+                ));
             }
-            PatternKind::Range(low, high) => return self.range_pattern(low, high, subject),
+            PatternKind::Range(low, high) => return self.range_pattern(low, high, subject, slot),
             PatternKind::Binding(_)
             | PatternKind::Or(_)
             | PatternKind::Default
@@ -762,9 +728,9 @@ impl FnCx<'_, '_> {
             ("Some", TyKind::Optional(inner)) => {
                 Some((1, vec![*inner], (|_, _| Payload::SomeValue) as PayloadAt))
             }
-            ("Ok", TyKind::Result(ok, _)) => Some((1, vec![*ok], (|_, _| Payload::OkValue) as _)),
-            ("Err", TyKind::Result(_, err)) => {
-                Some((0, vec![*err], (|_, _| Payload::ErrValue) as _))
+            ("Ok", TyKind::Result(ok)) => Some((1, vec![*ok], (|_, _| Payload::OkValue) as _)),
+            ("Err", TyKind::Result(_)) => {
+                Some((0, vec![Types::I32], (|_, _| Payload::ErrValue) as _))
             }
             (path, TyKind::Adt(def, _)) => path.rsplit_once("::").and_then(|(owner, variant)| {
                 let def = *def;
@@ -797,7 +763,8 @@ impl FnCx<'_, '_> {
             match &name.kind {
                 PatternKind::Binding(name) if name == "_" => {}
                 PatternKind::Binding(name) if !self.names_a_value(name) => {
-                    binds.push((name.clone(), ty, payload(tag as u32, at as u32)));
+                    let payload = payload(tag as u32, at as u32);
+                    binds.push((name.clone(), ty, Reach { slot, payload }));
                 }
                 _ => {
                     self.error(
@@ -808,7 +775,14 @@ impl FnCx<'_, '_> {
                 }
             }
         }
-        Some(((tag, tag), binds))
+        Some((
+            Test {
+                slot,
+                low: tag,
+                high: tag,
+            },
+            binds,
+        ))
     }
 
     /// `low..=high`, the integers from one to the other, which must not be
@@ -818,7 +792,8 @@ impl FnCx<'_, '_> {
         low: &Expression,
         high: &Expression,
         subject: Ty,
-    ) -> Option<Alternative> {
+        slot: Option<u32>,
+    ) -> Option<(Test, Binds)> {
         if self.cx.types.as_int(subject).is_none() {
             let shown = self.ty(subject);
             self.error(
@@ -838,7 +813,12 @@ impl FnCx<'_, '_> {
             );
             return None;
         }
-        Some(((low_value, high_value), Vec::new()))
+        let test = Test {
+            slot,
+            low: low_value,
+            high: high_value,
+        };
+        Some((test, Vec::new()))
     }
 
     /// A pattern standing for one value, which it is checked and evaluated to.
@@ -888,6 +868,20 @@ fn first_bindings(pattern: &Pattern, names: &mut Vec<String>) {
         }
         PatternKind::Or(alternatives) => first_bindings(&alternatives[0], names),
         _ => {}
+    }
+}
+
+/// The shape of a pattern that does not check: the names it binds, of the
+/// error type, so that the arm can still be checked.
+fn failed(pattern: &Pattern) -> Shape {
+    let mut names = Vec::new();
+    first_bindings(pattern, &mut names);
+    Shape {
+        tags: Vec::new(),
+        binds: names
+            .into_iter()
+            .map(|name| (name, Types::ERROR, vec![Payload::SomeValue.into()]))
+            .collect(),
     }
 }
 

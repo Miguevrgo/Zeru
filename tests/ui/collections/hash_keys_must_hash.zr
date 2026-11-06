@@ -1,10 +1,11 @@
 import std.collections.hashmap::{HashMap};
 import std.collections.hashset::{HashSet};
-enum Color {
-    Red,
-    Blue,
+enum Shape {
+    Circle(f64),
+    Empty,
 }
 fn main() {
+    var shapes: HashMap<Shape, i64> = HashMap.new();
     var floats: HashMap<f64, i32> = HashMap.new();
     var set: HashSet<f32> = HashSet.new();
 }
