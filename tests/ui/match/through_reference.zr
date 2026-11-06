@@ -1,7 +1,9 @@
 enum Packet {
     Int(i64),
     List(Vec<i64>),
+    Name(String),
 }
+
 fn size(p: &Packet) i64 {
     match p {
         Packet::Int(n) => {
@@ -10,12 +12,40 @@ fn size(p: &Packet) i64 {
         Packet::List(items) => {
             return items.len() as i64;
         }
+        Packet::Name(name) => {
+            return name.len() as i64;
+        }
     }
 }
+
+fn same(a: &Packet, b: &Packet) bool {
+    return match (a, b) {
+        (Packet::Name(x), Packet::Name(y)) => x == y,
+        default => false,
+    };
+}
+
+fn tagged(p: &Packet) {
+    match (p, String.from("tag")) {
+        (Packet::Name(name), tag) => println("{} {}", name, tag),
+        default => {}
+    }
+}
+
 fn main() {
     const ps: Vec<Packet> = Vec[Packet::Int(4), Packet::List(Vec[1, 2, 3])];
     for p in &ps {
         print("{} ", size(&p));
     }
     println("{}", size(ps.get(1).unwrap()));
+    const a = Packet::Name(String.from("ann"));
+    const b = Packet::Name(String.from("bob"));
+    println("{} {}", same(&a, &b), same(&a, &a));
+    tagged(&a);
+    const other = String.from("XXX");
+    println("{} {} {}", size(&a), other, same(&a, &Packet::Name(String.from("ann"))));
+    match a {
+        Packet::Name(name) => println("{}", name),
+        default => {}
+    }
 }

@@ -358,6 +358,7 @@ impl FnCx<'_, '_> {
             && self.local(type_name).is_none()
         {
             if type_name == "Vec" {
+                let expected = self.unwrap_expected(expected);
                 return self.vec_static(name, type_args, args, expected, span);
             }
             if self.enum_dot(object, name, span) {
@@ -1408,10 +1409,8 @@ impl FnCx<'_, '_> {
                 return self.reject_args(args, span);
             }
             _ => {
-                self.error(
-                    "Cannot infer Vec element type. Please add a type annotation",
-                    span,
-                );
+                self.error("Cannot tell what this Vec holds", span)
+                    .help(format!("name the element type, as in Vec.{name}<i32>()"));
                 return self.reject_args(args, span);
             }
         };

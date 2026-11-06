@@ -1270,7 +1270,16 @@ impl<'a> Builder<'a> {
             let locals: Vec<(Local, bool)> = arm
                 .bindings
                 .iter()
-                .map(|(local, _)| self.binding(*local, take))
+                .map(|(local, reaches)| {
+                    let owner = reaches.iter().all(|&reach| {
+                        reach.payload == Payload::Whole
+                            || reach.slot.is_none_or(|slot| {
+                                let element = place.clone().project(Projection::Field(slot));
+                                self.types().referent(self.place_ty(&element)).is_none()
+                            })
+                    });
+                    self.binding(*local, take && owner)
+                })
                 .collect();
             let alternatives: Vec<(&[Test], BlockId)> = match arm.tags.is_empty() {
                 true => vec![&[][..]],
@@ -1406,14 +1415,15 @@ impl<'a> Builder<'a> {
     }
 
     /// The local a `match` binding is, named as it, and whether it holds a
-    /// copy: one the checker did not make a view and that refers to
-    /// nothing, or with `take`, one that owns what it holds. Otherwise it is
+    /// copy: one the checker did not make a view that is plain data, or
+    /// with `take`, one that owns what it holds. Otherwise it is
     /// a reference the binding reads its value through.
     fn binding(&mut self, local: tir::LocalId, take: bool) -> (Local, bool) {
         let decl = &self.function.locals[local.0 as usize];
         let name = Some(decl.name.clone()).filter(|name| !name.is_empty());
-        let owned = take && self.program.needs_drop(decl.ty);
-        if !decl.view && (owned || !self.program.reaches(decl.ty, Part::Ref, &mut Vec::new())) {
+        let needs_drop = self.program.needs_drop(decl.ty);
+        let plain = !needs_drop && !self.program.reaches(decl.ty, Part::Ref, &mut Vec::new());
+        if !decl.view && (take && needs_drop || plain) {
             let copy = self.local(decl.ty, name);
             self.map[local.0 as usize] = Some(copy);
             return (copy, true);

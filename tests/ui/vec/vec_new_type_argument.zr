@@ -1,7 +1,15 @@
+fn names() Vec<String>! {
+    return Vec.new();
+}
+
+fn maybe() Vec<str>? {
+    return Vec.with_capacity(2);
+}
+
 fn main() {
     var v = Vec.new<i32>();
     v.push(3);
     var w = Vec.with_capacity<u8>(4);
     w.push(7);
-    println("{} {}", v[0], w[0]);
+    println("{} {} {} {}", v[0], w[0], names().unwrap().len(), maybe().unwrap().len());
 }
