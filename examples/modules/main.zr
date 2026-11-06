@@ -2,7 +2,7 @@ import geometry;
 import units.length::{meters};
 
 fn main() {
-    var room = geometry::Rect { w: 4, h: 3 };
+    const room = geometry::Rect { w: 4, h: 3 };
     println("area {}", room.area());
     println("{} square tiles", geometry::tiles(room, 2));
     println("{} cm is {} m", 250, meters(250));

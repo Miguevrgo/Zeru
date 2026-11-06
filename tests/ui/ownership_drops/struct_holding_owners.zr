@@ -14,7 +14,7 @@ struct Holder {
 }
 fn main() {
     var log: i64 = 0;
-    var at: *i64 = &log;
+    const at: *i64 = &log;
     {
         {
             var h = Holder { probe: probe(1, at), probes: Vec[probe(2, at), probe(3, at)] };

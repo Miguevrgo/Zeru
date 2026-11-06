@@ -24,7 +24,7 @@ fn main() {
     owners.remove(&0);
     var names: HashMap<i32, String> = HashMap.new();
     names.insert(1, String.from("one"));
-    var one = names.remove(&1).unwrap();
+    const one = names.remove(&1).unwrap();
     println("{} {}", one, names.len());
     var s: HashSet<i32> = HashSet.new();
     s.insert(3);

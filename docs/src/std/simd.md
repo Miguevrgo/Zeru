@@ -8,9 +8,9 @@ every lane in one instruction.
 import std.simd;
 
 fn main() {
-    var a: Array<i32, simd::LANES_32> = [3; simd::LANES_32];
-    var b: Array<i32, simd::LANES_32> = [4; simd::LANES_32];
-    var c = simd::add(a, b);
+    const a: Array<i32, simd::LANES_32> = [3; simd::LANES_32];
+    const b: Array<i32, simd::LANES_32> = [4; simd::LANES_32];
+    const c = simd::add(a, b);
     println("{} {}", c[0], simd::sum(c) == 7 * simd::LANES_32 as i32); // 7 true
 }
 ```

@@ -6,9 +6,9 @@ written:
 
 ```zeru
 fn main() {
-    var outer: Vec<i32> = Vec[1, 2];
+    const outer: Vec<i32> = Vec[1, 2];
     {
-        var inner: Vec<i32> = Vec[3, 4];
+        const inner: Vec<i32> = Vec[3, 4];
         println("{}", inner.len()); // 2
     }
     println("{}", outer.len()); // 2
@@ -30,8 +30,8 @@ fn make() Vec<i32> {
 }
 
 fn main() {
-    var all = &make();
-    var tail = make()[1..];
+    const all = &make();
+    const tail = make()[1..];
     println("{} {}", all.len(), tail); // 3 [2, 3]
 }
 ```
@@ -52,11 +52,11 @@ struct Noisy {
 }
 
 fn main() {
-    var a = Noisy { name: "a" };
+    const a = Noisy { name: "a" };
     {
-        var b = Noisy { name: "b" };
+        const b = Noisy { name: "b" };
     }
-    var c = Noisy { name: "c" };
+    const c = Noisy { name: "c" };
     println("end of main");
 }
 ```

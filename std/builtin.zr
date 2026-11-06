@@ -153,10 +153,10 @@ struct OutStream {
             self.index = 0;
             return 0;
         }
-        var buf_ptr: *u8 = &self.buffer[0];
+        const buf_ptr: *u8 = &self.buffer[0];
         var done: usize = 0;
         while done < self.index {
-            var written = syscall3(
+            const written = syscall3(
                 SYS_WRITE,
                 self.fd as i64,
                 (buf_ptr + done) as i64,
@@ -177,7 +177,7 @@ struct OutStream {
         var remaining: usize = count;
 
         while remaining > 0 {
-            var space_left: usize = 4096 - self.index;
+            const space_left: usize = 4096 - self.index;
             var to_copy: usize = remaining;
 
             if space_left < remaining {
@@ -191,7 +191,7 @@ struct OutStream {
             remaining -= to_copy;
 
             if self.index == 4096 {
-                var flush_result: i64 = self.flush();
+                const flush_result: i64 = self.flush();
                 if flush_result < 0 {
                     return flush_result;
                 }
@@ -256,14 +256,14 @@ struct OutStream {
         var lowest: i64 = 0;
         if single {
             var narrow: f32 = rest as f32;
-            var bits = *((&narrow) as *u32) as u64;
+            const bits = *((&narrow) as *u32) as u64;
             hidden = 1 << 23;
             lowest = -149;
             mantissa = bits & (hidden - 1);
             exponent = ((bits >> 23) & 255) as i64;
         } else {
             var wide = rest;
-            var bits = *((&wide) as *u64);
+            const bits = *((&wide) as *u64);
             hidden = 1 << 52;
             lowest = -1074;
             mantissa = bits & (hidden - 1);
@@ -278,7 +278,7 @@ struct OutStream {
 
         var digits: Array<u8, 24> = [0; 24];
         var count: usize = 0;
-        var point = __zeru_shortest(rest, mantissa, exponent, hidden, lowest, &digits[0], &count);
+        const point = __zeru_shortest(rest, mantissa, exponent, hidden, lowest, &digits[0], &count);
         if point <= 0 {
             self.write_text("0.");
             for at in 0..(0 - point) {
@@ -310,7 +310,7 @@ struct OutStream {
         }
         while true {
             at -= 1;
-            var digit = (rest % radix) as u8;
+            const digit = (rest % radix) as u8;
             if digit < 10 {
                 digits[at] = '0' + digit;
             } else {
@@ -341,8 +341,8 @@ struct OutStream {
             self.write_text("inf");
             return;
         }
-        var hidden: u64 = 1 << 52;
-        var bits = *((&rest) as *u64);
+        const hidden: u64 = 1 << 52;
+        const bits = *((&rest) as *u64);
         var mantissa = bits & (hidden - 1);
         var exponent = ((bits >> 52) & 2047) as i64;
         if exponent == 0 {
@@ -382,7 +382,7 @@ struct ZeruBig {
         var carry: u64 = 0;
         var at: usize = 0;
         while at < self.len {
-            var product = (self.limbs[at] as u64) * (factor as u64) + carry;
+            const product = (self.limbs[at] as u64) * (factor as u64) + carry;
             self.limbs[at] = product as u32;
             carry = product >> 32;
             at += 1;
@@ -440,7 +440,7 @@ struct ZeruBig {
         var at = self.len;
         while at > 0 {
             at -= 1;
-            var current = (rest << 32) | self.limbs[at] as u64;
+            const current = (rest << 32) | self.limbs[at] as u64;
             self.limbs[at] = (current / divisor as u64) as u32;
             rest = current % divisor as u64;
         }
@@ -459,13 +459,13 @@ struct ZeruBig {
             if step > 31 {
                 step = 31;
             }
-            var dropped = self.div_small((1 << step) as u32);
+            const dropped = self.div_small((1 << step) as u32);
             below = below || dropped != 0;
             left -= step;
         }
-        var half = self.div_small(2) == 1;
+        const half = self.div_small(2) == 1;
         if half && (below || self.len > 0 && self.limbs[0] % 2 == 1) {
-            var one = __zeru_big(1);
+            const one = __zeru_big(1);
             self.add(&one);
         }
     }
@@ -528,7 +528,7 @@ fn __zeru_big(value: u64) ZeruBig {
 
 // Whether `low` is at or under `high`, or strictly under unless `inclusive`.
 fn __zeru_under(low: &ZeruBig, high: &ZeruBig, inclusive: bool) bool {
-    var order = low.cmp(high);
+    const order = low.cmp(high);
     return order < 0 || inclusive && order == 0;
 }
 
@@ -546,8 +546,8 @@ fn __zeru_shortest(
     digits: *u8,
     count: *usize,
 ) i64 {
-    var even = mantissa % 2 == 0;
-    var uneven_gaps = mantissa == hidden && exponent > lowest;
+    const even = mantissa % 2 == 0;
+    const uneven_gaps = mantissa == hidden && exponent > lowest;
     var r = __zeru_big(mantissa);
     var s = __zeru_big(1);
     var plus = __zeru_big(1);
@@ -618,12 +618,12 @@ fn __zeru_shortest(
         }
         var high = r;
         high.add(&plus);
-        var low_reached = __zeru_under(&r, &minus, even);
-        var high_reached = !__zeru_under(&high, &s, !even);
+        const low_reached = __zeru_under(&r, &minus, even);
+        const high_reached = !__zeru_under(&high, &s, !even);
         if low_reached && high_reached {
             var twice = r;
             twice.mul_small(2);
-            var order = twice.cmp(&s);
+            const order = twice.cmp(&s);
             if order > 0 || order == 0 && digit % 2 == 1 {
                 digit += 1;
             }
@@ -939,7 +939,7 @@ fn __zeru_str_ends_with(s: str, suffix: str) bool {
 // (EINVAL) as the error code when it spells none, 34 (ERANGE) when it does
 // not fit an i64.
 fn __zeru_str_parse_int(s: str) i64! {
-    var negative = s.len() > 0 && s[0] == '-';
+    const negative = s.len() > 0 && s[0] == '-';
     var start: usize = 0;
     if s.len() > 0 && (s[0] == '-' || s[0] == '+') {
         start = 1;
@@ -956,14 +956,14 @@ fn __zeru_str_parse_int(s: str) i64! {
         if s[i] < '0' || s[i] > '9' {
             return Err(22);
         }
-        var digit = (s[i] - '0') as u64;
+        const digit = (s[i] - '0') as u64;
         if value > (limit - digit) / 10 {
             return Err(34);
         }
         value = value * 10 + digit;
     }
     if negative {
-        var zero: u64 = 0;
+        const zero: u64 = 0;
         return (zero -% value) as i64;
     }
     return value as i64;
@@ -973,7 +973,7 @@ fn __zeru_str_parse_int(s: str) i64! {
 // to the nearest f64; 22 (EINVAL) as the error code when it spells none.
 fn __zeru_str_parse_float(s: str) f64! {
     var at: usize = 0;
-    var negative = s.len() > 0 && s[0] == '-';
+    const negative = s.len() > 0 && s[0] == '-';
     if s.len() > 0 && (s[0] == '-' || s[0] == '+') {
         at = 1;
     }
@@ -1098,7 +1098,7 @@ fn __zeru_nearest(mantissa: u64, exponent: i64, inexact: bool) f64 {
             m = m | 4503599627370496;
             k = (bits >> 52) as i64 - 1075;
         }
-        var up = __zeru_order(mantissa, exponent, 2 * m + 1, k - 1);
+        const up = __zeru_order(mantissa, exponent, 2 * m + 1, k - 1);
         if up > 0 || up == 0 && (inexact || m % 2 == 1) {
             bits += 1;
             value = *((&bits) as *f64);
@@ -1388,7 +1388,7 @@ fn __zeru_room<T>(v: &var Vec<T>, count: usize) *u8 {
 
 // Count `count` more bytes of the String `v` as written.
 fn __zeru_filled<T>(v: &var Vec<T>, count: usize) {
-    var header = v as *usize;
+    const header = v as *usize;
     *(header + 1) += count;
 }
 
@@ -1526,18 +1526,18 @@ fn __zeru_map(size: usize) *u8 {
     if size >= HUGE_PAGE {
         extra = HUGE_PAGE;
     }
-    var prot: i64 = PROT_READ + PROT_WRITE;
-    var flags: i64 = MAP_PRIVATE + MAP_ANONYMOUS;
-    var result: i64 = syscall6(SYS_MMAP, 0, (size + extra) as i64, prot, flags, -1, 0);
+    const prot: i64 = PROT_READ + PROT_WRITE;
+    const flags: i64 = MAP_PRIVATE + MAP_ANONYMOUS;
+    const result: i64 = syscall6(SYS_MMAP, 0, (size + extra) as i64, prot, flags, -1, 0);
     if result < 0 {
         __zeru_out_of_memory();
     }
-    var base = result as usize;
+    const base = result as usize;
     if extra == 0 {
         return base as *u8;
     }
-    var start = (base + HUGE_PAGE - 1) & !(HUGE_PAGE - 1);
-    var end = (start + size + 4095) & !4095;
+    const start = (base + HUGE_PAGE - 1) & !(HUGE_PAGE - 1);
+    const end = (start + size + 4095) & !4095;
     if start > base {
         syscall2(SYS_MUNMAP, base as i64, (start - base) as i64);
     }
@@ -1567,8 +1567,8 @@ struct Heap {
         if size > HEAP_LARGEST {
             return __zeru_map(size);
         }
-        var class = Heap.class_of(size);
-        var bytes: usize = 16 << class;
+        const class = Heap.class_of(size);
+        const bytes: usize = 16 << class;
         var head = self.free[class];
         if head as usize != 0 {
             self.free[class] = *(head as **u8);
@@ -1598,7 +1598,7 @@ struct Heap {
                 flags = MREMAP_MAYMOVE + MREMAP_FIXED;
                 to = __zeru_map(new_size) as i64;
             }
-            var moved: i64 = syscall5(
+            const moved: i64 = syscall5(
                 SYS_MREMAP,
                 old as i64,
                 old_size as i64,
@@ -1615,7 +1615,7 @@ struct Heap {
             && Heap.class_of(old_size) == Heap.class_of(new_size) {
             return old;
         }
-        var new = self.alloc(new_size);
+        const new = self.alloc(new_size);
         var kept = old_size;
         if new_size < kept {
             kept = new_size;
@@ -1624,7 +1624,7 @@ struct Heap {
         if old_size > HEAP_LARGEST {
             syscall2(SYS_MUNMAP, old as i64, old_size as i64);
         } else if old_size > 0 {
-            var class = Heap.class_of(old_size);
+            const class = Heap.class_of(old_size);
             *(old as **u8) = self.free[class];
             self.free[class] = old;
         }

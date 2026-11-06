@@ -8,7 +8,7 @@ struct Inv {
     log: Stack<i64>,
 }
 fn main() {
-    var s: Stack<i64> = Stack { items: Vec[1] };
-    var inv = Inv { log: Stack { items: Vec[2] } };
+    const s: Stack<i64> = Stack { items: Vec[1] };
+    const inv = Inv { log: Stack { items: Vec[2] } };
     println("{} {}", s.fold(1, 2), inv.log.fold(3, 4));
 }

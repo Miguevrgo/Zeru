@@ -3,8 +3,8 @@ fn sign(x: i32) i32 {
 }
 
 fn main() {
-    var feel = if sign(-5) < 0 { "cold" } else { "warm" };
-    var name = String.from("zeru");
-    var shown: str? = if feel == "cold" { name } else { None };
+    const feel = if sign(-5) < 0 { "cold" } else { "warm" };
+    const name = String.from("zeru");
+    const shown: str? = if feel == "cold" { name } else { None };
     println("{} {} {} {}", sign(-5), sign(0), feel, shown.unwrap());
 }

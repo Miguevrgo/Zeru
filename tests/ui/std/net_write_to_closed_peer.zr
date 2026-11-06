@@ -1,11 +1,11 @@
 import std.net;
 
 fn main() {
-    var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+    const listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
     {
-        var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+        const client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
     }
-    var server = listener.accept().unwrap();
+    const server = listener.accept().unwrap();
     var failed = false;
     for i in 0..5 {
         if server.write("0123456789").is_err() {

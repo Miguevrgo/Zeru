@@ -1,10 +1,10 @@
 fn main() {
-    var v = Vec[1, 2, 3];
-    var n: usize = v.len() + 1;
-    var zeros: Vec<i64> = Vec[0; n];
-    var word = String.from("ab");
+    const v = Vec[1, 2, 3];
+    const n: usize = v.len() + 1;
+    const zeros: Vec<i64> = Vec[0; n];
+    const word = String.from("ab");
     var words = Vec[word; 3];
-    var empty: Vec<i32> = Vec[];
+    const empty: Vec<i32> = Vec[];
     words[0].push('c');
     println("{} {} {} {} {} {}", v, zeros, words, word, v.len(), empty.len());
 }

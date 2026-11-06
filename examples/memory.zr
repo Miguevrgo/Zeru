@@ -24,13 +24,13 @@ fn make(id: i32) Ticket {
 }
 
 fn main() {
-    var a = 5;
+    const a = 5;
     var b = a;
     b += 1;
     println("{} {}", a, b);
 
-    var first: Vec<str> = Vec["ann", "bob"];
-    var second = first;
+    const first: Vec<str> = Vec["ann", "bob"];
+    const second = first;
     var third = second.copy();
     add_name(&var third, "cid");
     println("{} {}", count(&second), count(&third));
@@ -42,18 +42,18 @@ fn main() {
     println("{} {} {}", scores[0], scores[1], scores[2]);
 
     {
-        var inner = make(1);
+        const inner = make(1);
         println("inner holds {}", inner.holders.len());
     }
     var ticket = make(2);
     ticket = make(3);
     consume(ticket);
 
-    var top = &scores[2];
+    const top = &scores[2];
     println("top {}", *top);
 
     var bytes: Array<u8, 4> = [1, 2, 3, 4];
-    var at: *u8 = &bytes[0];
+    const at: *u8 = &bytes[0];
     var sum: u32 = 0;
     for i in 0..4 {
         sum += *(at + i) as u32;

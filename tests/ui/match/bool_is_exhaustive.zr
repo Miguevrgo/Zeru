@@ -1,6 +1,6 @@
 fn main() {
-    var b = false;
-    var s = match b {
+    const b = false;
+    const s = match b {
         true => 1,
         false => 0,
     };

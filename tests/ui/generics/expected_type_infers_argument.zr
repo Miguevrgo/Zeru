@@ -2,5 +2,5 @@ fn id<T>(x: T) T {
     return x;
 }
 fn main() {
-    var r: i64 = id(5);
+    const r: i64 = id(5);
 }

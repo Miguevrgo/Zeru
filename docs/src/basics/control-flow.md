@@ -3,7 +3,7 @@
 ## if
 
 ```zeru
-var temperature = 24;
+const temperature = 24;
 if temperature > 30 {
     println("hot");
 } else if temperature > 15 {
@@ -20,8 +20,8 @@ An `if` whose branches each hold one expression gives a value, as long as
 it has an `else`:
 
 ```zeru
-var temperature = 24;
-var feel = if temperature > 30 { "hot" } else if temperature > 15 { "mild" } else { "cold" };
+const temperature = 24;
+const feel = if temperature > 30 { "hot" } else if temperature > 15 { "mild" } else { "cold" };
 println("{}", feel); // mild
 ```
 
@@ -30,7 +30,7 @@ A branch may instead be a block that leaves with `return`, `break` or
 
 ```zeru
 fn half(n: i32) i32 {
-    var even = if n % 2 == 0 { n } else { return -1; };
+    const even = if n % 2 == 0 { n } else { return -1; };
     return even / 2;
 }
 
@@ -97,7 +97,7 @@ Over an array, a `Vec` or a string, `for` gives each element in turn, and
 with two names also its index:
 
 ```zeru
-var names: Vec<str> = Vec["ann", "bob", "cid"];
+const names: Vec<str> = Vec["ann", "bob", "cid"];
 for name in names {
     print("{} ", name);
 }
@@ -121,7 +121,7 @@ println("{} {} {}", scores[0], scores[1], scores[2]); // 10 20 30
 A list of tuples can be taken apart as it is walked:
 
 ```zeru
-var scores: Vec<(str, i32)> = Vec[("ann", 7), ("bob", 9)];
+const scores: Vec<(str, i32)> = Vec[("ann", 7), ("bob", 9)];
 for (name, points) in scores {
     print("{}:{} ", name, points);
 }
@@ -133,8 +133,8 @@ one. It copies and allocates nothing: each pair is read in place, as a
 single list would be.
 
 ```zeru
-var prices: Vec<f64> = Vec[1.5, 2.0, 4.0];
-var amounts: Array<i32, 3> = [2, 1, 3];
+const prices: Vec<f64> = Vec[1.5, 2.0, 4.0];
+const amounts: Array<i32, 3> = [2, 1, 3];
 var total = 0.0;
 for (price, amount) in zip(prices, amounts) {
     total += price * amount as f64;
@@ -155,8 +155,8 @@ on the [Enums and Match](../structure/enums.md) page, but it works on
 numbers too, where `default`, the last arm, catches everything else:
 
 ```zeru
-var day = 6;
-var kind = match day {
+const day = 6;
+const kind = match day {
     6 | 7 => "weekend",
     default => "weekday",
 };

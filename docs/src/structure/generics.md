@@ -11,8 +11,8 @@ fn swap<T>(pair: (T, T)) (T, T) {
 }
 
 fn main() {
-    var numbers = swap((1, 2));
-    var words = swap(("left", "right"));
+    const numbers = swap((1, 2));
+    const words = swap(("left", "right"));
     println("{} {}", numbers.0, words.0); // 2 right
 }
 ```
@@ -55,8 +55,8 @@ fn largest<T: Ord>(items: &Vec<T>) T {
 }
 
 fn main() {
-    var ints: Vec<i64> = Vec[3, 9, 4];
-    var floats: Vec<f64> = Vec[2.5, 0.5];
+    const ints: Vec<i64> = Vec[3, 9, 4];
+    const floats: Vec<f64> = Vec[2.5, 0.5];
     println("{} {}", largest(&ints), largest(&floats)); // 9 2.5
 }
 ```

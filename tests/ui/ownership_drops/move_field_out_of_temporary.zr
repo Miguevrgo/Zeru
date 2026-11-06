@@ -20,10 +20,10 @@ fn pair() (String, Vec<i32>) {
     return (String.from("x"), Vec[1, 2]);
 }
 fn main() {
-    var name = make().name;
-    var tags = make().tags;
-    var deep = outer().pair.tags;
-    var first = pair().0;
-    var kept = found().unwrap().tags;
+    const name = make().name;
+    const tags = make().tags;
+    const deep = outer().pair.tags;
+    const first = pair().0;
+    const kept = found().unwrap().tags;
     println("{} {} {} {} {}", name, tags, deep, first, kept);
 }

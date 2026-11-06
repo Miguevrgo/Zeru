@@ -71,7 +71,7 @@ fn main() {
         default => {}
     }
     var w: Vec<D> = Vec[D { id: 50 }];
-    var gone = match w.pop() {
+    const gone = match w.pop() {
         Some(d) => d.id,
         None => 0,
     };

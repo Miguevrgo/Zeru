@@ -1,6 +1,6 @@
 fn main() {
-    var o: i32? = 1;
-    var a = o.unwrap();
-    var b = o.unwrap();
+    const o: i32? = 1;
+    const a = o.unwrap();
+    const b = o.unwrap();
     println("{} {}", a, b);
 }

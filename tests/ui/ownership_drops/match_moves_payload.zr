@@ -10,9 +10,9 @@ fn probe(id: i64, log: *i64) Probe {
 }
 fn main() {
     var log: i64 = 0;
-    var at: *i64 = &log;
+    const at: *i64 = &log;
     {
-        var o: Probe? = probe(1, at);
+        const o: Probe? = probe(1, at);
         match o {
             Some(p) => {
                 println("some {}", p.id);

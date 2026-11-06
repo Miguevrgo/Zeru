@@ -65,12 +65,12 @@ fn greet<T: Named>(who: T) {
 }
 
 fn main() {
-    var swapped = pair(1, 2);
-    var words = pair("left", "right");
+    const swapped = pair(1, 2);
+    const words = pair("left", "right");
     println("{} {} {} {}", swapped.0, swapped.1, words.0, words.1);
 
-    var ints: Vec<i64> = Vec[3, 9, 4];
-    var floats: Vec<f64> = Vec[2.5, 0.5, 1.5];
+    const ints: Vec<i64> = Vec[3, 9, 4];
+    const floats: Vec<f64> = Vec[2.5, 0.5, 1.5];
     println("{} {} {} {}", largest(&ints), largest(&floats), average(&ints), average(&floats));
     println("{} {}", zero<i32>(), zero<f64>());
 

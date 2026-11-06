@@ -13,9 +13,9 @@ fn consume(p: Probe) {
 }
 fn main() {
     var log: i64 = 0;
-    var at: *i64 = &log;
+    const at: *i64 = &log;
     {
-        var p = probe(1, at);
+        const p = probe(1, at);
         consume(p);
         println("after consume");
     }

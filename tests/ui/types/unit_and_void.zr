@@ -1,6 +1,6 @@
 fn nothing() {}
 fn main() {
-    var u: () = ();
+    const u: () = ();
     nothing();
     println("ok");
 }

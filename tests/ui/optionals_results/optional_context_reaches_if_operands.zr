@@ -2,8 +2,8 @@ fn scaled(a: i64) i64! {
     return (match a { 0 => 1, default => a }) * 2;
 }
 fn main() {
-    var c = true;
-    var x: i64? = (if c { 4 } else { 5 }) + 1;
-    var y: i64? = -(if c { 4 } else { 5 });
+    const c = true;
+    const x: i64? = (if c { 4 } else { 5 }) + 1;
+    const y: i64? = -(if c { 4 } else { 5 });
     println("{} {} {}", x.unwrap(), y.unwrap(), scaled(3).unwrap());
 }

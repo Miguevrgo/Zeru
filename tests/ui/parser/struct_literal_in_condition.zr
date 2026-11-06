@@ -12,7 +12,7 @@ fn big(p: P) bool {
 }
 
 fn main() {
-    var c = Color::Red;
+    const c = Color::Red;
     if c == Color::Red {
         println("red");
     }

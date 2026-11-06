@@ -16,9 +16,9 @@ A `TcpListener` waits for connections, and each one becomes a `TcpStream`:
 ```zeru
 import std.net;
 
-var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
-var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
-var server = listener.accept().unwrap();
+const listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+const client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+const server = listener.accept().unwrap();
 
 client.write("ping").unwrap();
 var request = String.new();
@@ -48,10 +48,10 @@ A `UdpSocket` sends and receives single messages, datagrams:
 ```zeru
 import std.net;
 
-var a = net::UdpSocket.bind("127.0.0.1:0").unwrap();
-var b = net::UdpSocket.bind("127.0.0.1:0").unwrap();
+const a = net::UdpSocket.bind("127.0.0.1:0").unwrap();
+const b = net::UdpSocket.bind("127.0.0.1:0").unwrap();
 a.send_to(b.local_addr().unwrap(), "hello").unwrap();
-var got = b.recv().unwrap();
+const got = b.recv().unwrap();
 println("{} from a: {}", got.data, got.from == a.local_addr().unwrap()); // hello from a: true
 ```
 

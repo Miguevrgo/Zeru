@@ -60,17 +60,17 @@ Inside a function that returns a result itself, `x!` takes the value out of
 
 ```zeru
 fn parse_pair(text: str) (i64, i64)! {
-    var parts = text.split(",");
+    const parts = text.split(",");
     if parts.len() != 2 {
         return Err(EINVAL);
     }
-    var a = parts[0].trim().parse_int()!;
-    var b = parts[1].trim().parse_int()!;
+    const a = parts[0].trim().parse_int()!;
+    const b = parts[1].trim().parse_int()!;
     return (a, b);
 }
 
 fn main() {
-    var pair = parse_pair("3, 4").unwrap();
+    const pair = parse_pair("3, 4").unwrap();
     println("{} {}", pair.0, pair.1); // 3 4
     println("{}", parse_pair("3, x").is_err()); // true
 }

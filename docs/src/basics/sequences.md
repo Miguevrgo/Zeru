@@ -10,8 +10,8 @@ Tuples group a few values of different types.
 no allocation. Write the values out, or one value and a count:
 
 ```zeru
-var primes: Array<i32, 4> = [2, 3, 5, 7];
-var zeros: Array<u8, 1024> = [0; 1024];
+const primes: Array<i32, 4> = [2, 3, 5, 7];
+const zeros: Array<u8, 1024> = [0; 1024];
 var grid: Array<Array<i32, 3>, 2> = [[0; 3]; 2];
 grid[1][2] = 7;
 println("{} {} {}", primes[3], zeros[500], grid[1][2]); // 7 0 7
@@ -23,7 +23,7 @@ with `index out of bounds` and the line where it happened.
 An array is plain data, so assigning it copies every element:
 
 ```zeru
-var a: Array<i32, 3> = [1, 2, 3];
+const a: Array<i32, 3> = [1, 2, 3];
 var b = a;
 b[0] = 9;
 println("{} {}", a[0], b[0]); // 1 9
@@ -50,9 +50,9 @@ import. Make an empty one with `Vec.new()`, write its values as
 var names: Vec<str> = Vec.new();
 names.push("ann");
 names.push("bob");
-var numbers = Vec[5, 3, 8];
-var size: usize = 3;
-var seen = Vec[false; size * size];
+const numbers = Vec[5, 3, 8];
+const size: usize = 3;
+const seen = Vec[false; size * size];
 println("{} {} {}", names.len(), numbers[2], seen.len()); // 2 8 9
 ```
 
@@ -92,8 +92,8 @@ println("{}", v.get(10).is_none()); // true
 quotes and escaped as it is written in code:
 
 ```zeru
-var grid: Vec<Vec<i32>> = Vec[Vec[1, 2], Vec[3]];
-var words: Vec<str> = Vec["a \"b\"", ""];
+const grid: Vec<Vec<i32>> = Vec[Vec[1, 2], Vec[3]];
+const words: Vec<str> = Vec["a \"b\"", ""];
 println("{} {}", grid, words); // [[1, 2], [3]] ["a \"b\"", ""]
 ```
 
@@ -108,9 +108,9 @@ anything. `v[a..b]` takes the elements from `a` up to, not including, `b`;
 either end can be left out:
 
 ```zeru
-var v: Vec<i32> = Vec[10, 20, 30, 40];
-var middle = v[1..3];
-var tail = v[2..];
+const v: Vec<i32> = Vec[10, 20, 30, 40];
+const middle = v[1..3];
+const tail = v[2..];
 println("{} {} {}", middle.len(), middle[0], tail[1]); // 2 20 40
 ```
 
@@ -118,7 +118,7 @@ A slice has the `Vec` methods that only read: `len`, `is_empty`, `contains`, `su
 `min`, `max`, `windows`, `chunks`, `map`, `filter`, `any` and `all`:
 
 ```zeru
-var v: Vec<i32> = Vec[9, 4, 7, 1];
+const v: Vec<i32> = Vec[9, 4, 7, 1];
 println("{} {}", v[1..].sum(), v[..2].max().unwrap()); // 12 9
 ```
 
@@ -135,8 +135,8 @@ fn total(values: &[i32]) i32 {
 }
 
 fn main() {
-    var list: Vec<i32> = Vec[1, 2, 3];
-    var fixed: Array<i32, 2> = [10, 20];
+    const list: Vec<i32> = Vec[1, 2, 3];
+    const fixed: Array<i32, 2> = [10, 20];
     println("{} {}", total(&list), total(&fixed)); // 6 30
     println("{}", total(list[1..])); // 5
 }
@@ -162,7 +162,7 @@ fn clear(values: &var [i32]) {
 
 fn main() {
     var v: Vec<i32> = Vec[5, 1, 4, 2, 3];
-    var front = &var v[..3];
+    const front = &var v[..3];
     front.sort();
     println("{}", v); // [1, 4, 5, 2, 3]
     clear(&var v[3..]);
@@ -176,9 +176,9 @@ A tuple groups a fixed number of values that can have different types.
 Its fields are numbered:
 
 ```zeru
-var person = ("ann", 30, true);
+const person = ("ann", 30, true);
 println("{} is {}", person.0, person.1); // ann is 30
-var point: (i32, i32) = (3, 4);
+const point: (i32, i32) = (3, 4);
 println("{}", point.0 * point.1); // 12
 println("{}", point); // (3, 4)
 ```
@@ -205,10 +205,10 @@ fn divide(a: i32, b: i32) (i32, i32) {
 }
 
 fn main() {
-    var (quotient, remainder) = divide(17, 5);
+    const (quotient, remainder) = divide(17, 5);
     println("{} {}", quotient, remainder); // 3 2
     const (low: u8, high: u8) = (1, 200);
-    var (_, (x, y)) = ("origin", (0.5, 2.0));
+    const (_, (x, y)) = ("origin", (0.5, 2.0));
     println("{} {} {}", low + high, x, y); // 201 0.5 2.0
 }
 ```

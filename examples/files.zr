@@ -2,7 +2,7 @@ import std.fs;
 import std.os;
 
 fn main() {
-    var args = os::args();
+    const args = os::args();
     var path = "files_example.txt";
     if args.len() > 1 {
         path = args[1];
@@ -15,7 +15,7 @@ fn main() {
         exit(1);
     }
 
-    var text = fs::read_file(path).unwrap();
+    const text = fs::read_file(path).unwrap();
     var words = 0;
     var longest = "";
     for line in text.lines() {

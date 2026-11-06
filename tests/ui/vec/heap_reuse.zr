@@ -34,7 +34,7 @@ fn main() {
     while rounds < 2000 {
         var scratch: Vec<i64> = Vec.with_capacity(((rounds % 37) * 997) as usize);
         scratch.push(rounds);
-        var copy = scratch.copy();
+        const copy = scratch.copy();
         if copy[0] != rounds {
             println("bad copy");
         }

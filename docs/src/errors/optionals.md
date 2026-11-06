@@ -14,8 +14,8 @@ fn find(names: &Vec<str>, wanted: str) usize? {
 }
 
 fn main() {
-    var names: Vec<str> = Vec["ann", "bob"];
-    var at = find(&names, "bob");
+    const names: Vec<str> = Vec["ann", "bob"];
+    const at = find(&names, "bob");
     if at.is_some() {
         println("found at {}", at.unwrap()); // found at 1
     }
@@ -40,7 +40,7 @@ value at all is asked with `is_some()` or `is_none()`, not compared with
 `None`.
 
 ```zeru
-var found: i32? = 3;
+const found: i32? = 3;
 println("{} {} {}", found == 3, found != 4, found.is_none()); // true true false
 ```
 
@@ -89,8 +89,8 @@ Lookups that point into a collection, like `Vec.get` or `HashMap.get`,
 return an optional reference, `(&T)?`. `*` reads the value once it is out:
 
 ```zeru
-var scores: Vec<i32> = Vec[10, 20];
-var second = scores.get(1);
+const scores: Vec<i32> = Vec[10, 20];
+const second = scores.get(1);
 if second.is_some() {
     println("{}", *second.unwrap()); // 20
 }

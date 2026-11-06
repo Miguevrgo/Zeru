@@ -25,7 +25,7 @@ fn main() {
     words.push(String.from("b"));
     words.dedup();
     println("{} {}", words, (String.from("k"), 1) == (String.from("k"), 1));
-    var c: Vec<i32> = Vec[1, 2, 3, 4, 5, 6, 7];
+    const c: Vec<i32> = Vec[1, 2, 3, 4, 5, 6, 7];
     println("{}", c.chunks(3));
     var nodes: Vec<N> = Vec.new();
     nodes.push(N { id: 1 });

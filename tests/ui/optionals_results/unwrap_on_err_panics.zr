@@ -1,5 +1,5 @@
 //@ checked
 fn main() {
-    var r: i32! = Err(3);
+    const r: i32! = Err(3);
     println("{}", r.unwrap());
 }

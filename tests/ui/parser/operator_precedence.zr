@@ -1,13 +1,13 @@
 fn main() {
-    var a = 2 + 3 * 4;
-    var b = (2 + 3) * 4;
-    var c = 10 - 4 - 3;
-    var d = 1 << 2 + 1;
-    var e = 6 & 3 == 2;
-    var f = 1 | 4 ^ 6 & 3;
-    var g = -2 * -3;
-    var h = 4 + 5 % 2 == 4 * 1 + 5 % 2;
-    var i = (a > b) == (c < 4);
-    var j = 64 >> 2;
+    const a = 2 + 3 * 4;
+    const b = (2 + 3) * 4;
+    const c = 10 - 4 - 3;
+    const d = 1 << 2 + 1;
+    const e = 6 & 3 == 2;
+    const f = 1 | 4 ^ 6 & 3;
+    const g = -2 * -3;
+    const h = 4 + 5 % 2 == 4 * 1 + 5 % 2;
+    const i = (a > b) == (c < 4);
+    const j = 64 >> 2;
     println("{} {} {} {} {} {} {} {} {} {}", a, b, c, d, e, f, g, h, i, j);
 }

@@ -48,7 +48,7 @@ The program reads them with `os::args()`, its own path first:
 import std.os;
 
 fn main() {
-    var args = os::args();
+    const args = os::args();
     println("{} arguments", args.len() - 1);
 }
 ```
@@ -60,12 +60,12 @@ the next value. Numbers, bools and text can be printed, and so can lists,
 tuples and optionals of them; `{{}}` writes the braces themselves.
 
 ```zeru
-var name = "Ann";
-var age = 30;
+const name = "Ann";
+const age = 30;
 println("{} is {} years old", name, age); // Ann is 30 years old
 println("pi is about {}", 3.14159); // pi is about 3.14159
 println("{{}} stays"); // {} stays
-var list: Vec<i32> = Vec[1, 2, 3];
+const list: Vec<i32> = Vec[1, 2, 3];
 println("{} and {}", list, (1, "one")); // [1, 2, 3] and (1, "one")
 ```
 
@@ -86,7 +86,7 @@ println("{:x} {:X} {:o} {:08b}", 255, 255, 8, 5); // ff FF 10 00000101
 `format` gives back the text as a `String`:
 
 ```zeru
-var message = format("{} of {} done", 3, 10);
+const message = format("{} of {} done", 3, 10);
 println("{} ({} bytes)", message, message.len()); // 3 of 10 done (12 bytes)
 ```
 

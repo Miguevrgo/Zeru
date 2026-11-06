@@ -5,13 +5,13 @@ fn takes(x: i64?) i64 {
     return x.unwrap();
 }
 fn main() {
-    var a: i64 = 3;
-    var b: i64 = 4;
-    var sum: i64? = a + b;
-    var neg: i64? = -a;
+    const a: i64 = 3;
+    const b: i64 = 4;
+    const sum: i64? = a + b;
+    const neg: i64? = -a;
     var n: i32 = 7;
-    var p: *i32 = &n;
-    var read: i32? = *p;
+    const p: *i32 = &n;
+    const read: i32? = *p;
     println(
         "{} {} {} {} {}",
         doubled(a).unwrap(),

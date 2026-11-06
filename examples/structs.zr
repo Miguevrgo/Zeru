@@ -70,7 +70,7 @@ fn describe(sides: i32) str {
 }
 
 fn main() {
-    var shapes = [
+    const shapes = [
         Shape { at: Point.origin(), kind: Kind::Circle(1.0), color: Color::Red },
         Shape { at: Point { x: 2.0, y: 1.0 }, kind: Kind::Rect(3.0, 2.0), color: Color::Blue },
         Shape { at: Point { x: -1.0, y: 4.0 }, kind: Kind::Dot, color: Color::Red },
@@ -79,7 +79,7 @@ fn main() {
     var total = 0.0;
     for shape in shapes {
         total += shape.area();
-        var size = shape.size();
+        const size = shape.size();
         println(
             "{} x {} at {} from the origin",
             size.0,

@@ -1,5 +1,5 @@
 import cfg;
 fn main() {
-    var l = cfg::Level::High;
+    const l = cfg::Level::High;
     println("{} {}", cfg::LIMIT, l == cfg::Level::High);
 }

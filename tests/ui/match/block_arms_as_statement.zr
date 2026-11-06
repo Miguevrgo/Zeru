@@ -1,5 +1,5 @@
 fn main() {
-    var n = 3;
+    const n = 3;
     var log = 0;
     match n {
         1 => {

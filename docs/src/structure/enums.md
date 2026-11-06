@@ -11,7 +11,7 @@ enum Direction {
 }
 
 fn main() {
-    var heading = Direction::East;
+    const heading = Direction::East;
     println("{}", heading == Direction::East); // true
 }
 ```
@@ -90,7 +90,7 @@ An arm is either an expression, as above, or a block. With blocks, the
 `match` is a statement and gives no value:
 
 ```zeru
-var code = 404;
+const code = 404;
 match code {
     200 => {
         println("ok");

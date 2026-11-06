@@ -28,6 +28,6 @@ fn main() {
         v.push(memset(i as i64));
     }
     abort();
-    var s = OutStream { x: 3 };
+    const s = OutStream { x: 3 };
     println("{} {} {} {} {}", v[99], strlen(4), __zeru_env(), syscall1(7), s.x);
 }

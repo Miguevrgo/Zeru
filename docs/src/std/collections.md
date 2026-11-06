@@ -137,6 +137,6 @@ println("{} {}", heap.pop().unwrap(), heap.pop().unwrap()); // 9 5
 var queue: BinaryHeap<(i64, str)> = BinaryHeap.new();
 queue.push((-7, "far"));
 queue.push((-2, "near"));
-var (distance, place) = queue.pop().unwrap();
+const (distance, place) = queue.pop().unwrap();
 println("{} {}", -distance, place); // 2 near
 ```

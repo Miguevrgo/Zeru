@@ -45,7 +45,7 @@ var line = os::stdin().read_line().unwrap();
 ```zeru
 import std.os;
 
-var clock = os::Clock.now();
+const clock = os::Clock.now();
 os::sleep(10);
 println("{}", clock.elapsed() >= 10_000_000); // true
 ```
@@ -63,8 +63,8 @@ The program is looked up in `PATH` unless the name has a `/`.
 ```zeru
 import std.os;
 
-var args: Vec<str> = Vec["hello"];
-var result = os::output("echo", args).unwrap();
+const args: Vec<str> = Vec["hello"];
+const result = os::output("echo", args).unwrap();
 println("{} {}", result.code, result.stdout.trim()); // 0 hello
 ```
 

@@ -1,5 +1,5 @@
 struct Empty {}
 fn main() {
-    var e = Empty {};
+    const e = Empty {};
     println("empty");
 }

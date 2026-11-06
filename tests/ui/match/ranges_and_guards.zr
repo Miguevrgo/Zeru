@@ -53,11 +53,11 @@ fn main() {
     }
     var count = 0;
     for b in 250..=255 {
-        var x: u8 = b as u8;
+        const x: u8 = b as u8;
         count += 1;
     }
     var bytes: u32 = 0;
-    var top: u8 = 255;
+    const top: u8 = 255;
     for v in 0..=top {
         bytes += 1;
     }
@@ -65,8 +65,8 @@ fn main() {
         println("never");
     }
     println("{} {} {}", total, count, bytes);
-    var opt: i32? = 7;
-    var r = match opt {
+    const opt: i32? = 7;
+    const r = match opt {
         Some(v) if v > 5 => v * 10,
         Some(v) => v,
         None => 0,

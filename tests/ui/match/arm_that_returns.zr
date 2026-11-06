@@ -6,7 +6,7 @@ fn to_int(t: i64) i64? {
 }
 
 fn parse(t: i64) i64 {
-    var n = match to_int(t) {
+    const n = match to_int(t) {
         Some(v) => v,
         None => {
             return -1;
@@ -19,7 +19,7 @@ fn main() {
     println("{} {}", parse(4), parse(-4));
     var total = 0;
     for i in 0..5 {
-        var add = match i {
+        const add = match i {
             3 => {
                 continue;
             }

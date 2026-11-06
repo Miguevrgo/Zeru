@@ -14,6 +14,6 @@ fn main() {
     var s: Stack<i64> = Stack { items: Vec.new() };
     s.push(1);
     s.push(2);
-    var top = s.pop().unwrap();
+    const top = s.pop().unwrap();
     println("{} {}", top, s.size());
 }

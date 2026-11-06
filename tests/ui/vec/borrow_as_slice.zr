@@ -19,18 +19,18 @@ fn first(values: &[i32]) &i32 {
 }
 fn main() {
     var list: Vec<i32> = Vec[1, 2, 3];
-    var fixed: Array<i32, 2> = [10, 20];
+    const fixed: Array<i32, 2> = [10, 20];
     println("{} {} {}", total(&list), total(&fixed), total(list[1..]));
-    var r = &list;
+    const r = &list;
     println("{}", total(r));
-    var m = &var list;
+    const m = &var list;
     println("{}", total(m));
-    var s: &[i32] = &list;
+    const s: &[i32] = &list;
     println("{}", s.len());
     println("{}", largest(&list));
-    var f = first(&list);
+    const f = first(&list);
     println("{}", *f);
-    var text = String.from("abc");
-    var view: str = &text;
+    const text = String.from("abc");
+    const view: str = &text;
     println("{}", view);
 }

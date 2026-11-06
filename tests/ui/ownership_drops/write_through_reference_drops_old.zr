@@ -13,12 +13,12 @@ fn replace(slot: &var Probe, with: Probe) {
 }
 fn main() {
     var log: i64 = 0;
-    var at: *i64 = &log;
+    const at: *i64 = &log;
     {
         var p = probe(1, at);
         replace(&var p, probe(2, at));
         println("replaced: {}", log);
-        var raw: *Probe = &var p;
+        const raw: *Probe = &var p;
         *raw = probe(3, at);
         println("written raw: {}", log);
     }

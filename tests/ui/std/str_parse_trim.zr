@@ -18,7 +18,7 @@ fn main() {
         "-",
         "12a",
     ] {
-        var r = t.parse_int();
+        const r = t.parse_int();
         if r.is_ok() {
             println("{} -> {}", t, r.unwrap());
         } else {
@@ -41,7 +41,7 @@ fn main() {
         "1e999999999",
         "-1e-999999999",
     ] {
-        var r = t.parse_float();
+        const r = t.parse_float();
         if r.is_ok() {
             println("{} -> {}", t, r.unwrap());
         } else {

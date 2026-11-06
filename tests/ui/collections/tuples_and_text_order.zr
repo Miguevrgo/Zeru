@@ -10,7 +10,7 @@ fn main() {
     println("{} {} {}", (2, 5) <= (2, 5), (3, 0) > (2, 9), (1, (2, 3)) >= (1, (2, 4)));
     println("{} {} {}", "ab" < "b", "abc" < "ab", "" < "a");
     println("{} {}", "zeru" >= "zeru", ("b", 1) < ("a", 2));
-    var s = String.from("pear");
+    const s = String.from("pear");
     println("{} {}", s < String.from("plum"), s > "apple");
     var pairs: Vec<(i32, str)> = Vec[(3, "c"), (1, "z"), (1, "a"), (2, "b")];
     pairs.sort();

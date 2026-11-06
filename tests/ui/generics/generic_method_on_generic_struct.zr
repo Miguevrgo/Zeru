@@ -13,9 +13,9 @@ struct Box<T> {
 }
 fn main() {
     var b: Box<i64> = Box { v: 7 };
-    var p = b.pair(3.5);
+    const p = b.pair(3.5);
     println("{} {}", p.0, p.1);
     println("{} {}", b.set(9, 8), b.get());
-    var c: Box<bool> = Box { v: true };
+    const c: Box<bool> = Box { v: true };
     println("{}", c.pair(1).0);
 }

@@ -3,6 +3,6 @@ fn bump(var value: i32) i32 {
     return value;
 }
 fn main() {
-    var a = 1;
+    const a = 1;
     println("{} {}", bump(a), a);
 }

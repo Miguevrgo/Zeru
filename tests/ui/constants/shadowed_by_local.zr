@@ -10,17 +10,17 @@ fn g(S: i32) i32 {
 struct M {
     a: i64,
     fn twice(self) i64 {
-        var K: i64 = 1;
+        const K: i64 = 1;
         return K * 2;
     }
 }
 fn main() {
-    var N: i32 = 1;
-    var y = N + 1;
+    const N: i32 = 1;
+    const y = N + 1;
     var t: i32 = 0;
     for N in 0..3 {
         t += N + 1;
     }
-    var m = M { a: 0 };
+    const m = M { a: 0 };
     println("{} {} {} {} {}", y, f(5), g(3), m.twice(), t);
 }

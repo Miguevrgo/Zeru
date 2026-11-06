@@ -1,5 +1,5 @@
 fn main() {
-    var parts = "  84283   63343 \t9\n".split();
+    const parts = "  84283   63343 \t9\n".split();
     println("{}", parts);
     println("{} {}", "".split(), "a  b".split(" "));
     var v: Vec<i32> = Vec[1, 2, 3, 4, 5];

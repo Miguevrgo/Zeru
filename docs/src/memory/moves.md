@@ -7,7 +7,7 @@ are plain data. Assigning them, or passing them to a function, makes a
 copy, and both copies live on independently:
 
 ```zeru
-var a = 5;
+const a = 5;
 var b = a;
 b += 1;
 println("{} {}", a, b); // 5 6
@@ -58,7 +58,7 @@ fn numbers() Vec<i32> {
 }
 
 fn main() {
-    var mine = numbers();
+    const mine = numbers();
     println("{}", mine.len()); // 2
 }
 ```
@@ -67,7 +67,7 @@ A moved-from variable can be given a new value and used again:
 
 ```zeru
 var list: Vec<i32> = Vec[1];
-var taken = list;
+const taken = list;
 list = Vec[2, 3];
 println("{} {}", taken.len(), list.len()); // 1 2
 ```
@@ -86,7 +86,7 @@ struct Job {
 
 fn main() {
     var job = Job { name: String.from("build"), log: Vec["start", "done"] };
-    var finished = replace(&var job.log, Vec.new());
+    const finished = replace(&var job.log, Vec.new());
     println("{} {} {}", job.name, finished.len(), job.log.len()); // build 2 0
 }
 ```
@@ -106,7 +106,7 @@ fn start() Job {
 }
 
 fn main() {
-    var name = start().name;
+    const name = start().name;
     println("{}", name); // build
 }
 ```
@@ -137,7 +137,7 @@ When you really need two independent copies, `copy()` makes one:
 
 ```zeru
 var original: Vec<i32> = Vec[1, 2, 3];
-var backup = original.copy();
+const backup = original.copy();
 original.push(4);
 println("{} {}", original.len(), backup.len()); // 4 3
 ```

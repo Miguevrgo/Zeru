@@ -30,7 +30,7 @@ fn area(s: Shape) f64 {
 }
 
 fn shapes() f64 {
-    var list: Array<Shape, 4> = [
+    const list: Array<Shape, 4> = [
         Shape::Circle(2.0),
         Shape::Rect(3.0, 3.0),
         Shape::Rect(2.0, 5.0),
@@ -72,8 +72,8 @@ fn find(xs: &Array<i32, 6>, want: i32) usize? {
 }
 
 fn finds() (usize, bool)? {
-    var xs: Array<i32, 6> = [5, 8, 13, 21, 34, 55];
-    var at = find(&xs, 21)?;
+    const xs: Array<i32, 6> = [5, 8, 13, 21, 34, 55];
+    const at = find(&xs, 21)?;
     return (at, find(&xs, 4).is_none());
 }
 
@@ -83,9 +83,9 @@ fn wrapper() (usize, bool)? {
 
 fn swapped() Array<i32, 3> {
     var a: Array<i32, 3> = [1, 2, 3];
-    var b = replace(&var a[0], 9);
+    const b = replace(&var a[0], 9);
     a[2] = b;
-    var t = (a[1], a[2]);
+    const t = (a[1], a[2]);
     (a[1], a[2]) = (t.1, t.0);
     return a;
 }

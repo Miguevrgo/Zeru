@@ -1,7 +1,7 @@
 fn main() {
-    var fixed: Array<i32, 4> = [1, 2, 3, 4];
-    var none = fixed[2..2];
-    var some = fixed[1..];
+    const fixed: Array<i32, 4> = [1, 2, 3, 4];
+    const none = fixed[2..2];
+    const some = fixed[1..];
     println("{} {} {} {}", fixed.len(), fixed.is_empty(), none.is_empty(), some.is_empty());
     for i in 0..fixed.len() {
         print("{} ", fixed[i]);

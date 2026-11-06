@@ -48,7 +48,7 @@ fn stack() *i64 {
 // ```zeru
 // import std.os;
 //
-// var args = os::args();
+// const args = os::args();
 // if args.len() < 2 {
 //     eprintln("usage: {} <name>", args[0]);
 //     return;
@@ -56,8 +56,8 @@ fn stack() *i64 {
 // println("hello, {}", args[1]);
 // ```
 pub fn args() Vec<str> {
-    var stack = stack();
-    var count = *stack as usize;
+    const stack = stack();
+    const count = *stack as usize;
     var out: Vec<str> = Vec.with_capacity(count);
     for i in 1..count + 1 {
         out.push(__zeru_c_text(*(stack + i) as *u8));
@@ -70,11 +70,11 @@ pub fn args() Vec<str> {
 fn environment() *Vec<String> {
     var at: i64 = 0;
     asm ("leaq __zeru_env(%rip), $0" : "=r" (at));
-    var table = at as *Vec<String>;
-    var ready = (at + 24) as *i64;
+    const table = at as *Vec<String>;
+    const ready = (at + 24) as *i64;
     if *ready == 0 {
         *ready = 1;
-        var stack = stack();
+        const stack = stack();
         var entry = stack + *stack + 2;
         while *entry != 0 {
             (*table).push(String.from(__zeru_c_text(*entry as *u8)));
@@ -126,8 +126,8 @@ pub fn env(name: str) String? {
     if check_name(name).is_err() {
         return None;
     }
-    var table = environment();
-    var at = find_env(table, name)?;
+    const table = environment();
+    const at = find_env(table, name)?;
     return String.from((*table)[at][name.len() + 1..]);
 }
 
@@ -161,7 +161,7 @@ pub fn set_env(name: str, value: str) ! {
     var entry = String.from(name);
     entry.push('=');
     entry.push_str(value);
-    var table = environment();
+    const table = environment();
     match find_env(table, name) {
         Some(at) => (*table)[at] = entry,
         None => (*table).push(entry),
@@ -186,7 +186,7 @@ pub fn set_env(name: str, value: str) ! {
 // ```
 pub fn remove_env(name: str) ! {
     check_name(name)!;
-    var table = environment();
+    const table = environment();
     match find_env(table, name) {
         Some(at) => {
             (*table).remove(at);
@@ -204,7 +204,7 @@ pub fn remove_env(name: str) ! {
 // ```zeru
 // import std.os;
 //
-// var clock = os::Clock.now();
+// const clock = os::Clock.now();
 // os::sleep(20);
 // println("{}", clock.elapsed() >= 20_000_000); // true
 // ```
@@ -230,7 +230,7 @@ fn clock(id: i64) Array<i64, 2> {
 // ```zeru
 // import std.os;
 //
-// var start = os::Clock.now();
+// const start = os::Clock.now();
 // var total = 0;
 // for i in 0..1000 {
 //     total += i;
@@ -242,7 +242,7 @@ pub struct Clock {
 
     // Returns this moment.
     pub fn now() Clock {
-        var time = clock(1);
+        const time = clock(1);
         return Clock { ns: (time[0] * 1000000000 + time[1]) as u64 };
     }
 
@@ -300,7 +300,7 @@ pub fn gid() u32 {
 // ```zeru
 // import std.os;
 //
-// var input = os::stdin();
+// const input = os::stdin();
 // var lines = 0;
 // while input.read_line().unwrap().is_some() {
 //     lines += 1;
@@ -324,11 +324,11 @@ pub fn stdin() &var fs::File {
 // ```zeru
 // import std.os;
 //
-// var text = os::read_stdin().unwrap();
+// const text = os::read_stdin().unwrap();
 // println("{}", text.lines().len()); // 0
 // ```
 pub fn read_stdin() String! {
-    var input = stdin();
+    const input = stdin();
     var text = String.new();
     while input.read(&var text, 65536)! > 0 {}
     return text;
@@ -351,7 +351,7 @@ fn locate(program: str) String! {
     if path.is_none() {
         path = String.from("/usr/local/bin:/usr/bin:/bin");
     }
-    var dirs = path.unwrap();
+    const dirs = path.unwrap();
     for dir in dirs.split(":") {
         var full = String.from(dir);
         full.push('/');
@@ -390,7 +390,7 @@ fn spawn(path: str, args: Vec<str>, out: i32, err: i32) i64! {
     for arg in args {
         argv_texts.push(arg);
     }
-    var table = environment();
+    const table = environment();
     var env_texts: Vec<str> = Vec.new();
     for entry in *table {
         env_texts.push(entry);
@@ -401,10 +401,10 @@ fn spawn(path: str, args: Vec<str>, out: i32, err: i32) i64! {
     var envp = c_list(&env_texts, &var env_packed);
     var ends: Array<i32, 2> = [0; 2];
     sys_result(syscall2(SYS_PIPE2, (&ends[0]) as i64, O_CLOEXEC))!;
-    var report = fs::File { fd: ends[0] as i64, buffer: Vec.new(), start: 0 };
+    const report = fs::File { fd: ends[0] as i64, buffer: Vec.new(), start: 0 };
     var pid: i64 = 0;
     {
-        var reported = fs::File { fd: ends[1] as i64, buffer: Vec.new(), start: 0 };
+        const reported = fs::File { fd: ends[1] as i64, buffer: Vec.new(), start: 0 };
         __zeru_flush();
         pid = sys_result(syscall1(SYS_FORK, 0))!;
         if pid == 0 {
@@ -437,7 +437,7 @@ fn spawn(path: str, args: Vec<str>, out: i32, err: i32) i64! {
 fn wait(pid: i64) i32! {
     var status: i32 = 0;
     while true {
-        var r = syscall5(SYS_WAIT4, pid, (&status) as i64, 0, 0, 0);
+        const r = syscall5(SYS_WAIT4, pid, (&status) as i64, 0, 0, 0);
         if r != -EINTR {
             sys_result(r)!;
             break;
@@ -471,8 +471,8 @@ fn wait(pid: i64) i32! {
 // println("{}", os::run("no-such-program", Vec[]).unwrap_err()); // 2
 // ```
 pub fn run(program: str, args: Vec<str>) i32! {
-    var path = locate(program)!;
-    var pid = spawn(path, args, -1, -1)!;
+    const path = locate(program)!;
+    const pid = spawn(path, args, -1, -1)!;
     return wait(pid);
 }
 
@@ -499,21 +499,21 @@ pub struct Output {
 // ```zeru
 // import std.os;
 //
-// var listing = os::output("echo", Vec["hello", "there"]).unwrap();
+// const listing = os::output("echo", Vec["hello", "there"]).unwrap();
 // println("{} {}", listing.stdout.trim(), listing.code); // hello there 0
-// var failed = os::output("sh", Vec["-c", "echo oops >&2; exit 1"]).unwrap();
+// const failed = os::output("sh", Vec["-c", "echo oops >&2; exit 1"]).unwrap();
 // println("{} {}", failed.stderr.trim(), failed.code); // oops 1
 // ```
 pub fn output(program: str, args: Vec<str>) Output! {
-    var path = locate(program)!;
+    const path = locate(program)!;
     var fds: Array<i32, 4> = [0; 4];
     sys_result(syscall2(SYS_PIPE2, (&fds[0]) as i64, O_CLOEXEC))!;
     var out = fs::File { fd: fds[0] as i64, buffer: Vec.new(), start: 0 };
     var pid: i64 = 0;
     {
-        var out_end = fs::File { fd: fds[1] as i64, buffer: Vec.new(), start: 0 };
+        const out_end = fs::File { fd: fds[1] as i64, buffer: Vec.new(), start: 0 };
         sys_result(syscall2(SYS_PIPE2, (&fds[2]) as i64, O_CLOEXEC))!;
-        var err_end = fs::File { fd: fds[3] as i64, buffer: Vec.new(), start: 0 };
+        const err_end = fs::File { fd: fds[3] as i64, buffer: Vec.new(), start: 0 };
         pid = spawn(path, args, fds[1], fds[3])!;
     }
     var err = fs::File { fd: fds[2] as i64, buffer: Vec.new(), start: 0 };
@@ -521,7 +521,7 @@ pub fn output(program: str, args: Vec<str>) Output! {
     var polls: Array<i32, 4> = [fds[0], 1, fds[2], 1];
     var open = 2;
     while open > 0 {
-        var r = syscall3(SYS_POLL, (&polls[0]) as i64, 2, -1);
+        const r = syscall3(SYS_POLL, (&polls[0]) as i64, 2, -1);
         if r == -EINTR {
             continue;
         }
@@ -587,19 +587,19 @@ pub fn random() u64 {
 // ```zeru
 // import std.os;
 //
-// var die = os::random_range(1, 6);
+// const die = os::random_range(1, 6);
 // println("{}", die >= 1 && die <= 6); // true
 // ```
 pub fn random_range(first: u64, last: u64) u64 {
-    var span = last - first;
+    const span = last - first;
     if span == 18446744073709551615 {
         return random();
     }
-    var count = span + 1;
-    var zero: u64 = 0;
-    var unfair = (zero -% count) % count;
+    const count = span + 1;
+    const zero: u64 = 0;
+    const unfair = (zero -% count) % count;
     while true {
-        var value = random();
+        const value = random();
         if value >= unfair {
             return first + value % count;
         }
@@ -619,9 +619,9 @@ pub fn random_range(first: u64, last: u64) u64 {
 // println("{}", os::temp_dir()); // /tmp
 // ```
 pub fn temp_dir() String {
-    var dir = env("TMPDIR");
+    const dir = env("TMPDIR");
     if dir.is_some() {
-        var path = dir.unwrap();
+        const path = dir.unwrap();
         if path.len() > 0 {
             return path;
         }

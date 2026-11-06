@@ -1,5 +1,5 @@
 //@ checked
 fn main() {
-    var f: f64 = -1.0;
+    const f: f64 = -1.0;
     println("{}", f as u8);
 }

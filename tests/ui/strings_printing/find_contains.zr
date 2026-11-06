@@ -1,6 +1,6 @@
 fn main() {
-    var line = "name: Zeru";
-    var colon = line.find(":").unwrap();
+    const line = "name: Zeru";
+    const colon = line.find(":").unwrap();
     println(
         "{}|{} {} {}",
         line[..colon],
@@ -8,6 +8,6 @@ fn main() {
         line.contains("Ze"),
         line.find("zz").is_none(),
     );
-    var owned = String.from("abcabc");
+    const owned = String.from("abcabc");
     println("{} {}", owned.find("ca").unwrap(), owned.contains(""));
 }

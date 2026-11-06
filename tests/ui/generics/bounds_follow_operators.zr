@@ -10,7 +10,7 @@ fn less<T: Ord>(a: T, b: T) bool {
 }
 fn main() {
     var x = 1;
-    var p: *i32 = &x;
+    const p: *i32 = &x;
     println(
         "{} {} {} {}",
         same("a", "a"),

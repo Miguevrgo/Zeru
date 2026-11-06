@@ -1,5 +1,5 @@
 fn main() {
-    var o: i64? = 5;
+    const o: i64? = 5;
     var total: i64 = 0;
     match o {
         Some(v) => {
@@ -7,8 +7,8 @@ fn main() {
         }
         None => {}
     }
-    var n: i64? = None;
-    var d = match n {
+    const n: i64? = None;
+    const d = match n {
         Some(v) => v,
         None => -1,
     };

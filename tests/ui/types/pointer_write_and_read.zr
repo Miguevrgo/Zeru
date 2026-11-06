@@ -4,7 +4,7 @@ fn set(p: *i32) {
 fn main() {
     var x: i32 = 1;
     set(&x);
-    var p: *i32 = &x;
+    const p: *i32 = &x;
     *p += 1;
     println("{}", x);
 }

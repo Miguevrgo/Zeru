@@ -11,23 +11,23 @@ Here it is whole. The rest of the page goes through it piece by piece.
 import std.os;
 
 fn main() {
-    var secret = os::random_range(1, 100) as i64;
+    const secret = os::random_range(1, 100) as i64;
     println("Guess the number between 1 and 100.");
     var tries = 0;
     while true {
         print("Your guess: ");
-        var line = os::stdin().read_line().unwrap();
+        const line = os::stdin().read_line().unwrap();
         if line.is_none() {
             println("Bye!");
             return;
         }
-        var guess = line.unwrap().trim().parse_int();
+        const guess = line.unwrap().trim().parse_int();
         if guess.is_err() {
             println("That is not a number.");
             continue;
         }
         tries += 1;
-        var n = guess.unwrap();
+        const n = guess.unwrap();
         if n < secret {
             println("Too small.");
         } else if n > secret {

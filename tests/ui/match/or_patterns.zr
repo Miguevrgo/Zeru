@@ -17,7 +17,7 @@ fn size(s: Shape) i64 {
 
 fn main() {
     for i in -1..9 {
-        var name = match i {
+        const name = match i {
             1 | 2 => "one or two",
             -1 | SEVEN => "minus one or seven",
             5 => "five",
@@ -25,8 +25,8 @@ fn main() {
         };
         println("{} {}", i, name);
     }
-    var r: i32! = Err(4);
-    var v = match r {
+    const r: i32! = Err(4);
+    const v = match r {
         Ok(x) | Err(x) => x,
     };
     println(

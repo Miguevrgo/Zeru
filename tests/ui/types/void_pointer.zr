@@ -3,6 +3,6 @@ fn is_null(p: *void) bool {
 }
 fn main() {
     var x = 5;
-    var p: *void = (&var x) as *void;
+    const p: *void = (&var x) as *void;
     println("{}", is_null(p));
 }

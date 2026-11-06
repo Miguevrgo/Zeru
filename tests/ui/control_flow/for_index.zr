@@ -22,7 +22,7 @@ fn main() {
     for i, w in words {
         println("{} {}", i, w.len());
     }
-    var arr: Array<i32, 3> = [7, 8, 9];
+    const arr: Array<i32, 3> = [7, 8, 9];
     for i, a in arr {
         if i == 2 {
             println("{}", a);

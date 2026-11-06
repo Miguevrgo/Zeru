@@ -1,10 +1,10 @@
 import std.net;
 fn main() {
-    var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
-    var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
-    var server = listener.accept().unwrap();
+    const listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+    const client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+    const server = listener.accept().unwrap();
     client.write("hi!").unwrap();
     var got = String.new();
-    var n = server.read(&var got, 3).unwrap();
+    const n = server.read(&var got, 3).unwrap();
     println("{} {}", n, got);
 }

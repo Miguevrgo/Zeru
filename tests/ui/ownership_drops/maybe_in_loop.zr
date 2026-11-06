@@ -13,7 +13,7 @@ fn maybe(at: *i64) Probe? {
 }
 fn main() {
     var log: i64 = 0;
-    var at: *i64 = &log;
+    const at: *i64 = &log;
     {
         while true {
             match maybe(at) {

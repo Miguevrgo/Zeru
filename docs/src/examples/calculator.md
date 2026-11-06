@@ -38,13 +38,13 @@ fn tokenize(text: str) Vec<Token>! {
     var tokens: Vec<Token> = Vec.new();
     var i: usize = 0;
     while i < text.len() {
-        var c = text[i];
+        const c = text[i];
         if c == ' ' {
             i += 1;
             continue;
         }
         if c >= '0' && c <= '9' || c == '.' {
-            var start = i;
+            const start = i;
             while i < text.len() && (text[i] >= '0' && text[i] <= '9' || text[i] == '.') {
                 i += 1;
             }
@@ -114,7 +114,7 @@ struct Parser {
                 }
                 Token::Slash => {
                     self.next();
-                    var divisor = self.factor()!;
+                    const divisor = self.factor()!;
                     if divisor == 0.0 {
                         return Err(DIV_ZERO);
                     }
@@ -138,7 +138,7 @@ struct Parser {
                 return -self.factor()!;
             }
             Token::Open => {
-                var value = self.sum()!;
+                const value = self.sum()!;
                 match self.next() {
                     Token::Close => {
                         return value;
@@ -157,7 +157,7 @@ struct Parser {
 
 fn evaluate(text: str) f64! {
     var parser = Parser { tokens: tokenize(text)!, at: 0 };
-    var value = parser.sum()!;
+    const value = parser.sum()!;
     match parser.peek() {
         Token::End => {
             return value;
@@ -171,18 +171,18 @@ fn evaluate(text: str) f64! {
 fn main() {
     while true {
         print("> ");
-        var line = os::stdin().read_line().unwrap();
+        const line = os::stdin().read_line().unwrap();
         if line.is_none() {
             return;
         }
-        var text = line.unwrap();
+        const text = line.unwrap();
         if text.trim().len() == 0 {
             continue;
         }
         match evaluate(text) {
             Ok(value) => println("{}", value),
             Err(code) => {
-                var why = match code {
+                const why = match code {
                     BAD_CHAR => "unexpected character",
                     DIV_ZERO => "division by zero",
                     default => "not a valid expression",

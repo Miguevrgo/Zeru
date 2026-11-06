@@ -1,6 +1,6 @@
 //@ checked
 fn main() {
-    var x: u8 = 1;
-    var far: usize = 8;
+    const x: u8 = 1;
+    const far: usize = 8;
     println("{}", x << far);
 }

@@ -1,9 +1,9 @@
 fn main() {
-    var a: u32 = 0xFF00 & 0x0F0F;
-    var b: u32 = 0xFF00 | 0x00FF;
-    var c: u32 = 0xFF00 ^ 0x0F0F;
-    var d: u8 = !0x0F;
-    var e = true & false;
-    var f = true ^ true;
+    const a: u32 = 0xFF00 & 0x0F0F;
+    const b: u32 = 0xFF00 | 0x00FF;
+    const c: u32 = 0xFF00 ^ 0x0F0F;
+    const d: u8 = !0x0F;
+    const e = true & false;
+    const f = true ^ true;
     println("{} {} {} {} {} {}", a, b, c, d, e, f);
 }

@@ -1,14 +1,14 @@
 fn main() {
-    var a: i8 = 100;
-    var b: i16 = 30000;
-    var c: i32 = 2000000000;
-    var d: i64 = 9000000000000000000;
-    var e: u8 = 200;
-    var f: u16 = 60000;
-    var g: u32 = 4000000000;
-    var h: u64 = 18000000000000000000;
-    var i: usize = 7;
-    var j: isize = -7;
+    const a: i8 = 100;
+    const b: i16 = 30000;
+    const c: i32 = 2000000000;
+    const d: i64 = 9000000000000000000;
+    const e: u8 = 200;
+    const f: u16 = 60000;
+    const g: u32 = 4000000000;
+    const h: u64 = 18000000000000000000;
+    const i: usize = 7;
+    const j: isize = -7;
     println(
         "{} {} {} {} {} {} {} {} {} {}",
         a + 27,

@@ -1,9 +1,9 @@
 fn main() {
-    var a: str = "hello";
-    var b = "hel";
+    const a: str = "hello";
+    const b = "hel";
     println("{} {} {}", a == "hello", a == b, a != b);
     println("{} {}", b == "help", "" == "");
-    var words: Vec<str> = Vec["x", "y"];
+    const words: Vec<str> = Vec["x", "y"];
     for w in words {
         if w == "y" {
             println("found y");

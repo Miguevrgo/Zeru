@@ -31,8 +31,8 @@ fn main_words() {
     }
     println("");
     println("{} {} {}", owned(String.from("a")), owned(String.from("bee")), owned(String.from("c")));
-    var s = String.from("else");
-    var r = &s;
+    const s = String.from("else");
+    const r = &s;
     println("{}", match *r { "else" => "yes", default => "no" });
     println("{}", match s { "else" if false => 1, "else" => 2, default => 3 });
 }

@@ -36,7 +36,7 @@ fn twice(f: fn(i32) i32, x: i32) i32 {
 
 fn sum_with<T: Num>(v: &Vec<T>, start: T) T {
     var total = start;
-    var add = fn(x: T) {
+    const add = fn(x: T) {
         total += x;
     };
     for x in v {
@@ -46,29 +46,29 @@ fn sum_with<T: Num>(v: &Vec<T>, start: T) T {
 }
 
 fn main() {
-    var bag = Bag { items: Vec[1, 2, 3, 4] };
+    const bag = Bag { items: Vec[1, 2, 3, 4] };
     var seen = 0;
     bag.each(fn(x) {
         seen += x;
     });
     println("{} {}", seen, bag.count(fn(x) x % 2 == 0));
-    var base = 10;
+    const base = 10;
     println("{}", twice(fn(x) x + base, 1));
-    var outer = 100;
-    var nested = fn(x: i32) i32 {
+    const outer = 100;
+    const nested = fn(x: i32) i32 {
         return apply(fn(y) y + outer + x, 1);
     };
     println("{}", nested(5));
     for k in Vec[7, 8] {
         println("{}", apply(fn(x) x * k, 2));
     }
-    var step = fn(var x: i32) i32 {
+    const step = fn(var x: i32) i32 {
         x += 1;
         return x;
     };
     println("{}", step(41));
-    var floats: Vec<f64> = Vec[1.5, 2.5];
+    const floats: Vec<f64> = Vec[1.5, 2.5];
     println("{} {}", sum_with(&bag.items, 0), sum_with(&floats, 0.5));
-    var shelf: Shelf<String> = Shelf { items: Vec[String.from("ab"), String.from("c")] };
+    const shelf: Shelf<String> = Shelf { items: Vec[String.from("ab"), String.from("c")] };
     println("{}", shelf.count_if(fn(s) s.len() == 2));
 }

@@ -11,7 +11,7 @@ Text in Zeru is bytes, usually UTF-8. There are two types:
 A string literal is a `str`:
 
 ```zeru
-var greeting = "hello, world";
+const greeting = "hello, world";
 println("{} has {} bytes", greeting, greeting.len()); // hello, world has 12 bytes
 ```
 
@@ -19,7 +19,7 @@ Indexing gives a byte (`u8`), slicing gives another `str`, and `for` walks
 the bytes:
 
 ```zeru
-var word = "zeru";
+const word = "zeru";
 println("{} {}", word[0] == 'z', word[1..3]); // true er
 var vowels = 0;
 for byte in word {
@@ -50,10 +50,10 @@ The methods:
 | `map(f)`, `filter(keep)`, `any(f)`, `all(f)` | run a [closure](closures.md#vec-methods) on each byte |
 
 ```zeru
-var line = "  width = 80 ";
-var parts = line.trim().split(" = ");
+const line = "  width = 80 ";
+const parts = line.trim().split(" = ");
 println("{} is {}", parts[0], parts[1]); // width is 80
-var width = parts[1].parse_int().unwrap();
+const width = parts[1].parse_int().unwrap();
 println("{}", width * 2); // 160
 println("{}", "3.5".parse_float().unwrap() + 1.0); // 4.5
 println("{}", "1x".parse_int().is_err()); // true
@@ -74,8 +74,8 @@ text is copied.
 `find` gives a position to slice from:
 
 ```zeru
-var line = "name: Zeru";
-var colon = line.find(":").unwrap();
+const line = "name: Zeru";
+const colon = line.find(":").unwrap();
 println("{}|{}", line[..colon], line[colon + 2..]); // name|Zeru
 println("{}", line.contains("Ze")); // true
 ```
@@ -84,7 +84,7 @@ println("{}", line.contains("Ze")); // true
 byte that differs, a text going before those it starts:
 
 ```zeru
-var answer = "yes";
+const answer = "yes";
 println("{}", answer == "yes"); // true
 println("{} {}", "apple" < "banana", "app" < "apple"); // true true
 ```
@@ -95,8 +95,8 @@ Between backticks, a string keeps everything as written: backslashes,
 quotes and line breaks. It suits paths, patterns and blocks of text:
 
 ```zeru
-var path = `C:\games\save.txt`;
-var block = `first line
+const path = `C:\games\save.txt`;
+const block = `first line
 second "quoted" line`;
 println("{}", path); // C:\games\save.txt
 println("{}", block.lines().len()); // 2
@@ -125,7 +125,7 @@ fn shout(text: str) {
 }
 
 fn main() {
-    var name = String.from("  ann ");
+    const name = String.from("  ann ");
     shout(name.trim()); // ann!
     println("{}", name.starts_with("  a")); // true
 }

@@ -19,7 +19,7 @@ import std.fs;
 
 fs::write_file("todo.txt", "buy milk\n").unwrap();
 fs::append_file("todo.txt", "call ann\n").unwrap();
-var text = fs::read_file("todo.txt").unwrap();
+const text = fs::read_file("todo.txt").unwrap();
 for line in text.lines() {
     println("- {}", line);
 }
@@ -53,7 +53,7 @@ fs::write_file("names.txt", "ann\nbob\ncid\n").unwrap();
 var file = fs::File.open("names.txt").unwrap();
 var count = 0;
 while true {
-    var line = file.read_line().unwrap();
+    const line = file.read_line().unwrap();
     if line.is_none() {
         break;
     }
@@ -83,7 +83,7 @@ import std.fs;
 fs::create_dir("notes").unwrap();
 fs::write_file("notes/a.txt", "hello").unwrap();
 println("{}", fs::metadata("notes/a.txt").unwrap().size); // 5
-var entries = fs::read_dir("notes").unwrap();
+const entries = fs::read_dir("notes").unwrap();
 println("{} {}", entries.len(), entries[0].name); // 1 a.txt
 fs::remove_file("notes/a.txt").unwrap();
 fs::remove_dir("notes").unwrap();

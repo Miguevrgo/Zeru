@@ -1,6 +1,6 @@
 fn main() {
-    var x: i32 = 7;
-    var r = match x {
+    const x: i32 = 7;
+    const r = match x {
         0 => "zero",
         7 => "seven",
         default => "other",

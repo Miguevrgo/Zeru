@@ -15,19 +15,19 @@ enum Kept {
 }
 fn main() {
     var log: i64 = 0;
-    var at: *i64 = &log;
+    const at: *i64 = &log;
     {
         {
-            var k = Kept::Two(probe(1, at), probe(2, at));
+            const k = Kept::Two(probe(1, at), probe(2, at));
         }
         {
             var k = Kept::One(probe(3, at));
-            var twin = Kept::One(probe(3, at));
+            const twin = Kept::One(probe(3, at));
             k = Kept::Nothing;
             println("reset");
         }
         {
-            var k = Kept::One(probe(4, at));
+            const k = Kept::One(probe(4, at));
             match k {
                 Kept::One(p) => {
                     println("matched {}", p.id);

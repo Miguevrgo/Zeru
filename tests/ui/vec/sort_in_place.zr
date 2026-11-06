@@ -1,11 +1,11 @@
 fn sort(v: *Vec<i64>) {
-    var n = (*v).len();
+    const n = (*v).len();
     var i: usize = 0;
     while i < n {
         var j: usize = 0;
         while j + 1 < n - i {
             if (*v)[j] > (*v)[j + 1] {
-                var t = (*v)[j];
+                const t = (*v)[j];
                 (*v)[j] = (*v)[j + 1];
                 (*v)[j + 1] = t;
             }

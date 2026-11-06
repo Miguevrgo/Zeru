@@ -2,7 +2,7 @@ fn zip(a: i32, b: i32) Array<(i32, i32), 1> {
     return [(a, b)];
 }
 fn main() {
-    var (only,) = (1,);
+    const (only,) = (1,);
     for (x, y) in zip(1, 2) {
         println("{} {} {}", only, x, y);
     }

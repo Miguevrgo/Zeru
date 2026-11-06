@@ -15,7 +15,7 @@ fn grid() Vec<Vec<i64>>! {
 }
 
 fn main() {
-    var arrays: Vec<Array<i32, 2>> = Vec[[1, 2]];
+    const arrays: Vec<Array<i32, 2>> = Vec[[1, 2]];
     println("{} {}", deep(Vec[Vec[Vec[1]]]), rows(arrays, [Vec[1], Vec[2, 3]]));
     println("{} {}", maybe().unwrap()[0], grid().unwrap()[0][0]);
 }

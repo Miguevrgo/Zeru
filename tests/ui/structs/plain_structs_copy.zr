@@ -8,9 +8,9 @@ fn moved(p: Point) Point {
     return q;
 }
 fn main() {
-    var p = Point { x: 1, y: 2 };
+    const p = Point { x: 1, y: 2 };
     var q = p;
     q.x = 9;
-    var r = moved(p);
+    const r = moved(p);
     println("{} {} {} {}", p.x, q.x, r.x, r.y);
 }

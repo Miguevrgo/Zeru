@@ -13,18 +13,18 @@ fn make() Vec<i32> {
     return Vec[1, 2, 3];
 }
 fn main() {
-    var r = &make();
-    var w = &var make();
+    const r = &make();
+    const w = &var make();
     w.push(4);
-    var e = &make()[1];
-    var j = &job("a");
-    var t = &job("b").tags;
+    const e = &make()[1];
+    const j = &job("a");
+    const t = &job("b").tags;
     for i in 0..2 {
-        var k = &job("loop");
+        const k = &job("loop");
         println("{} {}", i, k.name);
     }
     if !r.is_empty() {
-        var inner = &job("inner");
+        const inner = &job("inner");
         println("{}", inner.name);
     }
     println("{} {} {} {} {}", r.len(), w.len(), *e, j.name, t.len());

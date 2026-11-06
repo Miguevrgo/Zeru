@@ -2,5 +2,5 @@ struct Box<T> {
     v: T,
 }
 fn main() {
-    var o: Box<i64>? = Box { v: 3 };
+    const o: Box<i64>? = Box { v: 3 };
 }

@@ -17,7 +17,7 @@ Try it from another terminal with `nc 127.0.0.1 7000`, or several at once.
 import std.net;
 
 fn main() {
-    var listener = net::TcpListener.bind("127.0.0.1:7000").unwrap();
+    const listener = net::TcpListener.bind("127.0.0.1:7000").unwrap();
     println("listening on {}", listener.local_addr().unwrap());
     var clients: Vec<net::TcpStream> = Vec.new();
     while true {
@@ -26,24 +26,24 @@ fn main() {
         for client in clients {
             handles.push(client.handle());
         }
-        var ready = net::wait(&handles, None).unwrap();
+        const ready = net::wait(&handles, None).unwrap();
         var closed: Vec<usize> = Vec.new();
         for index in ready {
             if index == 0 {
-                var client = listener.accept().unwrap();
+                const client = listener.accept().unwrap();
                 println("{} connected", client.peer_addr().unwrap());
                 clients.push(client);
                 continue;
             }
-            var client = &clients[index - 1];
+            const client = &clients[index - 1];
             var data = String.new();
-            var got = client.read(&var data, 1024);
+            const got = client.read(&var data, 1024);
             if got.is_err() || got.unwrap() == 0 || client.write(data).is_err() {
                 closed.push(index - 1);
             }
         }
         while closed.len() > 0 {
-            var gone = clients.remove(closed.pop().unwrap());
+            const gone = clients.remove(closed.pop().unwrap());
             println("{} left", gone.peer_addr().unwrap());
         }
     }

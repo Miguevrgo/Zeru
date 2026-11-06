@@ -3,7 +3,7 @@ fn loud(v: bool) bool {
     return v;
 }
 fn main() {
-    var a = loud(false) && loud(true);
-    var b = loud(true) || loud(false);
+    const a = loud(false) && loud(true);
+    const b = loud(true) || loud(false);
     println("{} {}", a, b);
 }

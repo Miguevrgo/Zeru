@@ -2,7 +2,7 @@ fn main() {
     var v: Vec<i64> = Vec[1, 2, 3];
     v.insert(0, 0);
     v.insert(4, 9);
-    var second = v.remove(1);
+    const second = v.remove(1);
     for x in v {
         print("{} ", x);
     }

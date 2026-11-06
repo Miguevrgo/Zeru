@@ -11,6 +11,6 @@ fn name(s: Status) str {
     };
 }
 fn main() {
-    var s = Status::Connecting;
+    const s = Status::Connecting;
     println("{} {} {}", name(s), name(Status::Connected), s == Status::Connecting);
 }

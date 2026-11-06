@@ -1,6 +1,6 @@
 import std.fs;
 fn main() {
-    var r = fs::File.open("no/such/file");
+    const r = fs::File.open("no/such/file");
     println("{} {}", r.is_err(), r.unwrap_err());
     println("{} {}", fs::File.open("a\0b").unwrap_err(), fs::exists("a\0b"));
 }

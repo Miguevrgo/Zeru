@@ -1,12 +1,12 @@
 import std.net;
 fn main() {
-    var listener = net::UnixListener.bind("ui_net_unix.sock").unwrap();
+    const listener = net::UnixListener.bind("ui_net_unix.sock").unwrap();
     println("{}", listener.local_addr().unwrap());
-    var client = net::UnixStream.connect("ui_net_unix.sock").unwrap();
+    const client = net::UnixStream.connect("ui_net_unix.sock").unwrap();
     var handles: Vec<net::Handle> = Vec.new();
     handles.push(listener.handle());
     println("{}", net::wait(&handles, 0).unwrap().len());
-    var server = listener.accept().unwrap();
+    const server = listener.accept().unwrap();
     println("{} {} [{}]", client.peer_addr().unwrap(), server.local_addr().unwrap(), client.local_addr().unwrap());
     handles.push(server.handle());
     handles.push(client.handle());

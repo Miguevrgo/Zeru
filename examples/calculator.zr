@@ -19,7 +19,7 @@ fn tokenize(text: str) Vec<Token>! {
     var tokens: Vec<Token> = Vec.new();
     var at: usize = 0;
     while at < text.len() {
-        var c = text[at];
+        const c = text[at];
         if c >= '0' && c <= '9' {
             var value: i64 = 0;
             while at < text.len() && text[at] >= '0' && text[at] <= '9' {
@@ -56,7 +56,7 @@ struct Parser {
     }
 
     fn next(var self) Token {
-        var token = self.peek();
+        const token = self.peek();
         match token {
             Token::End => {}
             default => self.at += 1,
@@ -94,7 +94,7 @@ struct Parser {
                 }
                 Token::Slash => {
                     self.at += 1;
-                    var divisor = self.unary()!;
+                    const divisor = self.unary()!;
                     if divisor == 0 {
                         return Err(DIVIDE_BY_ZERO);
                     }
@@ -117,7 +117,7 @@ struct Parser {
                 return -self.unary()!;
             }
             Token::Open => {
-                var value = self.sum()!;
+                const value = self.sum()!;
                 match self.next() {
                     Token::Close => {
                         return value;
@@ -136,7 +136,7 @@ struct Parser {
 
 fn evaluate(text: str) i64! {
     var parser = Parser { tokens: tokenize(text)!, at: 0 };
-    var value = parser.sum()!;
+    const value = parser.sum()!;
     if parser.at != parser.tokens.len() - 1 {
         return Err(UNEXPECTED);
     }
@@ -151,7 +151,7 @@ fn show(text: str) {
 }
 
 fn main() {
-    var args = os::args();
+    const args = os::args();
     if args.len() > 1 {
         show(args[1]);
         return;

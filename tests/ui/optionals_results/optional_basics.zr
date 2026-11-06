@@ -5,7 +5,7 @@ fn find_positive(x: i32) i32? {
     return None;
 }
 fn main() {
-    var a = find_positive(5);
-    var b = find_positive(-1);
+    const a = find_positive(5);
+    const b = find_positive(-1);
     println("{} {} {}", a.is_some(), b.is_none(), a.unwrap());
 }

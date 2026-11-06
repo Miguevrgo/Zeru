@@ -77,7 +77,7 @@ fn main_values() {
     println("{} {} {}", both(true, true), both(false, true), both(false, false));
     println("{} {} {} {} {}", grade(0, true), grade(3, true), grade(3, false), grade(200, true), grade(50, true));
     println("{} {} {} {}", opt(1, 2), opt(None, 4), opt(7, None), opt(None, None));
-    var pair = (1, Value::Text(String.from("kept")));
+    const pair = (1, Value::Text(String.from("kept")));
     match pair {
         (1, Value::Text(s)) => println("view {}", s),
         default => {}
@@ -98,8 +98,8 @@ const C: i32 = cell(false, 9);
 const D: i32 = cell(false, 1);
 fn main_consts() {
     println("{} {} {} {}", A, B, C, D);
-    var o: i32? = 3;
-    var r = match (o, 2) { (Some(x),   y) => x+y, (None,_)=>0 };
+    const o: i32? = 3;
+    const r = match (o, 2) { (Some(x),   y) => x+y, (None,_)=>0 };
     println("{}", r);
 }
 fn main() {

@@ -14,7 +14,7 @@ fn quicksort(xs: &var [i64]) {
     if xs.len() < 2 {
         return;
     }
-    var pivot = xs[xs.len() - 1];
+    const pivot = xs[xs.len() - 1];
     var store: usize = 0;
     for i in 0..xs.len() - 1 {
         if xs[i] < pivot {
@@ -40,7 +40,7 @@ fn main() {
     var a: Array<i32, 4> = [4, 3, 2, 1];
     double(&var a);
     println("{}", a);
-    var part = &var a[1..];
+    const part = &var a[1..];
     part.sort();
     part[0] += 100;
     println("{} {} {}", a, part.len(), part.contains(102));
@@ -48,13 +48,13 @@ fn main() {
     quicksort(&var w);
     println("{}", w);
     var names: Vec<String> = Vec[String.from("c"), String.from("a"), String.from("b")];
-    var middle = &var names[0..2];
+    const middle = &var names[0..2];
     middle.reverse();
     middle.sort();
     println("{} {}", middle, names);
-    var r = &var v[..];
+    const r = &var v[..];
     r.rotate_left(2);
     println("{} {}", v, v.max().unwrap());
-    var ro: &[i32] = &var v[0..2];
+    const ro: &[i32] = &var v[0..2];
     println("{}", ro);
 }

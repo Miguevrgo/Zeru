@@ -68,7 +68,7 @@ struct Rect {
 }
 
 fn main() {
-    var r = Rect.square(3.0);
+    const r = Rect.square(3.0);
     println("{}", r.area()); // 9.0
 }
 ```

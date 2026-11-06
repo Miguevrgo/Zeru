@@ -1,14 +1,14 @@
 import std.net;
 
 fn once(listener: &net::TcpListener, addr: str) bool {
-    var client = net::TcpStream.connect(addr).unwrap();
-    var server = listener.accept().unwrap();
+    const client = net::TcpStream.connect(addr).unwrap();
+    const server = listener.accept().unwrap();
     return true;
 }
 
 fn main() {
-    var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
-    var addr = listener.local_addr().unwrap();
+    const listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+    const addr = listener.local_addr().unwrap();
     for i in 0..3000 {
         once(&listener, addr);
     }

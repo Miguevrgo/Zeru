@@ -3,8 +3,8 @@ enum Shape {
     Empty,
 }
 fn main() {
-    var s = Shape::Rect(4.0, 9.0);
-    var w = match s {
+    const s = Shape::Rect(4.0, 9.0);
+    const w = match s {
         Shape::Rect(w, _) => w,
         Shape::Empty => 0.0,
     };

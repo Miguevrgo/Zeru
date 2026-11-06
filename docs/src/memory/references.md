@@ -31,7 +31,7 @@ value a reference points at, put `*` in front:
 
 ```zeru
 var count = 1;
-var r = &var count;
+const r = &var count;
 *r += 10;
 println("{}", count); // 11
 ```
@@ -46,8 +46,8 @@ struct Player {
 
 fn main() {
     var p = Player { hp: 10, mana: 5 };
-    var hp = &var p.hp;
-    var mana = &var p.mana;
+    const hp = &var p.hp;
+    const mana = &var p.mana;
     *hp -= 3;
     *mana += 1;
     println("{} {}", p.hp, p.mana); // 7 6
@@ -89,7 +89,7 @@ reference simply sees the new value:
 
 ```zeru
 var list: Vec<i32> = Vec[1, 2, 3];
-var first = &list[0];
+const first = &list[0];
 list[0] = 9;
 println("{}", *first); // 9
 ```
@@ -106,7 +106,7 @@ fn first(list: &Vec<i32>) &i32 {
 }
 
 fn main() {
-    var list: Vec<i32> = Vec[4, 5];
+    const list: Vec<i32> = Vec[4, 5];
     println("{}", *first(&list)); // 4
 }
 ```
@@ -137,7 +137,7 @@ import std.collections.hashmap::{HashMap};
 fn main() {
     var ages: HashMap<String, i32> = HashMap.new();
     ages.insert(String.from("Ada"), 36);
-    var age = ages.get("Ada").unwrap();
+    const age = ages.get("Ada").unwrap();
     println("{}", *age); // 36
 }
 ```
@@ -182,7 +182,7 @@ to one where a `*T` is expected, and `*p` reads or writes through it:
 
 ```zeru
 var bytes: Array<u8, 4> = [1, 2, 3, 4];
-var at: *u8 = &bytes[0];
+const at: *u8 = &bytes[0];
 var sum: u32 = 0;
 for i in 0..4 {
     sum += *(at + i) as u32;

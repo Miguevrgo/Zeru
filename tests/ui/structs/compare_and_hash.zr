@@ -29,8 +29,8 @@ struct Tagged {
 }
 
 fn main() {
-    var p = Point { x: 1, y: 2 };
-    var q = Point { x: 1, y: 3 };
+    const p = Point { x: 1, y: 2 };
+    const q = Point { x: 1, y: 3 };
     println("{} {} {} {}", p == q, p != q, p < q, q <= p);
     var people: Vec<Person> = Vec[
         Person { name: String.from("Zoe"), age: 30 },
@@ -53,9 +53,9 @@ fn main() {
     heap.push(Point { x: 0, y: 9 });
     heap.push(Point { x: 5, y: 1 });
     println("{}", heap.pop().unwrap().x);
-    var t1 = Tagged { color: Color::Red, at: p, weight: 1.5 };
-    var t2 = Tagged { color: Color::Green, at: p, weight: 0.5 };
+    const t1 = Tagged { color: Color::Red, at: p, weight: 1.5 };
+    const t2 = Tagged { color: Color::Green, at: p, weight: 0.5 };
     println("{} {}", t1 < t2, t1 == t1);
-    var vs: Vec<Point> = Vec[q, p];
+    const vs: Vec<Point> = Vec[q, p];
     println("{} {}", vs.contains(p), vs.max().unwrap().y);
 }

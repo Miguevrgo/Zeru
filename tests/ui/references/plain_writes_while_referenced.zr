@@ -5,16 +5,16 @@ struct P {
 }
 fn main() {
     var p = P { x: 1, hp: 10, mana: 3 };
-    var r = &p;
+    const r = &p;
     p.x = 5;
     println("{}", r.x);
-    var hp = &var p.hp;
-    var mana = &var p.mana;
+    const hp = &var p.hp;
+    const mana = &var p.mana;
     *hp -= 1;
     *mana += 1;
     println("{} {}", p.hp, p.mana);
     var v: Vec<i64> = Vec[1, 2, 3];
-    var first = &v[0];
+    const first = &v[0];
     v[2] = 9;
     println("{} {}", *first, v[2]);
 }

@@ -4,7 +4,7 @@ enum Level {
     High,
 }
 fn main() {
-    var a = Level::Low;
-    var b = Level::High;
+    const a = Level::Low;
+    const b = Level::High;
     println("{} {} {}", a < b, b > Level::Mid, a == Level::Low);
 }

@@ -10,9 +10,9 @@ fn probe(id: i64, log: *i64) Probe {
 }
 fn main() {
     var log: i64 = 0;
-    var at: *i64 = &log;
+    const at: *i64 = &log;
     {
-        var n = probe(7, at).id;
+        const n = probe(7, at).id;
         println("n {}", n);
     }
     println("dropped: {}", log);

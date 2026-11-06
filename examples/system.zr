@@ -13,19 +13,19 @@ fn main() {
     println("{} {} {}", math::abs(-7), math::max(2.5, 1.5), math::clamp(15, 0, 10));
     println("{} {}", math::pow(3, 4), math::is_power_of_two(64));
 
-    var start = os::Clock.now();
+    const start = os::Clock.now();
     os::sleep(5);
     println("pid {} slept at least 5 ms: {}", os::pid() > 0, start.elapsed() >= 5_000_000);
-    var listing = os::output("echo", Vec["from", "a", "child"]).unwrap();
+    const listing = os::output("echo", Vec["from", "a", "child"]).unwrap();
     println("{} {}", listing.stdout.trim(), os::random_range(1, 6) <= 6);
 
-    var before = cycles();
-    var after = cycles();
+    const before = cycles();
+    const after = cycles();
     println("the cycle counter moves on: {}", after > before);
 
-    var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
-    var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
-    var server = listener.accept().unwrap();
+    const listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+    const client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+    const server = listener.accept().unwrap();
     client.write("ping").unwrap();
     var reply = String.new();
     server.read(&var reply, 4).unwrap();

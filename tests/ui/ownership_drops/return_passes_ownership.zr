@@ -9,14 +9,14 @@ fn probe(id: i64, log: *i64) Probe {
     return Probe { id: id, log: log };
 }
 fn passed_through(at: *i64) Probe {
-    var p = probe(5, at);
+    const p = probe(5, at);
     return p;
 }
 fn main() {
     var log: i64 = 0;
-    var at: *i64 = &log;
+    const at: *i64 = &log;
     {
-        var p = passed_through(at);
+        const p = passed_through(at);
         println("got {}", p.id);
     }
     println("dropped: {}", log);

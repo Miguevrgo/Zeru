@@ -17,6 +17,6 @@ fn measure<T: Area>(x: T) i64 {
     return x.area();
 }
 fn main() {
-    var w = Wrap { inner: Sq { s: 3 } };
+    const w = Wrap { inner: Sq { s: 3 } };
     println("{} {}", w.doubled(), measure(Sq { s: 4 }));
 }

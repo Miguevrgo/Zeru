@@ -1,8 +1,8 @@
 import std.fs;
 fn main() {
-    var path = "ui_fs_roundtrip.txt";
+    const path = "ui_fs_roundtrip.txt";
     fs::write_file(path, "zeru writes").unwrap();
-    var text = fs::read_file(path).unwrap();
+    const text = fs::read_file(path).unwrap();
     println("{} {} {}", text, fs::exists(path), fs::metadata(path).unwrap().size);
     fs::remove_file(path).unwrap();
     println("{} {}", fs::exists(path), fs::read_file(path).unwrap_err());

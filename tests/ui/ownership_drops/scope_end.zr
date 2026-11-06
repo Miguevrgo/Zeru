@@ -10,11 +10,11 @@ fn probe(id: i64, log: *i64) Probe {
 }
 fn main() {
     var log: i64 = 0;
-    var at: *i64 = &log;
+    const at: *i64 = &log;
     {
         {
-            var a = probe(1, at);
-            var b = probe(2, at);
+            const a = probe(1, at);
+            const b = probe(2, at);
         }
         println("after block");
     }

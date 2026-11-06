@@ -27,10 +27,10 @@ fn main() {
     people.sort_by(fn(a, b) a.age - b.age);
     println("{}", people.map(fn(p) p.name.copy()));
 
-    var size = fn(s: String) usize {
+    const size = fn(s: String) usize {
         return s.len();
     };
-    var kept = String.from("ab");
+    const kept = String.from("ab");
     println("{} {} {}", size(String.from("xyz")), size(kept), kept);
 
     var marks: Array<i32, 4> = [7, 3, 9, 5];
@@ -40,7 +40,7 @@ fn main() {
     marks.rotate_left(1);
     println("{}", marks);
 
-    var text = "a-b-c";
+    const text = "a-b-c";
     println("{} {}", text.filter(fn(c) c != '-'), text.map(fn(c) c == '-'));
     println("{} {}", text.any(fn(c) c == 'b'), text.all(fn(c) c != ' '));
 }

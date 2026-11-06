@@ -18,12 +18,12 @@ fn main() {
     println("{} {}", q, r);
     const (x: i64, y: u8) = (3, 4);
     println("{} {}", x, y);
-    var (a, (b, c), _) = (1, (2.5, "c"), true);
+    const (a, (b, c), _) = (1, (2.5, "c"), true);
     println("{} {} {}", a, b, c);
-    var (first, second) = two();
+    const (first, second) = two();
     println("got {} {}", first.id, second.id);
     {
-        var (kept, _) = two();
+        const (kept, _) = two();
         println("kept {}", kept.id);
     }
     var m = 1;
@@ -39,7 +39,7 @@ fn main() {
     println("{} {}", s1, s2);
     (q, _) = divide(9, 2);
     println("{}", q);
-    var pairs: Vec<(i32, str)> = Vec[(1, "one"), (2, "two")];
+    const pairs: Vec<(i32, str)> = Vec[(1, "one"), (2, "two")];
     for (k, name) in pairs {
         print("{}={} ", k, name);
     }
@@ -55,7 +55,7 @@ fn main() {
     }
     println("{}", points);
     var xs: Vec<i32> = Vec[1, 2, 3, 4];
-    var ys: Array<i32, 3> = [10, 20, 30];
+    const ys: Array<i32, 3> = [10, 20, 30];
     var total = 0;
     for (p, q2) in zip(xs, ys) {
         total += p * q2;
@@ -72,7 +72,7 @@ fn main() {
     var names: Vec<String> = Vec.new();
     names.push(String.from("ann"));
     names.push(String.from("bob"));
-    var ages: Vec<i32> = Vec[30, 40];
+    const ages: Vec<i32> = Vec[30, 40];
     for (name, age) in zip(names, ages) {
         print("{} {} ", name, age);
     }

@@ -1,8 +1,8 @@
 fn main() {
-    var a: i32 = -7;
-    var b: i32 = 2;
-    var c: u32 = 7;
-    var d: u32 = 2;
+    const a: i32 = -7;
+    const b: i32 = 2;
+    const c: u32 = 7;
+    const d: u32 = 2;
     println("{} {} {} {}", a / b, a % b, c / d, c % d);
     println("{} {} {}", 7 / 2, 7 % 2, -7 / 2);
 }

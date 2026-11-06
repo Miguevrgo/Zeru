@@ -8,7 +8,7 @@ fn main() {
     println("{} {}", fs::exists("dangling"), fs::exists("nowhere.txt"));
     os::set_env("A", "B=c").unwrap();
     println("{}", os::env("A=B").is_none());
-    var parts = "a\rb\r".lines();
+    const parts = "a\rb\r".lines();
     println("{} {}", parts.len(), parts[0].len());
     println("{}", "x\r\ny\n".lines()[0].len());
     fs::write_file("cr.txt", "one\r\ntwo\r").unwrap();

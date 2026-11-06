@@ -1,3 +1,3 @@
 status: signal 6
 -- stderr
-panic at tests/ui/simd/load_past_end_panics.zr:6:17: index out of bounds
+panic at tests/ui/simd/load_past_end_panics.zr:6:19: index out of bounds

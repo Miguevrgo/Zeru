@@ -1,10 +1,10 @@
 fn main() {
     var v: Vec<i64> = Vec[1, 2];
-    var r = v.get(0);
+    const r = v.get(0);
     println("{}", *r.unwrap());
     v.push(3);
     while v.len() < 5 {
-        var first = v.get(0);
+        const first = v.get(0);
         println("{}", first.is_some());
         v.push(4);
     }

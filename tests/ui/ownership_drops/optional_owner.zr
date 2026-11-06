@@ -10,15 +10,15 @@ fn probe(id: i64, log: *i64) Probe {
 }
 fn main() {
     var log: i64 = 0;
-    var at: *i64 = &log;
+    const at: *i64 = &log;
     {
         {
-            var some: Probe? = probe(1, at);
-            var none: Probe? = None;
+            const some: Probe? = probe(1, at);
+            const none: Probe? = None;
         }
         {
-            var some: Probe? = probe(2, at);
-            var p = some.unwrap();
+            const some: Probe? = probe(2, at);
+            const p = some.unwrap();
             println("unwrapped {}", p.id);
         }
     }

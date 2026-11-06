@@ -50,21 +50,21 @@ fn count(text: str) Counts {
 }
 
 fn run() ! {
-    var args = os::args();
+    const args = os::args();
     if args.len() != 2 {
         eprintln("usage: wc <file>");
         return Err(USAGE);
     }
-    var text = fs::read_file(args[1])!;
-    var counts = count(text);
+    const text = fs::read_file(args[1])!;
+    const counts = count(text);
     println("{} lines, {} words, {} bytes", counts.lines, counts.words, counts.bytes);
     println("longest line: {} bytes", counts.longest);
 }
 
 fn main() {
-    var result = run();
+    const result = run();
     if result.is_err() {
-        var code = result.unwrap_err();
+        const code = result.unwrap_err();
         if code == ENOENT {
             eprintln("no such file");
         } else if code != USAGE {

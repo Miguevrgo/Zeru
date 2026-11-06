@@ -64,7 +64,7 @@ fn c_path(path: str, buf: *u8) i64! {
 // A syscall that takes one path and returns 0 on success.
 fn on_path(nr: i64, path: str, arg: i64) ! {
     var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
-    var p = c_path(path, &buf[0])!;
+    const p = c_path(path, &buf[0])!;
     sys_result(syscall2(nr, p, arg))!;
 }
 
@@ -72,8 +72,8 @@ fn on_path(nr: i64, path: str, arg: i64) ! {
 fn on_paths(nr: i64, first: str, second: str) ! {
     var first_buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
     var second_buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
-    var a = c_path(first, &first_buf[0])!;
-    var b = c_path(second, &second_buf[0])!;
+    const a = c_path(first, &first_buf[0])!;
+    const b = c_path(second, &second_buf[0])!;
     sys_result(syscall2(nr, a, b))!;
 }
 
@@ -86,7 +86,7 @@ pub enum Kind {
 }
 
 fn kind_of(mode: u32) Kind {
-    var format = mode & 0o170000;
+    const format = mode & 0o170000;
     if format == 0o100000 {
         return Kind::File;
     }
@@ -110,7 +110,7 @@ fn kind_of(mode: u32) Kind {
 // import std.fs;
 //
 // fs::write_file("data.txt", "12345").unwrap();
-// var meta = fs::metadata("data.txt").unwrap();
+// const meta = fs::metadata("data.txt").unwrap();
 // println("{} {}", meta.size, meta.mode == 0o644); // 5 true
 // match meta.kind {
 //     fs::Kind::File => println("a file"), // a file
@@ -129,7 +129,7 @@ pub struct Metadata {
 
 // Metadata from the `struct stat` a stat syscall fills.
 fn metadata_of(stat: Array<i64, 18>) Metadata {
-    var mode = ((stat[3] as u64) & 0xffffffff) as u32;
+    const mode = ((stat[3] as u64) & 0xffffffff) as u32;
     return Metadata {
         kind: kind_of(mode),
         size: stat[6] as usize,
@@ -143,7 +143,7 @@ fn metadata_of(stat: Array<i64, 18>) Metadata {
 
 fn stat_path(nr: i64, path: str) Metadata! {
     var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
-    var p = c_path(path, &buf[0])!;
+    const p = c_path(path, &buf[0])!;
     var stat: Array<i64, 18> = [0; 18];
     sys_result(syscall2(nr, p, (&stat[0]) as i64))!;
     return metadata_of(stat);
@@ -151,7 +151,7 @@ fn stat_path(nr: i64, path: str) Metadata! {
 
 fn open_path(path: str, flags: i64, mode: i64) i64! {
     var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
-    var p = c_path(path, &buf[0])!;
+    const p = c_path(path, &buf[0])!;
     return sys_result(syscall3(SYS_OPEN, p, flags, mode));
 }
 
@@ -159,7 +159,7 @@ fn open_path(path: str, flags: i64, mode: i64) i64! {
 fn write_all(fd: i64, data: str) ! {
     var done: usize = 0;
     while done < data.len() {
-        var n = sys_result(
+        const n = sys_result(
             syscall3(SYS_WRITE, fd, ((data as *u8) + done) as i64, (data.len() - done) as i64),
         )!;
         done += n as usize;
@@ -168,8 +168,8 @@ fn write_all(fd: i64, data: str) ! {
 
 // Write `data` to the file `open` gives, and close it.
 fn write_to(path: str, flags: i64, data: str) ! {
-    var fd = open_path(path, flags, 0o644)!;
-    var wrote = write_all(fd, data);
+    const fd = open_path(path, flags, 0o644)!;
+    const wrote = write_all(fd, data);
     syscall1(SYS_CLOSE, fd);
     wrote!;
 }
@@ -190,8 +190,8 @@ fn write_to(path: str, flags: i64, data: str) ! {
 // import std.fs;
 //
 // fs::write_file("hello.txt", "one\ntwo\n").unwrap();
-// var text = fs::read_file("hello.txt").unwrap();
-// var lines = text.lines();
+// const text = fs::read_file("hello.txt").unwrap();
+// const lines = text.lines();
 // println("{} {}", lines.len(), lines[1]); // 2 two
 // println("{}", fs::read_file("missing.txt").unwrap_err()); // 2
 // ```
@@ -199,7 +199,7 @@ pub fn read_file(path: str) String! {
     var file = File.open(path)!;
     var stat: Array<i64, 18> = [0; 18];
     sys_result(syscall2(SYS_FSTAT, file.fd, (&stat[0]) as i64))!;
-    var size = stat[6] as usize;
+    const size = stat[6] as usize;
     var text = String.new();
     while true {
         var want = CHUNK;
@@ -252,7 +252,7 @@ pub fn write_file(path: str, data: str) ! {
 //
 // fs::append_file("log.txt", "start\n").unwrap();
 // fs::append_file("log.txt", "stop\n").unwrap();
-// var log = fs::read_file("log.txt").unwrap();
+// const log = fs::read_file("log.txt").unwrap();
 // println("{}", log.lines().len()); // 2
 // ```
 pub fn append_file(path: str, data: str) ! {
@@ -297,7 +297,7 @@ pub struct File {
     // println("{}", fs::File.open("missing.txt").is_err()); // true
     // ```
     pub fn open(path: str) File! {
-        var fd = open_path(path, O_RDONLY, 0)!;
+        const fd = open_path(path, O_RDONLY, 0)!;
         return File { fd: fd, buffer: Vec.new(), start: 0 };
     }
 
@@ -311,7 +311,7 @@ pub struct File {
     // The errno: 2 (ENOENT) when the directory it goes in is missing, 13
     // (EACCES) without permission, 21 (EISDIR) when `path` is a directory.
     pub fn create(path: str) File! {
-        var fd = open_path(path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)!;
+        const fd = open_path(path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)!;
         return File { fd: fd, buffer: Vec.new(), start: 0 };
     }
 
@@ -335,7 +335,7 @@ pub struct File {
     // println("{}", fs::File.create_new("app.lock").unwrap_err()); // 17
     // ```
     pub fn create_new(path: str) File! {
-        var fd = open_path(path, O_WRONLY | O_CREAT | O_EXCL, 0o644)!;
+        const fd = open_path(path, O_WRONLY | O_CREAT | O_EXCL, 0o644)!;
         return File { fd: fd, buffer: Vec.new(), start: 0 };
     }
 
@@ -360,7 +360,7 @@ pub struct File {
     // println("{}", fs::read_file("log.txt").unwrap().len()); // 8
     // ```
     pub fn append(path: str) File! {
-        var fd = open_path(path, O_WRONLY | O_CREAT | O_APPEND, 0o644)!;
+        const fd = open_path(path, O_WRONLY | O_CREAT | O_APPEND, 0o644)!;
         return File { fd: fd, buffer: Vec.new(), start: 0 };
     }
 
@@ -389,7 +389,7 @@ pub struct File {
     // ```
     pub fn read(var self, buf: &var String, count: usize) usize! {
         var end = __zeru_room(buf, count);
-        var held = self.buffer.len() - self.start;
+        const held = self.buffer.len() - self.start;
         if held > 0 {
             var n = count;
             if held < n {
@@ -400,7 +400,7 @@ pub struct File {
             __zeru_filled(buf, n);
             return n;
         }
-        var n = sys_result(syscall3(SYS_READ, self.fd, end as i64, count as i64))! as usize;
+        const n = sys_result(syscall3(SYS_READ, self.fd, end as i64, count as i64))! as usize;
         __zeru_filled(buf, n);
         return n;
     }
@@ -437,14 +437,14 @@ pub struct File {
         while true {
             while at < self.buffer.len() {
                 if self.buffer[at] == '\n' {
-                    var line = self.take(at, true);
+                    const line = self.take(at, true);
                     self.start = at + 1;
                     return line;
                 }
                 at += 1;
             }
             if self.start > 0 {
-                var kept = self.buffer.len() - self.start;
+                const kept = self.buffer.len() - self.start;
                 for i in 0..kept {
                     self.buffer[i] = self.buffer[self.start + i];
                 }
@@ -455,13 +455,13 @@ pub struct File {
                 self.start = 0;
             }
             var end = __zeru_room(&var self.buffer, CHUNK);
-            var n = sys_result(syscall3(SYS_READ, self.fd, end as i64, CHUNK as i64))! as usize;
+            const n = sys_result(syscall3(SYS_READ, self.fd, end as i64, CHUNK as i64))! as usize;
             __zeru_filled(&var self.buffer, n);
             if n == 0 {
                 if self.buffer.len() == 0 {
                     return None;
                 }
-                var last = self.take(self.buffer.len(), false);
+                const last = self.take(self.buffer.len(), false);
                 self.start = self.buffer.len();
                 return last;
             }
@@ -599,8 +599,8 @@ pub fn rename(from: str, to: str) ! {
 // println("{}", fs::read_file("b.txt").unwrap()); // same
 // ```
 pub fn copy_file(from: str, to: str) ! {
-    var source = File.open(from)!;
-    var target = File {
+    const source = File.open(from)!;
+    const target = File {
         fd: open_path(to, O_WRONLY | O_CREAT, 0o644)!,
         buffer: Vec.new(),
         start: 0,
@@ -615,7 +615,7 @@ pub fn copy_file(from: str, to: str) ! {
     sys_result(syscall2(SYS_FTRUNCATE, target.fd, 0))!;
     sys_result(syscall2(SYS_FCHMOD, target.fd, metadata_of(read).mode as i64))!;
     while true {
-        var n = sys_result(syscall5(SYS_SENDFILE, target.fd, source.fd, 0, 1073741824, 0))!;
+        const n = sys_result(syscall5(SYS_SENDFILE, target.fd, source.fd, 0, 1073741824, 0))!;
         if n == 0 {
             break;
         }
@@ -651,7 +651,7 @@ pub fn exists(path: str) bool {
 // println("{} {}", fs::is_file("x.txt"), fs::is_file(".")); // true false
 // ```
 pub fn is_file(path: str) bool {
-    var meta = metadata(path);
+    const meta = metadata(path);
     return meta.is_ok() && meta.unwrap().kind == Kind::File;
 }
 
@@ -667,7 +667,7 @@ pub fn is_file(path: str) bool {
 // println("{} {}", fs::is_dir("."), fs::is_dir("nowhere")); // true false
 // ```
 pub fn is_dir(path: str) bool {
-    var meta = metadata(path);
+    const meta = metadata(path);
     return meta.is_ok() && meta.unwrap().kind == Kind::Dir;
 }
 
@@ -753,13 +753,13 @@ pub fn set_permissions(path: str, mode: u32) ! {
 // import std.fs;
 //
 // fs::write_file("mine.txt", "").unwrap();
-// var meta = fs::metadata("mine.txt").unwrap();
+// const meta = fs::metadata("mine.txt").unwrap();
 // fs::set_owner("mine.txt", None, meta.gid).unwrap();
 // println("{}", fs::set_owner("mine.txt", 0, None).is_ok() == (meta.uid == 0)); // true
 // ```
 pub fn set_owner(path: str, uid: u32?, gid: u32?) ! {
     var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
-    var p = c_path(path, &buf[0])!;
+    const p = c_path(path, &buf[0])!;
     var user: i64 = -1;
     var group: i64 = -1;
     if uid.is_some() {
@@ -790,15 +790,15 @@ pub fn set_owner(path: str, uid: u32?, gid: u32?) ! {
 // ```
 pub fn set_times(path: str, accessed: i64?, modified: i64?) ! {
     var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
-    var p = c_path(path, &buf[0])!;
+    const p = c_path(path, &buf[0])!;
     var times: Array<i64, 4> = [0, UTIME_OMIT, 0, UTIME_OMIT];
     if accessed.is_some() {
-        var time = timespec(accessed.unwrap());
+        const time = timespec(accessed.unwrap());
         times[0] = time.0;
         times[1] = time.1;
     }
     if modified.is_some() {
-        var time = timespec(modified.unwrap());
+        const time = timespec(modified.unwrap());
         times[2] = time.0;
         times[3] = time.1;
     }
@@ -851,13 +851,13 @@ pub struct Entry {
 // println("{} {}", fs::read_dir("box").unwrap().len(), files); // 2 1
 // ```
 pub fn read_dir(path: str) Vec<Entry>! {
-    var dir = File { fd: open_path(path, O_RDONLY | O_DIRECTORY, 0)!, buffer: Vec.new(), start: 0 };
-    var fd = dir.fd;
+    const dir = File { fd: open_path(path, O_RDONLY | O_DIRECTORY, 0)!, buffer: Vec.new(), start: 0 };
+    const fd = dir.fd;
     var entries: Vec<Entry> = Vec.new();
     var space = String.new();
     var batch = __zeru_room(&var space, DIR_BATCH);
     while true {
-        var got = sys_result(
+        const got = sys_result(
             syscall3(SYS_GETDENTS64, fd, batch as i64, DIR_BATCH as i64),
         )! as usize;
         if got == 0 {
@@ -865,19 +865,19 @@ pub fn read_dir(path: str) Vec<Entry>! {
         }
         var at: usize = 0;
         while at < got {
-            var record = batch + at;
-            var size = *((record + 16) as *u16) as usize;
+            const record = batch + at;
+            const size = *((record + 16) as *u16) as usize;
             var name = record + 19;
-            var text = __zeru_c_text(name);
+            const text = __zeru_c_text(name);
             at += size;
             if text == "." || text == ".." {
                 continue;
             }
-            var tag = *(record + 18);
+            const tag = *(record + 18);
             var kind = kind_of((tag as u32) << 12);
             if tag == 0 {
                 var stat: Array<i64, 18> = [0; 18];
-                var looked = syscall5(
+                const looked = syscall5(
                     SYS_NEWFSTATAT,
                     fd,
                     name as i64,
@@ -978,9 +978,9 @@ pub fn symlink(target: str, path: str) ! {
 // ```
 pub fn read_link(path: str) String! {
     var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
-    var p = c_path(path, &buf[0])!;
+    const p = c_path(path, &buf[0])!;
     var text: Array<u8, PATH_MAX> = [0; PATH_MAX];
-    var len = sys_result(syscall3(SYS_READLINK, p, (&text[0]) as i64, PATH_MAX as i64))!;
+    const len = sys_result(syscall3(SYS_READLINK, p, (&text[0]) as i64, PATH_MAX as i64))!;
     return String.from(text[..len as usize]);
 }
 
@@ -1023,11 +1023,11 @@ pub fn hard_link(target: str, path: str) ! {
 // import std.fs;
 //
 // fs::create_dir("deep").unwrap();
-// var path = fs::real_path("deep/../deep").unwrap();
+// const path = fs::real_path("deep/../deep").unwrap();
 // println("{} {}", path.starts_with("/"), path.ends_with("/deep")); // true true
 // ```
 pub fn real_path(path: str) String! {
-    var opened = File { fd: open_path(path, O_PATH, 0)!, buffer: Vec.new(), start: 0 };
+    const opened = File { fd: open_path(path, O_PATH, 0)!, buffer: Vec.new(), start: 0 };
     var link = String.from("/proc/self/fd/");
     link.push_str(__zeru_format_int(opened.fd as i64, false, 10, false, ' ', '>', false, 0));
     return read_link(link);
@@ -1048,7 +1048,7 @@ pub fn real_path(path: str) String! {
 // ```
 pub fn current_dir() String! {
     var text: Array<u8, PATH_MAX> = [0; PATH_MAX];
-    var len = sys_result(syscall2(SYS_GETCWD, (&text[0]) as i64, PATH_MAX as i64))!;
+    const len = sys_result(syscall2(SYS_GETCWD, (&text[0]) as i64, PATH_MAX as i64))!;
     return String.from(text[..len as usize - 1]);
 }
 

@@ -4,8 +4,8 @@ fn noisy(n: i64) i64 {
 }
 fn main() {
     println("first {} then {}", noisy(1), noisy(2));
-    var s = "old";
-    var t = s;
+    const s = "old";
+    const t = s;
     println("{} {}", s, noisy(3));
     println("{}", t);
     later();
@@ -15,6 +15,6 @@ fn twice(x: i64) Vec<i64> {
     return Vec[x, x];
 }
 fn later() {
-    var o: i64? = 5;
+    const o: i64? = 5;
     println("list {} then {} {}", twice(4), o, noisy(5));
 }

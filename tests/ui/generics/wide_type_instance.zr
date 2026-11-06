@@ -8,7 +8,7 @@ fn id<T>(x: T) T {
     return x;
 }
 fn main() {
-    var t = (
+    const t = (
         "s",
         "s",
         "s",
@@ -80,7 +80,7 @@ fn main() {
         "s",
         "s",
     );
-    var w = W { v: t };
-    var u = id(w.get());
+    const w = W { v: t };
+    const u = id(w.get());
     println("{}", u.69);
 }

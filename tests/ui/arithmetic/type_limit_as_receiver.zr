@@ -1,5 +1,5 @@
 fn main() {
-    var kind = match u8.MAX {
+    const kind = match u8.MAX {
         255 => "full",
         default => "other",
     };

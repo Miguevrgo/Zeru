@@ -2,6 +2,6 @@ fn g<T>(a: T, b: T) T {
     return a;
 }
 fn main() {
-    var x: i64 = 5;
-    var r = g(1 + 1, x);
+    const x: i64 = 5;
+    const r = g(1 + 1, x);
 }

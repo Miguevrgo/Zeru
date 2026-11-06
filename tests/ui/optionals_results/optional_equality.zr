@@ -8,16 +8,16 @@ fn find(n: i64) i64? {
     return None;
 }
 fn main() {
-    var o: u8? = 3;
-    var p: u8? = 3;
-    var none: u8? = None;
+    const o: u8? = 3;
+    const p: u8? = 3;
+    const none: u8? = None;
     println("{} {} {}", o == p, o == 3, o != 4);
     println("{} {}", none == p, none != 3);
-    var s: String? = String.from("hi");
+    const s: String? = String.from("hi");
     println("{}", s == String.from("hi"));
-    var t: str? = "a";
+    const t: str? = "a";
     println("{} {}", t == "a", t != "b");
     println("{} {}", find(2) == 2, find(-1) == find(-2));
-    var q: P? = P { x: 1 };
+    const q: P? = P { x: 1 };
     println("{}", q.is_some());
 }

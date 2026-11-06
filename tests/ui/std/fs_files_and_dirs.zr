@@ -11,19 +11,19 @@ fn main() {
     fs::write_file("big.txt", big).unwrap();
 
     var file = fs::File.open("big.txt").unwrap();
-    var first = file.read_line().unwrap().unwrap();
-    var empty = file.read_line().unwrap().unwrap();
-    var last = file.read_line().unwrap().unwrap();
+    const first = file.read_line().unwrap().unwrap();
+    const empty = file.read_line().unwrap().unwrap();
+    const last = file.read_line().unwrap().unwrap();
     println("{} {} {} {}", first.len(), first[9999] == 'a' + (9999 % 26) as u8, empty.len(), last);
     println("{}", file.read_line().unwrap().is_none());
 
     var mixed = fs::File.open("big.txt").unwrap();
     var buf: Vec<u8> = Vec.new();
     mixed.read(&var buf, 3).unwrap();
-    var rest = mixed.read_line().unwrap().unwrap();
+    const rest = mixed.read_line().unwrap().unwrap();
     println("{} {} {}", buf.len(), rest.len(), rest[0] == 'd');
     var more: Vec<u8> = Vec.new();
-    var n = mixed.read(&var more, 100).unwrap();
+    const n = mixed.read(&var more, 100).unwrap();
     println("{} {}", n, more[0] == '\n');
     mixed.seek(0).unwrap();
     println("{}", mixed.read_line().unwrap().unwrap().len());
@@ -31,7 +31,7 @@ fn main() {
     fs::create_dir("many").unwrap();
     var name = String.new();
     for i in 0..3000 {
-        var path = "many/file_0000";
+        const path = "many/file_0000";
         name.clear();
         for b in path {
             name.push(b);
@@ -42,7 +42,7 @@ fn main() {
         name[13] = '0' + (i % 10) as u8;
         fs::write_file(name, "").unwrap();
     }
-    var entries = fs::read_dir("many").unwrap();
+    const entries = fs::read_dir("many").unwrap();
     var files = 0;
     for e in entries {
         if e.name.starts_with("file_") {

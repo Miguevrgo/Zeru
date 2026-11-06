@@ -5,7 +5,7 @@ fn f(fail: bool) i32! {
     return 10;
 }
 fn g(fail: bool) i32! {
-    var x = f(fail)!;
+    const x = f(fail)!;
     return x + 1;
 }
 fn half(n: i32) i32? {

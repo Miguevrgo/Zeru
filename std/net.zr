@@ -90,7 +90,7 @@ fn groups(text: str, out: &var Vec<u64>) ! {
     if text.len() == 0 {
         return Ok();
     }
-    var parts = text.split(":");
+    const parts = text.split(":");
     for part in parts {
         out.push(number(part, 16, 65535)!);
     }
@@ -107,13 +107,13 @@ fn ip_addr(text: str) Raw! {
     if colon == text.len() {
         return Err(EINVAL);
     }
-    var host = text[..colon];
-    var port = number(text[colon + 1..], 10, 65535)!;
+    const host = text[..colon];
+    const port = number(text[colon + 1..], 10, 65535)!;
     var raw = empty();
     raw.bytes[2] = (port >> 8) as u8;
     raw.bytes[3] = (port & 255) as u8;
     if host.len() > 1 && host[0] == '[' && host[host.len() - 1] == ']' {
-        var halves = host[1..host.len() - 1].split("::");
+        const halves = host[1..host.len() - 1].split("::");
         if halves.len() > 2 {
             return Err(EINVAL);
         }
@@ -123,7 +123,7 @@ fn ip_addr(text: str) Raw! {
         if halves.len() == 2 {
             groups(halves[1], &var tail)!;
         }
-        var count = head.len() + tail.len();
+        const count = head.len() + tail.len();
         if (halves.len() == 2 && count > 7) || (halves.len() == 1 && count != 8) {
             return Err(EINVAL);
         }
@@ -141,7 +141,7 @@ fn ip_addr(text: str) Raw! {
         }
         return raw;
     }
-    var parts = host.split(".");
+    const parts = host.split(".");
     if parts.len() != 4 {
         return Err(EINVAL);
     }
@@ -243,7 +243,7 @@ fn timed(r: i64) i64! {
 
 // A socket of `kind` bound to `addr`, listening when it is a stream.
 fn bound(addr: &Raw, kind: i64) i64! {
-    var fd = sys_result(syscall3(SYS_SOCKET, addr.bytes[0] as i64, kind, 0))!;
+    const fd = sys_result(syscall3(SYS_SOCKET, addr.bytes[0] as i64, kind, 0))!;
     var one: i32 = 1;
     if kind == SOCK_STREAM {
         syscall5(SYS_SETSOCKOPT, fd, SOL_SOCKET, SO_REUSEADDR, (&one) as i64, 4);
@@ -275,8 +275,8 @@ fn poll(entries: i64, count: usize, ms: u64?) i64 {
 // A stream socket connected to `addr`, giving up after `ms` milliseconds
 // when there are some.
 fn dial(addr: &Raw, ms: u64?) i64! {
-    var fd = sys_result(syscall3(SYS_SOCKET, addr.bytes[0] as i64, SOCK_STREAM, 0))!;
-    var flags = syscall2(SYS_FCNTL, fd, F_GETFL);
+    const fd = sys_result(syscall3(SYS_SOCKET, addr.bytes[0] as i64, SOCK_STREAM, 0))!;
+    const flags = syscall2(SYS_FCNTL, fd, F_GETFL);
     if ms.is_some() {
         syscall3(SYS_FCNTL, fd, F_SETFL, flags | O_NONBLOCK);
     }
@@ -317,7 +317,7 @@ fn accept(fd: i64) i64! {
 // Up to `count` bytes from `fd` at the end of `buf`; how many came.
 fn receive(fd: i64, buf: &var String, count: usize, flags: i64) usize! {
     var end = __zeru_room(buf, count);
-    var n = timed(syscall6(SYS_RECVFROM, fd, end as i64, count as i64, flags, 0, 0))! as usize;
+    const n = timed(syscall6(SYS_RECVFROM, fd, end as i64, count as i64, flags, 0, 0))! as usize;
     __zeru_filled(buf, n);
     return n;
 }
@@ -326,7 +326,7 @@ fn receive(fd: i64, buf: &var String, count: usize, flags: i64) usize! {
 fn send(fd: i64, data: str) ! {
     var done: usize = 0;
     while done < data.len() {
-        var left = (data.len() - done) as i64;
+        const left = (data.len() - done) as i64;
         done += timed(
             syscall6(SYS_SENDTO, fd, ((data as *u8) + done) as i64, left, MSG_NOSIGNAL, 0, 0),
         )! as usize;
@@ -347,7 +347,7 @@ fn send_datagram(fd: i64, data: str, to: &Raw) ! {
 // The next datagram on `fd`, taken or, with MSG_PEEK in `flags`, left for
 // the next call.
 fn datagram(fd: i64, flags: i64) Datagram! {
-    var size = timed(syscall6(SYS_RECVFROM, fd, 0, 0, MSG_PEEK | MSG_TRUNC, 0, 0))! as usize;
+    const size = timed(syscall6(SYS_RECVFROM, fd, 0, 0, MSG_PEEK | MSG_TRUNC, 0, 0))! as usize;
     var data = String.new();
     var from = empty();
     var end = __zeru_room(&var data, size);
@@ -415,15 +415,15 @@ pub struct Handle {
 // ```zeru
 // import std.net;
 //
-// var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
-// var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
-// var server = listener.accept().unwrap();
+// const listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+// const client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+// const server = listener.accept().unwrap();
 // var handles: Vec<net::Handle> = Vec.new();
 // handles.push(listener.handle());
 // handles.push(server.handle());
 // println("{}", net::wait(&handles, 10).unwrap().len()); // 0
 // client.write("hi").unwrap();
-// var ready = net::wait(&handles, None).unwrap();
+// const ready = net::wait(&handles, None).unwrap();
 // println("{} {}", ready.len(), ready[0]); // 1 1
 // ```
 pub fn wait(handles: &[Handle], ms: u64?) Vec<usize>! {
@@ -455,9 +455,9 @@ pub fn wait(handles: &[Handle], ms: u64?) Vec<usize>! {
 // ```zeru
 // import std.net;
 //
-// var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
-// var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
-// var server = listener.accept().unwrap();
+// const listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+// const client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+// const server = listener.accept().unwrap();
 // client.write("ping").unwrap();
 // var buf = String.new();
 // server.read(&var buf, 64).unwrap();
@@ -488,7 +488,7 @@ pub struct TcpListener {
     // println("{}", again.unwrap_err() == EADDRINUSE); // true
     // ```
     pub fn bind(addr: str) TcpListener! {
-        var raw = ip_addr(addr)!;
+        const raw = ip_addr(addr)!;
         return TcpListener { fd: bound(&raw, SOCK_STREAM)! };
     }
 
@@ -537,9 +537,9 @@ pub struct TcpListener {
 // ```zeru
 // import std.net;
 //
-// var listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
-// var client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
-// var server = listener.accept().unwrap();
+// const listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
+// const client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
+// const server = listener.accept().unwrap();
 // client.write("hello").unwrap();
 // var buf = String.new();
 // server.read(&var buf, 64).unwrap();
@@ -566,7 +566,7 @@ pub struct TcpStream {
     // println("{}", refused.unwrap_err() == ECONNREFUSED); // true
     // ```
     pub fn connect(addr: str) TcpStream! {
-        var raw = ip_addr(addr)!;
+        const raw = ip_addr(addr)!;
         return TcpStream { fd: dial(&raw, None)! };
     }
 
@@ -586,7 +586,7 @@ pub struct TcpStream {
     // println("{}", stream.is_ok()); // true
     // ```
     pub fn connect_timeout(addr: str, ms: u64) TcpStream! {
-        var raw = ip_addr(addr)!;
+        const raw = ip_addr(addr)!;
         return TcpStream { fd: dial(&raw, ms)! };
     }
 
@@ -728,10 +728,10 @@ pub struct Datagram {
 // ```zeru
 // import std.net;
 //
-// var a = net::UdpSocket.bind("127.0.0.1:0").unwrap();
-// var b = net::UdpSocket.bind("127.0.0.1:0").unwrap();
+// const a = net::UdpSocket.bind("127.0.0.1:0").unwrap();
+// const b = net::UdpSocket.bind("127.0.0.1:0").unwrap();
 // a.send_to(b.local_addr().unwrap(), "hey").unwrap();
-// var got = b.recv().unwrap();
+// const got = b.recv().unwrap();
 // println("{} {}", got.data, got.from == a.local_addr().unwrap()); // hey true
 // ```
 pub struct UdpSocket {
@@ -744,7 +744,7 @@ pub struct UdpSocket {
     // `EADDRINUSE` when another socket has the port, `EACCES` for a port
     // under 1024 without root, `EINVAL` when `addr` does not parse.
     pub fn bind(addr: str) UdpSocket! {
-        var raw = ip_addr(addr)!;
+        const raw = ip_addr(addr)!;
         return UdpSocket { fd: bound(&raw, SOCK_DGRAM)! };
     }
 
@@ -755,7 +755,7 @@ pub struct UdpSocket {
     // 90 (EMSGSIZE) when `data` is too big for one datagram, `EINVAL` when
     // `addr` does not parse.
     pub fn send_to(self, addr: str, data: str) ! {
-        var raw = ip_addr(addr)!;
+        const raw = ip_addr(addr)!;
         send_datagram(self.fd, data, &raw)!;
     }
 
@@ -864,9 +864,9 @@ pub struct UdpSocket {
 // ```zeru
 // import std.net;
 //
-// var listener = net::UnixListener.bind("app.sock").unwrap();
-// var client = net::UnixStream.connect("app.sock").unwrap();
-// var server = listener.accept().unwrap();
+// const listener = net::UnixListener.bind("app.sock").unwrap();
+// const client = net::UnixStream.connect("app.sock").unwrap();
+// const server = listener.accept().unwrap();
 // client.write("ping").unwrap();
 // var buf = String.new();
 // server.read(&var buf, 64).unwrap();
@@ -883,7 +883,7 @@ pub struct UnixListener {
     // `EADDRINUSE` when the path exists, `ENOENT` when its directory does
     // not, 36 (ENAMETOOLONG) for a path of 108 bytes or more.
     pub fn bind(path: str) UnixListener! {
-        var raw = unix_addr(path)!;
+        const raw = unix_addr(path)!;
         return UnixListener { fd: bound(&raw, SOCK_STREAM)!, addr: raw };
     }
 
@@ -923,7 +923,7 @@ pub struct UnixStream {
     // `ECONNREFUSED` when nothing listens there, `ENOENT` when the path does
     // not exist.
     pub fn connect(path: str) UnixStream! {
-        var raw = unix_addr(path)!;
+        const raw = unix_addr(path)!;
         return UnixStream { fd: dial(&raw, None)! };
     }
 

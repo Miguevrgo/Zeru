@@ -16,7 +16,7 @@ fn make(id: i32) D? {
 
 fn first(v: i32) i32 {
     for i in 0..10 {
-        var r = match i {
+        const r = match i {
             x if x == v => 100,
             x if if x > 6 {
                 break;
@@ -32,8 +32,8 @@ fn first(v: i32) i32 {
 }
 
 fn main() {
-    var n = 4;
-    var a = match n {
+    const n = 4;
+    const a = match n {
         0..=2 if check("low", true) => "low",
         3..=5 if check("mid-a", false) => "mid-a",
         3..=5 if check("mid-b", true) => "mid-b",

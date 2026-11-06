@@ -14,7 +14,7 @@ fn main() {
     var e: Vec<i32> = Vec.new();
     e.sort();
     println("{} {}", e.sum(), e.min().is_none());
-    var words: Vec<str> = "pear apple fig".split(" ");
+    const words: Vec<str> = "pear apple fig".split(" ");
     println("{} {}", words[0], words.contains("fig"));
     var nested: Vec<Vec<str>> = Vec.new();
     nested.push("a".split(" "));
@@ -27,7 +27,7 @@ fn main() {
         seed = seed *% 6364136223846793005 +% 1442695040888963407;
         big.push(seed >> 40);
     }
-    var total = big.sum();
+    const total = big.sum();
     big.sort();
     var sorted = true;
     for i in 1..big.len() {

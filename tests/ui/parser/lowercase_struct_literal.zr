@@ -2,5 +2,5 @@ struct p {
     x: i32,
 }
 fn main() {
-    var v = p { x: 1 };
+    const v = p { x: 1 };
 }

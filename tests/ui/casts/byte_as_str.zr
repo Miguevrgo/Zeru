@@ -1,8 +1,8 @@
 const COLON: str = 58 as u8 as str;
 
 fn main() {
-    var c: u8 = 58;
-    var text = "zeru";
+    const c: u8 = 58;
+    const text = "zeru";
     var out = String.new();
     for b in text {
         out.push_str(b as str);
@@ -12,7 +12,7 @@ fn main() {
     println("{} {}", (c as str).len(), c as str == ":");
     var all = 0;
     for i in 0..256 {
-        var s = i as u8 as str;
+        const s = i as u8 as str;
         if s[0] == i as u8 && s.len() == 1 {
             all += 1;
         }

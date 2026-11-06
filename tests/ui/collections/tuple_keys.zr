@@ -21,7 +21,7 @@ fn main() {
     println("{} {}", seen.insert(((1, true), Dir::Up)), seen.insert(((1, true), Dir::Up)));
     println("{}", seen.contains(&((1, true), Dir::Down)));
     println("{} {}", (1, "a") == (1, "a"), (1, "a") != (1, "b"));
-    var p = (3, (4, 5));
-    var q = (3, (4, 6));
+    const p = (3, (4, 5));
+    const q = (3, (4, 6));
     println("{} {}", p == q, p == (3, (4, 5)));
 }

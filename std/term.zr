@@ -59,7 +59,7 @@ fn saved() &var Saved {
 //
 // The errno: 25 (ENOTTY) when standard input is not a terminal.
 pub fn raw_enable() ! {
-    var state = saved();
+    const state = saved();
     if state.raw {
         return Ok();
     }
@@ -82,7 +82,7 @@ pub fn raw_enable() ! {
 //
 // The errno: 25 (ENOTTY) when standard input is not a terminal.
 pub fn raw_disable() ! {
-    var state = saved();
+    const state = saved();
     if !state.raw {
         return Ok();
     }
@@ -174,9 +174,9 @@ fn byte(ms: i64) u8? {
 // key not listed in `Key`, as F1. An Escape alone is one that nothing
 // follows at once; with more, it starts the sequence of a key as an arrow.
 pub fn key(ms: u64) Key? {
-    var first = byte(if ms == 0 { -1 } else { ms as i64 })?;
+    const first = byte(if ms == 0 { -1 } else { ms as i64 })?;
     if first == 27 {
-        var kind = byte(25);
+        const kind = byte(25);
         if kind.is_none() {
             return Key::Escape;
         }

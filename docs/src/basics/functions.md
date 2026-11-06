@@ -64,7 +64,7 @@ fn count_down(var n: i32) {
 }
 
 fn main() {
-    var start = 3;
+    const start = 3;
     count_down(start); // 3 2 1 go
     println("{}", start); // 3
 }
@@ -83,7 +83,7 @@ fn divide(a: i32, b: i32) (i32, i32) {
 }
 
 fn main() {
-    var result = divide(17, 5);
+    const result = divide(17, 5);
     println("{} remainder {}", result.0, result.1); // 3 remainder 2
 }
 ```

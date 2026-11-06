@@ -25,19 +25,19 @@ fn main() {
 
     var count: i32 = 0;
     const answer = 42;
-    var ratio = 0.5;
-    var flag = true;
+    const ratio = 0.5;
+    const flag = true;
     println("{} {} {} {}", count, answer, ratio, flag);
 
-    var letter: u8 = 'z';
-    var million: u64 = 1_000_000;
-    var hex = 0xff;
-    var bits = 0b1010;
-    var small: f32 = 2.5e-3;
+    const letter: u8 = 'z';
+    const million: u64 = 1_000_000;
+    const hex = 0xff;
+    const bits = 0b1010;
+    const small: f32 = 2.5e-3;
     println("{} {} {} {} {}", letter, million, hex, bits, small);
 
-    var quoted = "tab\there, a quote \" and a backslash \\";
-    var raw = `C:\path\kept "as is"`;
+    const quoted = "tab\there, a quote \" and a backslash \\";
+    const raw = `C:\path\kept "as is"`;
     println("{}", quoted);
     println("{}", raw);
 
@@ -51,8 +51,8 @@ fn main() {
     byte = byte +% 10;
     println("{} {} {} {}", 7 / 2, 7 % 2, -7 / 2, byte);
 
-    var inside = count >= 0 && count < LIMIT;
-    var masked = (0b1100 & 0b1010) | 1 << 4;
+    const inside = count >= 0 && count < LIMIT;
+    const masked = (0b1100 & 0b1010) | 1 << 4;
     println("{} {} {} {}", inside, !inside, masked, masked ^ 0xff);
 
     count += 3;
@@ -60,12 +60,12 @@ fn main() {
     count <<= 1;
     println("{}", count);
 
-    var precise = 3.99;
-    var whole = precise as i32;
-    var wide = whole as i64 * 1_000_000_000;
+    const precise = 3.99;
+    const whole = precise as i32;
+    const wide = whole as i64 * 1_000_000_000;
     println("{} {}", whole, wide);
 
-    var count = count as f64 / 4.0;
+    const count = count as f64 / 4.0;
     println("{}", count);
 
     if answer > 100 {

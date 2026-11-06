@@ -97,7 +97,7 @@ const HALF: f32 = 1.0 / 3.0;
 const SIZE: usize = W * 2;
 
 fn main() {
-    var grid: Array<u8, SIZE> = [0; SIZE];
+    const grid: Array<u8, SIZE> = [0; SIZE];
     println("{} {} {} {}", SQ, FIB, P.x, LEN);
     println("{:x} {:x} {}", CRC[1], CRC[255], F);
     println("{} {} {} {}", W, UP, M, N.is_none());

@@ -15,7 +15,7 @@ fn main() {
     var v: Vec<C> = Vec.new();
     v.push(C { n: 5 });
     v[0].bump();
-    var p: *C = &h.c;
+    const p: *C = &h.c;
     p.bump();
     println("{} {} {}", h.c.n, h.cs[1].n, v[0].n);
 }

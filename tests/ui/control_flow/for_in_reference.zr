@@ -10,7 +10,7 @@ fn main() {
     for x in &v {
         print("{} ", x);
     }
-    var m = &var v;
+    const m = &var v;
     for x in m {
         print("{} ", x);
     }

@@ -5,8 +5,8 @@ written as a function, with `fn`, its parameters and a block:
 
 ```zeru
 fn main() {
-    var square = fn(x: i32) i32 {
-        var y = x * x;
+    const square = fn(x: i32) i32 {
+        const y = x * x;
         return y;
     };
     println("{}", square(4)); // 16
@@ -50,7 +50,7 @@ fn count(v: &Vec<i32>, keep: fn(i32) bool) usize {
 }
 
 fn main() {
-    var v: Vec<i32> = Vec[1, 2, 3, 4];
+    const v: Vec<i32> = Vec[1, 2, 3, 4];
     println("{}", count(&v, fn(x) x % 2 == 0)); // 2
 }
 ```
@@ -129,7 +129,7 @@ fn each(v: &Vec<i32>, f: fn(i32)) {
 }
 
 fn main() {
-    var v: Vec<i32> = Vec[1, 2, 3];
+    const v: Vec<i32> = Vec[1, 2, 3];
     var total = 0;
     each(&v, fn(x) {
         total += x;

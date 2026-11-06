@@ -9,7 +9,7 @@ fn kind(n: i32) Kind {
     return Kind::Small;
 }
 fn main() {
-    var s = match kind(50) {
+    const s = match kind(50) {
         Kind::Small => "s",
         Kind::Large => "L",
     };

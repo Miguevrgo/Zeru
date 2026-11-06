@@ -1,5 +1,5 @@
 //@ checked
 fn main() {
-    var o: i32? = None;
+    const o: i32? = None;
     println("{}", o.unwrap());
 }

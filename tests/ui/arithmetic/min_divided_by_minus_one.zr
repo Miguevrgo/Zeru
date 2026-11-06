@@ -1,6 +1,6 @@
 //@ checked
 fn main() {
-    var a: i32 = -2147483648;
-    var b: i32 = -1;
+    const a: i32 = -2147483648;
+    const b: i32 = -1;
     println("{}", a / b);
 }

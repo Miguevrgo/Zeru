@@ -10,11 +10,11 @@ fn probe(id: i64, log: *i64) Probe {
 }
 fn main() {
     var log: i64 = 0;
-    var at: *i64 = &log;
+    const at: *i64 = &log;
     {
         {
             var vs: Vec<Array<Probe, 1>> = Vec[[probe(1, at)], [probe(2, at)]];
-            var first = vs.remove(0);
+            const first = vs.remove(0);
             println("removed {}", first[0].id);
         }
     }

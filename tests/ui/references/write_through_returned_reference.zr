@@ -37,27 +37,27 @@ fn find(v: &var Vec<Account>, frozen: bool) (&var Account)? {
 }
 fn main() {
     var v: Vec<Vec<i64>> = Vec[Vec[1]];
-    var s = pick(&var v);
+    const s = pick(&var v);
     *s = Vec[2, 3];
     s.push(4);
-    var t = s;
+    const t = s;
     t.push(5);
     s.push(6);
     println("{}", v[0].len());
 
     var o: Vec<i64?> = Vec[None];
-    var x = first(&var o);
+    const x = first(&var o);
     *x = 5;
     println("{}", o[0].unwrap());
 
     var b = Bank { accounts: Vec[Account { state: State::Open, log: Vec.new() }] };
-    var acc = b.slot(0);
+    const acc = b.slot(0);
     acc.state = State::Frozen(1);
     acc.log.push(3);
     acc.log.push(4);
     println("{}", b.accounts[0].log.len());
 
-    var a = find(&var b.accounts, true).unwrap();
+    const a = find(&var b.accounts, true).unwrap();
     a.state = State::Open;
     match find(&var b.accounts, false) {
         Some(c) => {

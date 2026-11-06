@@ -34,7 +34,7 @@ fn main() {
         name(5),
         size(Shape::Dot),
     );
-    var o: i32? = None;
+    const o: i32? = None;
     match o {
         Some(v) => {
             println("{}", v);

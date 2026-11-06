@@ -2,7 +2,7 @@ fn swap<T>(p: (T, T)) (T, T) {
     return (p.1, p.0);
 }
 fn main() {
-    var a = swap((1, 2));
-    var b = swap((true, false));
+    const a = swap((1, 2));
+    const b = swap((true, false));
     println("{} {} {} {}", a.0, a.1, b.0, b.1);
 }

@@ -1,5 +1,5 @@
 fn main() {
-    var a: Vec<Vec<i64>> = Vec[Vec[1, 2], Vec[3]];
+    const a: Vec<Vec<i64>> = Vec[Vec[1, 2], Vec[3]];
     var b = a.copy();
     b[0][0] = 99;
     b.push(Vec[4]);

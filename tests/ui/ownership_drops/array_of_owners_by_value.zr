@@ -13,10 +13,10 @@ fn consume_all(ps: Array<Probe, 2>) {
 }
 fn main() {
     var log: i64 = 0;
-    var at: *i64 = &log;
+    const at: *i64 = &log;
     {
         {
-            var ps: Array<Probe, 2> = [probe(1, at), probe(2, at)];
+            const ps: Array<Probe, 2> = [probe(1, at), probe(2, at)];
             consume_all(ps);
             println("consumed");
         }

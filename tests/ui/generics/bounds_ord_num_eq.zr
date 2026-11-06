@@ -11,8 +11,8 @@ fn same<T: Eq>(a: T, b: T) bool {
     return a == b;
 }
 fn main() {
-    var big: u32 = 3000000000;
-    var small: u32 = 1;
-    var wide: i64 = 5000000000;
+    const big: u32 = 3000000000;
+    const small: u32 = 1;
+    const wide: i64 = 5000000000;
     println("{} {} {} {}", largest(big, small), largest(7, wide), total(1.5, 2.0), same(3, 3));
 }
