@@ -1337,7 +1337,7 @@ fn __zeru_string_from(text: str) String {
 }
 
 // `s.push_str(text)`: `text` added at the end of the String `s`.
-fn __zeru_vec_push_str<T>(v: &var Vec<T>, text: str) {
+fn __zeru_string_push_str<T>(v: &var Vec<T>, text: str) {
     __zeru_copy_bytes(__zeru_room(v, text.len()), text as *u8, text.len());
     __zeru_filled(v, text.len());
 }

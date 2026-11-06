@@ -135,9 +135,9 @@ impl FnCx<'_, '_> {
         }
         let fields: Vec<Ty> = captures
             .iter()
-            .map(|captured| match captured.mutable {
-                true => self.cx.types.intern(TyKind::RefMut(captured.outer.ty)),
-                false => self.cx.types.intern(TyKind::Ref(captured.outer.ty)),
+            .map(|captured| match captured.changed {
+                Some(_) => self.cx.types.intern(TyKind::RefMut(captured.outer.ty)),
+                None => self.cx.types.intern(TyKind::Ref(captured.outer.ty)),
             })
             .collect();
         let function = tir::Function {
@@ -158,14 +158,15 @@ impl FnCx<'_, '_> {
             let (place, ty) = self
                 .variable(name)
                 .expect("a capture is visible where it was made");
-            match place {
-                Place::Capture(outer) if captured.mutable => {
-                    self.captures[outer as usize].mutable = true;
+            match (&place, captured.changed) {
+                (&Place::Capture(outer), Some(changed)) => {
+                    self.captures[outer as usize].changed.get_or_insert(changed);
                 }
-                Place::Local(local) if captured.mutable => self.note_changed(local),
+                (&Place::Local(local), Some(_)) => self.note_changed(local),
                 _ => {}
             }
-            values.push((at as u32, self.address(place, ty, captured.mutable, head)));
+            let (mutable, span) = (captured.changed.is_some(), captured.changed.unwrap_or(head));
+            values.push((at as u32, self.address(place, ty, mutable, span)));
         }
         self.mk(ExprKind::Struct(values), ty, span)
     }

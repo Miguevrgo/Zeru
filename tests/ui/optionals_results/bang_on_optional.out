@@ -7,7 +7,17 @@ Error: '!' takes a T! value, not i32?
    │             ──┬─
    │               ╰─── '!' takes a T! value, not i32?
    │
-   │ Help: an i32? is passed on with '?'
-   │           var x = f()?;
+   │ Help: take the value out with .unwrap(), which stops the program on None
+   │           var x = f().unwrap();
 ───╯
+Error: '!' takes a T! value, not i32?
+    ╭─[ tests/ui/optionals_results/bang_on_optional.zr:10:13 ]
+    │
+ 10 │     var y = f()!;
+    │             ──┬─
+    │               ╰─── '!' takes a T! value, not i32?
+    │
+    │ Help: an i32? is passed on with '?'
+    │           var y = f()?;
+────╯
 [-] Error: aborting due to previous error

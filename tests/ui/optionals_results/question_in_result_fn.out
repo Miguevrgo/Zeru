@@ -1,10 +1,13 @@
 status: compile error
 -- stderr
-Error: '?' returns from a function returning i32!, which is no T?
+Error: '?' would pass None on, but this function returns i32!
    ╭─[ tests/ui/optionals_results/question_in_result_fn.zr:5:13 ]
    │
  5 │     var x = f()?;
    │             ──┬─
-   │               ╰─── '?' returns from a function returning i32!, which is no T?
+   │               ╰─── '?' would pass None on, but this function returns i32!
+   │
+   │ Help: take the value out with .unwrap(), which stops the program on None
+   │           var x = f().unwrap();
 ───╯
 [-] Error: aborting due to previous error

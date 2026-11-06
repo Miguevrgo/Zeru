@@ -7,7 +7,7 @@ Warning: Variable 'k' is never read
     │                   ┬
     │                   ╰── Variable 'k' is never read
     │
-    │ Help: remove it, or name it '_k' to keep it unread
+    │ Help: 'k' runs its drop at the end of the scope; if it is kept for that, name it '_k'
     │           const _k = Kept::Two(probe(1, at), probe(2, at));
 ────╯
 Warning: Variable 'k' is never read
@@ -17,7 +17,7 @@ Warning: Variable 'k' is never read
     │                 ┬
     │                 ╰── Variable 'k' is never read
     │
-    │ Help: remove it, or name it '_k' to keep it unread
+    │ Help: 'k' runs its drop at the end of the scope; if it is kept for that, name it '_k'
     │           var _k = Kept::One(probe(3, at));
 ────╯
 Warning: Variable 'twin' is never read
@@ -27,7 +27,7 @@ Warning: Variable 'twin' is never read
     │                   ──┬─
     │                     ╰─── Variable 'twin' is never read
     │
-    │ Help: remove it, or name it '_twin' to keep it unread
+    │ Help: 'twin' runs its drop at the end of the scope; if it is kept for that, name it '_twin'
     │           const _twin = Kept::One(probe(3, at));
 ────╯
 -- stdout

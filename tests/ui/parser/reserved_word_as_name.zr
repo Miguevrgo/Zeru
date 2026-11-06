@@ -1,0 +1,14 @@
+struct S {
+    default: i32,
+}
+
+fn main() {
+    const s = S { default: 3 };
+    const asm = 1;
+    const volatile = 2;
+    const n = match s.default {
+        1 => asm,
+        default => volatile,
+    };
+    println("{} {}", n, s.default + asm);
+}

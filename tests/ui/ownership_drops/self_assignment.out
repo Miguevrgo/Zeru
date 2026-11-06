@@ -1,5 +1,15 @@
 status: exit 0
 -- warnings
+Warning: This method never changes self; take self
+   ╭─[ tests/ui/ownership_drops/self_assignment.zr:3:15 ]
+   │
+ 3 │     fn refill(var self) Vec<i64> {
+   │               ─┬─
+   │                ╰─── This method never changes self; take self
+   │
+   │ Help: write self, so that var self marks a method that changes it
+   │           fn refill(self) Vec<i64> {
+───╯
 Warning: This assigns a value to where it already is
    ╭─[ tests/ui/ownership_drops/self_assignment.zr:9:5 ]
    │

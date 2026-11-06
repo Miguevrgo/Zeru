@@ -82,11 +82,20 @@ pub(crate) fn value_alias(name: &str) -> Option<&'static str> {
     alias(VALUE_ALIASES, name, |_| true)
 }
 
-/// The method another language calls `name`, among `methods`.
+/// The method another language calls `name`, or a name close to it when
+/// none of `methods` is, among `methods`.
 pub(crate) fn method_alias(name: &str, methods: &[String]) -> Option<&'static str> {
-    alias(METHOD_ALIASES, name, |ours| {
-        methods.iter().any(|m| m == ours)
-    })
+    let exists = |ours: &str| methods.iter().any(|m| m == ours);
+    let others: Vec<String> = METHOD_ALIASES
+        .iter()
+        .filter(|(_, ours)| exists(ours))
+        .map(|(other, _)| other.to_string())
+        .collect();
+    let near = match closest(name, methods) {
+        Some(_) => None,
+        None => closest(name, &others),
+    };
+    alias(METHOD_ALIASES, near.unwrap_or(name), exists)
 }
 
 /// Suggest in `error` the candidate closest to `name`, or those that start

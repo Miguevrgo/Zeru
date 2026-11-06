@@ -1,24 +1,24 @@
 status: compile error
 -- stderr
-Error: 'hashmap::HashMap' asks for K: Hash, which Shape does not satisfy
+Error: 'HashMap' asks for K: Hash, which Shape does not satisfy
    ╭─[ tests/ui/collections/hash_keys_must_hash.zr:8:5 ]
    │
  8 │     var shapes: HashMap<Shape, i64> = HashMap.new();
    │     ────────────────────────┬───────────────────────
-   │                             ╰───────────────────────── 'hashmap::HashMap' asks for K: Hash, which Shape does not satisfy
+   │                             ╰───────────────────────── 'HashMap' asks for K: Hash, which Shape does not satisfy
 ───╯
-Error: 'hashmap::HashMap' asks for K: Hash, which f64 does not satisfy
+Error: 'HashMap' asks for K: Hash, which f64 does not satisfy
    ╭─[ tests/ui/collections/hash_keys_must_hash.zr:9:5 ]
    │
  9 │     var floats: HashMap<f64, i32> = HashMap.new();
    │     ───────────────────────┬──────────────────────
-   │                            ╰──────────────────────── 'hashmap::HashMap' asks for K: Hash, which f64 does not satisfy
+   │                            ╰──────────────────────── 'HashMap' asks for K: Hash, which f64 does not satisfy
 ───╯
-Error: 'hashset::HashSet' asks for K: Hash, which f32 does not satisfy
+Error: 'HashSet' asks for K: Hash, which f32 does not satisfy
     ╭─[ tests/ui/collections/hash_keys_must_hash.zr:10:5 ]
     │
  10 │     var set: HashSet<f32> = HashSet.new();
     │     ───────────────────┬──────────────────
-    │                        ╰──────────────────── 'hashset::HashSet' asks for K: Hash, which f32 does not satisfy
+    │                        ╰──────────────────── 'HashSet' asks for K: Hash, which f32 does not satisfy
 ────╯
 [-] Error: aborting due to previous error

@@ -1,11 +1,11 @@
 status: compile error
 -- stderr
-Error: Invalid return type. Function expects i32, returning void
+Error: This function returns i32, but this return gives no value
    ╭─[ tests/ui/control_flow/return_wrong_type.zr:2:5 ]
    │
  2 │     return;
    │     ───┬───
-   │        ╰───── Invalid return type. Function expects i32, returning void
+   │        ╰───── This function returns i32, but this return gives no value
 ───╯
 Error: This function returns i32, but this value is bool
    ╭─[ tests/ui/control_flow/return_wrong_type.zr:5:12 ]

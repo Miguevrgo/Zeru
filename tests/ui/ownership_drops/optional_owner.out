@@ -7,7 +7,7 @@ Warning: Variable 'some' is never read
     │                   ──┬─
     │                     ╰─── Variable 'some' is never read
     │
-    │ Help: remove it, or name it '_some' to keep it unread
+    │ Help: 'some' runs its drop at the end of the scope; if it is kept for that, name it '_some'
     │           const _some: Probe? = probe(1, at);
 ────╯
 Warning: Variable 'none' is never read
@@ -17,7 +17,7 @@ Warning: Variable 'none' is never read
     │                   ──┬─
     │                     ╰─── Variable 'none' is never read
     │
-    │ Help: remove it, or name it '_none' to keep it unread
+    │ Help: 'none' runs its drop at the end of the scope; if it is kept for that, name it '_none'
     │           const _none: Probe? = None;
 ────╯
 -- stdout

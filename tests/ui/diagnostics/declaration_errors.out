@@ -6,6 +6,9 @@ Error: Unknown type 'Strng'
  1 │ fn f(a: Strng) {}
    │         ──┬──
    │           ╰──── Unknown type 'Strng'
+   │
+   │ Help: did you mean 'String'?
+   │           fn f(a: String) {}
 ───╯
 Error: Function 'g' is already defined
    ╭─[ tests/ui/diagnostics/declaration_errors.zr:3:1 ]
@@ -32,5 +35,8 @@ Error: Unknown type 'Strng'
  6 │     a: Strng,
    │        ──┬──
    │          ╰──── Unknown type 'Strng'
+   │
+   │ Help: did you mean 'String'?
+   │           a: String,
 ───╯
 [-] Error: aborting due to previous error

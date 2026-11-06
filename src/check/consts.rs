@@ -170,14 +170,23 @@ impl FnCx<'_, '_> {
                 left,
                 right,
             ) => {
-                let (Some(l), Some(r)) = (self.cx.eval(left), self.cx.eval(right)) else {
+                let Some(r) = self.cx.eval(right) else {
+                    return;
+                };
+                let l = self.cx.eval(left);
+                if matches!(op, BinOp::Div | BinOp::Rem) && r == 0 {
+                    match l {
+                        Some(_) => {
+                            self.error("Division by zero in a constant expression", expr.span)
+                        }
+                        None => self.warn("This divides by zero, so it always panics", expr.span),
+                    };
+                    return;
+                }
+                let Some(l) = l else {
                     return;
                 };
                 let result = match op {
-                    BinOp::Div | BinOp::Rem if r == 0 => {
-                        self.error("Division by zero in a constant expression", expr.span);
-                        return;
-                    }
                     BinOp::Rem if !int.contains(l / r) => None,
                     _ => arith(*op, l, r, Some(int)),
                 };

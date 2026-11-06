@@ -6,4 +6,9 @@ fn main() {
         Ok(Some(value)) => value,
         default => 0,
     };
+    var o: (i64, i64)? = None;
+    match o {
+        Some((a, b)) => println("{} {}", a, b),
+        None => {}
+    }
 }

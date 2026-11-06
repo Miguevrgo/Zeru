@@ -22,6 +22,6 @@ Error: Vec[x; n] takes n as usize, not i32
    │                        ╰───── this is i32
    │
    │ Help: convert it with as
-   │           var c = Vec[0; (4 as i32) as usize];
+   │           var c = Vec[0; 4 as usize];
 ───╯
 [-] Error: aborting due to previous error

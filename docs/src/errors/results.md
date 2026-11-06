@@ -88,7 +88,7 @@ succeeds by reaching its end, or early with `return Ok();`:
 import std.fs;
 
 fn save(name: str, text: str) ! {
-    if text.len() == 0 {
+    if text.is_empty() {
         return Ok();
     }
     fs::write_file(name, text)!;

@@ -4,5 +4,7 @@ fn main() {
     a.count_ones(1);
     a.rotate_left();
     a.rotate_left(true);
+    const amount: u8 = 3;
+    a.rotate_left(amount as u32);
     f.count_ones();
 }

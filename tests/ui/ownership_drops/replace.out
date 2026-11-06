@@ -7,7 +7,7 @@ Warning: Variable 't' is never read
     │           ┬
     │           ╰── Variable 't' is never read
     │
-    │ Help: remove it, or name it '_t' to keep it unread
+    │ Help: 't' runs its drop at the end of the scope; if it is kept for that, name it '_t'
     │           const _t = State::Open(D { id: 8 });
 ────╯
 Warning: The value this call returns is never used

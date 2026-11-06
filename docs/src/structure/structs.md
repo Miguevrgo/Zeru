@@ -40,9 +40,7 @@ struct Counter {
 
 fn main() {
     var c = Counter { count: 0, step: 5 };
-    c.next();
-    c.next();
-    println("{} {}", c.count, c.is_past(8)); // 10 true
+    println("{} {} {}", c.next(), c.next(), c.is_past(8)); // 5 10 true
 }
 ```
 

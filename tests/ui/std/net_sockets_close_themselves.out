@@ -7,7 +7,7 @@ Warning: Variable 'client' is never read
    │           ───┬──
    │              ╰──── Variable 'client' is never read
    │
-   │ Help: remove it, or name it '_client' to keep it unread
+   │ Help: 'client' runs its drop at the end of the scope; if it is kept for that, name it '_client'
    │           const _client = net::TcpStream.connect(addr).unwrap();
 ───╯
 Warning: Variable 'server' is never read
@@ -17,7 +17,7 @@ Warning: Variable 'server' is never read
    │           ───┬──
    │              ╰──── Variable 'server' is never read
    │
-   │ Help: remove it, or name it '_server' to keep it unread
+   │ Help: 'server' runs its drop at the end of the scope; if it is kept for that, name it '_server'
    │           const _server = listener.accept().unwrap();
 ───╯
 Warning: Variable 'i' is never read

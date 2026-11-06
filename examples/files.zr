@@ -20,7 +20,7 @@ fn main() {
     var longest = "";
     for line in text.lines() {
         for word in line.split(" ") {
-            if word.len() > 0 {
+            if !word.is_empty() {
                 words += 1;
             }
             if word.len() > longest.len() {

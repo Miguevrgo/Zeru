@@ -39,3 +39,8 @@ fn arms_after_a_bare_one() {
         Some(x) => println("{}", x),
     }
 }
+fn value_match(c: Color) i32 {
+    return match c {
+        Color::Red => 1,
+    };
+}

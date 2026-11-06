@@ -39,7 +39,7 @@ fn area(text: str) i64! {
 }
 
 fn require(text: str, key: str) ! {
-    if key.len() == 0 {
+    if key.is_empty() {
         return Ok();
     }
     if find(text, key).is_none() {
@@ -49,7 +49,7 @@ fn require(text: str, key: str) ! {
 
 fn first_letter(text: str, key: str) u8? {
     const value = find(text, key)?;
-    if value.len() == 0 {
+    if value.is_empty() {
         return None;
     }
     return value[0];
@@ -59,7 +59,7 @@ fn check(text: str) i32! {
     var settings = 0;
     for line in text.lines() {
         const clean = line.trim();
-        if clean.len() == 0 || clean.starts_with("#") {
+        if clean.is_empty() || clean.starts_with("#") {
             continue;
         }
         if clean.split("=").len() != 2 {

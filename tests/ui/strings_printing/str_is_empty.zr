@@ -5,4 +5,7 @@ fn main() {
     if s.len() == 0 {
         println("none");
     }
+    if owned.len() == 0 && 0 < s.len() {
+        println("some");
+    }
 }

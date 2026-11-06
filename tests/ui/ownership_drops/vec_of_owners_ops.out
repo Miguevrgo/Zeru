@@ -7,7 +7,7 @@ Warning: Variable 'last' is never read
     │               ──┬─
     │                 ╰─── Variable 'last' is never read
     │
-    │ Help: remove it, or name it '_last' to keep it unread
+    │ Help: 'last' runs its drop at the end of the scope; if it is kept for that, name it '_last'
     │           const _last = v.pop().unwrap();
 ────╯
 Warning: Variable 'mid' is never read
@@ -17,7 +17,7 @@ Warning: Variable 'mid' is never read
     │               ─┬─
     │                ╰─── Variable 'mid' is never read
     │
-    │ Help: remove it, or name it '_mid' to keep it unread
+    │ Help: 'mid' runs its drop at the end of the scope; if it is kept for that, name it '_mid'
     │           const _mid = v.remove(1);
 ────╯
 -- stdout

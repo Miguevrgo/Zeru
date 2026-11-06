@@ -532,9 +532,9 @@ impl<'a> Checker<'a> {
                 self.error("Function 'main' must not take type parameters", span);
             }
             if ret != Types::VOID {
-                let shown = self.types.show(ret);
+                let shown = crate::errors::with_article(&self.types.show(ret));
                 self.error(
-                    format!("Function 'main' must return void, not {shown}"),
+                    format!("Function 'main' returns nothing, so it cannot return {shown}"),
                     self.sources.first_line(span),
                 )
                 .help("end the program with a status code by calling exit(code)");
@@ -901,6 +901,9 @@ impl<'a> Checker<'a> {
                     ),
                     span,
                 );
+                if let Some(trait_def) = self.items.lookup_trait(module, bound) {
+                    self.explain_unmet(arg, trait_def, bound);
+                }
                 satisfied = false;
             }
         }
@@ -913,19 +916,28 @@ impl<'a> Checker<'a> {
     /// A type meets a trait by having its methods, with the same parameter
     /// and return types; there is no other way to say that it does.
     fn has_trait_methods(&mut self, ty: Ty, trait_def: DefId) -> bool {
-        let Some(owner) = self.is_struct(ty) else {
-            return false;
-        };
+        self.is_struct(ty).is_some() && self.unmet_method(ty, trait_def).is_none()
+    }
+
+    /// The first method of `trait_def` the struct `ty` lacks, or has with
+    /// other parameter or return types, with the one it has by that name
+    /// and how it reads.
+    fn unmet_method(
+        &mut self,
+        ty: Ty,
+        trait_def: DefId,
+    ) -> Option<(TraitMethod, Option<(DefId, String)>)> {
+        let owner = self.is_struct(ty)?;
         let TyKind::Adt(_, args) = self.types.kind(ty).clone() else {
-            return false;
+            return None;
         };
-        self.trait_def(trait_def).into_iter().all(|wanted| {
-            let Some(sig) = self
+        self.trait_def(trait_def).into_iter().find_map(|wanted| {
+            let Some((method, sig)) = self
                 .items
                 .method(owner, &wanted.name)
-                .and_then(|m| self.sig(m))
+                .and_then(|m| Some((m, self.sig(m)?)))
             else {
-                return false;
+                return Some((wanted, None));
             };
             let takes_self = sig.receiver != Receiver::None;
             let params = self
@@ -934,11 +946,70 @@ impl<'a> Checker<'a> {
             let ret = self.types.subst(sig.ret, &args);
             let same =
                 |have: Ty, want: Ty| have == want || have == Types::ERROR || want == Types::ERROR;
-            takes_self == wanted.takes_self
+            if takes_self == wanted.takes_self
                 && params.len() == wanted.params.len()
                 && params.iter().zip(&wanted.params).all(|(&p, &w)| same(p, w))
                 && same(ret, wanted.ret)
+            {
+                return None;
+            }
+            let shown = self.signature(&wanted.name, takes_self, &params, ret);
+            Some((wanted, Some((method, shown))))
         })
+    }
+
+    /// `fn name(self, ..) ret` as a method with these types is written.
+    fn signature(&self, name: &str, takes_self: bool, params: &[Ty], ret: Ty) -> String {
+        let receiver = takes_self.then(|| "self".to_string());
+        let params: Vec<String> = receiver
+            .into_iter()
+            .chain(params.iter().map(|&p| self.types.show(p)))
+            .collect();
+        let ret = match ret == Types::VOID {
+            true => String::new(),
+            false => format!(" {}", self.types.show(ret)),
+        };
+        format!("fn {name}({}){ret}", params.join(", "))
+    }
+
+    /// Say in the last error why `ty` does not meet `trait_def`, named
+    /// `bound`: the method it lacks, or has with other types.
+    fn explain_unmet(&mut self, ty: Ty, trait_def: DefId, bound: &str) {
+        let shown = self.types.show(ty);
+        let Some(owner) = self.is_struct(ty) else {
+            let error = self.errors.last_mut().expect("reported above");
+            error.help(format!("only a struct can meet a trait, not {shown}"));
+            return;
+        };
+        let Some((wanted, found)) = self.unmet_method(ty, trait_def) else {
+            return;
+        };
+        let asked = self.signature(&wanted.name, wanted.takes_self, &wanted.params, wanted.ret);
+        let items = self.items;
+        let names: Vec<String> = items
+            .methods_of(owner)
+            .filter_map(|m| items.item(m).name.rsplit("::").next().map(String::from))
+            .collect();
+        let head = |method: DefId| self.sources.first_line(items.item(method).decl.span);
+        let note = match &found {
+            Some((method, has)) => Some((format!("{shown} has {has} here"), head(*method))),
+            None => suggest::closest(&wanted.name, &names).and_then(|near| {
+                let method = items.method(owner, near)?;
+                let text = format!("{shown} has '{near}' here, not '{}'", wanted.name);
+                Some((text, head(method)))
+            }),
+        };
+        let error = self.errors.last_mut().expect("reported above");
+        match found {
+            Some(_) => error.help(format!("{bound} asks for {asked}")),
+            None => error.help(format!(
+                "{shown} has no method '{}', and {bound} asks for {asked}",
+                wanted.name
+            )),
+        };
+        if let Some((text, span)) = note {
+            error.note(text, span);
+        }
     }
 
     fn check_visible(&mut self, def: DefId, from: ModuleId, span: Span) {

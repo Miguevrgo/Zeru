@@ -25,4 +25,11 @@ fn main() {
     var c = Color::Gren;
     var v: Vec<i32> = Vec[1];
     v.psuh(2);
+    var w = v.sorted();
+    v.reversed();
+    var text = String.from("a");
+    var size = text.lenght();
+    var maybe: u8? = 3;
+    var at: *u8? = &var maybe;
+    println("{}", at.is_some());
 }

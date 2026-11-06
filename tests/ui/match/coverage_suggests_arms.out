@@ -78,4 +78,13 @@ Error: This match does not cover None
     │ Help: add an arm for each, or a default arm
     │           None => {}
 ────╯
+Error: This match does not cover Color::Green, Color::Blue
+    ╭─[ tests/ui/match/coverage_suggests_arms.zr:43:12 ]
+    │
+ 43 │     return match c {
+    │            ────┬────
+    │                ╰────── This match does not cover Color::Green, Color::Blue
+    │
+    │ Help: add an arm for each, or a default arm
+────╯
 [-] Error: aborting due to previous error

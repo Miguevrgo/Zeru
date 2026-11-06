@@ -6,5 +6,7 @@ Error: 'H' asks for T: Shape, which Bad does not satisfy
  11 │     var h: H<Bad> = H { v: Bad { x: 2 } };
     │     ───────────────────┬──────────────────
     │                        ╰──────────────────── 'H' asks for T: Shape, which Bad does not satisfy
+    │
+    │ Help: Bad has no method 'area', and Shape asks for fn area(self) i64
 ────╯
 [-] Error: aborting due to previous error

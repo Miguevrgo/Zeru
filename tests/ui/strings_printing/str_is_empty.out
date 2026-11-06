@@ -10,5 +10,26 @@ Warning: Write .is_empty() to ask whether a str is empty
    │ Help: ask it directly
    │           if s.is_empty() {
 ───╯
+Warning: Write .is_empty() to ask whether a String is empty
+   ╭─[ tests/ui/strings_printing/str_is_empty.zr:8:8 ]
+   │
+ 8 │     if owned.len() == 0 && 0 < s.len() {
+   │        ────────┬───────
+   │                ╰───────── Write .is_empty() to ask whether a String is empty
+   │
+   │ Help: ask it directly
+   │           if owned.is_empty() && 0 < s.len() {
+───╯
+Warning: Write .is_empty() to ask whether a str is empty
+   ╭─[ tests/ui/strings_printing/str_is_empty.zr:8:28 ]
+   │
+ 8 │     if owned.len() == 0 && 0 < s.len() {
+   │                            ─────┬─────
+   │                                 ╰─────── Write .is_empty() to ask whether a str is empty
+   │
+   │ Help: ask it directly
+   │           if owned.len() == 0 && !s.is_empty() {
+───╯
 -- stdout
 false true true
+some

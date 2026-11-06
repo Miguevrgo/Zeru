@@ -30,12 +30,12 @@ Error: Cannot move a value out of a field, an element or a pointer
     │ Help: move a copy of it instead
     │           var s = make()[0].copy();
 ────╯
-Error: Cannot move a value out of a field, an element or a pointer
+Error: Cannot move a field out of a temporary 'Guard', which has a drop
     ╭─[ tests/ui/ownership_drops/move_out_of_place.zr:30:13 ]
     │
  30 │     var v = guard().v;
     │             ────┬────
-    │                 ╰────── what holds it would be left without it
+    │                 ╰────── 'Guard' has a drop, which still needs the whole value
     │
     │ Help: move a copy of it instead
     │           var v = guard().v.copy();

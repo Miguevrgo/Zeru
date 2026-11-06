@@ -90,4 +90,40 @@ Error: Vec<i32> has no method 'psuh'
     │ Help: did you mean 'push'?
     │           v.push(2);
 ────╯
+Error: Vec<i32> has no method 'sorted'
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:28:15 ]
+    │
+ 28 │     var w = v.sorted();
+    │               ───┬──
+    │                  ╰──── Vec<i32> has no method 'sorted'
+    │
+    │ Help: did you mean 'sort'? It changes v in place and returns nothing, so call v.sort() first, then use v
+────╯
+Error: Vec<i32> has no method 'reversed'
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:29:7 ]
+    │
+ 29 │     v.reversed();
+    │       ────┬───
+    │           ╰───── Vec<i32> has no method 'reversed'
+    │
+    │ Help: did you mean 'reverse'?
+    │           v.reverse();
+────╯
+Error: String has no method 'lenght'
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:31:21 ]
+    │
+ 31 │     var size = text.lenght();
+    │                     ───┬──
+    │                        ╰──── String has no method 'lenght'
+    │
+    │ Help: Zeru calls it 'len'
+    │           var size = text.len();
+────╯
+Error: *(u8?) has no method 'is_some'
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:34:22 ]
+    │
+ 34 │     println("{}", at.is_some());
+    │                      ───┬───
+    │                         ╰───── *(u8?) has no method 'is_some'
+────╯
 [-] Error: aborting due to previous error

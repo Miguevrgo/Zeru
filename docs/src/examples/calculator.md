@@ -88,11 +88,11 @@ struct Parser {
         while true {
             match self.peek() {
                 Token::Plus => {
-                    self.next();
+                    self.at += 1;
                     value += self.term()!;
                 }
                 Token::Minus => {
-                    self.next();
+                    self.at += 1;
                     value -= self.term()!;
                 }
                 default => {
@@ -100,7 +100,6 @@ struct Parser {
                 }
             }
         }
-        return value;
     }
 
     // A term: factors joined by * and /.
@@ -109,11 +108,11 @@ struct Parser {
         while true {
             match self.peek() {
                 Token::Star => {
-                    self.next();
+                    self.at += 1;
                     value *= self.factor()!;
                 }
                 Token::Slash => {
-                    self.next();
+                    self.at += 1;
                     const divisor = self.factor()!;
                     if divisor == 0.0 {
                         return Err(DIV_ZERO);
@@ -125,7 +124,6 @@ struct Parser {
                 }
             }
         }
-        return value;
     }
 
     // A number, a negated factor, or a sum in parentheses.
@@ -176,7 +174,7 @@ fn main() {
             return;
         }
         const text = line.unwrap();
-        if text.trim().len() == 0 {
+        if text.trim().is_empty() {
             continue;
         }
         match evaluate(text) {

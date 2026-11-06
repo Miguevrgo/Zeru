@@ -4,9 +4,18 @@ trait Area {
 struct Blob {
     s: i64,
 }
+struct Typo {
+    s: i64,
+
+    fn aera(self) i64 {
+        return self.s;
+    }
+}
 fn measure<T: Area>(x: T) i64 {
     return x.area();
 }
 fn main() {
     var n = measure(Blob { s: 1 });
+    var m = measure(Typo { s: 1 });
+    var k = measure(3);
 }

@@ -81,7 +81,6 @@ struct Parser {
                 }
             }
         }
-        return value;
     }
 
     fn product(var self) i64! {
@@ -105,7 +104,6 @@ struct Parser {
                 }
             }
         }
-        return value;
     }
 
     fn unary(var self) i64! {

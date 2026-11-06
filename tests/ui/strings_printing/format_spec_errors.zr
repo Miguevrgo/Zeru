@@ -5,6 +5,7 @@ fn main() {
     println("{:05}", "text");
     println("{:>4}", v);
     println("{:q}", 1);
+    println("a {:+} b", 1);
     println("{:.}", 1.0);
     println("{:.101}", 1.0);
     println("{:>8", 1);

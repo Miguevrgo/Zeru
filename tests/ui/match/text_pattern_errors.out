@@ -8,7 +8,6 @@ Error: A match on str needs a 'default' arm
    │                 ╰────── A match on str needs a 'default' arm
    │
    │ Help: add a default arm for the values no other arm takes
-   │           default => {}
 ───╯
 Error: This value is already matched by an earlier arm
    ╭─[ tests/ui/match/text_pattern_errors.zr:8:9 ]

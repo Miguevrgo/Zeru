@@ -7,7 +7,7 @@ Warning: Variable 'pair' is never read
     │                   ──┬─
     │                     ╰─── Variable 'pair' is never read
     │
-    │ Help: remove it, or name it '_pair' to keep it unread
+    │ Help: 'pair' runs its drop at the end of the scope; if it is kept for that, name it '_pair'
     │           const _pair = (probe(1, at), [probe(2, at), probe(3, at)]);
 ────╯
 -- stdout

@@ -22,10 +22,10 @@ const server = listener.accept().unwrap();
 
 client.write("ping").unwrap();
 var request = String.new();
-server.read(&var request, 64).unwrap();
+var _ = server.read(&var request, 64).unwrap();
 server.write("pong").unwrap();
 var reply = String.new();
-client.read(&var reply, 64).unwrap();
+var _ = client.read(&var reply, 64).unwrap();
 println("{} {}", request, reply); // ping pong
 ```
 

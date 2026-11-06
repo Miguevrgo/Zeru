@@ -1,0 +1,16 @@
+status: compile error
+-- stderr
+Error: Expected '}', found the end of the file
+   ╭─[ tests/ui/parser/unclosed_inner_block.zr:8:1 ]
+   │
+ 3 │     if x > 0 {
+   │              ┬
+   │              ╰── this '{' is never closed
+   │
+ 8 │
+   │ ┬
+   │ ╰── Expected '}', found the end of the file
+   │
+   │ Help: close it with }
+───╯
+[-] Error: aborting due to previous error

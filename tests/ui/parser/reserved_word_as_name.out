@@ -1,0 +1,30 @@
+status: compile error
+-- stderr
+Error: 'default' is a reserved word, so it cannot be a name
+   ╭─[ tests/ui/parser/reserved_word_as_name.zr:2:5 ]
+   │
+ 2 │     default: i32,
+   │     ───┬───
+   │        ╰───── 'default' is a reserved word, so it cannot be a name
+   │
+   │ Help: choose another name
+───╯
+Error: 'asm' is a reserved word, so it cannot be a name
+   ╭─[ tests/ui/parser/reserved_word_as_name.zr:7:11 ]
+   │
+ 7 │     const asm = 1;
+   │           ─┬─
+   │            ╰─── 'asm' is a reserved word, so it cannot be a name
+   │
+   │ Help: choose another name
+───╯
+Error: 'volatile' is a reserved word, so it cannot be a name
+   ╭─[ tests/ui/parser/reserved_word_as_name.zr:8:11 ]
+   │
+ 8 │     const volatile = 2;
+   │           ────┬───
+   │               ╰───── 'volatile' is a reserved word, so it cannot be a name
+   │
+   │ Help: choose another name
+───╯
+[-] Error: aborting due to previous error

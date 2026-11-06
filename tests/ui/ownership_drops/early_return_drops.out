@@ -7,7 +7,7 @@ Warning: Variable 'first' is never read
     │           ──┬──
     │             ╰──── Variable 'first' is never read
     │
-    │ Help: remove it, or name it '_first' to keep it unread
+    │ Help: 'first' runs its drop at the end of the scope; if it is kept for that, name it '_first'
     │           const _first = probe(1, at);
 ────╯
 Warning: Variable 'second' is never read
@@ -17,7 +17,7 @@ Warning: Variable 'second' is never read
     │           ───┬──
     │              ╰──── Variable 'second' is never read
     │
-    │ Help: remove it, or name it '_second' to keep it unread
+    │ Help: 'second' runs its drop at the end of the scope; if it is kept for that, name it '_second'
     │           const _second = probe(2, at);
 ────╯
 -- stdout

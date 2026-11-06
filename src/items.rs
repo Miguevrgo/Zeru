@@ -285,9 +285,24 @@ impl<'a> Items<'a> {
     }
 
     /// The name of `def` as a program calls it: the prelude's functions
-    /// behind the methods of `str`, `Vec` and `String` by those methods.
+    /// behind the methods of `str`, `Vec` and `String` by those methods,
+    /// and std's types and their methods without their module, as they are
+    /// imported by name.
     pub fn shown(&self, def: DefId) -> String {
-        let name = &self.item(def).name;
+        let item = self.item(def);
+        let name = &item.name;
+        let module = self
+            .std_module_of(def)
+            .filter(|_| {
+                matches!(
+                    item.kind,
+                    ItemKind::Struct | ItemKind::Enum | ItemKind::Trait
+                ) || item.owner.is_some()
+            })
+            .map(|module| format!("{module}::"));
+        let name = module
+            .and_then(|module| name.strip_prefix(&module))
+            .unwrap_or(name);
         let owners = [
             ("__zeru_str_", "str"),
             ("__zeru_vec_", "Vec"),
@@ -296,7 +311,7 @@ impl<'a> Items<'a> {
         owners
             .iter()
             .find_map(|(prefix, owner)| Some(format!("{owner}.{}", name.strip_prefix(prefix)?)))
-            .unwrap_or_else(|| name.clone())
+            .unwrap_or_else(|| name.to_string())
     }
 
     pub fn method(&self, owner: DefId, name: &str) -> Option<DefId> {

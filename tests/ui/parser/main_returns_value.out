@@ -1,11 +1,11 @@
 status: compile error
 -- stderr
-Error: Function 'main' must return void, not i32
+Error: Function 'main' returns nothing, so it cannot return an i32
    ╭─[ tests/ui/parser/main_returns_value.zr:1:1 ]
    │
  1 │ fn main() i32 {
    │ ──────┬──────
-   │       ╰──────── Function 'main' must return void, not i32
+   │       ╰──────── Function 'main' returns nothing, so it cannot return an i32
    │
    │ Help: end the program with a status code by calling exit(code)
 ───╯

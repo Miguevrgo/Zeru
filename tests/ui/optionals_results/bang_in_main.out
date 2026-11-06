@@ -1,10 +1,13 @@
 status: compile error
 -- stderr
-Error: '!' returns from a function returning void, which is no T!
+Error: '!' would pass the error on, but this function returns nothing
    ╭─[ tests/ui/optionals_results/bang_in_main.zr:5:13 ]
    │
  5 │     var x = f()!;
    │             ──┬─
-   │               ╰─── '!' returns from a function returning void, which is no T!
+   │               ╰─── '!' would pass the error on, but this function returns nothing
+   │
+   │ Help: take the value out with .unwrap(), which stops the program on an error
+   │           var x = f().unwrap();
 ───╯
 [-] Error: aborting due to previous error

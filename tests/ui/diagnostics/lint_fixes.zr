@@ -1,0 +1,36 @@
+struct P {
+    x: i32,
+
+    fn look(var self) i32 {
+        return self.x;
+    }
+
+    fn bump(var self) {
+        self.x += 1;
+    }
+
+    fn drop(var self) {}
+}
+
+fn twice(var n: i32) i32 {
+    return n * 2;
+}
+
+fn grow(var n: i32) i32 {
+    n += 1;
+    return n;
+}
+
+fn _divide(n: i32) i32 {
+    return n / 0 + n % 0;
+}
+
+fn _flip(flag: bool) bool {
+    return if flag { false } else { true };
+}
+
+fn main() {
+    var p = P { x: 1 };
+    p.bump();
+    println("{} {} {}", p.look(), twice(2), grow(3));
+}

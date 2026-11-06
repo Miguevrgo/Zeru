@@ -15,11 +15,11 @@ Error: Shift by 40 is out of range for i32
    │                     ╰───── Shift by 40 is out of range for i32
 ───╯
 Error: Constant 128 does not fit in i8
-   ╭─[ tests/ui/constants/overflow_at_compile_time.zr:4:19 ]
+   ╭─[ tests/ui/constants/overflow_at_compile_time.zr:4:18 ]
    │
  4 │     var c: i8 = -(64 * 2);
-   │                   ───┬──
-   │                      ╰──── Constant 128 does not fit in i8
+   │                  ────┬───
+   │                      ╰───── Constant 128 does not fit in i8
 ───╯
 Error: Constant 2147483648 does not fit in i32
    ╭─[ tests/ui/constants/overflow_at_compile_time.zr:5:13 ]

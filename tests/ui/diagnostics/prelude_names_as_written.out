@@ -67,4 +67,11 @@ Error: Vec<i32> has no method 'shout'
     │ Help: did you mean 'sort'?
     │           n.sort();
 ────╯
+Error: 'String.push_str' takes 'text' as str, but this is i32
+    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:14:16 ]
+    │
+ 14 │     o.push_str(5);
+    │                ┬
+    │                ╰── this is i32
+────╯
 [-] Error: aborting due to previous error

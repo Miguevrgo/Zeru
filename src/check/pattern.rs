@@ -37,6 +37,10 @@ type Tested = (Vec<Test>, Binds);
 /// does not list its values, as an integer's: only a name or `_` takes it.
 const OTHER: i128 = i128::MIN;
 
+/// The error a match reports for values no arm takes, by its index, and
+/// the edit that adds arms for them.
+type Gap = Option<(usize, (Span, String))>;
+
 /// How many combinations of its elements' values a match on a tuple checks
 /// at most for gaps and repeats; beyond them it needs a `default`.
 const MAX_COMBINATIONS: usize = 4096;
@@ -59,8 +63,11 @@ impl FnCx<'_, '_> {
             }
             false => arms,
         };
-        let patterns = self.patterns(subject, arms, span);
+        let (patterns, gap) = self.patterns(subject, arms, span);
         if arms.is_empty() {
+            if let Some((error, (at, added))) = gap {
+                self.cx.errors[error].fix(at, added);
+            }
             return self.mk(
                 ExprKind::Match {
                     scrutinee,
@@ -179,6 +186,11 @@ impl FnCx<'_, '_> {
             true => Types::ERROR,
             false => arm_ty.unwrap_or(Types::VOID),
         };
+        if let Some((error, (at, added))) = gap
+            && ty == Types::VOID
+        {
+            self.cx.errors[error].fix(at, added);
+        }
         self.mk(
             ExprKind::Match {
                 scrutinee,
@@ -277,9 +289,11 @@ impl FnCx<'_, '_> {
 
     /// Check each pattern against the subject: none twice, and every value
     /// covered, by a `default` or by listing them all. A value no arm takes
-    /// has nowhere to go at runtime.
-    fn patterns(&mut self, subject: Ty, arms: &[MatchArm], span: Span) -> Vec<Shape> {
-        let none = || arms.iter().map(|arm| failed(&arm.pattern)).collect();
+    /// has nowhere to go at runtime. With a gap, also the error that reports
+    /// it and the arms that fill it, each with an empty block, which fit only
+    /// a match that gives no value.
+    fn patterns(&mut self, subject: Ty, arms: &[MatchArm], span: Span) -> (Vec<Shape>, Gap) {
+        let none = || (arms.iter().map(|arm| failed(&arm.pattern)).collect(), None);
         let mut elements = Vec::new();
         let all: Option<Vec<String>> = match self.cx.types.kind(subject).clone() {
             TyKind::Error => return none(),
@@ -316,6 +330,7 @@ impl FnCx<'_, '_> {
 
         let mut covered = Vec::new();
         let mut has_default = false;
+        let mut failed = false;
         let mut shapes = Vec::new();
         for (at, arm) in arms.iter().enumerate() {
             let pattern = &arm.pattern;
@@ -345,11 +360,13 @@ impl FnCx<'_, '_> {
                 });
                 continue;
             }
-            shapes.push(self.shape(pattern, subject, guarded, &mut covered, combos.as_deref()));
+            let shape = self.shape(pattern, subject, guarded, &mut covered, combos.as_deref());
+            failed |= shape.tags.is_empty();
+            shapes.push(shape);
         }
 
-        if has_default {
-            return shapes;
+        if has_default || failed {
+            return (shapes, None);
         }
         let missing: Vec<String> = match (all, &combos) {
             (Some(all), _) => (0..)
@@ -382,12 +399,9 @@ impl FnCx<'_, '_> {
                 let shown = self.ty(subject);
                 let fix = self.added_arms(arms, &["default".to_string()], span);
                 let head = self.cx.sources.first_line(span);
-                let error = self.error(format!("A match on {shown} needs a 'default' arm"), head);
-                error.help("add a default arm for the values no other arm takes");
-                if let Some((at, arms)) = fix {
-                    error.fix(at, arms);
-                }
-                return shapes;
+                self.error(format!("A match on {shown} needs a 'default' arm"), head)
+                    .help("add a default arm for the values no other arm takes");
+                return (shapes, fix.map(|fix| (self.cx.errors.len() - 1, fix)));
             }
         };
         if !missing.is_empty() {
@@ -406,13 +420,11 @@ impl FnCx<'_, '_> {
                 ),
                 false => missing.join(", "),
             };
-            let error = self.error(format!("This match does not cover {listed}"), head);
-            error.help("add an arm for each, or a default arm");
-            if let Some((at, arms)) = fix {
-                error.fix(at, arms);
-            }
+            self.error(format!("This match does not cover {listed}"), head)
+                .help("add an arm for each, or a default arm");
+            return (shapes, fix.map(|fix| (self.cx.errors.len() - 1, fix)));
         }
-        shapes
+        (shapes, None)
     }
 
     /// What `ty` refers to when it is a reference, which a tuple element is

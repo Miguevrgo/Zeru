@@ -84,7 +84,7 @@ pub fn shl<V, N>(lanes: V, amount: N) V {}
 pub fn shr<V, N>(lanes: V, amount: N) V {}
 
 // Returns a mask: each lane all ones where the lanes are equal, else zero,
-// as integers of the lanes' width.
+// as signed integers of the lanes' width.
 pub fn eq<V, M>(a: V, b: V) M {}
 
 // Returns a mask of where a lane of `a` is less than that of `b`.
@@ -93,7 +93,8 @@ pub fn lt<V, M>(a: V, b: V) M {}
 // Returns a mask of where a lane of `a` is greater than that of `b`.
 pub fn gt<V, M>(a: V, b: V) M {}
 
-// Returns the lane of `a` where `mask` is not zero, else that of `b`.
+// Returns the lane of `a` where `mask` is not zero, else that of `b`. The
+// mask holds signed integers of the lanes' width, as `eq`, `lt` and `gt` give.
 pub fn select<M, V>(mask: M, a: V, b: V) V {}
 
 // Returns the sum of the lanes; for integers, wrapping around.

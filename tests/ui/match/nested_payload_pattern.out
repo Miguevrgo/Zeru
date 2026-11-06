@@ -7,4 +7,11 @@ Error: A pattern binds names, as in Some(x); match the value inside again
    │            ─────┬─────
    │                 ╰─────── A pattern binds names, as in Some(x); match the value inside again
 ───╯
+Error: A pattern binds names, as in Some(x); match the value inside again
+    ╭─[ tests/ui/match/nested_payload_pattern.zr:11:14 ]
+    │
+ 11 │         Some((a, b)) => println("{} {}", a, b),
+    │              ───┬──
+    │                 ╰──── A pattern binds names, as in Some(x); match the value inside again
+────╯
 [-] Error: aborting due to previous error

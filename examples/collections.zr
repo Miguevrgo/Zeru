@@ -38,7 +38,7 @@ fn main() {
 
     var seen: HashSet<i32> = HashSet.new();
     for n in [4, 7, 4, 4, 9] {
-        seen.insert(n);
+        var _ = seen.insert(n);
     }
     println("{} distinct", seen.len());
 

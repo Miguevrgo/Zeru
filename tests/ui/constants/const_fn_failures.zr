@@ -3,6 +3,11 @@ fn positive(n: i32) i32 {
     return n;
 }
 
+fn checked(n: i32) i32 {
+    assert(n > 0, "nope {} {}", n, true);
+    return n;
+}
+
 fn first(v: i32?) i32 {
     return v.unwrap();
 }
@@ -16,6 +21,7 @@ fn shift(a: i32, b: i32) i32 {
 }
 
 const A: i32 = positive(0);
+const F: i32 = checked(-3);
 const B: i32 = first(None);
 const C: i32 = div(1, 0);
 const D: i32 = div(-2147483647 - 1, -1);

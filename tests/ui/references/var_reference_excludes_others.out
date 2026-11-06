@@ -1,13 +1,13 @@
 status: compile error
 -- stderr
 Error: Cannot change 'v' while a reference into it is still in use
-   ╭─[ tests/ui/references/var_reference_excludes_others.zr:5:5 ]
+   ╭─[ tests/ui/references/var_reference_excludes_others.zr:5:11 ]
    │
  5 │     drain(&var v, &v);
-   │     ────────┬──────┬─
-   │             ╰────────── this can free or move what a reference points at
+   │           ───┬──  ─┬
+   │              ╰──────── this can free or move what a reference points at
    │                    │
-   │                    ╰─── borrowed here
+   │                    ╰── borrowed here
    │
    │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'v'
 ───╯
@@ -52,13 +52,13 @@ Error: Cannot change 'v' while the loop still refers into it
     │ Help: the loop walks 'v'; collect the changes in another variable and make them after the loop
 ────╯
 Error: Cannot change 'v' while a reference into it is still in use
-    ╭─[ tests/ui/references/var_reference_excludes_others.zr:31:19 ]
+    ╭─[ tests/ui/references/var_reference_excludes_others.zr:31:36 ]
     │
  31 │     println("{}", first_after_push(&var v, &v));
-    │                   ──────────────┬───────────┬─
-    │                                 ╰─────────────── this can free or move what a reference points at
+    │                                    ───┬──  ─┬
+    │                                       ╰──────── this can free or move what a reference points at
     │                                             │
-    │                                             ╰─── borrowed here
+    │                                             ╰── borrowed here
     │
     │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'v'
 ────╯

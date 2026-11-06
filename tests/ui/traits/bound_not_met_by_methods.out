@@ -1,10 +1,34 @@
 status: compile error
 -- stderr
 Error: 'measure' asks for T: Area, which Blob does not satisfy
-    ╭─[ tests/ui/traits/bound_not_met_by_methods.zr:11:13 ]
+    ╭─[ tests/ui/traits/bound_not_met_by_methods.zr:18:13 ]
     │
- 11 │     var n = measure(Blob { s: 1 });
+ 18 │     var n = measure(Blob { s: 1 });
     │             ───────────┬──────────
     │                        ╰──────────── 'measure' asks for T: Area, which Blob does not satisfy
+    │
+    │ Help: Blob has no method 'area', and Area asks for fn area(self) i64
+────╯
+Error: 'measure' asks for T: Area, which Typo does not satisfy
+    ╭─[ tests/ui/traits/bound_not_met_by_methods.zr:19:13 ]
+    │
+ 10 │     fn aera(self) i64 {
+    │     ────────┬────────
+    │             ╰────────── Typo has 'aera' here, not 'area'
+    │
+ 19 │     var m = measure(Typo { s: 1 });
+    │             ───────────┬──────────
+    │                        ╰──────────── 'measure' asks for T: Area, which Typo does not satisfy
+    │
+    │ Help: Typo has no method 'area', and Area asks for fn area(self) i64
+────╯
+Error: 'measure' asks for T: Area, which i32 does not satisfy
+    ╭─[ tests/ui/traits/bound_not_met_by_methods.zr:20:13 ]
+    │
+ 20 │     var k = measure(3);
+    │             ─────┬────
+    │                  ╰────── 'measure' asks for T: Area, which i32 does not satisfy
+    │
+    │ Help: only a struct can meet a trait, not i32
 ────╯
 [-] Error: aborting due to previous error

@@ -141,7 +141,8 @@ impl Checker<'_> {
         if name == "self" {
             return Types::ERROR;
         }
-        let mut candidates: Vec<String> = PRIMITIVES.iter().map(|p| p.to_string()).collect();
+        let builtin = PRIMITIVES.iter().chain(&["str", "String", "Vec", "Array"]);
+        let mut candidates: Vec<String> = builtin.map(|p| p.to_string()).collect();
         candidates.extend(
             self.items
                 .items

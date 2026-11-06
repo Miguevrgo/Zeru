@@ -391,6 +391,15 @@ impl Types {
         }
     }
 
+    /// `ty` after a `*` or `&`, in parentheses when it ends with `?` or `!`,
+    /// which would otherwise read as applying to the pointer.
+    fn show_pointee(&self, ty: Ty) -> String {
+        match self.kind(ty) {
+            TyKind::Optional(_) | TyKind::Result(_) => format!("({})", self.show(ty)),
+            _ => self.show(ty),
+        }
+    }
+
     /// The type as the programmer writes it.
     pub fn show(&self, ty: Ty) -> String {
         let list = |tys: &[Ty]| {
@@ -415,9 +424,9 @@ impl Types {
             TyKind::Slice(inner) if *inner == Self::U8 => "str".into(),
             TyKind::Slice(inner) => format!("&[{}]", self.show(*inner)),
             TyKind::SliceMut(inner) => format!("&var [{}]", self.show(*inner)),
-            TyKind::Ptr(inner) => format!("*{}", self.show(*inner)),
-            TyKind::Ref(inner) => format!("&{}", self.show(*inner)),
-            TyKind::RefMut(inner) => format!("&var {}", self.show(*inner)),
+            TyKind::Ptr(inner) => format!("*{}", self.show_pointee(*inner)),
+            TyKind::Ref(inner) => format!("&{}", self.show_pointee(*inner)),
+            TyKind::RefMut(inner) => format!("&var {}", self.show_pointee(*inner)),
             TyKind::Optional(inner) => format!("{}?", self.show_operand(*inner)),
             TyKind::Result(..) if self.is_unit_result(ty) => "!".into(),
             TyKind::Result(ok) => format!("{}!", self.show_operand(*ok)),

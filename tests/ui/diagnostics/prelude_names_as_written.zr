@@ -10,4 +10,6 @@ fn main() {
     var w = "abc".shout();
     var n: Vec<i32> = Vec[1];
     n.shout();
+    var o = String.new();
+    o.push_str(5);
 }

@@ -28,6 +28,6 @@ fn main() {
     const server = listener.accept().unwrap();
     client.write("ping").unwrap();
     var reply = String.new();
-    server.read(&var reply, 4).unwrap();
+    var _ = server.read(&var reply, 4).unwrap();
     println("server got {}", reply);
 }

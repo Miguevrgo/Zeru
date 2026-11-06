@@ -7,7 +7,7 @@ Warning: Variable 'p' is never read
     │                      ┬
     │                      ╰── Variable 'p' is never read
     │
-    │ Help: remove it, or name it '_p' to keep it unread
+    │ Help: 'p' runs its drop at the end of the scope; if it is kept for that, name it '_p'
     │           Some(_p) => {
 ────╯
 -- stdout

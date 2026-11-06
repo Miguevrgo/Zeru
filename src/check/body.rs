@@ -39,6 +39,8 @@ pub(super) struct FnCx<'c, 'a> {
     pub(super) in_closure: bool,
     pub(super) naming: Option<String>,
     pub(super) own_name: Option<String>,
+    /// The expression statement being checked, whose value nothing uses.
+    pub(super) statement: Span,
 }
 
 /// A variable of the code around a closure, which its body may capture:
@@ -52,11 +54,11 @@ pub(super) struct Outer {
     pub(super) declared: Span,
 }
 
-/// What a closure's body captured: the variable, and whether the body
-/// changes it, which takes a `&var` to it rather than a `&`.
+/// What a closure's body captured: the variable, and where the body first
+/// changes it, if it does, which takes a `&var` to it rather than a `&`.
 pub(super) struct Captured {
     pub(super) outer: Outer,
-    pub(super) mutable: bool,
+    pub(super) changed: Option<Span>,
 }
 
 pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::Function {
@@ -109,6 +111,8 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
     }
     fx.warn_unread(params.len());
     fx.warn_unchanged(params.len());
+    let drop = item.owner.is_some() && name.ends_with("::drop");
+    fx.warn_unchanged_params(&params, span, drop);
     let locals = std::mem::take(&mut fx.locals);
 
     if !args.is_empty() {
@@ -160,6 +164,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             in_closure: false,
             naming: None,
             own_name: None,
+            statement: Span::default(),
         }
     }
 
@@ -251,6 +256,45 @@ impl<'c, 'a> FnCx<'c, 'a> {
         }
     }
 
+    /// Warn about each `var` parameter, `var self` too, of the function
+    /// declared at `span` that never changes, but the `self` of a `drop`.
+    fn warn_unchanged_params(&mut self, params: &[LocalId], span: Span, drop: bool) {
+        let text = self.cx.sources.text(span);
+        let head = &text[..text.find('{').unwrap_or(text.len())];
+        for &local in params {
+            let at = local.0 as usize;
+            let name = &self.locals[at].name;
+            if self.fixed[at].is_some() || self.changed[at] || name.starts_with('_') {
+                continue;
+            }
+            let written = format!("var {name}");
+            let ends =
+                |at: usize| !head[at..].starts_with(|c: char| c.is_alphanumeric() || c == '_');
+            let Some(offset) = head
+                .match_indices(&written)
+                .map(|(offset, _)| offset)
+                .find(|&offset| ends(offset + written.len()))
+            else {
+                continue;
+            };
+            let (message, help) = match name.as_str() {
+                "self" if drop => continue,
+                "self" => (
+                    "This method never changes self; take self",
+                    "write self, so that var self marks a method that changes it",
+                ),
+                _ => (
+                    "This parameter never changes; drop var",
+                    "drop var, so that var marks what does change",
+                ),
+            };
+            let start = span.start + offset;
+            self.warn(message, Span::new(start, start + 3))
+                .help(help)
+                .fix(Span::new(start, start + 4), "");
+        }
+    }
+
     /// Warn about each variable after the first `params` locals that is
     /// never read. A name that starts with `_` is left alone.
     pub(super) fn warn_unread(&mut self, params: usize) {
@@ -262,7 +306,12 @@ impl<'c, 'a> FnCx<'c, 'a> {
             let declared = self.declared[at];
             let named = self.cx.sources.word_in(declared, name);
             let message = format!("Variable '{name}' is never read");
-            let help = format!("remove it, or name it '_{name}' to keep it unread");
+            let help = match self.cx.runs_drop(self.locals[at].ty) {
+                true => format!(
+                    "'{name}' runs its drop at the end of the scope; if it is kept for that, name it '_{name}'"
+                ),
+                false => format!("remove it, or name it '_{name}' to keep it unread"),
+            };
             let warning = self.warn(message, named.unwrap_or(declared)).help(help);
             if let Some(at) = named {
                 warning.fix(Span::new(at.start, at.start), "_");
@@ -358,7 +407,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
         let ty = outer.ty;
         self.captures.push(Captured {
             outer,
-            mutable: false,
+            changed: None,
         });
         Some((self.captures.len() as u32 - 1, ty))
     }
@@ -444,6 +493,19 @@ impl<'c, 'a> FnCx<'c, 'a> {
             ExprKind::Read(place @ (Place::Field(..) | Place::Index(..) | Place::Deref(_))) => {
                 let replaceable = matches!(place.base(), Place::Local(local)
                     if self.fixed[local.0 as usize].is_none() && !self.locals[local.0 as usize].view);
+                if matches!(place.base(), Place::Temp(_))
+                    && let Place::Field(base, _) = &*place
+                    && let Some(TyKind::Adt(def, _)) =
+                        self.place_ty(base).map(|ty| self.cx.types.kind(ty).clone())
+                {
+                    let name = self.cx.items.item(def).name.clone();
+                    let message = format!(
+                        "Cannot move a field out of a temporary '{name}', which has a drop"
+                    );
+                    let why = format!("'{name}' has a drop, which still needs the whole value");
+                    self.cannot_move(message, &why, expr, replaceable);
+                    return;
+                }
                 let message = "Cannot move a value out of a field, an element or a pointer";
                 let why = "what holds it would be left without it";
                 self.cannot_move(message.to_string(), why, expr, replaceable);
@@ -589,6 +651,12 @@ impl<'c, 'a> FnCx<'c, 'a> {
     fn conversion(&mut self, value: &Expr, target: Ty) -> Option<(&'static str, Option<String>)> {
         let (got, target) = (self.resolve(value.ty), self.resolve(target));
         let text = self.cx.sources.text(value.span).to_string();
+        let cast = match &value.kind {
+            ExprKind::Cast(inner) if text.contains(" as ") => {
+                Some(operand(self.cx.sources.text(inner.span)))
+            }
+            _ => None,
+        };
         let operand = operand(&text);
         let shown = self.ty(target);
         let owns = self.cx.owns_heap(target);
@@ -601,9 +669,10 @@ impl<'c, 'a> FnCx<'c, 'a> {
         Some(
             match (types.kind(got).clone(), types.kind(target).clone()) {
                 _ if literal && (types.is_number(target) || target == Types::BOOL) => return None,
-                _ if types.is_number(got) && types.is_number(target) => {
-                    ("convert it with as", Some(format!("{operand} as {shown}")))
-                }
+                _ if types.is_number(got) && types.is_number(target) => (
+                    "convert it with as",
+                    Some(format!("{} as {shown}", cast.unwrap_or(operand))),
+                ),
                 (TyKind::Optional(inner), _) if inner == target => (
                     "take the value out: .unwrap() stops the program when there is none, and ? passes the None on",
                     Some(format!("{operand}.unwrap()")),
@@ -791,7 +860,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             Place::Temp(_) => {}
             Place::Capture(at) => {
                 let captured = &mut self.captures[*at as usize];
-                captured.mutable = true;
+                captured.changed.get_or_insert(span);
                 if let Some(why) = captured.outer.fixed {
                     let (name, declared) = (captured.outer.name.clone(), captured.outer.declared);
                     self.fixed_error(name, why, declared, span);
@@ -923,7 +992,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 } else if value.is_none() && ret != Types::VOID {
                     let want = self.ty(ret);
                     self.error(
-                        format!("Invalid return type. Function expects {want}, returning void"),
+                        format!("This function returns {want}, but this return gives no value"),
                         span,
                     );
                 }
@@ -977,6 +1046,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 }
             }
             StatementKind::Expression(expr) => {
+                self.statement = expr.span;
                 let value = self.expr(expr, None);
                 if matches!(self.cx.types.kind(value.ty), TyKind::Result(..)) {
                     let fallible = matches!(self.cx.types.kind(self.ret), TyKind::Result(..));

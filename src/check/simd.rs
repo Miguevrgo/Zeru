@@ -213,7 +213,7 @@ impl FnCx<'_, '_> {
                 if mask.ty != wanted {
                     let (want, got) = (self.ty(wanted), self.ty(mask.ty));
                     self.error(
-                        format!("The mask of 'simd::select' is a vector of integers as wide as the lanes, {want}; this is {got}"),
+                        format!("The mask of 'simd::select' holds signed integers as wide as the lanes, {want}, not {got}"),
                         args[0].span,
                     );
                     return None;

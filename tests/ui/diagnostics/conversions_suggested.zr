@@ -14,6 +14,7 @@ fn main() {
     var small: i32 = 1;
     var wide: i64 = 2;
     var a = add(small, wide);
+    var grown = add(small * (small + 1), wide);
     var b: i64 = small;
     var o: i32? = 3;
     var c: i32 = o;

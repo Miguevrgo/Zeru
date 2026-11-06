@@ -8,7 +8,6 @@ Error: This match does not cover (true, false)
     │                     ╰──────── This match does not cover (true, false)
     │
     │ Help: add an arm for each, or a default arm
-    │           (true, false) => {}
 ────╯
 Error: This match does not cover (_, false), (E::B(_), true), (E::C, true)
     ╭─[ tests/ui/match/tuple_pattern_errors.zr:15:14 ]
@@ -18,9 +17,6 @@ Error: This match does not cover (_, false), (E::B(_), true), (E::C, true)
     │                     ╰──────── This match does not cover (_, false), (E::B(_), true), (E::C, true)
     │
     │ Help: add an arm for each, or a default arm
-    │           (_, false) => {}
-    │           (E::B(_), true) => {}
-    │           (E::C, true) => {}
 ────╯
 Error: This value is already matched by an earlier arm
     ╭─[ tests/ui/match/tuple_pattern_errors.zr:21:9 ]
@@ -43,7 +39,6 @@ Error: This match does not cover (_, _)
     │                     ╰──────── This match does not cover (_, _)
     │
     │ Help: add an arm for each, or a default arm
-    │           (_, _) => {}
 ────╯
 Error: This pattern has 2 parts, but (bool, bool, bool) has 3
     ╭─[ tests/ui/match/tuple_pattern_errors.zr:28:9 ]

@@ -7,51 +7,62 @@ Error: An assert failed while computing a constant
     │     ──────┬──────
     │           ╰──────── An assert failed while computing a constant
     │
- 18 │ const A: i32 = positive(0);
+ 23 │ const A: i32 = positive(0);
     │ ─────────────┬─────────────
     │              ╰─────────────── while computing 'A'
 ────╯
-Error: unwrap() of None while computing a constant
-    ╭─[ tests/ui/constants/const_fn_failures.zr:7:12 ]
+Error: An assert failed while computing a constant: nope -3 true
+    ╭─[ tests/ui/constants/const_fn_failures.zr:7:5 ]
     │
-  7 │     return v.unwrap();
+  7 │     assert(n > 0, "nope {} {}", n, true);
+    │     ──────────────────┬─────────────────
+    │                       ╰─────────────────── An assert failed while computing a constant: nope -3 true
+    │
+ 24 │ const F: i32 = checked(-3);
+    │ ─────────────┬─────────────
+    │              ╰─────────────── while computing 'F'
+────╯
+Error: unwrap() of None while computing a constant
+    ╭─[ tests/ui/constants/const_fn_failures.zr:12:12 ]
+    │
+ 12 │     return v.unwrap();
     │            ─────┬────
     │                 ╰────── unwrap() of None while computing a constant
     │
- 19 │ const B: i32 = first(None);
+ 25 │ const B: i32 = first(None);
     │ ─────────────┬─────────────
     │              ╰─────────────── while computing 'B'
 ────╯
 Error: Arithmetic overflow of i32 while computing a constant
-    ╭─[ tests/ui/constants/const_fn_failures.zr:11:12 ]
+    ╭─[ tests/ui/constants/const_fn_failures.zr:16:12 ]
     │
- 11 │     return a / b;
+ 16 │     return a / b;
     │            ──┬──
     │              ╰──── Arithmetic overflow of i32 while computing a constant
     │
- 21 │ const D: i32 = div(-2147483647 - 1, -1);
+ 27 │ const D: i32 = div(-2147483647 - 1, -1);
     │ ────────────────────┬───────────────────
     │                     ╰───────────────────── while computing 'D'
 ────╯
 Error: Division by zero while computing a constant
-    ╭─[ tests/ui/constants/const_fn_failures.zr:11:12 ]
+    ╭─[ tests/ui/constants/const_fn_failures.zr:16:12 ]
     │
- 11 │     return a / b;
+ 16 │     return a / b;
     │            ──┬──
     │              ╰──── Division by zero while computing a constant
     │
- 20 │ const C: i32 = div(1, 0);
+ 26 │ const C: i32 = div(1, 0);
     │ ────────────┬────────────
     │             ╰────────────── while computing 'C'
 ────╯
 Error: Shift by 40 is out of range while computing a constant
-    ╭─[ tests/ui/constants/const_fn_failures.zr:15:12 ]
+    ╭─[ tests/ui/constants/const_fn_failures.zr:20:12 ]
     │
- 15 │     return a << b;
+ 20 │     return a << b;
     │            ───┬──
     │               ╰──── Shift by 40 is out of range while computing a constant
     │
- 22 │ const E: i32 = shift(1, 40);
+ 28 │ const E: i32 = shift(1, 40);
     │ ──────────────┬─────────────
     │               ╰─────────────── while computing 'E'
 ────╯

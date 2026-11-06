@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use crate::ast::{Expression, ExpressionKind, StatementKind, TypeSpec};
-use crate::errors::Span;
+use crate::errors::{Span, ZeruError};
 use crate::items::{DefId, ItemKind};
 use crate::tir::{Arm, Asm, BinOp, Builtin, Expr, ExprKind, Place, Test, UnOp, Unpack};
 use crate::token::Token;
@@ -1344,7 +1344,7 @@ impl FnCx<'_, '_> {
             return self.error_expr(span);
         }
         if comparison {
-            self.lint_comparison(left, operator, right, &l, l_ty, span);
+            self.lint_comparison(left, operator, right, (&l, &r), l_ty, span);
         }
         match operator {
             Token::And => self.mk(ExprKind::And(Box::new(l), Box::new(r)), Types::BOOL, span),
@@ -1380,7 +1380,7 @@ impl FnCx<'_, '_> {
         left: &Expression,
         operator: &Token,
         right: &Expression,
-        l: &Expr,
+        (l, r): (&Expr, &Expr),
         ty: Ty,
         span: Span,
     ) {
@@ -1401,7 +1401,18 @@ impl FnCx<'_, '_> {
             .iter()
             .any(|e| matches!(e.kind, ExpressionKind::Boolean(_)));
         let types = &self.cx.types;
-        let held = match &l.kind {
+        let flipped = match operator {
+            Token::Lt => Token::Gt,
+            Token::Gt => Token::Lt,
+            Token::Leq => Token::Geq,
+            Token::Geq => Token::Leq,
+            other => other.clone(),
+        };
+        let (call, len, other, operator) = match zero(left) {
+            true => (right, r, left, &flipped),
+            false => (left, l, right, operator),
+        };
+        let held = match &len.kind {
             ExprKind::Builtin(Builtin::Len, args) => {
                 Some(types.pointee(args[0].ty).unwrap_or(args[0].ty))
             }
@@ -1409,6 +1420,7 @@ impl FnCx<'_, '_> {
         };
         let sized = match held {
             Some(ty) if ty == Types::STR => Some("a str"),
+            Some(ty) if ty == Types::STRING => Some("a String"),
             Some(ty) if matches!(types.kind(ty), TyKind::Vec(_)) => Some("a Vec"),
             _ => None,
         };
@@ -1433,14 +1445,14 @@ impl FnCx<'_, '_> {
             .help("drop the comparison")
             .fix(span, written);
         } else if let Some(what) = sized
-            && zero(right)
+            && zero(other)
             && (equality || *operator == Token::Gt)
         {
             let warning = self.warn(
                 format!("Write .is_empty() to ask whether {what} is empty"),
                 span,
             );
-            if let ExpressionKind::Call { function, .. } = &left.kind
+            if let ExpressionKind::Call { function, .. } = &call.kind
                 && let ExpressionKind::Get { object, .. } = &function.kind
             {
                 let negated = match operator {
@@ -1477,7 +1489,7 @@ impl FnCx<'_, '_> {
             (_, E::Boolean(false), E::Boolean(true)) => {
                 self.warn("This if gives the opposite of its condition", whole)
                     .help("write the condition negated")
-                    .fix(whole, format!("!({text})"));
+                    .fix(whole, format!("!{}", operand(&text)));
                 return;
             }
             (
@@ -1814,6 +1826,9 @@ impl FnCx<'_, '_> {
         {
             return Some(ty);
         }
+        if expected.is_some_and(|ty| self.cx.types.is_error(ty)) {
+            return None;
+        }
         let mut args = Vec::new();
         for param in type_params {
             let spec = TypeSpec::Named(param.name.clone());
@@ -2026,44 +2041,74 @@ impl FnCx<'_, '_> {
     /// the None or the error, which the function must return in kind.
     fn try_expr(&mut self, operator: &Token, value: &Expression, span: Span) -> Expr {
         let mut value = self.expr(value, None);
+        let ret = self.ret;
+        let passes = |operator: &Token, ret: &TyKind| {
+            matches!(
+                (operator, ret),
+                (Token::Question, TyKind::Optional(_)) | (Token::Bang, TyKind::Result(..))
+            )
+        };
+        let returns = passes(operator, self.cx.types.kind(ret));
+        let at = Span::new(span.end - 1, span.end);
+        let unwrap = |error: &mut ZeruError, kind: &TyKind| {
+            let stops = match kind {
+                TyKind::Optional(_) => "None",
+                _ => "an error",
+            };
+            error
+                .help(format!(
+                    "take the value out with .unwrap(), which stops the program on {stops}"
+                ))
+                .fix(at, ".unwrap()");
+        };
         let ok = match (operator, self.cx.types.kind(value.ty)) {
             (Token::Question, TyKind::Optional(ok)) | (Token::Bang, TyKind::Result(ok)) => *ok,
             (_, TyKind::Error) => return self.error_expr(span),
             (_, kind) => {
+                let kind = kind.clone();
                 let other = match kind {
-                    TyKind::Optional(_) => Some("?"),
-                    TyKind::Result(..) => Some("!"),
+                    TyKind::Optional(_) => Some(Token::Question),
+                    TyKind::Result(..) => Some(Token::Bang),
                     _ => None,
                 };
                 let shown = self.ty(value.ty);
+                let can_pass = other
+                    .as_ref()
+                    .is_some_and(|other| passes(other, self.cx.types.kind(ret)));
                 let error = self.error(
                     format!("'{operator}' takes a T{operator} value, not {shown}"),
                     span,
                 );
-                if let Some(other) = other {
-                    error
-                        .help(format!(
-                            "{} is passed on with '{other}'",
-                            crate::errors::with_article(&shown)
-                        ))
-                        .fix(Span::new(span.end - 1, span.end), other);
+                match other {
+                    Some(other) if can_pass => {
+                        error
+                            .help(format!(
+                                "{} is passed on with '{other}'",
+                                crate::errors::with_article(&shown)
+                            ))
+                            .fix(at, other.to_string());
+                    }
+                    Some(_) => unwrap(error, &kind),
+                    None => {}
                 }
                 return self.error_expr(span);
             }
         };
-        let ret = self.ret;
-        let passes = matches!(
-            (operator, self.cx.types.kind(ret)),
-            (Token::Question, TyKind::Optional(_)) | (Token::Bang, TyKind::Result(..))
-        );
-        if !passes {
-            let ret = self.ty(ret);
-            self.error(
-                format!(
-                    "'{operator}' returns from a function returning {ret}, which is no T{operator}"
-                ),
+        if !returns {
+            let kind = self.cx.types.kind(value.ty).clone();
+            let passed = match operator {
+                Token::Question => "None",
+                _ => "the error",
+            };
+            let ret = match ret == Types::VOID {
+                true => "nothing".to_string(),
+                false => self.ty(ret),
+            };
+            let error = self.error(
+                format!("'{operator}' would pass {passed} on, but this function returns {ret}"),
                 span,
             );
+            unwrap(error, &kind);
         }
         self.consume(&mut value);
         self.mk(ExprKind::Try(Box::new(value)), ok, span)

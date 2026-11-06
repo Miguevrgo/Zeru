@@ -21,10 +21,20 @@ Error: rotate_left takes the places to move, a usize, not bool
    │                   ──┬─
    │                     ╰─── this is bool
 ───╯
-Error: f64 has no method 'count_ones'
-   ╭─[ tests/ui/arithmetic/bit_method_errors.zr:7:7 ]
+Error: rotate_left takes the places to move, a usize, not u32
+   ╭─[ tests/ui/arithmetic/bit_method_errors.zr:8:19 ]
    │
- 7 │     f.count_ones();
+ 8 │     a.rotate_left(amount as u32);
+   │                   ──────┬──────
+   │                         ╰──────── this is u32
+   │
+   │ Help: convert it with as
+   │           a.rotate_left(amount as usize);
+───╯
+Error: f64 has no method 'count_ones'
+   ╭─[ tests/ui/arithmetic/bit_method_errors.zr:9:7 ]
+   │
+ 9 │     f.count_ones();
    │       ─────┬────
    │            ╰────── f64 has no method 'count_ones'
 ───╯

@@ -45,16 +45,6 @@ Error: 'default' takes every other value, with no 'if'; bind a name to test it, 
     │         ───┬───
     │            ╰───── 'default' takes every other value, with no 'if'; bind a name to test it, as in x if x > 3
 ────╯
-Error: A match on i32 needs a 'default' arm
-    ╭─[ tests/ui/match/range_and_guard_errors.zr:26:13 ]
-    │
- 26 │     var f = match n {
-    │             ────┬────
-    │                 ╰────── A match on i32 needs a 'default' arm
-    │
-    │ Help: add a default arm for the values no other arm takes
-    │           default => {}
-────╯
 Error: 'x' names no value; a name alone matches only with an 'if' after it, as in x if x > 3, and 'default' takes every other value
     ╭─[ tests/ui/match/range_and_guard_errors.zr:27:9 ]
     │
@@ -77,6 +67,5 @@ Error: A match on i32 needs a 'default' arm
     │                 ╰────── A match on i32 needs a 'default' arm
     │
     │ Help: add a default arm for the values no other arm takes
-    │           default => {}
 ────╯
 [-] Error: aborting due to previous error

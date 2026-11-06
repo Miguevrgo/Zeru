@@ -42,12 +42,12 @@ Error: 'simd::shl' shifts by an integer, not f64
     │                              ─┬─
     │                               ╰─── 'simd::shl' shifts by an integer, not f64
 ────╯
-Error: The mask of 'simd::select' is a vector of integers as wide as the lanes, Array<i32, 4>; this is Array<i16, 8>
+Error: The mask of 'simd::select' holds signed integers as wide as the lanes, Array<i32, 4>, not Array<i16, 8>
     ╭─[ tests/ui/simd/errors.zr:14:26 ]
     │
  14 │     var g = simd::select(lanes, floats, floats);
     │                          ──┬──
-    │                            ╰──── The mask of 'simd::select' is a vector of integers as wide as the lanes, Array<i32, 4>; this is Array<i16, 8>
+    │                            ╰──── The mask of 'simd::select' holds signed integers as wide as the lanes, Array<i32, 4>, not Array<i16, 8>
 ────╯
 Error: 'simd::sum' takes 1 argument(s), but 2 were given
     ╭─[ tests/ui/simd/errors.zr:15:13 ]

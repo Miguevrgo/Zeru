@@ -1,14 +1,14 @@
 status: compile error
 -- stderr
 Error: Cannot change 'o' while 'r' still refers into it
-    ╭─[ tests/ui/references/var_reference_resets_variant.zr:9:13 ]
+    ╭─[ tests/ui/references/var_reference_resets_variant.zr:9:19 ]
     │
   8 │         Some(r) => {
     │         ───┬───
     │            ╰───── 'r' borrows here
   9 │             reset(&var o);
-    │             ──────┬──────
-    │                   ╰──────── this can free or move what 'r' points at
+    │                   ───┬──
+    │                      ╰──── this can free or move what 'r' points at
  10 │             println("{}", *r);
     │                            ┬
     │                            ╰── 'r' is used later here

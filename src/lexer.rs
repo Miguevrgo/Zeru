@@ -11,6 +11,9 @@ pub struct Lexer<'a> {
     /// Each `/*` inside a block comment, which starts nothing, with where
     /// that comment ends.
     pub nested: Vec<(Span, usize)>,
+    /// Where each line's first token starts, with its column.
+    pub line_firsts: Vec<(usize, usize)>,
+    line_start: Option<usize>,
 }
 
 impl<'a> Lexer<'a> {
@@ -24,6 +27,8 @@ impl<'a> Lexer<'a> {
             after_dot: false,
             comments: Vec::new(),
             nested: Vec::new(),
+            line_firsts: Vec::new(),
+            line_start: Some(start),
         }
     }
 
@@ -35,6 +40,9 @@ impl<'a> Lexer<'a> {
         let ch = self.input.next();
         if let Some(c) = ch {
             self.pos += c.len_utf8();
+            if c == '\n' {
+                self.line_start = Some(self.pos);
+            }
         }
         ch
     }
@@ -128,6 +136,9 @@ impl<'a> Lexer<'a> {
         }
 
         let start_pos = self.pos;
+        if let Some(line) = self.line_start.take() {
+            self.line_firsts.push((start_pos, start_pos - line));
+        }
 
         let Some(ch) = self.advance() else {
             return (Token::Eof, Span::new(start_pos, start_pos + 1));

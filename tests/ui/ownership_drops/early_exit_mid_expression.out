@@ -7,7 +7,7 @@ Warning: Variable 'a' is never read
     │           ┬
     │           ╰── Variable 'a' is never read
     │
-    │ Help: remove it, or name it '_a' to keep it unread
+    │ Help: 'a' runs its drop at the end of the scope; if it is kept for that, name it '_a'
     │           const _a = [mk(3), mk(4), D { id: none()? }];
 ────╯
 Warning: Variable 'v' is never read
@@ -17,7 +17,7 @@ Warning: Variable 'v' is never read
     │           ┬
     │           ╰── Variable 'v' is never read
     │
-    │ Help: remove it, or name it '_v' to keep it unread
+    │ Help: 'v' runs its drop at the end of the scope; if it is kept for that, name it '_v'
     │           const _v: Vec<D> = Vec[mk(5), D { id: none()? }];
 ────╯
 -- stdout

@@ -8,4 +8,5 @@ struct Point {
 fn main() {
     var p = Point { x: Vec[1] };
     var bad = Pair { first: p, second: p };
+    var named: Pair<Point> = Pair { first: p, second: p };
 }

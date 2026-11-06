@@ -1,0 +1,7 @@
+fn main() {
+    const x = 1;
+    if x > 0 {
+        println("pos");
+
+    println("done");
+}

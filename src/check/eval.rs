@@ -662,9 +662,13 @@ impl Eval<'_, '_> {
                 Value::Void
             }
             ExprKind::Print { .. } => return cannot("print", span),
-            ExprKind::Assert { cond, .. } => {
+            ExprKind::Assert { cond, message } => {
                 if !self.truth(cond)? {
-                    return fail("An assert failed while computing a constant", span);
+                    let failed = "An assert failed while computing a constant";
+                    return match message.as_deref().and_then(|message| self.said(message)) {
+                        Some(said) => fail(format!("{failed}: {said}"), span),
+                        None => fail(failed, span),
+                    };
                 }
                 Value::Void
             }
@@ -675,6 +679,25 @@ impl Eval<'_, '_> {
             }
             ExprKind::Asm(_) => return cannot("run assembly", span),
         })
+    }
+
+    /// The text an assert's `message` prints, when its values are numbers,
+    /// bools or text.
+    fn said(&mut self, message: &Expr) -> Option<String> {
+        let ExprKind::Print { pieces, values, .. } = &message.kind else {
+            return None;
+        };
+        let mut said = String::from_utf8_lossy(&pieces[0]).into_owned();
+        for (value, piece) in values.iter().zip(&pieces[1..]) {
+            match self.expr(value).ok()? {
+                Value::Int(n) => said += &n.to_string(),
+                Value::Bool(b) => said += &b.to_string(),
+                Value::Text(bytes) => said += &String::from_utf8_lossy(&bytes),
+                _ => return None,
+            }
+            said += &String::from_utf8_lossy(piece);
+        }
+        Some(said)
     }
 
     fn int_ty(&self, ty: Ty) -> IntTy {

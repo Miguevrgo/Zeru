@@ -42,8 +42,8 @@ whatever it is built for. `[x; simd::LANES_16]` is a vector of one value.
 | `min`, `max` | the smaller or larger of each pair of lanes |
 | `and`, `or`, `xor` | bit operations, for integer lanes |
 | `shl(v, n)`, `shr(v, n)` | each integer lane shifted by `n` |
-| `eq`, `lt`, `gt` | a mask: integer lanes all ones where it holds, zero elsewhere |
-| `select(mask, a, b)` | the lane of `a` where the mask is not zero, else that of `b` |
+| `eq`, `lt`, `gt` | a mask: signed integer lanes of the same width, all ones where it holds, zero elsewhere |
+| `select(mask, a, b)` | the lane of `a` where the mask, of signed integers of the lanes' width, is not zero, else that of `b` |
 | `sum(v)` | the sum of the lanes |
 | `madd(a, b)` | from two vectors of `i16`, the `i32` lanes `a[2i] * b[2i] + a[2i + 1] * b[2i + 1]` |
 

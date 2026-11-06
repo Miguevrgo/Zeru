@@ -40,7 +40,8 @@ const STR_METHODS: &[&str] = &[
 ];
 
 /// The Vec methods written in the prelude besides the slice ones, each
-/// `__zeru_vec_<name>` taking a reference to the Vec first.
+/// `__zeru_vec_<name>`, or `__zeru_string_<name>` for a String's, taking a
+/// reference to the Vec first.
 const VEC_STD_METHODS: &[&str] = &["dedup", "push_str"];
 
 /// The prelude's methods that only read the elements: slices have them, and
@@ -126,7 +127,10 @@ impl FnCx<'_, '_> {
                 return self.reject_args(args, span);
             }
             _ => {
-                self.error("Only a function or a method can be called", function.span);
+                let callee = self.expr(function, None).ty;
+                if !self.cx.types.is_error(callee) {
+                    self.error("Only a function or a method can be called", function.span);
+                }
                 return self.reject_args(args, span);
             }
         };
@@ -481,7 +485,11 @@ impl FnCx<'_, '_> {
                         Some(kind) => self.whole(receiver, kind, object.span),
                         None => receiver,
                     };
-                    let def = self.cx.prelude_def(&format!("__zeru_vec_{name}"));
+                    let owner = match name {
+                        "push_str" => "string",
+                        _ => "vec",
+                    };
+                    let def = self.cx.prelude_def(&format!("__zeru_{owner}_{name}"));
                     return self.call_def(def, vec![elem], Some(receiver), args, expected, span);
                 }
                 self.vec_method(name, elem, receiver, args, name_at, span)
@@ -685,6 +693,7 @@ impl FnCx<'_, '_> {
     /// The methods a value of `ty` has.
     pub(super) fn methods_of(&mut self, ty: Ty) -> Vec<String> {
         let names: Vec<&str> = match self.cx.types.kind(ty).clone() {
+            TyKind::Ptr(inner) if self.cx.is_struct(inner).is_none() => Vec::new(),
             TyKind::Ref(inner) | TyKind::RefMut(inner) | TyKind::Ptr(inner) => {
                 return self.methods_of(inner);
             }
@@ -760,13 +769,15 @@ impl FnCx<'_, '_> {
         let writes = SLICE_MUT_METHODS.contains(&name)
             && matches!(self.cx.types.kind(ty), TyKind::Slice(_))
             && ty != Types::STR;
+        let used = self.statement != span;
+        let sources = self.cx.sources;
         let object = name_at.map(|at| Span::new(span.start, at.start - 1));
         let text = object.map(|at| self.cx.sources.text(at).to_string());
         let error = self.error(
             format!("{what} has no method '{name}'"),
             name_at.unwrap_or(span),
         );
-        if let (true, Some(at), Some(text)) = (writes, object, text) {
+        if let (true, Some(at), Some(text)) = (writes, object, &text) {
             match text.ends_with(']') {
                 true => {
                     error
@@ -786,6 +797,16 @@ impl FnCx<'_, '_> {
             if let Some(at) = name_at {
                 error.fix(at, ours);
             }
+        } else if let (Some(near), Some(at), Some(text), true) = (
+            suggest::closest(name, &methods).filter(|near| SLICE_MUT_METHODS.contains(near)),
+            name_at,
+            text,
+            used,
+        ) {
+            let call = format!("{text}.{near}{}", sources.text(Span::new(at.end, span.end)));
+            error.help(format!(
+                "did you mean '{near}'? It changes {text} in place and returns nothing, so call {call} first, then use {text}"
+            ));
         } else {
             suggest::did_you_mean(error, name, &methods, name_at);
         }
@@ -1083,14 +1104,36 @@ impl FnCx<'_, '_> {
         let (late, early): (Vec<usize>, Vec<usize>) =
             plain.into_iter().partition(|&at| written_value(&args[at]));
         let mut checked: Vec<Option<Expr>> = (0..args.len()).map(|_| None).collect();
+        let bare: Vec<Option<u32>> = sig.params[skip..]
+            .iter()
+            .map(|&ty| match *self.cx.types.kind(ty) {
+                TyKind::Param(param) => Some(param),
+                _ => None,
+            })
+            .collect();
+        let shared = |at: usize, given: &[usize]| {
+            let param = bare[at]?;
+            let j = *given.iter().find(|&&j| bare[j] == Some(param))?;
+            Some((&sig.generics[param as usize].name, &args[j], j + skip))
+        };
+        let mut given = Vec::new();
         for at in early {
-            checked[at] = Some(self.argument(&args[at], params[at], def, at + skip));
+            let (errors, same) = (self.cx.errors.len(), shared(at, &given));
+            checked[at] = Some(self.argument(&args[at], params[at], def, at + skip, same));
+            if self.cx.errors.len() == errors {
+                given.push(at);
+            }
         }
         if let Some(expected) = expected {
             self.fits(expected, ret, false);
+            given.clear();
         }
         for at in late {
-            checked[at] = Some(self.argument(&args[at], params[at], def, at + skip));
+            let (errors, same) = (self.cx.errors.len(), shared(at, &given));
+            checked[at] = Some(self.argument(&args[at], params[at], def, at + skip, same));
+            if self.cx.errors.len() == errors {
+                given.push(at);
+            }
         }
         for at in closures {
             let callable = callable(at).expect("partitioned above").clone();
@@ -1192,21 +1235,43 @@ impl FnCx<'_, '_> {
     }
 
     /// The argument for parameter `at` of `def`, going where `param` is
-    /// wanted.
-    fn argument(&mut self, arg: &Expression, param: Ty, def: DefId, at: usize) -> Expr {
+    /// wanted, its type parameter, if it is one alone, already given by
+    /// the argument `same` for another parameter.
+    fn argument(
+        &mut self,
+        arg: &Expression,
+        param: Ty,
+        def: DefId,
+        at: usize,
+        same: Option<(&String, &Expression, usize)>,
+    ) -> Expr {
         let value = self.value(arg, Some(param));
         let value = match self.coerce(value, param) {
             Ok(value) => value,
             Err(value) => {
                 let callee = self.cx.items.shown(def);
                 let (params, decl) = self.cx.params_of(def);
-                let name = params.get(at).map_or("", |(name, ..)| name.as_str());
-                let error = self.mismatch(&value, param, arg.span, |want, got| {
-                    format!("'{callee}' takes '{name}' as {want}, but this is {got}")
+                let name = |at: usize| params.get(at).map_or("", |(name, ..)| name.as_str());
+                let want = self.ty(param);
+                let error = self.mismatch(&value, param, arg.span, |want, got| match same {
+                    Some((ty, _, other)) => {
+                        let (a, b) = (name(other.min(at)), name(other.max(at)));
+                        let (this, other) = (name(at), name(other));
+                        format!(
+                            "'{callee}' takes '{a}' and '{b}' as one type {ty}, but '{this}' is {got} and '{other}' is {want}"
+                        )
+                    }
+                    None => format!("'{callee}' takes '{}' as {want}, but this is {got}", name(at)),
                 });
-                if let Some(decl) = decl {
-                    error.note(format!("'{name}' is declared here"), decl);
-                }
+                match (same, decl) {
+                    (Some((ty, other, _)), _) => {
+                        error.note(format!("this makes {ty} {want}"), other.span)
+                    }
+                    (None, Some(decl)) => {
+                        error.note(format!("'{}' is declared here", name(at)), decl)
+                    }
+                    (None, None) => error,
+                };
                 value
             }
         };
@@ -1866,7 +1931,15 @@ impl FnCx<'_, '_> {
         };
         let (pieces, specs) = match format_pieces(text) {
             Err(message) => {
-                self.error(message, format.span);
+                let source = self.cx.sources.text(format.span);
+                let spec = source.match_indices("{:").find_map(|(at, _)| {
+                    let end = at + source[at..].find('}')? + 1;
+                    let span = Span::new(format.span.start + at, format.span.start + end);
+                    format_pieces(&source.as_bytes()[at..end])
+                        .is_err()
+                        .then_some(span)
+                });
+                self.error(message, spec.unwrap_or(format.span));
                 (Vec::new(), Vec::new())
             }
             Ok((pieces, _)) if pieces.len() - 1 != values.len() => {

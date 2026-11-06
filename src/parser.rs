@@ -33,6 +33,9 @@ pub struct Parser {
     nesting: usize,
     rewrites: Vec<Rewrite>,
     opens: Vec<Span>,
+    line_firsts: Vec<(usize, usize)>,
+    misaligned: Option<Span>,
+    reserved: Vec<String>,
     arm_blocks: Vec<usize>,
     pub comments: Vec<Span>,
     nested: Vec<(Span, usize)>,
@@ -86,6 +89,9 @@ impl Parser {
             nesting: 0,
             rewrites: Vec::new(),
             opens: Vec::new(),
+            line_firsts: std::mem::take(&mut lexer.line_firsts),
+            misaligned: None,
+            reserved: Vec::new(),
             arm_blocks: Vec::new(),
             comments: lexer.comments,
             nested: lexer.nested,
@@ -125,7 +131,17 @@ impl Parser {
             }
             Token::RBrace => {
                 self.depth = self.depth.saturating_sub(1);
-                self.opens.pop();
+                let open = self.opens.pop();
+                let close = self.span().start;
+                let firsts = &self.line_firsts;
+                let indent = |at: usize| firsts[firsts.partition_point(|&(o, _)| o <= at) - 1].1;
+                if let Some(open) = open
+                    && self.misaligned.is_none()
+                    && firsts.binary_search_by_key(&close, |&(o, _)| o).is_ok()
+                    && indent(close) < indent(open.start)
+                {
+                    self.misaligned = Some(open);
+                }
             }
             Token::LBracket => self.brackets += 1,
             Token::RBracket => self.brackets = self.brackets.saturating_sub(1),
@@ -170,7 +186,7 @@ impl Parser {
         let before = self.prev_span();
         match (token, &found) {
             (Token::RBrace, Token::Eof) => {
-                let open = self.opens.last().copied();
+                let open = self.misaligned.or(self.opens.last().copied());
                 let error = self.error("Expected '}', found the end of the file", self.span())?;
                 if let Some(open) = open {
                     error.note("this '{' is never closed", open);
@@ -273,14 +289,44 @@ impl Parser {
         self.errors.last_mut()
     }
 
-    /// The name that should follow the last token read.
+    /// The name that should follow the last token read. A reserved word
+    /// where a name goes is reported once, and taken as that name after.
     fn identifier(&mut self, what: &str) -> Option<String> {
         if let Token::Identifier(name) = self.peek() {
             let name = name.clone();
             self.bump();
             return Some(name);
         }
+        if let Some(word) = self.reserved_name() {
+            if !self.reserved.contains(&word) {
+                let message = format!("'{word}' is a reserved word, so it cannot be a name");
+                if let Some(error) = self.error(message, self.span()) {
+                    error.help("choose another name");
+                }
+                self.panic_mode = false;
+                self.reserved.push(word.clone());
+            }
+            self.bump();
+            return Some(word);
+        }
         self.error_here(format!("Expected {what}, found '{}'", self.peek()))
+    }
+
+    /// The next token when it is a reserved word written where a name goes:
+    /// what follows it does not go on as the code that word starts would.
+    fn reserved_name(&self) -> Option<String> {
+        let word = self.peek().to_string();
+        let reserved = !matches!(
+            self.peek(),
+            Token::Identifier(_)
+                | Token::Eof
+                | Token::True
+                | Token::False
+                | Token::None
+                | Token::SelfTok
+        ) && word.chars().all(|c| c.is_ascii_lowercase());
+        let named = !starts_operand(self.ahead(1)) && *self.ahead(1) != Token::Volatile;
+        (reserved && named).then_some(word)
     }
 
     fn string(&mut self, what: &str) -> Option<String> {
@@ -1241,7 +1287,7 @@ impl Parser {
                 .last()
                 .is_none_or(|e| e.span.end < self.span().start)
         {
-            let at = self.span();
+            let (at, open) = (self.span(), self.misaligned.unwrap_or(open));
             if let Some(error) = self.error("Expected '}', found the end of the file", at) {
                 error
                     .note("this '{' is never closed", open)
@@ -1381,6 +1427,12 @@ impl Parser {
             }
         }
         let start = self.span();
+        if let Some(word) = self.reserved_name()
+            && self.reserved.contains(&word)
+        {
+            self.bump();
+            return Some(Expression::new(ExpressionKind::Identifier(word), start));
+        }
         let literal = match self.peek() {
             Token::Int(val) => Some(ExpressionKind::Int(*val)),
             Token::Float(val) => Some(ExpressionKind::Float(*val)),
@@ -1428,9 +1480,10 @@ impl Parser {
             if p.eat(&Token::RParen) {
                 return Some(p.expression(ExpressionKind::Tuple(vec![]), start));
             }
-            let first = p.parse_expression(Precedence::Lowest)?;
+            let mut first = p.parse_expression(Precedence::Lowest)?;
             if !p.eat(&Token::Comma) {
                 p.expect(&Token::RParen)?;
+                first.span = start.merge(p.prev_span());
                 p.parens.push(first.span);
                 return Some(first);
             }
@@ -1771,6 +1824,7 @@ impl Parser {
                 let name = match self.peek() {
                     Token::Identifier(name) => name.clone(),
                     Token::Int(index) => index.to_string(),
+                    token if self.reserved.contains(&token.to_string()) => token.to_string(),
                     _ => return self.error_here("Expected a field name after '.'"),
                 };
                 self.bump();

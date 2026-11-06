@@ -1,50 +1,50 @@
 status: compile error
 -- stderr
 Error: Cannot change 'vs' while a reference into it is still in use
-    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:20:16 ]
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:20:21 ]
     │
  20 │     vs[0].push(grow(&var vs));
-    │     ────────────┬────┬───────
+    │     ────────────┬──────┬─────
     │                 ╰────────────── borrowed here
-    │                      │
-    │                      ╰───────── this can free or move what a reference points at
+    │                        │
+    │                        ╰─────── this can free or move what a reference points at
     │
     │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'vs'
 ────╯
 Error: Cannot change 'vs' while a reference into it is still in use
-    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:21:25 ]
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:21:30 ]
     │
  21 │     println("{}", vs[0][grow(&var vs)]);
-    │                   ──────────┬─┬───────
+    │                   ──────────┬───┬─────
     │                             ╰─────────── borrowed here
-    │                               │
-    │                               ╰───────── this can free or move what a reference points at
+    │                                 │
+    │                                 ╰─────── this can free or move what a reference points at
     │
     │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'vs'
 ────╯
 Error: Cannot change 'cs' while a reference into it is still in use
-    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:23:15 ]
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:23:23 ]
     │
  23 │     cs[0].add(grow_cs(&var cs));
-    │     ──┬──────────┬────┬────────
+    │     ──┬──────────┬───────┬─────
     │       ╰────────────────────────── borrowed here
-    │                  │    │
+    │                  │       │
     │                  ╰─────────────── it is used later here
-    │                       │
-    │                       ╰────────── this can free or move what a reference points at
+    │                          │
+    │                          ╰─────── this can free or move what a reference points at
     │
     │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'cs'
 ────╯
 Error: Cannot change 'cs' while a reference into it is still in use
-    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:24:30 ]
+    ╭─[ tests/ui/vec/two_phase_receiver_errors.zr:24:38 ]
     │
  24 │     println("{}", cs[0].size(grow_cs(&var cs)));
-    │                   ──┬───────────┬────┬────────
+    │                   ──┬───────────┬───────┬─────
     │                     ╰─────────────────────────── borrowed here
-    │                                 │    │
+    │                                 │       │
     │                                 ╰─────────────── it is used later here
-    │                                      │
-    │                                      ╰────────── this can free or move what a reference points at
+    │                                         │
+    │                                         ╰─────── this can free or move what a reference points at
     │
     │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'cs'
 ────╯

@@ -1,0 +1,48 @@
+status: exit 0
+-- warnings
+Warning: This method never changes self; take self
+   ╭─[ tests/ui/diagnostics/lint_fixes.zr:4:13 ]
+   │
+ 4 │     fn look(var self) i32 {
+   │             ─┬─
+   │              ╰─── This method never changes self; take self
+   │
+   │ Help: write self, so that var self marks a method that changes it
+   │           fn look(self) i32 {
+───╯
+Warning: This parameter never changes; drop var
+    ╭─[ tests/ui/diagnostics/lint_fixes.zr:15:10 ]
+    │
+ 15 │ fn twice(var n: i32) i32 {
+    │          ─┬─
+    │           ╰─── This parameter never changes; drop var
+    │
+    │ Help: drop var, so that var marks what does change
+    │           fn twice(n: i32) i32 {
+────╯
+Warning: This divides by zero, so it always panics
+    ╭─[ tests/ui/diagnostics/lint_fixes.zr:25:12 ]
+    │
+ 25 │     return n / 0 + n % 0;
+    │            ──┬──
+    │              ╰──── This divides by zero, so it always panics
+────╯
+Warning: This divides by zero, so it always panics
+    ╭─[ tests/ui/diagnostics/lint_fixes.zr:25:20 ]
+    │
+ 25 │     return n / 0 + n % 0;
+    │                    ──┬──
+    │                      ╰──── This divides by zero, so it always panics
+────╯
+Warning: This if gives the opposite of its condition
+    ╭─[ tests/ui/diagnostics/lint_fixes.zr:29:12 ]
+    │
+ 29 │     return if flag { false } else { true };
+    │            ───────────────┬───────────────
+    │                           ╰───────────────── This if gives the opposite of its condition
+    │
+    │ Help: write the condition negated
+    │           return !flag;
+────╯
+-- stdout
+2 4 4

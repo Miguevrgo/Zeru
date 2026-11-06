@@ -990,7 +990,8 @@ impl<'a> Cx<'a> {
             Role::Drop | Role::Realloc => Rule::Owning,
         };
         let accessed = self.canonical(place, facts);
-        self.conflict(&accessed, rule, live, at);
+        let span = self.span(at.0, at.1);
+        self.conflict(&accessed, rule, live, at, span);
     }
 
     /// A call may reallocate what each `&var` its arguments carry, directly
@@ -1039,14 +1040,30 @@ impl<'a> Cx<'a> {
                         )
                     })
                     .collect();
-                self.conflict(&accessed, Rule::Owning, &live, at);
+                let call = self.span(at.0, at.1);
+                let lent = self.loans[loan].span;
+                let inside = call.start < lent.start && lent.end <= call.end;
+                self.conflict(
+                    &accessed,
+                    Rule::Owning,
+                    &live,
+                    at,
+                    if inside { lent } else { call },
+                );
             }
         }
     }
 
-    /// Report each loan in `live` that `rule`'s access to `accessed`
-    /// invalidates.
-    fn conflict(&mut self, accessed: &[Path], rule: Rule, live: &[Fact], at: (usize, usize)) {
+    /// Report each loan in `live` that `rule`'s access to `accessed`, at
+    /// `span`, invalidates.
+    fn conflict(
+        &mut self,
+        accessed: &[Path],
+        rule: Rule,
+        live: &[Fact],
+        at: (usize, usize),
+        span: Span,
+    ) {
         for &(holder, loan, deep) in live {
             if self.reported.contains(&loan) {
                 continue;
@@ -1095,7 +1112,6 @@ impl<'a> Cx<'a> {
                     "finish with {by} before this, or keep a copy of the value instead of a reference into {what}"
                 ),
             };
-            let span = self.span(at.0, at.1);
             let later = self.later_use(at, holder, span);
             let borrowed = match by.as_str() {
                 "a reference" | "the loop" => "borrowed here".to_string(),
