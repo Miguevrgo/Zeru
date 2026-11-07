@@ -14,4 +14,6 @@ fn main() {
     o.extend(5);
     n.extend(5);
     n.join(",");
+    var bytes: Vec<u8> = Vec[1, 2];
+    var found = bytes.contains(bytes[0]);
 }

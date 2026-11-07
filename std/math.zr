@@ -153,7 +153,8 @@ pub fn is_power_of_two(n: u64) bool {
 //
 // # Panics
 //
-// When `b` is 0.
+// When `b` is 0, and when `a` is the most negative integer of its type and
+// `b` is -1, whose quotient does not fit, as `-128 / -1` for an `i8`.
 //
 // # Examples
 //
@@ -197,7 +198,11 @@ pub fn div_euclid<T: Int>(a: T, b: T) T {
 // println("{}", math::mod_euclid(-1, 5)); // 4
 // ```
 pub fn mod_euclid<T: Num>(a: T, b: T) T {
-    const r: T = a % b;
+    var divisor = b;
+    if b < 0 && b + 1 == 0 {
+        divisor = 1;
+    }
+    const r: T = a % divisor;
     if r < 0 {
         if b > 0 {
             return r + b;

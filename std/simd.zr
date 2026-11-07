@@ -61,10 +61,14 @@ pub fn sub<V>(a: V, b: V) V {}
 // Returns the products, lane by lane; for integers, their low bits.
 pub fn mul<V>(a: V, b: V) V {}
 
-// Returns the smaller of each pair of lanes.
+// Returns the smaller of each pair of lanes: that of `a` where it is less than
+// that of `b`, else that of `b`, so a float NaN or a tie of 0.0 and -0.0
+// gives `b`'s.
 pub fn min<V>(a: V, b: V) V {}
 
-// Returns the larger of each pair of lanes.
+// Returns the larger of each pair of lanes: that of `a` where it is greater than
+// that of `b`, else that of `b`, so a float NaN or a tie of 0.0 and -0.0
+// gives `b`'s.
 pub fn max<V>(a: V, b: V) V {}
 
 // Returns the bits set in both, for integer lanes.

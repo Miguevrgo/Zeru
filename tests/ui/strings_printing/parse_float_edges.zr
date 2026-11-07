@@ -20,4 +20,20 @@ fn main() {
     show(".5");
     show("5.");
     show("x");
+    show("1.000000000000000111022302462515654042363166809082031250001");
+    show("1.00000000000000011102230246251565404236316680908203125");
+    show("1.000000000000000111022302462515654042363166809082031249999");
+    show("1e99999999999999999999");
+    show("1e-99999999999999999999");
+    show("0e99999999999999999999");
+    show("1e+x");
+    var ones = String.from("1");
+    var tenth = String.from("0.");
+    for _ in 0..1100 {
+        ones.push('0');
+        tenth.push('0');
+    }
+    ones.extend("e-1100");
+    tenth.extend("1e1100");
+    println("{} {}", ones.parse_float().unwrap(), tenth.parse_float().unwrap());
 }

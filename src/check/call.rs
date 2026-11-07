@@ -53,9 +53,6 @@ const SLICE_METHODS: &[&str] = &[
     "contains", "sum", "min", "max", "windows", "chunks", "map", "filter", "any", "all", "join",
 ];
 
-/// The prelude's methods that take a closure, which a str has too.
-const CLOSURE_METHODS: &[&str] = &["map", "filter", "any", "all"];
-
 /// The prelude's methods that move the elements around: a `&var [T]` has
 /// them, and a Vec reaches them through one of all of it.
 const SLICE_MUT_METHODS: &[&str] = &[
@@ -550,7 +547,6 @@ impl FnCx<'_, '_> {
                     return self.str_method(text, name, args, expected, span);
                 }
                 if let TyKind::Slice(elem) = *self.cx.types.kind(ty)
-                    && (ty != Types::STR || CLOSURE_METHODS.contains(&name))
                     && SLICE_METHODS.contains(&name)
                 {
                     let slice = self.mk(ExprKind::Read(place), ty, object.span);
@@ -746,7 +742,7 @@ impl FnCx<'_, '_> {
             }
             TyKind::Slice(_) if ty == Types::STR => STR_METHODS
                 .iter()
-                .chain(CLOSURE_METHODS)
+                .chain(SLICE_METHODS)
                 .chain(&["len"])
                 .copied()
                 .collect(),
@@ -1266,6 +1262,14 @@ impl FnCx<'_, '_> {
         let value = match self.coerce(value, param) {
             Ok(value) => value,
             Err(value) => {
+                let text = self.cx.sources.text(arg.span);
+                let char = text.starts_with('\'');
+                let byte = ((value.ty == Types::U8 || char)
+                    && def == self.cx.prelude_def("__zeru_str_contains"))
+                .then(|| match char {
+                    true => text.to_string(),
+                    false => super::body::operand(text),
+                });
                 let callee = self.cx.items.shown(def);
                 let (params, decl) = self.cx.params_of(def);
                 let name = |at: usize| params.get(at).map_or("", |(name, ..)| name.as_str());
@@ -1289,6 +1293,11 @@ impl FnCx<'_, '_> {
                     }
                     (None, None) => error,
                 };
+                if let Some(text) = byte {
+                    error
+                        .help("contains looks for text, on bytes too; to look for this byte, write it as text")
+                        .fix(arg.span, format!("{text} as str"));
+                }
                 value
             }
         };

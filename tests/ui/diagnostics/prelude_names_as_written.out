@@ -88,4 +88,14 @@ Error: join() needs a list of str, not Vec<i32>
     │     ─────┬─────
     │          ╰─────── join() needs a list of str, not Vec<i32>
 ────╯
+Error: 'str.contains' takes 't' as str, but this is u8
+    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:18:32 ]
+    │
+ 18 │     var found = bytes.contains(bytes[0]);
+    │                                ────┬───
+    │                                    ╰───── this is u8
+    │
+    │ Help: contains looks for text, on bytes too; to look for this byte, write it as text
+    │           var found = bytes.contains(bytes[0] as str);
+────╯
 [-] Error: aborting due to previous error

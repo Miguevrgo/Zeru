@@ -937,7 +937,10 @@ fn __zeru_str_parse_int(s: str) i64! {
         }
         const digit = (s[i] - '0') as u64;
         if value > (limit - digit) / 10 {
-            return Err(34);
+            if s[i..].all(fn(c) c >= '0' && c <= '9') {
+                return Err(34);
+            }
+            return Err(EINVAL);
         }
         value = value * 10 + digit;
     }
@@ -956,6 +959,7 @@ fn __zeru_str_parse_float(s: str) f64! {
     if s.len() > 0 && (s[0] == '-' || s[0] == '+') {
         at = 1;
     }
+    const start = at;
     var mantissa: u64 = 0;
     var digits: i64 = 0;
     var exponent: i64 = 0;
@@ -989,12 +993,20 @@ fn __zeru_str_parse_float(s: str) f64! {
     if !seen {
         return Err(EINVAL);
     }
+    const end = at;
     if at < s.len() && (s[at] == 'e' || s[at] == 'E') {
-        var power = __zeru_str_parse_int(s[at + 1..])!;
-        if power > 1000 {
-            power = 1000;
-        } else if power < -1000 {
-            power = -1000;
+        var power = match __zeru_str_parse_int(s[at + 1..]) {
+            Ok(power) => power,
+            Err(error) if error != 34 => {
+                return Err(error);
+            }
+            Err(_) if s[at + 1] == '-' => i64.MIN,
+            Err(_) => i64.MAX,
+        };
+        if power > 1000000000000000000 {
+            power = 1000000000000000000;
+        } else if power < -1000000000000000000 {
+            power = -1000000000000000000;
         }
         exponent += power;
         at = s.len();
@@ -1006,7 +1018,13 @@ fn __zeru_str_parse_float(s: str) f64! {
     if mantissa != 0 && exponent > 309 {
         value = 1.0 / 0.0;
     } else if mantissa != 0 && exponent >= -343 {
-        value = __zeru_nearest(mantissa, exponent, inexact);
+        value = __zeru_nearest(mantissa, exponent);
+        if inexact {
+            const above = __zeru_nearest(mantissa + 1, exponent);
+            if above != value {
+                value = __zeru_closer(value, above, s[start..end], exponent + digits);
+            }
+        }
     }
     if negative {
         value = -value;
@@ -1040,11 +1058,10 @@ const POW10: Array<f64, 23> = [
     1e22,
 ];
 
-// The f64 nearest mantissa * 10^exponent, a tie going to the even one, or
-// up when `inexact` says digits past the mantissa were dropped: a guess
-// within a few ulps, then moved an ulp at a time by exact comparisons with
-// the halfway points around it.
-fn __zeru_nearest(mantissa: u64, exponent: i64, inexact: bool) f64 {
+// The f64 nearest mantissa * 10^exponent, a tie going to the even one: a
+// guess within a few ulps, then moved an ulp at a time by exact comparisons
+// with the halfway points around it.
+fn __zeru_nearest(mantissa: u64, exponent: i64) f64 {
     var value = mantissa as f64;
     var left = exponent;
     while left > 0 {
@@ -1063,7 +1080,7 @@ fn __zeru_nearest(mantissa: u64, exponent: i64, inexact: bool) f64 {
         value /= POW10[step];
         left += step;
     }
-    if exponent >= -22 && exponent <= 22 && mantissa < 9007199254740992 && !inexact {
+    if exponent >= -22 && exponent <= 22 && mantissa < 9007199254740992 {
         return value;
     }
     if value > 1.7976931348623157e308 {
@@ -1078,7 +1095,7 @@ fn __zeru_nearest(mantissa: u64, exponent: i64, inexact: bool) f64 {
             k = (bits >> 52) as i64 - 1075;
         }
         const up = __zeru_order(mantissa, exponent, 2 * m + 1, k - 1);
-        if up > 0 || up == 0 && (inexact || m % 2 == 1) {
+        if up > 0 || up == 0 && m % 2 == 1 {
             bits += 1;
             value = *((&bits) as *f64);
             if bits >> 52 == 2047 {
@@ -1095,7 +1112,7 @@ fn __zeru_nearest(mantissa: u64, exponent: i64, inexact: bool) f64 {
         } else {
             down = __zeru_order(mantissa, exponent, 2 * m - 1, k - 1);
         }
-        if down < 0 || down == 0 && !inexact && m % 2 == 1 {
+        if down < 0 || down == 0 && m % 2 == 1 {
             bits -= 1;
             value = *((&bits) as *f64);
             continue;
@@ -1103,6 +1120,58 @@ fn __zeru_nearest(mantissa: u64, exponent: i64, inexact: bool) f64 {
         break;
     }
     return value;
+}
+
+// `low` or `high`, the f64 just above it, whichever is nearer the number
+// 0.d * 10^point, `d` being what `digits` spells once its point and leading
+// zeros are skipped, a tie going to the even one: the digits are compared
+// one by one with those of the halfway point between the two.
+fn __zeru_closer(low: f64, high: f64, digits: str, point: i64) f64 {
+    const bits = *((&low) as *u64);
+    var m = bits & 4503599627370495;
+    var k: i64 = -1074;
+    if bits >> 52 != 0 {
+        m = m | 4503599627370496;
+        k = (bits >> 52) as i64 - 1075;
+    }
+    var r = __zeru_big(2 * m + 1);
+    var s = __zeru_big(1);
+    if k >= 1 {
+        r.mul_pow2(k - 1);
+    } else {
+        s.mul_pow2(1 - k);
+    }
+    if point >= 0 {
+        s.mul_pow10(point);
+    } else {
+        r.mul_pow10(0 - point);
+    }
+    if !__zeru_under(&r, &s, false) {
+        return low;
+    }
+    var started = false;
+    for c in digits {
+        if c == '.' || c == '0' && !started {
+            continue;
+        }
+        started = true;
+        r.mul_small(10);
+        var digit: u8 = '0';
+        while !__zeru_under(&r, &s, false) {
+            r.sub(&s);
+            digit += 1;
+        }
+        if c != digit {
+            if c > digit {
+                return high;
+            }
+            return low;
+        }
+    }
+    if r.len > 0 || m % 2 == 0 {
+        return low;
+    }
+    return high;
 }
 
 // -1, 0 or 1 as a * 10^ten is below, equal to or above b * 2^two.
@@ -1299,6 +1368,9 @@ fn __zeru_vec_extend<T>(v: &var Vec<T>, other: &[T]) {
 fn __zeru_vec_windows<T>(v: &[T], n: usize) Vec<&[T]> {
     assert(n > 0, "windows takes a size above 0");
     var parts: Vec<&[T]> = Vec.new();
+    if n == 0 {
+        return parts;
+    }
     var start: usize = 0;
     while start + n <= v.len() {
         parts.push(v[start..start + n]);
@@ -1312,6 +1384,9 @@ fn __zeru_vec_windows<T>(v: &[T], n: usize) Vec<&[T]> {
 fn __zeru_vec_chunks<T>(v: &[T], n: usize) Vec<&[T]> {
     assert(n > 0, "chunks takes a size above 0");
     var parts: Vec<&[T]> = Vec.new();
+    if n == 0 {
+        return parts;
+    }
     var start: usize = 0;
     while start < v.len() {
         var end = start + n;

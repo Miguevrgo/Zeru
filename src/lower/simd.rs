@@ -127,13 +127,21 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             SimdOp::And => builder.build_and(a, b_vec(), "and").unwrap().into(),
             SimdOp::Or => builder.build_or(a, b_vec(), "or").unwrap().into(),
             SimdOp::Xor => builder.build_xor(a, b_vec(), "xor").unwrap().into(),
+            SimdOp::Min | SimdOp::Max if float => {
+                let predicate = match op {
+                    SimdOp::Min => FloatPredicate::OLT,
+                    _ => FloatPredicate::OGT,
+                };
+                let wins = builder
+                    .build_float_compare(predicate, a, b_vec(), "wins")
+                    .unwrap();
+                builder.build_select(wins, a, b_vec(), "pick").unwrap()
+            }
             SimdOp::Min | SimdOp::Max => {
-                let name = match (op, float, signed) {
-                    (SimdOp::Min, true, _) => "llvm.minnum",
-                    (SimdOp::Max, true, _) => "llvm.maxnum",
-                    (SimdOp::Min, _, true) => "llvm.smin",
-                    (SimdOp::Max, _, true) => "llvm.smax",
-                    (SimdOp::Min, _, false) => "llvm.umin",
+                let name = match (op, signed) {
+                    (SimdOp::Min, true) => "llvm.smin",
+                    (SimdOp::Max, true) => "llvm.smax",
+                    (SimdOp::Min, false) => "llvm.umin",
                     _ => "llvm.umax",
                 };
                 self.intrinsic(name, a.get_type().into(), &[a.into(), b_vec().into()])

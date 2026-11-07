@@ -48,7 +48,9 @@ whatever it is built for. `[x; simd::LANES_16]` is a vector of one value.
 | `madd(a, b)` | from two vectors of `i16`, the `i32` lanes `a[2i] * b[2i] + a[2i + 1] * b[2i + 1]` |
 
 Integer arithmetic wraps around, as `+%` does: there is no overflow check
-on a lane. `load` and `store` check that the slice holds a whole vector,
+on a lane. On floats, `min` and `max` give the lane of `a` where it is less, or
+greater, than that of `b`, and that of `b` otherwise, so a NaN or a tie of
+`0.0` and `-0.0` gives `b`'s. `load` and `store` check that the slice holds a whole vector,
 outside `--release-fast`.
 
 A loop over a long slice takes a vector at a time, and the elements left

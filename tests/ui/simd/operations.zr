@@ -26,4 +26,13 @@ fn main() {
     const high: Array<u32, simd::LANES_32> = [9; simd::LANES_32];
     println("{} {} {}", simd::shr(neg, 2)[0], simd::lt(low, high)[0], simd::eq(low, high)[0]);
     println("{} {}", simd::min(floats, [0.5; simd::LANES_32])[0], simd::sub(neg, neg)[1]);
+    const odd: Array<f64, simd::LANES_64> = [0.0 / 0.0, -0.0];
+    const even: Array<f64, simd::LANES_64> = [1.0, 0.0];
+    println(
+        "{} {} {} {}",
+        simd::max(odd, even),
+        simd::min(odd, even),
+        simd::max(even, odd),
+        simd::min(even, odd),
+    );
 }

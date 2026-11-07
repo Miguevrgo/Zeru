@@ -11,4 +11,10 @@ fn main() {
     println("{} {}", math::div_euclid(-7, 2), math::mod_euclid(-7, 2));
     println("{} {}", math::div_euclid(7 as u8, 2), math::mod_euclid(-7.5, 2.0));
     println("{}", math::PI);
+    println(
+        "{} {} {}",
+        math::mod_euclid(i64.MIN, -1),
+        math::mod_euclid(-2.5, -1.0),
+        math::mod_euclid(i32.MIN, -2),
+    );
 }

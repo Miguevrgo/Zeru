@@ -10,4 +10,11 @@ fn main() {
     println("{} {}", e[..].max(), e.sum());
     const words = "a b c".split();
     println("{}", words[1..].contains("c"));
+    const bytes: Array<u8, 3> = [1, 2, 3];
+    println("{} {} {}", total(&bytes), bytes[1..].max().unwrap(), bytes[..2].min().unwrap());
+    println("{} {}", "abc".windows(2), "abc".chunks(2).len());
+}
+
+fn total(values: str) u8 {
+    return values.sum();
 }

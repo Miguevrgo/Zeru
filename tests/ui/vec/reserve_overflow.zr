@@ -1,0 +1,6 @@
+//@ checked
+fn main() {
+    var v: Vec<i64> = Vec[1, 2, 3];
+    v.reserve(usize.MAX);
+    println("{}", v.capacity());
+}

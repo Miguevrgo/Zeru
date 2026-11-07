@@ -572,8 +572,9 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         let more = self.operand(more).imm().into_int_value();
         let (vec, ty, _) = self.vec_at(place);
         let current = self.load_field(vec, ty, 1).into_int_value();
-        let needed = self.builder.build_int_add(current, more, "needed").unwrap();
-        self.reserve(vec, ty, needed);
+        let checked = self.mode.emit_safety_checks();
+        let needed = self.int_arith(BinOp::Add, current, more, false, checked);
+        self.reserve(vec, ty, needed.into_int_value());
     }
 
     /// `extend(other)`: a copy of each element of `other` after the last,

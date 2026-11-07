@@ -17,6 +17,8 @@ import std.math;
 They work for any number type the arguments share, except
 `div_euclid`, which takes integers only, and `is_power_of_two`, which
 takes a `u64`.
+`div_euclid` panics when `b` is 0, and on the most negative integer of
+its type divided by -1, whose quotient does not fit.
 
 ```zeru
 import std.math;

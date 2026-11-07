@@ -59,6 +59,10 @@ println("{}", "3.5".parse_float().unwrap() + 1.0); // 4.5
 println("{}", "1x".parse_int().is_err()); // true
 ```
 
+`str` and `&[u8]` are the same type, so the [slice](sequences.md#slices)
+methods that read, as `sum`, `max` and `windows`, work on text too;
+`contains` is the one above, which looks for text.
+
 `split()` with no separator is the one to read numbers or words separated
 by any amount of spaces. With a separator, each one counts, so two in a
 row leave an empty part between them:
