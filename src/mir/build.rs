@@ -31,7 +31,8 @@ pub fn build(
     let mut errors: Vec<ZeruError> = Vec::new();
     let mut bodies = Vec::new();
     for (at, function) in functions.iter().enumerate() {
-        let body = Builder::new(program, sources, function, mode.emit_safety_checks()).build();
+        let checks = mode.emit_safety_checks() || program.tests.contains(&FnId(at as u32));
+        let body = Builder::new(program, sources, function, checks).build();
         if body.recurses_forever(FnId(at as u32)) {
             program.warnings.push(ZeruError::warning(
                 format!(
@@ -1106,7 +1107,7 @@ impl<'a> Builder<'a> {
                 });
             }
             ExprKind::Assert { cond, message } => {
-                if self.checks {
+                if self.checks || self.sources.in_tests(self.function.span) {
                     self.assert_holds(cond, message.as_deref());
                 }
                 return;

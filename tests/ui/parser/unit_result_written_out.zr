@@ -1,0 +1,10 @@
+fn a() ()! {
+    return Ok();
+}
+fn b(r: void!) {
+}
+struct S {
+    all: Vec<()!>,
+}
+fn main() {
+}

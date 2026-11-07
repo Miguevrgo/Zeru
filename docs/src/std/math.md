@@ -15,7 +15,8 @@ import std.math;
 | `div_euclid(a, b)`, `mod_euclid(a, b)` | division and remainder that never give a negative remainder |
 
 They work for any number type the arguments share, except
-`is_power_of_two`, which takes a `u64`.
+`div_euclid`, which takes integers only, and `is_power_of_two`, which
+takes a `u64`.
 
 ```zeru
 import std.math;

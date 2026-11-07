@@ -1,7 +1,31 @@
-fn check(n: i32) ()! {
+struct Job {
+    name: str,
+    done: !,
+}
+fn check(n: i32) ! {
     if n < 0 { return Err(1); }
     return Ok();
 }
+fn passed(r: !) bool {
+    return r.is_ok();
+}
+fn run(step: fn(i32) !, n: i32) ! {
+    return step(n);
+}
 fn main() {
     println("{} {}", check(1).is_ok(), check(-1).is_err());
+    var r: ! = check(-2);
+    println("{}", passed(r));
+    r = Ok();
+    println("{}", passed(r));
+    const job = Job { name: "a", done: check(-3) };
+    println("{} {}", job.name, job.done.unwrap_err());
+    var all: Vec<!> = Vec.new();
+    all.push(Ok());
+    all.push(check(-4));
+    println("{} {}", all[0].is_ok(), all[1].is_err());
+    const pair: (!, i32) = (Ok(), 2);
+    const maybe: !? = None;
+    println("{} {}", pair.0.is_ok(), maybe.is_none());
+    println("{}", run(fn(x) { check(x)!; }, -5).unwrap_err());
 }

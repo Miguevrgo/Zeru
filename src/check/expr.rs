@@ -555,7 +555,8 @@ impl FnCx<'_, '_> {
     }
 
     /// `if c { a } else { b }` giving a value, checked as a `match` on the
-    /// condition; both branches give one type, or the `T?` or `T!` wanted.
+    /// condition; both branches give one type, the `T?` or `T!` wanted, or
+    /// a `T?` when one is `None`.
     fn if_expr(
         &mut self,
         condition: &Expression,
@@ -568,7 +569,7 @@ impl FnCx<'_, '_> {
         let cond = self.condition(condition, "If condition must be boolean, got ");
         let wraps = self.wrapper(expected);
         let before = self.diverges;
-        let swap = takes_branch_type(then) && !takes_branch_type(otherwise);
+        let swap = branch_order(then) > branch_order(otherwise);
         let (one, other) = if swap {
             (otherwise, then)
         } else {
@@ -576,7 +577,7 @@ impl FnCx<'_, '_> {
         };
         let mut first = self.value_branch(one, expected);
         let first_leaves = std::mem::replace(&mut self.diverges, before);
-        let first_ty = (!first_leaves).then_some(first.ty);
+        let first_ty = (!first_leaves).then(|| self.with_none(first.ty, other, expected));
         let second = self.value_branch(other, wraps.or(first_ty).or(expected));
         let second_leaves = self.diverges;
         self.diverges = first_leaves && second_leaves;
@@ -962,6 +963,19 @@ impl FnCx<'_, '_> {
                 let whole = self.tuple_hint(hints);
                 self.value(value, whole)
             }
+        }
+    }
+
+    /// The type of branches giving `ty` when `branch` is `None` and no type
+    /// is expected: `ty?`, which the others wrap into, for a plain `ty`.
+    pub(super) fn with_none(&mut self, ty: Ty, branch: &Expression, expected: Option<Ty>) -> Ty {
+        let types = &self.cx.types;
+        let plain = !matches!(types.kind(ty), TyKind::Optional(_) | TyKind::Error)
+            && ty != Types::VOID
+            && !types.is_unit(ty);
+        match plain && expected.is_none() && matches!(branch.kind, ExpressionKind::None) {
+            true => self.cx.types.intern(TyKind::Optional(ty)),
+            false => ty,
         }
     }
 
@@ -2168,10 +2182,14 @@ pub(super) fn is_number_literal(expr: &Expression) -> bool {
     }
 }
 
-/// A number written out, or `None`: a branch that takes its type from
-/// the others.
-pub(super) fn takes_branch_type(expr: &Expression) -> bool {
-    matches!(expr.kind, ExpressionKind::None) || is_number_literal(expr)
+/// When a branch is checked among the others: 0 for one with a type of
+/// its own, 1 for a number written out, which takes the others' type, and
+/// 2 for `None`, which takes it even from a number.
+pub(super) fn branch_order(expr: &Expression) -> u8 {
+    match expr.kind {
+        ExpressionKind::None => 2,
+        _ => u8::from(is_number_literal(expr)),
+    }
 }
 
 /// Whether `a` and `b` read the same value: the same variable, field,

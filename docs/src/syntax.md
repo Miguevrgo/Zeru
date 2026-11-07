@@ -64,6 +64,7 @@ var name = match day {
     default => "weekday",
 };
 var size = match n { 0 => "none", 1..=9 => "few", x if x < 0 => "negative", default => "many" };
+var half = match b { 0..=127 => "low", 128..=255 => "high" };   // b: u8, every value taken: no default
 var op = match word { "+" | "plus" => 1, "-" => 2, default => 0 };   // text too
 match (a, b) { (Some(x), Some(y)) => .., (Some(x), None) | (None, Some(x)) => .., (None, None) => .. }
 ```
@@ -75,6 +76,7 @@ var a: Array<i32, 3> = [1, 2, 3];   var zeros: Array<u8, 64> = [0; 64];
 var v = Vec[1, 2];                  var empty: Vec<str> = Vec.new();
 var grid = Vec[Vec[0; width]; height];   // n known as it runs
 v.push(3);  v.pop();  v.len();  v[0];  v.get(9);  v.sort();  v.reverse();  v.copy();
+v.extend(&other);  v.extend(other[1..]);   // a copy of each element of a slice
 var part = v[1..];                  // a slice, &[i32]
 var front = &var v[..2];  front.sort();   // a slice that writes, &var [i32]
 var t = (1, true);  t.0;
@@ -87,6 +89,7 @@ var s: str = "hello";               s.len();  s[0];  s[1..3];
 s.is_empty();  b as str;           // b: u8, its one-byte text
 s.split();  s.split(",");  s.lines();  s.contains("a");  s.find("a");  s.trim();  s.starts_with("he");  s.parse_int();
 var owned = String.from("hi");      owned.push_str("!");  owned.push('?');
+var csv = s.split(",").join(";");  // a String, the parts with ";" between
 println("{} and {}", 1, "two");     println("{}", v);  // [1, 2]
 println("{:.2} {:>5} {:08b} {:x}", 2.0 / 3.0, "ab", 5, 255);  // 0.67    ab 00000101 ff
 var line = format("{}: {}", 3, "ok");  // the same text as a String
@@ -147,6 +150,8 @@ var p: *u8 = &bytes[0]; // raw pointer, unchecked
 fn find(..) usize? { return 3; ... return None; }
 fn parse(..) i64! { return 3; ... return Err(EINVAL); }
 fn save(..) ! { ... return Ok(); ... }        // success or an error code
+const done: ! = save(..);                     // ! goes wherever a type does: a field, Vec<!>
+const found = if hit { n } else { None };     // n: i32 makes it i32?
 x.is_some()  x.is_none()  x.is_ok()  x.is_err()  x.unwrap()  x.unwrap_err()
 x == 3  x != y                    // a T? compared with a value or another T?
 var n = parse(text)!;    // returns the error from this function

@@ -2,3 +2,5 @@ status: exit 0
 -- stdout
 3 2 4
 true 2
+true 2 true b 2
+6 2

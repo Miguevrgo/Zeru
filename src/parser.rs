@@ -628,7 +628,12 @@ impl Parser {
 
     fn parse_type(&mut self) -> Option<TypeSpec> {
         self.nested(|p| {
+            let start = p.span();
             let base = match p.peek() {
+                Token::Bang => {
+                    p.bump();
+                    TypeSpec::Result(Box::new(TypeSpec::Tuple(Vec::new())))
+                }
                 Token::Str => {
                     p.bump();
                     TypeSpec::Slice(Box::new(TypeSpec::Named("u8".to_string())))
@@ -652,7 +657,6 @@ impl Parser {
                         Token::Assign,
                         Token::LBrace,
                         Token::Question,
-                        Token::Bang,
                     ]) {
                         true => None,
                         false => Some(Box::new(p.parse_type()?)),
@@ -664,6 +668,18 @@ impl Parser {
             if p.eat(&Token::Question) {
                 return Some(TypeSpec::Optional(Box::new(base)));
             }
+            let unit = TypeSpec::Tuple(Vec::new());
+            if p.at(&Token::Bang) && (base == unit || base == TypeSpec::Named("void".into())) {
+                let span = start.merge(p.span());
+                if let Some(error) = p.error("A result with no value is written '!' alone", span) {
+                    error
+                        .help("write ! for success or an error code")
+                        .fix(span, "!");
+                }
+                p.panic_mode = false;
+                p.bump();
+                return Some(TypeSpec::Result(Box::new(unit)));
+            }
             if p.eat(&Token::Bang) {
                 return Some(TypeSpec::Result(Box::new(base)));
             }
@@ -674,6 +690,9 @@ impl Parser {
     /// The type of a `var` or `const`, whose `!` the lexer may have joined
     /// to the `=` after it, as in `i32!= 3`.
     fn parse_annotation(&mut self) -> Option<TypeSpec> {
+        if self.at(&Token::NotEq) {
+            self.split_token(Token::Bang, Token::Assign);
+        }
         let ty = self.parse_type()?;
         let touching = self.span().start == self.prev_span().end;
         if !touching
@@ -842,11 +861,6 @@ impl Parser {
         }
         if self.at_any(body_starts) {
             return Some(None);
-        }
-        if self.eat(&Token::Bang) {
-            return Some(Some(TypeSpec::Result(Box::new(
-                TypeSpec::Tuple(Vec::new()),
-            ))));
         }
         self.parse_type().map(Some)
     }

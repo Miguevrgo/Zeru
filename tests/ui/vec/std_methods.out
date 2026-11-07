@@ -18,3 +18,7 @@ Warning: Variable 'i' is never read
 pear true
 2 1
 true true
+[1, 9, -2, 0, 3, 3, 5, -7, 5, -7, 7, 8]
+[["b", "c"], ["a"]] [["b", "c", "d"], ["a"]]
+[pear, apple, fig] []
+xyz apple/fig

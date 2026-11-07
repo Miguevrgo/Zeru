@@ -44,3 +44,14 @@ fn value_match(c: Color) i32 {
         Color::Red => 1,
     };
 }
+fn integer_gaps(b: u8, s: i8) i32 {
+    match s {
+        -128..=-1 => {}
+        1..=127 => {}
+    }
+    return match b {
+        0..=100 => 1,
+        150 => 2,
+        200..=254 => 3,
+    };
+}

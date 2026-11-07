@@ -681,7 +681,7 @@ impl<'a> Checker<'a> {
     /// declared.
     fn check_bound_names(&mut self, generics: &[TypeParameter], module: ModuleId, span: Span) {
         for bound in generics.iter().filter_map(|param| param.bound.as_ref()) {
-            if matches!(bound.as_str(), "Eq" | "Ord" | "Num" | "Hash") {
+            if matches!(bound.as_str(), "Eq" | "Ord" | "Num" | "Int" | "Hash") {
                 continue;
             }
             match self.items.lookup_trait(module, bound) {
@@ -689,7 +689,7 @@ impl<'a> Checker<'a> {
                 Some(_) => {}
                 None => {
                     let mut known = self.items.names_of(module, ItemKind::Trait, false);
-                    known.extend(["Eq", "Ord", "Num", "Hash"].map(String::from));
+                    known.extend(["Eq", "Ord", "Num", "Int", "Hash"].map(String::from));
                     let at = self.sources.word_in(span, bound);
                     let error = self.error(
                         format!("Unknown trait '{bound}' in a bound"),
@@ -886,6 +886,7 @@ impl<'a> Checker<'a> {
                 "Eq" => self.operator_applies(&Token::Eq, arg),
                 "Ord" => self.operator_applies(&Token::Lt, arg),
                 "Num" => self.operator_applies(&Token::Plus, arg),
+                "Int" => self.types.as_int(arg).is_some(),
                 "Hash" => self.hashes(arg),
                 _ => match self.items.lookup_trait(module, bound) {
                     Some(trait_def) => self.has_trait_methods(arg, trait_def),

@@ -26,6 +26,9 @@ fn main() {
 A plain `usize` becomes a `usize?` on its own wherever one is wanted, so
 `return i;` needs nothing around it. Where nothing says a `T?` is wanted,
 `Some(x)` makes one: `var pair = (Some(3), 2);` is an `(i64?, i64)`.
+An `if` or `match` with `None` in some branches and a plain value in the
+others gives a `T?` too: `if c { None } else { n }` is an `i32?` when `n`
+is an `i32`.
 
 ## Taking the value out
 

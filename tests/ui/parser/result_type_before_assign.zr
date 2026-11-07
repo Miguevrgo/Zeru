@@ -1,4 +1,5 @@
 fn main() {
     const x: i32!= 3;
-    println("{}", x.unwrap());
+    const r: != Ok();
+    println("{} {}", x.unwrap(), r.is_ok());
 }

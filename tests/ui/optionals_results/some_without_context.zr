@@ -9,4 +9,14 @@ fn main() {
     const odd = if pair.1 % 2 == 0 { None } else { Some(pair.1) };
     const arm = match pair.1 { 0 => None, default => Some(pair.1) };
     println("{} {}", odd.is_none(), arm.unwrap());
+    const n: i32 = pair.1;
+    const first = if n > 1 { None } else { n };
+    const last = if n > 1 { n } else { None };
+    const literal = if n > 1 { None } else { 7 };
+    const owned = if n > 5 { None } else { String.from("b") };
+    const nested = if n > 0 { if n > 9 { None } else { n } } else { None };
+    println("{} {} {} {} {}", first.is_none(), last.unwrap(), literal.is_none(), owned.unwrap(), nested.unwrap());
+    const mixed = match n { 0 => None, 1 => 10, default => n * 3 };
+    const wrapped: i32? = match n { 0 => None, default => n };
+    println("{} {}", mixed.unwrap(), wrapped.unwrap());
 }

@@ -66,6 +66,7 @@ The methods:
 |---|---|
 | `Vec.new()`, `Vec.with_capacity(n)` | an empty Vec, the second with room for `n` |
 | `push(x)`, `pop()` | add at the end, take from the end (`T?`, `None` when empty) |
+| `extend(other)` | add a copy of each element of the slice `other` at the end |
 | `insert(i, x)`, `remove(i)` | add or take at index `i`, moving the rest |
 | `len()`, `is_empty()`, `capacity()` | sizes |
 | `get(i)` | a reference to element `i`, or `None` past the end |
@@ -76,6 +77,7 @@ The methods:
 | `windows(n)` | views of every run of `n` elements next to each other |
 | `contains(x)`, `sum()`, `min()`, `max()` | look at the values |
 | `map(f)`, `filter(keep)`, `any(f)`, `all(f)` | run a [closure](closures.md#vec-methods) on each element |
+| `join(sep)` | for a `Vec<str>`, a `String` of the parts with `sep` between each two |
 | `clear()`, `reserve(n)`, `shrink_to_fit()` | manage the memory |
 | `copy()` | a second Vec with the same elements |
 
@@ -86,6 +88,19 @@ println("{} {} {}", v[0], v[1], v[2]); // 3 5 8
 println("{} {}", v.contains(8), v.sum()); // true 16
 println("{}", v.max().unwrap()); // 8
 println("{}", v.get(10).is_none()); // true
+```
+
+`extend` takes a slice, so it adds from a Vec, an array or part of
+either. Elements that own memory are copied, as `copy()` does:
+
+```zeru
+var v: Vec<i32> = Vec[1, 2];
+const more: Array<i32, 3> = [3, 4, 5];
+v.extend(&more);
+v.extend(more[..1]);
+println("{}", v); // [1, 2, 3, 4, 5, 3]
+const words: Vec<str> = Vec["red", "green", "blue"];
+println("{}", words.join(", ")); // red, green, blue
 ```
 
 `println` writes a whole list, nested ones too, with any text inside in
@@ -115,7 +130,7 @@ println("{} {} {}", middle.len(), middle[0], tail[1]); // 2 20 40
 ```
 
 A slice has the `Vec` methods that only read: `len`, `is_empty`, `contains`, `sum`,
-`min`, `max`, `windows`, `chunks`, `map`, `filter`, `any` and `all`:
+`min`, `max`, `windows`, `chunks`, `map`, `filter`, `any`, `all` and `join`:
 
 ```zeru
 const v: Vec<i32> = Vec[9, 4, 7, 1];

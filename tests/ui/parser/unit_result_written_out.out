@@ -1,0 +1,33 @@
+status: compile error
+-- stderr
+Error: A result with no value is written '!' alone
+   ╭─[ tests/ui/parser/unit_result_written_out.zr:1:8 ]
+   │
+ 1 │ fn a() ()! {
+   │        ─┬─
+   │         ╰─── A result with no value is written '!' alone
+   │
+   │ Help: write ! for success or an error code
+   │           fn a() ! {
+───╯
+Error: A result with no value is written '!' alone
+   ╭─[ tests/ui/parser/unit_result_written_out.zr:4:9 ]
+   │
+ 4 │ fn b(r: void!) {
+   │         ──┬──
+   │           ╰──── A result with no value is written '!' alone
+   │
+   │ Help: write ! for success or an error code
+   │           fn b(r: !) {
+───╯
+Error: A result with no value is written '!' alone
+   ╭─[ tests/ui/parser/unit_result_written_out.zr:7:14 ]
+   │
+ 7 │     all: Vec<()!>,
+   │              ─┬─
+   │               ╰─── A result with no value is written '!' alone
+   │
+   │ Help: write ! for success or an error code
+   │           all: Vec<!>,
+───╯
+[-] Error: aborting due to previous error

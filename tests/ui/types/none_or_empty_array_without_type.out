@@ -55,4 +55,29 @@ Error: Cannot tell the type of None here
     │
     │ Help: give the variable a type, as in var x: i32? = None
 ────╯
+Error: Cannot tell the type of None here
+    ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:12:20 ]
+    │
+ 12 │     var y = if c { None } else { None };
+    │                    ──┬─
+    │                      ╰─── Cannot tell the type of None here
+    │
+    │ Help: give the variable a type, as in var x: i32? = None
+────╯
+Error: Cannot tell the type of None here
+    ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:13:31 ]
+    │
+ 13 │     var z = match c { true => None, false => None };
+    │                               ──┬─
+    │                                 ╰─── Cannot tell the type of None here
+    │
+    │ Help: give the variable a type, as in var x: i32? = None
+────╯
+Error: 'None' can only be assigned to optional types, got i32
+    ╭─[ tests/ui/types/none_or_empty_array_without_type.zr:14:25 ]
+    │
+ 14 │     var w: i32 = if c { None } else { 3 };
+    │                         ──┬─
+    │                           ╰─── 'None' can only be assigned to optional types, got i32
+────╯
 [-] Error: aborting due to previous error

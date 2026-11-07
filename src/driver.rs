@@ -73,6 +73,9 @@ fn parse_file(
     let mut program = parser.parse_program();
     errors.append(&mut parser.errors);
     if tests {
+        if let Some(first) = program.tests.first() {
+            sources.mark_tests(Span::new(first.span.start, sources.end()));
+        }
         program.statements.append(&mut program.tests);
     }
     program

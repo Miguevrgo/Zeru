@@ -96,6 +96,10 @@ A test fails when it panics, as a failed `assert` does, or when an error
 leaves it through `!`. It sees everything in its file, `pub` or not.
 `zeru run` and `zeru build` leave the block out.
 
+The asserts written in the `#test` block are checked in every mode,
+`--release-fast` included, while the code they test keeps the checks of
+the mode it is built in.
+
 `zeru test main.zr` runs the tests of `main.zr` and of every file it
 imports, outside the standard library, each in a process of its own. It
 lists the passes as they finish, then each failure with what it printed.

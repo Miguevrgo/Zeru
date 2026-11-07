@@ -71,6 +71,14 @@ println("{}", "84283   63343".split(" ")); // ["84283", "", "", "63343"]
 The parts `split` and `lines` give are views into the original text; no
 text is copied.
 
+`join(sep)` goes the other way: on a `Vec<str>` or a slice of them, it
+gives a `String` of the parts with `sep` between each two.
+
+```zeru
+const parts = "a,b,c".split(",");
+println("{}", parts.join(" + ")); // a + b + c
+```
+
 `find` gives a position to slice from:
 
 ```zeru

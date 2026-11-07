@@ -12,4 +12,6 @@ fn main() {
     n.shout();
     var o = String.new();
     o.push_str(5);
+    n.extend(5);
+    n.join(",");
 }

@@ -100,6 +100,9 @@ fn main() {
 }
 ```
 
+`!` is a type like any other: a parameter, a variable, a field or a
+`Vec<!>` holds a success or an error code the same way.
+
 ## Results must be looked at
 
 A `T!` has to be taken apart before its value can be used: there is no

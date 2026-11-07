@@ -59,13 +59,22 @@ Error: A match guard must be a bool, got i32
     │              ┬
     │              ╰── this is i32
 ────╯
-Error: A match on i32 needs a 'default' arm
+Error: This match does not cover -2147483648..=0, 2..=2147483647
     ╭─[ tests/ui/match/range_and_guard_errors.zr:33:13 ]
     │
  33 │     var i = match n {
     │             ────┬────
-    │                 ╰────── A match on i32 needs a 'default' arm
+    │                 ╰────── This match does not cover -2147483648..=0, 2..=2147483647
     │
-    │ Help: add a default arm for the values no other arm takes
+    │ Help: add an arm for each, or a default arm
+────╯
+Error: This match does not cover 0..=127
+    ╭─[ tests/ui/match/range_and_guard_errors.zr:38:13 ]
+    │
+ 38 │     var j = match b {
+    │             ────┬────
+    │                 ╰────── This match does not cover 0..=127
+    │
+    │ Help: add an arm for each, or a default arm
 ────╯
 [-] Error: aborting due to previous error

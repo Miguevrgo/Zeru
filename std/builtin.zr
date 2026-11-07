@@ -1273,6 +1273,14 @@ fn __zeru_vec_dedup<T: Eq>(v: &var Vec<T>) {
     }
 }
 
+// `v.extend(other)`: a copy of each element of `other` added at the end.
+fn __zeru_vec_extend<T>(v: &var Vec<T>, other: &[T]) {
+    v.reserve(other.len());
+    for x in other {
+        v.push(x.copy());
+    }
+}
+
 // `v.windows(n)`: a view of every run of `n` elements next to each other,
 // each starting one element after the one before; none when `v` is
 // shorter than `n`.
@@ -1451,6 +1459,26 @@ fn __zeru_vec_filter<T>(v: &[T], keep: fn(T) bool) Vec<T> {
         }
     }
     return out;
+}
+
+// `parts.join(sep)`: a String of the parts with `sep` between each two.
+fn __zeru_vec_join<T>(parts: &[T], sep: str) String {
+    var s = String.new();
+    if parts.len() == 0 {
+        return s;
+    }
+    var total = sep.len() * (parts.len() - 1);
+    for part in parts {
+        total += part.len();
+    }
+    s.reserve(total);
+    for i in 0..parts.len() {
+        if i > 0 {
+            s.push_str(sep);
+        }
+        s.push_str(parts[i]);
+    }
+    return s;
 }
 
 // `v.any(f)`: whether `f` accepts some element.

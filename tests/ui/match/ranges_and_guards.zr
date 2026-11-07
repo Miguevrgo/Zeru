@@ -72,4 +72,39 @@ fn main() {
         None => 0,
     };
     println("{}", r);
+    println("{} {} {} {} {} {}", half(0), half(101), half(255), side(-128), side(0), side(127));
+    println("{} {} {} {} {}", edge(i64.MIN), edge(i64.MAX), edge(0), wide(0), wide(u64.MAX));
+}
+
+const TOP: u8 = 255;
+
+fn half(b: u8) str {
+    return match b {
+        0..=100 => "low",
+        101..=254 => "high",
+        TOP => "top",
+    };
+}
+
+fn side(n: i8) str {
+    return match n {
+        i8.MIN..=-1 => "neg",
+        0 => "zero",
+        1..=127 => "pos",
+    };
+}
+
+fn edge(n: i64) str {
+    return match n {
+        i64.MIN => "min",
+        i64.MAX => "max",
+        -9223372036854775807..=9223372036854775806 => "inside",
+    };
+}
+
+fn wide(n: u64) str {
+    return match n {
+        0 => "zero",
+        1..=u64.MAX => "more",
+    };
 }

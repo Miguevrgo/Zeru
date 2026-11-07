@@ -10,9 +10,13 @@ fn total<T: Num>(a: T, b: T) T {
 fn same<T: Eq>(a: T, b: T) bool {
     return a == b;
 }
+fn low_bits<T: Int>(a: T) T {
+    return a & 3;
+}
 fn main() {
     const big: u32 = 3000000000;
     const small: u32 = 1;
     const wide: i64 = 5000000000;
     println("{} {} {} {}", largest(big, small), largest(7, wide), total(1.5, 2.0), same(3, 3));
+    println("{} {}", low_bits(7 as u8), low_bits(-1 as i64));
 }

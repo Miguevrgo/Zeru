@@ -164,7 +164,7 @@ pub fn is_power_of_two(n: u64) bool {
 // println("{}", math::div_euclid(-7, 2)); // -4
 // println("{}", math::div_euclid(-7, -2)); // 4
 // ```
-pub fn div_euclid<T: Num>(a: T, b: T) T {
+pub fn div_euclid<T: Int>(a: T, b: T) T {
     const q: T = a / b;
     const r: T = a % b;
     if r < 0 {

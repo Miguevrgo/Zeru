@@ -74,4 +74,18 @@ Error: 'String.push_str' takes 'text' as str, but this is i32
     │                ┬
     │                ╰── this is i32
 ────╯
+Error: 'Vec.extend' takes 'other' as &[i32], but this is i32
+    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:15:14 ]
+    │
+ 15 │     n.extend(5);
+    │              ┬
+    │              ╰── this is i32
+────╯
+Error: join() needs a list of str, not Vec<i32>
+    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:16:5 ]
+    │
+ 16 │     n.join(",");
+    │     ─────┬─────
+    │          ╰─────── join() needs a list of str, not Vec<i32>
+────╯
 [-] Error: aborting due to previous error

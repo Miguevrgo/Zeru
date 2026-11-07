@@ -182,6 +182,22 @@ fn main() {
 }
 ```
 
+Arms that between them take every value of the type need no `default`.
+An arm with an `if` does not count, since its condition may fail:
+
+```zeru
+fn half(b: u8) str {
+    return match b {
+        0..=127 => "low",
+        128..=255 => "high",
+    };
+}
+
+fn main() {
+    println("{} {}", half(5), half(200)); // low high
+}
+```
+
 Text matches the same way, a `str` or a `String` against string literals
 and text constants, with `default` for every other text:
 

@@ -36,4 +36,17 @@ fn main() {
         }
     }
     println("{} {}", sorted, total == big.sum());
+    var all: Vec<i64> = Vec[1];
+    const fixed: Array<i64, 2> = [7, 8];
+    all.extend(&v);
+    all.extend(v[5..]);
+    all.extend(&fixed);
+    println("{}", all);
+    var lists: Vec<Vec<str>> = Vec.new();
+    lists.extend(&nested);
+    nested[0].push("d");
+    println("{} {}", lists, nested);
+    println("[{}] [{}]", words.join(", "), e.map(fn(x) "n").join("-"));
+    const letters: Array<str, 3> = ["x", "y", "z"];
+    println("{} {}", letters.join(""), words[1..].join("/"));
 }

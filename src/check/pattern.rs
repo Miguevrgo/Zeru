@@ -8,7 +8,7 @@ use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
 use super::body::{Fixed, FnCx};
-use super::expr::takes_branch_type;
+use super::expr::branch_order;
 
 /// The binding a match on text tests its values against, a name no code
 /// can write.
@@ -88,7 +88,7 @@ impl FnCx<'_, '_> {
         let temporary = matches!(scrutinee, Place::Temp(_));
         let mut shapes: Vec<_> = patterns.into_iter().map(Some).collect();
         let mut order: Vec<usize> = (0..arms.len()).collect();
-        order.sort_by_key(|&at| takes_branch_type(&arms[at].body));
+        order.sort_by_key(|&at| branch_order(&arms[at].body));
         for at in order {
             let (arm, shape) = (&arms[at], shapes[at].take().expect("each arm once"));
             let (pattern, body) = (&arm.pattern, &arm.body);
@@ -109,6 +109,18 @@ impl FnCx<'_, '_> {
                 .as_ref()
                 .map(|guard| self.condition(guard, "A match guard must be a bool, got "));
             self.diverges = before;
+            if let Some(plain) = arm_ty {
+                let ty = self.with_none(plain, body, expected);
+                arm_ty = Some(ty);
+                for arm in checked
+                    .iter_mut()
+                    .flatten()
+                    .filter(|arm| ty != plain && arm.body.ty == plain)
+                {
+                    let body = std::mem::replace(&mut arm.body, Expr::error(arm.span));
+                    arm.body = self.coerce(body, ty).unwrap_or_else(|body| body);
+                }
+            }
             let wanted = arm_ty.or(expected);
             let mut result = self.expr(body, wanted);
             for (binding, _) in &bindings {
@@ -368,7 +380,9 @@ impl FnCx<'_, '_> {
         if has_default || failed {
             return (shapes, None);
         }
+        let int = self.cx.types.as_int(subject);
         let missing: Vec<String> = match (all, &combos) {
+            _ if let Some(int) = int => gaps(&covered, int.min(), int.max()),
             (Some(all), _) => (0..)
                 .zip(all)
                 .filter(|(at, _)| !covered.iter().any(|(tests, _)| takes(tests, &[*at])))
@@ -406,7 +420,7 @@ impl FnCx<'_, '_> {
         };
         if !missing.is_empty() {
             const SHOWN: usize = 4;
-            let added = match missing.len() > SHOWN {
+            let added = match missing.len() > SHOWN || int.is_some() {
                 true => vec!["default".to_string()],
                 false => missing.clone(),
             };
@@ -982,6 +996,32 @@ fn repeated(
         first = Some(*span);
     }
     first
+}
+
+/// The values from `min` to `max` that no test in `covered` takes, as
+/// patterns: `7`, or `101..=255` for several in a row.
+fn gaps(covered: &[(Vec<Test>, Span)], min: i128, max: i128) -> Vec<String> {
+    let mut taken: Vec<(i128, i128)> = covered
+        .iter()
+        .map(|(tests, _)| (tests[0].low, tests[0].high))
+        .collect();
+    taken.sort();
+    let shown = |low: i128, high: i128| match low == high {
+        true => low.to_string(),
+        false => format!("{low}..={high}"),
+    };
+    let mut gaps = Vec::new();
+    let mut next = min;
+    for (low, high) in taken {
+        if low > next {
+            gaps.push(shown(next, low - 1));
+        }
+        next = next.max(high + 1);
+    }
+    if next <= max {
+        gaps.push(shown(next, max));
+    }
+    gaps
 }
 
 /// `missing` combinations of tags, those that together take every value

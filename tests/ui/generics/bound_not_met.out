@@ -1,10 +1,17 @@
 status: compile error
 -- stderr
 Error: 'Pair' asks for T: Eq, which Point does not satisfy
-    ╭─[ tests/ui/generics/bound_not_met.zr:10:15 ]
+    ╭─[ tests/ui/generics/bound_not_met.zr:12:15 ]
     │
- 10 │     var bad = Pair { first: p, second: p };
+ 12 │     var bad = Pair { first: p, second: p };
     │               ──────────────┬─────────────
     │                             ╰─────────────── 'Pair' asks for T: Eq, which Point does not satisfy
+────╯
+Error: 'math::div_euclid' asks for T: Int, which f64 does not satisfy
+    ╭─[ tests/ui/generics/bound_not_met.zr:14:16 ]
+    │
+ 14 │     var half = math::div_euclid(7.0, 2.0);
+    │                ─────────────┬────────────
+    │                             ╰────────────── 'math::div_euclid' asks for T: Int, which f64 does not satisfy
 ────╯
 [-] Error: aborting due to previous error

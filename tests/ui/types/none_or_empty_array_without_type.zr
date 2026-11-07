@@ -7,8 +7,11 @@ fn none_or_empty_array_without_type() {
     var b = None == x;
 }
 
-fn none_needs_context() {
+fn none_needs_context(c: bool) {
     var x = None;
+    var y = if c { None } else { None };
+    var z = match c { true => None, false => None };
+    var w: i32 = if c { None } else { 3 };
 }
 
 fn main() {}

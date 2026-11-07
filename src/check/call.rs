@@ -42,12 +42,12 @@ const STR_METHODS: &[&str] = &[
 /// The Vec methods written in the prelude besides the slice ones, each
 /// `__zeru_vec_<name>`, or `__zeru_string_<name>` for a String's, taking a
 /// reference to the Vec first.
-const VEC_STD_METHODS: &[&str] = &["dedup", "push_str"];
+const VEC_STD_METHODS: &[&str] = &["dedup", "push_str", "extend"];
 
 /// The prelude's methods that only read the elements: slices have them, and
 /// a Vec reaches them through a slice of all of it.
 const SLICE_METHODS: &[&str] = &[
-    "contains", "sum", "min", "max", "windows", "chunks", "map", "filter", "any", "all",
+    "contains", "sum", "min", "max", "windows", "chunks", "map", "filter", "any", "all", "join",
 ];
 
 /// The prelude's methods that take a closure, which a str has too.
@@ -69,6 +69,7 @@ const SLICE_MUT_METHODS: &[&str] = &[
 const VEC_MUTATORS: &[&str] = &[
     "dedup",
     "push_str",
+    "extend",
     "push",
     "pop",
     "clear",
@@ -427,6 +428,14 @@ impl FnCx<'_, '_> {
                 .fix(span, object);
             }
             return self.mk(ExprKind::Read(place), ty, span);
+        }
+        if name == "join"
+            && let Some(elem) = self.cx.types.elem(ty)
+            && elem != Types::STR
+        {
+            let shown = self.ty(ty);
+            self.error(format!("join() needs a list of str, not {shown}"), span);
+            return self.error_expr(span);
         }
 
         match self.cx.types.kind(ty).clone() {

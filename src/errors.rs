@@ -217,6 +217,7 @@ impl ZeruError {
 pub struct Sources {
     text: String,
     files: Vec<SourceFile>,
+    tests: Vec<Span>,
 }
 
 struct SourceFile {
@@ -294,6 +295,18 @@ impl Sources {
     /// Where the file a span points into starts.
     pub fn file_start(&self, span: Span) -> Option<usize> {
         self.file(span).map(|file| file.start)
+    }
+
+    /// Count `span` as a `#test { }` block, whose asserts are always checked.
+    pub fn mark_tests(&mut self, span: Span) {
+        self.tests.push(span);
+    }
+
+    /// Whether a span lies inside a `#test { }` block.
+    pub fn in_tests(&self, span: Span) -> bool {
+        self.tests
+            .iter()
+            .any(|block| block.start <= span.start && span.end <= block.end)
     }
 
     /// Whether a span points into the standard library.

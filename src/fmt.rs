@@ -1025,10 +1025,9 @@ impl<'s> Printer<'s> {
     }
 }
 
-/// A return type after a space, `()!` written as `!`, or nothing.
+/// A return type after a space, or nothing.
 fn return_text(ty: &Option<TypeSpec>) -> String {
     match ty {
-        Some(TypeSpec::Result(inner)) if **inner == TypeSpec::Tuple(Vec::new()) => " !".into(),
         Some(ty) => format!(" {}", ty_text(ty)),
         None => String::new(),
     }
@@ -1056,6 +1055,7 @@ pub(crate) fn ty_text(ty: &TypeSpec) -> String {
         TypeSpec::Tuple(parts) => format!("({})", types(parts)),
         TypeSpec::Pointer(inner) => format!("*{}", ty_text(inner)),
         TypeSpec::Optional(inner) => format!("{}?", suffixed(inner)),
+        TypeSpec::Result(inner) if **inner == TypeSpec::Tuple(Vec::new()) => "!".into(),
         TypeSpec::Result(inner) => format!("{}!", suffixed(inner)),
         TypeSpec::Slice(inner) if **inner == TypeSpec::Named("u8".into()) => "str".into(),
         TypeSpec::Slice(inner) => format!("&[{}]", ty_text(inner)),
@@ -1176,6 +1176,8 @@ fn main() {
 ";
         assert_eq!(format(source).unwrap(), expected);
         assert!(format("fn main() { x = /* here */ 2; }").is_err());
+        let bang = "fn f(r: !, all: Vec<!>) ! {\n    const done: ! = r;\n}\n";
+        assert_eq!(format(bang).unwrap(), bang);
     }
 
     #[test]

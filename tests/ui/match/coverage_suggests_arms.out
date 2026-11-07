@@ -22,14 +22,14 @@ Error: This match does not cover Color::Green, Color::Blue
     │           Color::Green => {}
     │           Color::Blue => {}
 ────╯
-Error: A match on i32 needs a 'default' arm
+Error: This match does not cover -2147483648..=0, 3..=2147483647
     ╭─[ tests/ui/match/coverage_suggests_arms.zr:21:5 ]
     │
  21 │     match n {
     │     ────┬────
-    │         ╰────── A match on i32 needs a 'default' arm
+    │         ╰────── This match does not cover -2147483648..=0, 3..=2147483647
     │
-    │ Help: add a default arm for the values no other arm takes
+    │ Help: add an arm for each, or a default arm
     │           default => {}
 ────╯
 Error: This value is already matched by an earlier arm
@@ -57,14 +57,14 @@ Error: 'default' goes last, after every other arm
     │
     │ Help: move the default arm to the end of the match
 ────╯
-Error: A match on i32 needs a 'default' arm
+Error: This match does not cover -2147483648..=0, 3..=2147483647
     ╭─[ tests/ui/match/coverage_suggests_arms.zr:33:5 ]
     │
  33 │     match n {
     │     ────┬────
-    │         ╰────── A match on i32 needs a 'default' arm
+    │         ╰────── This match does not cover -2147483648..=0, 3..=2147483647
     │
-    │ Help: add a default arm for the values no other arm takes
+    │ Help: add an arm for each, or a default arm
     │           ,
     │                   default => {}
 ────╯
@@ -84,6 +84,25 @@ Error: This match does not cover Color::Green, Color::Blue
  43 │     return match c {
     │            ────┬────
     │                ╰────── This match does not cover Color::Green, Color::Blue
+    │
+    │ Help: add an arm for each, or a default arm
+────╯
+Error: This match does not cover 0
+    ╭─[ tests/ui/match/coverage_suggests_arms.zr:48:5 ]
+    │
+ 48 │     match s {
+    │     ────┬────
+    │         ╰────── This match does not cover 0
+    │
+    │ Help: add an arm for each, or a default arm
+    │           default => {}
+────╯
+Error: This match does not cover 101..=149, 151..=199, 255
+    ╭─[ tests/ui/match/coverage_suggests_arms.zr:52:12 ]
+    │
+ 52 │     return match b {
+    │            ────┬────
+    │                ╰────── This match does not cover 101..=149, 151..=199, 255
     │
     │ Help: add an arm for each, or a default arm
 ────╯

@@ -38,7 +38,8 @@ against the length, arithmetic is not checked for overflow, `unwrap` does
 not check for `None`, and `assert` disappears along with its condition. A
 program without bugs gives the same results, sooner. A program with one of
 those bugs does whatever the machine happens to do: read the wrong memory,
-give a wrong number, or crash without saying where.
+give a wrong number, or crash without saying where. Under `zeru test`, the
+asserts written in a `#test` block stay.
 
 Use it for code that is well tested and where speed matters, like a
 simulation or a number-crunching tool, after it runs cleanly in the other
