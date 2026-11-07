@@ -72,6 +72,7 @@ pub enum StatementKind {
     VecInsert(Place, Operand, Operand),
     VecClear(Place),
     VecReserve(Place, Operand),
+    VecExtend(Place, Operand),
     VecShrinkToFit(Place),
     CopyBytes(Operand, Operand, Operand),
     /// A vector written to the start of a slice that writes.
@@ -253,7 +254,9 @@ impl StatementKind {
     fn operands(&self) -> Vec<&Operand> {
         match self {
             StatementKind::Assign(_, rvalue) => rvalue.operands(),
-            StatementKind::VecPush(_, item) | StatementKind::VecReserve(_, item) => vec![item],
+            StatementKind::VecPush(_, item)
+            | StatementKind::VecReserve(_, item)
+            | StatementKind::VecExtend(_, item) => vec![item],
             StatementKind::VecInsert(_, at, item) => vec![at, item],
             StatementKind::CopyBytes(to, from, count) => vec![to, from, count],
             StatementKind::SimdStore(to, value) => vec![to, value],

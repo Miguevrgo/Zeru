@@ -400,6 +400,7 @@ impl<'a> Cx<'a> {
             | StatementKind::VecInsert(place, ..)
             | StatementKind::VecClear(place)
             | StatementKind::VecReserve(place, _)
+            | StatementKind::VecExtend(place, _)
             | StatementKind::VecShrinkToFit(place) => out.push((place.clone(), Role::Realloc)),
             StatementKind::StorageDead(local) => out.push((Place::local(*local), Role::Dead)),
             StatementKind::Asm(asm) => {

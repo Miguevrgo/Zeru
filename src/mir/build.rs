@@ -1626,6 +1626,10 @@ impl<'a> Builder<'a> {
                         let more = operand(self, 1);
                         return self.push(StatementKind::VecReserve(held, more));
                     }
+                    Builtin::VecExtend => {
+                        let other = operand(self, 1);
+                        return self.push(StatementKind::VecExtend(held, other));
+                    }
                     Builtin::VecShrinkToFit => {
                         return self.push(StatementKind::VecShrinkToFit(held));
                     }

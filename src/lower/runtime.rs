@@ -576,6 +576,29 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         self.reserve(vec, ty, needed);
     }
 
+    /// `extend(other)`: a copy of each element of `other` after the last,
+    /// all their bytes at once when they own nothing.
+    pub(super) fn vec_extend(&mut self, place: &Place, other: &Operand) {
+        let (from, count) = self.slice_parts(other);
+        let (vec, ty, elem) = self.vec_at(place);
+        let current = self.load_field(vec, ty, 1).into_int_value();
+        let grown = self.builder.build_int_add(current, count, "grown").unwrap();
+        self.reserve(vec, ty, grown);
+        let data = self.load_field(vec, ty, 0).into_pointer_value();
+        let end = self.buffer_slot(data, elem, current);
+        if self.program.needs_drop(elem) {
+            self.counted_loop(count, |this, at| {
+                let to = this.buffer_slot(end, elem, at);
+                let from = this.buffer_slot(from, elem, at);
+                this.call_copy(to, from, elem);
+            });
+        } else {
+            let size = self.bytes_for(elem, count);
+            self.builder.build_memcpy(end, 1, from, 1, size).unwrap();
+        }
+        self.store_field(vec, ty, 1, grown);
+    }
+
     pub(super) fn vec_shrink(&mut self, place: &Place) {
         let (vec, ty, elem) = self.vec_at(place);
         let current = self.load_field(vec, ty, 1).into_int_value();

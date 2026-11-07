@@ -21,7 +21,7 @@ fn add(a: Value, b: Value) Value {
         }
         (Value::Text(x), Value::Text(y)) => {
             var joined = x;
-            joined.push_str(y);
+            joined.extend(y);
             return Value::Text(joined);
         }
         (Value::List(x), _) => {

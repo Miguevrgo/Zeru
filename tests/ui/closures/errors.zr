@@ -45,10 +45,10 @@ fn main() {
     var same = words.map(fn(w) w);
     var lens = words.map(keep);
     var grow = fn(var t: String) {
-        t.push_str("x");
+        t.extend("x");
     };
     var lent = words.map(fn(w) {
-        w.push_str("!");
+        w.extend("!");
         return 0;
     });
     var nothing = words.map(fn(w) {

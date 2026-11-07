@@ -393,6 +393,7 @@ pub enum Builtin {
     VecGet,
     VecClear,
     VecReserve,
+    VecExtend,
     VecShrinkToFit,
     VecNew,
     VecWithCapacity,

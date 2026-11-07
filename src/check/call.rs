@@ -23,6 +23,10 @@ const PRINTS: &[&str] = &["print", "println", "eprint", "eprintln"];
 /// emits it.
 const COPY_FN: &str = "__zeru_copy_bytes";
 
+/// Adds a copy of each element of a slice at the end of a Vec; the
+/// compiler emits it.
+const EXTEND_FN: &str = "__zeru_extend";
+
 /// The bits a hash map hashes for a key; the compiler computes them.
 const HASH_BITS_FN: &str = "__zeru_hash_bits";
 /// str methods, each the prelude's `__zeru_str_<name>` with the str first.
@@ -40,9 +44,8 @@ const STR_METHODS: &[&str] = &[
 ];
 
 /// The Vec methods written in the prelude besides the slice ones, each
-/// `__zeru_vec_<name>`, or `__zeru_string_<name>` for a String's, taking a
-/// reference to the Vec first.
-const VEC_STD_METHODS: &[&str] = &["dedup", "push_str", "extend"];
+/// `__zeru_vec_<name>`, taking a reference to the Vec first.
+const VEC_STD_METHODS: &[&str] = &["dedup", "extend"];
 
 /// The prelude's methods that only read the elements: slices have them, and
 /// a Vec reaches them through a slice of all of it.
@@ -68,7 +71,6 @@ const SLICE_MUT_METHODS: &[&str] = &[
 /// receiver declared `var`.
 const VEC_MUTATORS: &[&str] = &[
     "dedup",
-    "push_str",
     "extend",
     "push",
     "pop",
@@ -225,6 +227,21 @@ impl FnCx<'_, '_> {
             return self.mk(
                 ExprKind::Builtin(Builtin::HashBits, vec![key]),
                 Types::U64,
+                span,
+            );
+        }
+        if name == EXTEND_FN && self.local(name).is_none() {
+            let [vec, other] = args else {
+                self.error(format!("{name} takes a Vec and a slice"), span);
+                return self.error_expr(span);
+            };
+            let vec = self.expr(vec, None);
+            let ty = vec.ty;
+            let vec = self.mk(ExprKind::AddressOf(Place::Deref(Box::new(vec))), ty, span);
+            let other = self.expr(other, None);
+            return self.mk(
+                ExprKind::Builtin(Builtin::VecExtend, vec![vec, other]),
+                Types::VOID,
                 span,
             );
         }
@@ -475,11 +492,6 @@ impl FnCx<'_, '_> {
                     self.require_mutable(&place, object, span);
                 }
                 let receiver = self.address(place, ty, mutable, object.span);
-                if name == "push_str" && elem != Types::U8 {
-                    let shown = self.ty(ty);
-                    self.error(format!("push_str() needs a String, not {shown}"), span);
-                    return self.error_expr(span);
-                }
                 if SLICE_METHODS.contains(&name)
                     || SLICE_MUT_METHODS.contains(&name)
                     || VEC_STD_METHODS.contains(&name)
@@ -495,11 +507,7 @@ impl FnCx<'_, '_> {
                         Some(kind) => self.whole(receiver, kind, object.span),
                         None => receiver,
                     };
-                    let owner = match name {
-                        "push_str" => "string",
-                        _ => "vec",
-                    };
-                    let def = self.cx.prelude_def(&format!("__zeru_{owner}_{name}"));
+                    let def = self.cx.prelude_def(&format!("__zeru_vec_{name}"));
                     return self.call_def(def, vec![elem], Some(receiver), args, expected, span);
                 }
                 self.vec_method(name, elem, receiver, args, name_at, span)
@@ -724,7 +732,6 @@ impl FnCx<'_, '_> {
             }
             TyKind::Vec(elem) => {
                 let text = elem == Types::U8;
-                let std = VEC_STD_METHODS.iter().filter(|&&m| text || m != "push_str");
                 let strs = STR_METHODS.iter().filter(|_| text);
                 VEC_BUILTINS
                     .iter()
@@ -732,7 +739,7 @@ impl FnCx<'_, '_> {
                     .chain(&["copy"])
                     .chain(SLICE_MUT_METHODS)
                     .chain(SLICE_METHODS)
-                    .chain(std)
+                    .chain(VEC_STD_METHODS)
                     .chain(strs)
                     .copied()
                     .collect()

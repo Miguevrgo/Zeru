@@ -11,7 +11,7 @@ fn main_texts() {
     println("[{}]", format("{} {} {} {:>5}|{:.2}|{:x}", v, o, t, "ab", 2.0 / 3.0, 255));
     var big = String.new();
     for i in 0..2000 {
-        big.push_str(format("{},", i));
+        big.extend(format("{},", i));
     }
     println("{} {}", big.len(), big.ends_with("1999,"));
     const long = format("{}{}", big, big);

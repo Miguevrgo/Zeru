@@ -33,11 +33,11 @@ Error: Cannot change 'v' while 'part' still refers into it
 Error: Cannot change 's' while a reference into it is still in use
     ╭─[ tests/ui/strings_printing/views_are_borrows.zr:17:5 ]
     │
- 17 │     s.push_str(s);
-    │     ──────┬────┬─
-    │           ╰──────── this can free or move what a reference points at
-    │                │
-    │                ╰─── borrowed here
+ 17 │     s.extend(s);
+    │     ─────┬───┬─
+    │          ╰─────── this can free or move what a reference points at
+    │              │
+    │              ╰─── borrowed here
     │
     │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 's'
 ────╯

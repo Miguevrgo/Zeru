@@ -91,7 +91,7 @@ println("{}", v.get(10).is_none()); // true
 ```
 
 `extend` takes a slice, so it adds from a Vec, an array or part of
-either. Elements that own memory are copied, as `copy()` does:
+either, and adds text to a String. Elements that own memory are copied, as `copy()` does:
 
 ```zeru
 var v: Vec<i32> = Vec[1, 2];

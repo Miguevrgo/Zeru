@@ -1,0 +1,6 @@
+fn main() {
+    var s = String.from("a");
+    s.push_str("b");
+    var nums: Vec<i32> = Vec[1];
+    nums.extend("x");
+}

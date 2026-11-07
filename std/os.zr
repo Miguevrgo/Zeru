@@ -160,7 +160,7 @@ pub fn set_env(name: str, value: str) ! {
     }
     var entry = String.from(name);
     entry.push('=');
-    entry.push_str(value);
+    entry.extend(value);
     const table = environment();
     match find_env(table, name) {
         Some(at) => (*table)[at] = entry,
@@ -355,7 +355,7 @@ fn locate(program: str) String! {
     for dir in dirs.split(":") {
         var full = String.from(dir);
         full.push('/');
-        full.push_str(program);
+        full.extend(program);
         const c = c_string(full);
         if syscall2(SYS_ACCESS, (&c[0]) as i64, 1) == 0 {
             return full;
@@ -370,7 +370,7 @@ fn c_list(texts: &Vec<str>, packed: &var String) Vec<u64> {
     var starts: Vec<usize> = Vec.new();
     for text in texts {
         starts.push(packed.len());
-        packed.push_str(text);
+        packed.extend(text);
         packed.push(0);
     }
     var list: Vec<u64> = Vec.new();

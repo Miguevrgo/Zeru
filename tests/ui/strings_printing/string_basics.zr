@@ -12,7 +12,7 @@ fn make(c: u8) String {
 
 fn main() {
     var greeting = String.from("hello");
-    greeting.push_str(", world");
+    greeting.extend(", world");
     greeting.push('!');
     println("{} {} {}", greeting, greeting.len(), greeting[0] == 'h');
     greeting[0] = 'H';

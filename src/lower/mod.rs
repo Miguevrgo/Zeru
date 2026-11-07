@@ -157,6 +157,7 @@ fn fixed_locals(body: &Body) -> Vec<Option<&Constant>> {
                 | StatementKind::VecInsert(place, ..)
                 | StatementKind::VecClear(place)
                 | StatementKind::VecReserve(place, _)
+                | StatementKind::VecExtend(place, _)
                 | StatementKind::VecShrinkToFit(place) => touched[place.local.0 as usize] += 2,
                 StatementKind::Asm(asm) => {
                     for place in &asm.outputs {
@@ -438,6 +439,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             StatementKind::VecInsert(vec, at, item) => self.vec_insert(vec, Some(at), item),
             StatementKind::VecClear(vec) => self.vec_clear(vec),
             StatementKind::VecReserve(vec, more) => self.vec_reserve(vec, more),
+            StatementKind::VecExtend(vec, other) => self.vec_extend(vec, other),
             StatementKind::VecShrinkToFit(vec) => self.vec_shrink(vec),
             StatementKind::CopyBytes(to, from, count) => {
                 let to = self.operand(to).imm().into_pointer_value();

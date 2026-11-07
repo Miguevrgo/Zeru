@@ -9,7 +9,7 @@ fn collect(out: &var Vec<str>, src: &var String) {
 }
 
 fn fill(out: &var Vec<str>, src: &var String) {
-    src.push_str("!");
+    src.extend("!");
     out.push(*src);
 }
 
@@ -27,7 +27,7 @@ fn main() {
     var seen: str = "";
     const both = fn() {
         seen = d;
-        d.push_str(" and more");
+        d.extend(" and more");
     };
     both();
     println("{} {} {} {}", view, views, more, seen);

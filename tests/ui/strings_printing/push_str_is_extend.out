@@ -1,0 +1,20 @@
+status: compile error
+-- stderr
+Error: String has no method 'push_str'
+   ╭─[ tests/ui/strings_printing/push_str_is_extend.zr:3:7 ]
+   │
+ 3 │     s.push_str("b");
+   │       ────┬───
+   │           ╰───── String has no method 'push_str'
+   │
+   │ Help: Zeru calls it 'extend'
+   │           s.extend("b");
+───╯
+Error: 'Vec.extend' takes 'other' as &[i32], but this is str
+   ╭─[ tests/ui/strings_printing/push_str_is_extend.zr:5:17 ]
+   │
+ 5 │     nums.extend("x");
+   │                 ─┬─
+   │                  ╰─── this is str
+───╯
+[-] Error: aborting due to previous error

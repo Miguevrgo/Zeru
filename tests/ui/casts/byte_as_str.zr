@@ -5,8 +5,8 @@ fn main() {
     const text = "zeru";
     var out = String.new();
     for b in text {
-        out.push_str(b as str);
-        out.push_str("-");
+        out.extend(b as str);
+        out.extend("-");
     }
     println("[{}] [{}] [{}] {}", c as str, text[1] as str, COLON, out);
     println("{} {} {} {}", (c as str).len(), c as str == ":", 'a' as str, 98 as str);

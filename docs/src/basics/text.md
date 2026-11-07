@@ -113,12 +113,12 @@ println("{}", block.lines().len()); // 2
 ## String
 
 `String` is text that grows. Make one empty or from a `str`, then add text
-or bytes to it:
+to it with `extend` or a byte with `push`:
 
 ```zeru
 var s = String.from("hello");
-s.push_str(", ");
-s.push_str("world");
+s.extend(", ");
+s.extend("world");
 s.push('!');
 println("{} ({} bytes)", s, s.len()); // hello, world! (13 bytes)
 ```
@@ -154,7 +154,7 @@ use the compiler does not let the `String` change or go away:
 fn main() {
     var s = String.from("abc");
     var view = s[0..2];
-    s.push_str("def");
+    s.extend("def");
     println("{}", view);
 }
 ```
@@ -163,5 +163,5 @@ fn main() {
 Error: Cannot change 's' while 'view' still refers into it
 ```
 
-The `push_str` above may move the text to a bigger block of memory, which
+The `extend` above may move the text to a bigger block of memory, which
 would leave `view` pointing at freed memory, so the compiler refuses it.

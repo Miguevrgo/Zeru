@@ -60,6 +60,7 @@ const METHOD_ALIASES: &[(&str, &str)] = &[
     ("delete", "remove"),
     ("pop_back", "pop"),
     ("strip", "trim"),
+    ("push_str", "extend"),
 ];
 
 /// The Zeru name for `name` in `table`, among those `exists` accepts.

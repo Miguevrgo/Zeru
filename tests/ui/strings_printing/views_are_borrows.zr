@@ -14,7 +14,7 @@ fn cleared() {
 
 fn appends_itself() {
     var s = String.from("abc");
-    s.push_str(s);
+    s.extend(s);
 }
 
 fn main() {

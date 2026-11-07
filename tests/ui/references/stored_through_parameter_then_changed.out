@@ -30,9 +30,9 @@ Error: Cannot change 'd' while 'seen' still refers into it
  29 │         seen = d;
     │                ┬
     │                ╰── 'seen' borrows here
- 30 │         d.push_str(" and more");
-    │         ───────────┬───────────
-    │                    ╰───────────── this can free or move what 'seen' points at
+ 30 │         d.extend(" and more");
+    │         ──────────┬──────────
+    │                   ╰──────────── this can free or move what 'seen' points at
     │
     │ Help: finish with 'seen' before this, or keep a copy of the value instead of a reference into 'd'
 ────╯

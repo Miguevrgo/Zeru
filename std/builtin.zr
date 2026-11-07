@@ -113,7 +113,7 @@ struct OutStream {
 
     fn flush(var self) i64 {
         if self.fd < 0 {
-            self.text.push_str(self.buffer[..self.index]);
+            self.text.extend(self.buffer[..self.index]);
             self.index = 0;
             return 0;
         }
@@ -669,12 +669,12 @@ fn __zeru_quoted(text: str) String {
     var out = String.from("\"");
     for byte in text {
         match byte {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\t' => out.push_str("\\t"),
-            '\r' => out.push_str("\\r"),
-            0 => out.push_str("\\0"),
+            '"' => out.extend("\\\""),
+            '\\' => out.extend("\\\\"),
+            '\n' => out.extend("\\n"),
+            '\t' => out.extend("\\t"),
+            '\r' => out.extend("\\r"),
+            0 => out.extend("\\0"),
             default => out.push(byte),
         }
     }
@@ -714,7 +714,7 @@ fn __zeru_pad(text: str, fill: u8, align: u8, zero: bool, width: usize) String {
     for i in 0..before {
         padded.push(pad);
     }
-    padded.push_str(text[start..]);
+    padded.extend(text[start..]);
     for i in before..gap {
         padded.push(pad);
     }
@@ -1275,10 +1275,7 @@ fn __zeru_vec_dedup<T: Eq>(v: &var Vec<T>) {
 
 // `v.extend(other)`: a copy of each element of `other` added at the end.
 fn __zeru_vec_extend<T>(v: &var Vec<T>, other: &[T]) {
-    v.reserve(other.len());
-    for x in other {
-        v.push(x.copy());
-    }
+    __zeru_extend(v, other);
 }
 
 // `v.windows(n)`: a view of every run of `n` elements next to each other,
@@ -1340,14 +1337,8 @@ fn __zeru_vec_swap<T>(v: &var [T], i: usize, j: usize) {
 // `String.from(text)`: a String holding a copy of `text`.
 fn __zeru_string_from(text: str) String {
     var s = String.new();
-    s.push_str(text);
+    s.extend(text);
     return s;
-}
-
-// `s.push_str(text)`: `text` added at the end of the String `s`.
-fn __zeru_string_push_str<T>(v: &var Vec<T>, text: str) {
-    __zeru_copy_bytes(__zeru_room(v, text.len()), text as *u8, text.len());
-    __zeru_filled(v, text.len());
 }
 
 // The address of room for `count` more bytes at the end of the String `v`,
@@ -1474,9 +1465,9 @@ fn __zeru_vec_join<T>(parts: &[T], sep: str) String {
     s.reserve(total);
     for i in 0..parts.len() {
         if i > 0 {
-            s.push_str(sep);
+            s.extend(sep);
         }
-        s.push_str(parts[i]);
+        s.extend(parts[i]);
     }
     return s;
 }

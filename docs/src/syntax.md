@@ -88,7 +88,7 @@ var t = (1, true);  t.0;
 var s: str = "hello";               s.len();  s[0];  s[1..3];
 s.is_empty();  b as str;           // b: u8, its one-byte text
 s.split();  s.split(",");  s.lines();  s.contains("a");  s.find("a");  s.trim();  s.starts_with("he");  s.parse_int();
-var owned = String.from("hi");      owned.push_str("!");  owned.push('?');
+var owned = String.from("hi");      owned.extend("!");  owned.push('?');
 var csv = s.split(",").join(";");  // a String, the parts with ";" between
 println("{} and {}", 1, "two");     println("{}", v);  // [1, 2]
 println("{:.2} {:>5} {:08b} {:x}", 2.0 / 3.0, "ab", 5, 255);  // 0.67    ab 00000101 ff

@@ -147,9 +147,9 @@ Error: 't' cannot be var: a closure only borrows what it is given
 Error: Cannot change 'w': a closure only borrows what it is given
     ╭─[ tests/ui/closures/errors.zr:51:9 ]
     │
- 51 │         w.push_str("!");
-    │         ───────┬───────
-    │                ╰───────── Cannot change 'w': a closure only borrows what it is given
+ 51 │         w.extend("!");
+    │         ──────┬──────
+    │               ╰──────── Cannot change 'w': a closure only borrows what it is given
     │
     │ Help: change a copy of it, as in var own = w.copy();
 ────╯

@@ -4,7 +4,7 @@
 use inkwell::{
     FloatPredicate, IntPredicate,
     types::{BasicTypeEnum, VectorType},
-    values::{BasicValueEnum, PointerValue, VectorValue},
+    values::{BasicValueEnum, IntValue, PointerValue, VectorValue},
 };
 
 use crate::mir::Operand;
@@ -70,22 +70,25 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         self.load_vector(ty, address)
     }
 
-    /// Where the elements of a slice operand start.
-    fn slice_data(&mut self, operand: &Operand) -> PointerValue<'ctx> {
+    /// Where the elements of a slice operand start, and how many it has.
+    pub(super) fn slice_parts(
+        &mut self,
+        operand: &Operand,
+    ) -> (PointerValue<'ctx>, IntValue<'ctx>) {
         let ty = self.operand_ty(operand);
-        match self.operand(operand) {
-            Val::Mem(slice) => self.load_field(slice, ty, 0).into_pointer_value(),
-            value => self
-                .builder
-                .build_extract_value(value.imm().into_struct_value(), 0, "data")
-                .unwrap()
-                .into_pointer_value(),
-        }
+        let [data, len] = match self.operand(operand) {
+            Val::Mem(slice) => [0, 1].map(|at| self.load_field(slice, ty, at)),
+            value => {
+                let slice = value.imm().into_struct_value();
+                [0, 1].map(|at| self.builder.build_extract_value(slice, at, "part").unwrap())
+            }
+        };
+        (data.into_pointer_value(), len.into_int_value())
     }
 
     /// `simd::store`: `value` written over the first lanes of `to`.
     pub(super) fn simd_store(&mut self, to: &Operand, value: &Operand) {
-        let data = self.slice_data(to);
+        let (data, _) = self.slice_parts(to);
         let ty = self.operand_ty(value);
         let lanes = self.vector(value);
         self.store_vector(ty, data, lanes);
@@ -100,7 +103,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         ty: Ty,
     ) -> BasicValueEnum<'ctx> {
         if op == SimdOp::Load {
-            let data = self.slice_data(&operands[0]);
+            let (data, _) = self.slice_parts(&operands[0]);
             return self.load_vector(ty, data).into();
         }
         let first = self.operand_ty(&operands[0]);

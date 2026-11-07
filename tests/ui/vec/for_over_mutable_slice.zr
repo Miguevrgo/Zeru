@@ -13,7 +13,7 @@ fn main() {
     println("{} {}", v, c);
     var names: Vec<String> = Vec[String.from("a"), String.from("b")];
     for n in &var names[..] {
-        n.push_str("!");
+        n.extend("!");
     }
     println("{}", names);
 }
