@@ -3,10 +3,11 @@
 // Addresses are text: "127.0.0.1:8080", "[::1]:8080", or a path for Unix
 // sockets. Port 0 lets the system pick a free one, which `local_addr` tells.
 
+import std.fs;
+
 const SYS_POLL: i64 = 7;
 const SYS_SOCKET: i64 = 41;
 const SYS_CONNECT: i64 = 42;
-const SYS_ACCEPT: i64 = 43;
 const SYS_SENDTO: i64 = 44;
 const SYS_RECVFROM: i64 = 45;
 const SYS_BIND: i64 = 49;
@@ -16,13 +17,14 @@ const SYS_GETPEERNAME: i64 = 52;
 const SYS_SETSOCKOPT: i64 = 54;
 const SYS_GETSOCKOPT: i64 = 55;
 const SYS_FCNTL: i64 = 72;
-const SYS_UNLINK: i64 = 87;
+const SYS_ACCEPT4: i64 = 288;
 
 const AF_UNIX: u8 = 1;
 const AF_INET: u8 = 2;
 const AF_INET6: u8 = 10;
 const SOCK_STREAM: i64 = 1;
 const SOCK_DGRAM: i64 = 2;
+const SOCK_CLOEXEC: i64 = 524288;
 const SOL_SOCKET: i64 = 1;
 const SO_REUSEADDR: i64 = 2;
 const SO_ERROR: i64 = 4;
@@ -92,6 +94,9 @@ fn groups(text: str, out: &var Vec<u64>) ! {
     }
     const parts = text.split(":");
     for part in parts {
+        if part.len() > 4 {
+            return Err(EINVAL);
+        }
         out.push(number(part, 16, 65535)!);
     }
 }
@@ -148,16 +153,22 @@ fn ip_addr(text: str) Raw! {
     raw.bytes[0] = AF_INET;
     raw.len = 16;
     for i in 0..4 {
+        if parts[i].len() > 1 && parts[i][0] == '0' {
+            return Err(EINVAL);
+        }
         raw.bytes[4 + i] = number(parts[i], 10, 255)! as u8;
     }
     return raw;
 }
 
 // `path` as a Unix socket address: ENAMETOOLONG when it does not fit,
-// EINVAL when it holds a NUL.
+// EINVAL when it is empty or holds a NUL.
 fn unix_addr(path: str) Raw! {
     if path.len() >= UNIX_PATH_MAX {
         return Err(ENAMETOOLONG);
+    }
+    if path.len() == 0 {
+        return Err(EINVAL);
     }
     var raw = empty();
     raw.bytes[0] = AF_UNIX;
@@ -238,7 +249,7 @@ fn timed(r: i64) i64! {
 
 // A socket of `kind` bound to `addr`, listening when it is a stream.
 fn bound(addr: &Raw, kind: i64) i64! {
-    const fd = sys_result(syscall3(SYS_SOCKET, addr.bytes[0] as i64, kind, 0))!;
+    const fd = new_fd(syscall3(SYS_SOCKET, addr.bytes[0] as i64, kind | SOCK_CLOEXEC, 0))!;
     const one: i32 = 1;
     if kind == SOCK_STREAM {
         syscall5(SYS_SETSOCKOPT, fd, SOL_SOCKET, SO_REUSEADDR, (&one) as i64, 4);
@@ -270,7 +281,7 @@ fn poll(entries: i64, count: usize, ms: u64?) i64 {
 // A stream socket connected to `addr`, giving up after `ms` milliseconds
 // when there are some.
 fn dial(addr: &Raw, ms: u64?) i64! {
-    const fd = sys_result(syscall3(SYS_SOCKET, addr.bytes[0] as i64, SOCK_STREAM, 0))!;
+    const fd = new_fd(syscall3(SYS_SOCKET, addr.bytes[0] as i64, SOCK_STREAM | SOCK_CLOEXEC, 0))!;
     const flags = syscall2(SYS_FCNTL, fd, F_GETFL);
     if ms.is_some() {
         syscall3(SYS_FCNTL, fd, F_SETFL, flags | O_NONBLOCK);
@@ -306,7 +317,7 @@ fn dial(addr: &Raw, ms: u64?) i64! {
 
 // The next connection waiting on the listening socket `fd`.
 fn accept(fd: i64) i64! {
-    return sys_result(syscall3(SYS_ACCEPT, fd, 0, 0));
+    return new_fd(syscall5(SYS_ACCEPT4, fd, 0, 0, SOCK_CLOEXEC, 0));
 }
 
 // Up to `count` bytes from `fd` at the end of `buf`; how many came.
@@ -849,7 +860,7 @@ pub struct UdpSocket {
 // named by a path.
 //
 // It creates the socket file at the path, and removes it when it goes out
-// of scope.
+// of scope, even after the working directory changes.
 //
 // # Examples
 //
@@ -866,17 +877,24 @@ pub struct UdpSocket {
 // ```
 pub struct UnixListener {
     fd: i64,
-    addr: Raw,
+    path: String,
 
     // Starts listening for connections at `path`.
     //
     // # Errors
     //
     // `EADDRINUSE` when the path exists, `ENOENT` when its directory does
-    // not, 36 (ENAMETOOLONG) for a path of 108 bytes or more.
+    // not, 36 (ENAMETOOLONG) for a path of 108 bytes or more, `EINVAL` for
+    // an empty one.
     pub fn bind(path: str) UnixListener! {
         const raw = unix_addr(path)!;
-        return UnixListener { fd: bound(&raw, SOCK_STREAM)!, addr: raw };
+        var full = String.new();
+        if path[0] != '/' {
+            full = fs::current_dir()!;
+            full.push('/');
+        }
+        full.extend(path);
+        return UnixListener { fd: bound(&raw, SOCK_STREAM)!, path: full };
     }
 
     // Waits for the next client to connect and returns the connection.
@@ -896,7 +914,7 @@ pub struct UnixListener {
 
     fn drop(var self) {
         syscall1(SYS_CLOSE, self.fd);
-        syscall1(SYS_UNLINK, (&self.addr.bytes[2]) as i64);
+        var _ = fs::remove_file(self.path);
     }
 }
 

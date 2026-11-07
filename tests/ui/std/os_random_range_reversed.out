@@ -1,0 +1,3 @@
+status: signal 6
+-- stderr
+panic at std/os.zr:599:5: random_range takes first <= last

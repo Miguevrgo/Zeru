@@ -1,0 +1,5 @@
+//@ checked
+import std.os;
+fn main() {
+    println("{}", os::random_range(6, 1));
+}

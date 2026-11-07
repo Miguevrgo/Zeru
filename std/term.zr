@@ -174,20 +174,39 @@ fn byte(ms: i64) u8? {
 // key not listed in `Key`, as F1. An Escape alone is one that nothing
 // follows at once; with more, it starts the sequence of a key as an arrow.
 pub fn key(ms: u64) Key? {
-    const first = byte(if ms == 0 { -1 } else { ms as i64 })?;
+    var wait: i64 = -1;
+    if ms > 0 {
+        wait = 2147483647;
+        if ms < 2147483647 {
+            wait = ms as i64;
+        }
+    }
+    const first = byte(wait)?;
     if first == 27 {
-        const kind = byte(25);
+        var kind = byte(25);
         if kind.is_none() {
             return Key::Escape;
         }
-        if kind.unwrap() != '[' && kind.unwrap() != 'O' {
+        const alt = kind == 27;
+        if alt {
+            kind = byte(25);
+        }
+        if kind != '[' && kind != 'O' {
             return None;
         }
         var last = byte(25)?;
-        var number: u8 = 0;
-        while last >= '0' && last <= '9' {
-            number = number *% 10 +% (last - '0');
+        var number: u32 = 0;
+        var plain = !alt;
+        while last >= 0x20 && last <= 0x3F {
+            if last >= '0' && last <= '9' && number < 10000 {
+                number = number * 10 + (last - '0') as u32;
+            } else {
+                plain = false;
+            }
             last = byte(25)?;
+        }
+        if !plain {
+            return None;
         }
         return match (last, number) {
             ('A', _) => Key::Up,

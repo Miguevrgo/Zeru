@@ -342,7 +342,7 @@ fn c_string(text: str) String {
 }
 
 // The file `program` names: itself when it holds a "/", else the first
-// one of that name in the directories of $PATH that may be run.
+// file of that name in the directories of $PATH that may be run.
 fn locate(program: str) String! {
     if program.contains("/") {
         return String.from(program);
@@ -357,7 +357,7 @@ fn locate(program: str) String! {
         full.push('/');
         full.extend(program);
         const c = c_string(full);
-        if syscall2(SYS_ACCESS, (&c[0]) as i64, 1) == 0 {
+        if fs::is_file(full) && syscall2(SYS_ACCESS, (&c[0]) as i64, 1) == 0 {
             return full;
         }
     }
@@ -381,6 +381,18 @@ fn c_list(texts: &Vec<str>, packed: &var String) Vec<u64> {
     return list;
 }
 
+// A pipe: its read end and its write end, both above the standard streams.
+fn pipe() (fs::File, fs::File)! {
+    var ends: Array<i32, 2> = [0; 2];
+    sys_result(syscall2(SYS_PIPE2, (&ends[0]) as i64, O_CLOEXEC))!;
+    const read = new_fd(ends[0] as i64);
+    if read.is_err() {
+        syscall1(SYS_CLOSE, ends[1] as i64);
+    }
+    const reader = fs::File { fd: read!, buffer: Vec.new(), start: 0 };
+    return (reader, fs::File { fd: new_fd(ends[1] as i64)!, buffer: Vec.new(), start: 0 });
+}
+
 // Start the file `path` with `args`, its standard output going to `out`
 // and its error output to `err` unless they are -1; its pid, or the errno
 // of the `execve` that could not start it, which a pipe closed by a
@@ -399,12 +411,10 @@ fn spawn(path: str, args: Vec<str>, out: i32, err: i32) i64! {
     var env_packed = String.new();
     const argv = c_list(&argv_texts, &var argv_packed);
     const envp = c_list(&env_texts, &var env_packed);
-    var ends: Array<i32, 2> = [0; 2];
-    sys_result(syscall2(SYS_PIPE2, (&ends[0]) as i64, O_CLOEXEC))!;
-    const report = fs::File { fd: ends[0] as i64, buffer: Vec.new(), start: 0 };
+    const (report, sent) = pipe()!;
     var pid: i64 = 0;
     {
-        const reported = fs::File { fd: ends[1] as i64, buffer: Vec.new(), start: 0 };
+        const reported = sent;
         __zeru_flush();
         pid = sys_result(syscall1(SYS_FORK, 0))!;
         if pid == 0 {
@@ -506,20 +516,14 @@ pub struct Output {
 // ```
 pub fn output(program: str, args: Vec<str>) Output! {
     const path = locate(program)!;
-    var fds: Array<i32, 4> = [0; 4];
-    sys_result(syscall2(SYS_PIPE2, (&fds[0]) as i64, O_CLOEXEC))!;
-    var out = fs::File { fd: fds[0] as i64, buffer: Vec.new(), start: 0 };
-    var spawned: i64! = 0;
+    var (out, out_end) = pipe()!;
+    var (err, err_end) = pipe()!;
+    const pid = spawn(path, args, out_end.fd as i32, err_end.fd as i32)!;
     {
-        const out_end = fs::File { fd: fds[1] as i64, buffer: Vec.new(), start: 0 };
-        sys_result(syscall2(SYS_PIPE2, (&fds[2]) as i64, O_CLOEXEC))!;
-        const err_end = fs::File { fd: fds[3] as i64, buffer: Vec.new(), start: 0 };
-        spawned = spawn(path, args, fds[1], fds[3]);
+        const _ends = (out_end, err_end);
     }
-    var err = fs::File { fd: fds[2] as i64, buffer: Vec.new(), start: 0 };
-    const pid = spawned!;
     var result = Output { code: 0, stdout: String.new(), stderr: String.new() };
-    var polls: Array<i32, 4> = [fds[0], 1, fds[2], 1];
+    var polls: Array<i32, 4> = [out.fd as i32, 1, err.fd as i32, 1];
     var open = 2;
     while open > 0 {
         const r = syscall3(SYS_POLL, (&polls[0]) as i64, 2, -1);
@@ -592,6 +596,7 @@ pub fn random() u64 {
 // println("{}", die >= 1 && die <= 6); // true
 // ```
 pub fn random_range(first: u64, last: u64) u64 {
+    assert(first <= last, "random_range takes first <= last");
     const span = last - first;
     if span == 18446744073709551615 {
         return random();

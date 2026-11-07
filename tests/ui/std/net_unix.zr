@@ -1,4 +1,5 @@
 import std.net;
+import std.fs;
 fn main() {
     const listener = net::UnixListener.bind("ui_net_unix.sock").unwrap();
     println("{}", listener.local_addr().unwrap());
@@ -18,4 +19,20 @@ fn main() {
     println("{}", buf);
     server.set_timeout(10).unwrap();
     println("{}", server.read(&var buf, 64).unwrap_err() == ETIMEDOUT);
+    println(
+        "{} {}",
+        net::UnixListener.bind("").unwrap_err(),
+        net::UnixStream.connect("").unwrap_err(),
+    );
+    fs::create_dir("ui_net_unix").unwrap();
+    fs::write_file("ui_net_unix/other.sock", "unrelated").unwrap();
+    {
+        const _other = net::UnixListener.bind("other.sock").unwrap();
+        fs::set_current_dir("ui_net_unix").unwrap();
+    }
+    println("{}", fs::read_file("other.sock").unwrap());
+    fs::remove_file("other.sock").unwrap();
+    fs::set_current_dir("..").unwrap();
+    println("{}", fs::exists("other.sock"));
+    fs::remove_dir("ui_net_unix").unwrap();
 }

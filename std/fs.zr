@@ -31,9 +31,11 @@ const O_TRUNC: i64 = 512;
 const O_APPEND: i64 = 1024;
 const O_DIRECTORY: i64 = 65536;
 const O_PATH: i64 = 2097152;
+const O_CLOEXEC: i64 = 524288;
 const AT_FDCWD: i64 = -100;
 const AT_SYMLINK_NOFOLLOW: i64 = 256;
 const UTIME_OMIT: i64 = 1073741822;
+const ENOSYS: i64 = 38;
 
 // Longest path Linux takes, its closing NUL included.
 const PATH_MAX: usize = 4096;
@@ -110,8 +112,9 @@ fn kind_of(mode: u32) Kind {
 // import std.fs;
 //
 // fs::write_file("data.txt", "12345").unwrap();
+// fs::set_permissions("data.txt", 0o640).unwrap();
 // const meta = fs::metadata("data.txt").unwrap();
-// println("{} {}", meta.size, meta.mode == 0o644); // 5 true
+// println("{} {}", meta.size, meta.mode == 0o640); // 5 true
 // match meta.kind {
 //     fs::Kind::File => println("a file"), // a file
 //     default => println("something else"),
@@ -152,7 +155,7 @@ fn stat_path(nr: i64, path: str) Metadata! {
 fn open_path(path: str, flags: i64, mode: i64) i64! {
     var buf: Array<u8, PATH_MAX> = [0; PATH_MAX];
     const p = c_path(path, &buf[0])!;
-    return sys_result(syscall3(SYS_OPEN, p, flags, mode));
+    return new_fd(syscall3(SYS_OPEN, p, flags | O_CLOEXEC, mode));
 }
 
 // Write all of `data` to `fd`.
@@ -216,7 +219,7 @@ pub fn read_file(path: str) String! {
 // Writes `data` to the file at `path`, creating it or replacing what it
 // held.
 //
-// A new file gets permissions `0o644`.
+// A new file gets permissions `0o644` less the process's umask.
 //
 // # Errors
 //
@@ -238,7 +241,7 @@ pub fn write_file(path: str, data: str) ! {
 
 // Adds `data` at the end of the file at `path`, creating it when missing.
 //
-// A new file gets permissions `0o644`.
+// A new file gets permissions `0o644` less the process's umask.
 //
 // # Errors
 //
@@ -308,7 +311,7 @@ pub struct File {
     // Opens the file at `path` for writing, creating it or emptying what it
     // held.
     //
-    // A new file gets permissions `0o644`.
+    // A new file gets permissions `0o644` less the process's umask.
     //
     // # Errors
     //
@@ -322,7 +325,7 @@ pub struct File {
     //
     // Two programs racing to create the same file cannot both succeed,
     // which makes it right for lock files. A new file gets permissions
-    // `0o644`.
+    // `0o644` less the process's umask.
     //
     // # Errors
     //
@@ -344,7 +347,7 @@ pub struct File {
     // Opens the file at `path` to write at its end, creating it when
     // missing.
     //
-    // A new file gets permissions `0o644`.
+    // A new file gets permissions `0o644` less the process's umask.
     //
     // # Errors
     //
@@ -600,23 +603,35 @@ pub fn rename(from: str, to: str) ! {
 // println("{}", fs::read_file("b.txt").unwrap()); // same
 // ```
 pub fn copy_file(from: str, to: str) ! {
-    const source = File.open(from)!;
-    const target = File.from_fd(open_path(to, O_WRONLY | O_CREAT, 0o644)!);
+    var source = File.open(from)!;
     var read: Array<i64, 18> = [0; 18];
-    var written: Array<i64, 18> = [0; 18];
     sys_result(syscall2(SYS_FSTAT, source.fd, (&read[0]) as i64))!;
+    if metadata_of(read).kind == Kind::Dir {
+        return Err(EISDIR);
+    }
+    const target = File.from_fd(open_path(to, O_WRONLY | O_CREAT, 0o644)!);
+    var written: Array<i64, 18> = [0; 18];
     sys_result(syscall2(SYS_FSTAT, target.fd, (&written[0]) as i64))!;
     if read[0] == written[0] && read[1] == written[1] {
         return Err(EINVAL);
     }
-    sys_result(syscall2(SYS_FTRUNCATE, target.fd, 0))!;
-    sys_result(syscall2(SYS_FCHMOD, target.fd, metadata_of(read).mode as i64))!;
-    while true {
-        const n = sys_result(syscall5(SYS_SENDFILE, target.fd, source.fd, 0, 1073741824, 0))!;
-        if n == 0 {
-            break;
+    var total: i64 = 0;
+    var sent = syscall5(SYS_SENDFILE, target.fd, source.fd, 0, 1073741824, 0);
+    if sent == -(EINVAL as i64) || sent == -ENOSYS {
+        var buf = String.new();
+        while source.read(&var buf, CHUNK)! > 0 {
+            write_all(target.fd, buf)!;
+            total += buf.len() as i64;
+            buf.clear();
+        }
+    } else {
+        while sys_result(sent)! > 0 {
+            total += sent;
+            sent = syscall5(SYS_SENDFILE, target.fd, source.fd, 0, 1073741824, 0);
         }
     }
+    sys_result(syscall2(SYS_FTRUNCATE, target.fd, total))!;
+    sys_result(syscall2(SYS_FCHMOD, target.fd, metadata_of(read).mode as i64))!;
 }
 
 // Returns whether there is a file, directory or anything else at `path`.
@@ -1025,7 +1040,11 @@ pub fn hard_link(target: str, path: str) ! {
 // ```
 pub fn real_path(path: str) String! {
     const opened = File.from_fd(open_path(path, O_PATH, 0)!);
-    return read_link(format("/proc/self/fd/{}", opened.fd));
+    const link = read_link(format("/proc/self/fd/{}", opened.fd))!;
+    if link.ends_with(" (deleted)") && !exists(link) {
+        return Err(ENOENT);
+    }
+    return link;
 }
 
 // Returns the working directory, which relative paths start from.

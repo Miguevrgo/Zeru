@@ -18,6 +18,9 @@ const SYS_MMAP: i64 = 9;
 const SYS_MREMAP: i64 = 25;
 const SYS_MUNMAP: i64 = 11;
 const SYS_EXIT: i64 = 60;
+const SYS_FCNTL: i64 = 72;
+
+const F_DUPFD_CLOEXEC: i64 = 1030;
 
 const PROT_READ: i64 = 1;
 const PROT_WRITE: i64 = 2;
@@ -37,6 +40,18 @@ fn sys_result(r: i64) i64! {
         return Err((-r) as i32);
     }
     return r;
+}
+
+// The new fd a syscall returned, or its error, moved to 3 or above when it
+// took 0, 1 or 2, which drops leave open as the standard streams.
+fn new_fd(r: i64) i64! {
+    const fd = sys_result(r)!;
+    if fd > 2 {
+        return fd;
+    }
+    const moved = syscall3(SYS_FCNTL, fd, F_DUPFD_CLOEXEC, 3);
+    syscall1(SYS_CLOSE, fd);
+    return sys_result(moved);
 }
 
 // No file or directory by that name.

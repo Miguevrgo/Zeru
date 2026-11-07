@@ -4,3 +4,4 @@ status: exit 0
 true
 true
 1 1 hi
+22 22 true true

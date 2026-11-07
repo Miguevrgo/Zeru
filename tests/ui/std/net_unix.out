@@ -1,9 +1,9 @@
 status: exit 0
 -- warnings
 Warning: The value this call returns is never used
-    ╭─[ tests/ui/std/net_unix.zr:16:5 ]
+    ╭─[ tests/ui/std/net_unix.zr:17:5 ]
     │
- 16 │     server.peek(&var buf, 64).unwrap();
+ 17 │     server.peek(&var buf, 64).unwrap();
     │     ─────────────────┬────────────────
     │                      ╰────────────────── The value this call returns is never used
     │
@@ -11,9 +11,9 @@ Warning: The value this call returns is never used
     │           var _ = server.peek(&var buf, 64).unwrap();
 ────╯
 Warning: The value this call returns is never used
-    ╭─[ tests/ui/std/net_unix.zr:17:5 ]
+    ╭─[ tests/ui/std/net_unix.zr:18:5 ]
     │
- 17 │     server.read(&var buf, 64).unwrap();
+ 18 │     server.read(&var buf, 64).unwrap();
     │     ─────────────────┬────────────────
     │                      ╰────────────────── The value this call returns is never used
     │
@@ -27,3 +27,6 @@ ui_net_unix.sock ui_net_unix.sock []
 [1]
 pingping
 true
+22 22
+unrelated
+false

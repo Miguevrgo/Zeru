@@ -18,4 +18,12 @@ fn main() {
     fs::remove_file("old.txt").unwrap();
     fs::remove_file("dangling").unwrap();
     fs::remove_file("cr.txt").unwrap();
+    fs::write_file("a (deleted)", "").unwrap();
+    println("{}", fs::real_path("a (deleted)").unwrap().ends_with("/a (deleted)"));
+    fs::remove_file("a (deleted)").unwrap();
+    fs::create_dir("gone").unwrap();
+    fs::set_current_dir("gone").unwrap();
+    fs::remove_dir("../gone").unwrap();
+    println("{}", fs::real_path(".").unwrap_err());
+    fs::set_current_dir("..").unwrap();
 }

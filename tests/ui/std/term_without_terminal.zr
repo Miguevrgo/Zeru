@@ -1,4 +1,30 @@
 import std.term;
+import std.term::{Key};
+
+fn sys(nr: i64, a: i64, b: i64, c: i64) {
+    var _result: i64 = 0;
+    asm volatile (
+        "syscall"
+        : "={rax}" (_result)
+        : "{rax}" (nr), "{rdi}" (a), "{rsi}" (b), "{rdx}" (c)
+        : "rcx", "r11", "memory"
+    );
+}
+
+fn name(key: Key?) str {
+    if key.is_none() {
+        return "None";
+    }
+    return match key.unwrap() {
+        Key::Char(_) => "Char",
+        Key::Up => "Up",
+        Key::Home => "Home",
+        Key::Delete => "Delete",
+        Key::PageUp => "PageUp",
+        Key::Escape => "Escape",
+        default => "other",
+    };
+}
 
 fn main() {
     println("{}", term::raw_enable().unwrap_err());
@@ -13,4 +39,16 @@ fn main() {
     term::flush();
     println("");
     println("{}", term::key(1).is_none());
+    var ends: Array<i32, 2> = [0; 2];
+    sys(293, (&ends[0]) as i64, 0, 0);
+    const keys = "\x1b[1;5Ax\x1b[15;2~x\x1b\x1b[Ax\x1b[259~\x1b[99999999999A\x1b[3~\x1b[A\x1bOH\x1b[5~\x1b";
+    sys(1, ends[1] as i64, (keys as *u8) as i64, keys.len() as i64);
+    sys(3, ends[1] as i64, 0, 0);
+    sys(33, ends[0] as i64, 0, 0);
+    var names = String.new();
+    for _ in 0..13 {
+        names.extend(name(term::key(1)));
+        names.push(' ');
+    }
+    println("{}", names.trim());
 }

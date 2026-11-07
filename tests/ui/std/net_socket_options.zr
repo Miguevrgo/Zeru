@@ -19,4 +19,11 @@ fn main() {
     a.send("hi").unwrap();
     const ready = net::wait(&handles, None).unwrap();
     println("{} {} {}", ready.len(), ready[0], b.recv().unwrap().data);
+    println(
+        "{} {} {} {}",
+        net::UdpSocket.bind("0127.0.0.1:0").unwrap_err(),
+        net::UdpSocket.bind("[::00001]:0").unwrap_err(),
+        net::UdpSocket.bind("0.0.0.0:0").is_ok(),
+        net::UdpSocket.bind("[::0001]:0").is_ok(),
+    );
 }

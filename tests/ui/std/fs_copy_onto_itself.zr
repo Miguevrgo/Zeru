@@ -8,6 +8,17 @@ fn main() {
     fs::write_file("other.txt", "a much longer text than the source").unwrap();
     fs::copy_file("same.txt", "other.txt").unwrap();
     println("{}", fs::read_file("other.txt").unwrap());
+    fs::create_dir("dir").unwrap();
+    println("{}", fs::copy_file("dir", "other.txt").unwrap_err());
+    println("{} {}", fs::copy_file("dir", "new.txt").unwrap_err(), fs::exists("new.txt"));
+    println("{}", fs::read_file("other.txt").unwrap());
+    println("{}", fs::copy_file("other.txt", "dir").unwrap_err());
+    fs::remove_dir("dir").unwrap();
+    fs::copy_file("/dev/null", "other.txt").unwrap();
+    println("{}", fs::read_file("other.txt").unwrap().len());
+    fs::copy_file("/proc/version", "proc.txt").unwrap();
+    println("{}", fs::read_file("proc.txt").unwrap() == fs::read_file("/proc/version").unwrap());
+    fs::remove_file("proc.txt").unwrap();
     fs::remove_file("same.txt").unwrap();
     fs::remove_file("alias.txt").unwrap();
     fs::remove_file("other.txt").unwrap();

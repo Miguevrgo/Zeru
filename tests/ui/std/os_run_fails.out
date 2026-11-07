@@ -1,18 +1,18 @@
 status: exit 0
 -- warnings
 Warning: Variable 'i' is never read
-    ╭─[ tests/ui/std/os_run_fails.zr:11:14 ]
+    ╭─[ tests/ui/std/os_run_fails.zr:23:14 ]
     │
- 11 │     for i in 0..2000 {
+ 23 │     for i in 0..2000 {
     │              ───┬───
     │                 ╰───── Variable 'i' is never read
     │
     │ Help: remove it, or name it '_i' to keep it unread
 ────╯
 Warning: The value this call returns is never used
-    ╭─[ tests/ui/std/os_run_fails.zr:12:9 ]
+    ╭─[ tests/ui/std/os_run_fails.zr:24:9 ]
     │
- 12 │         os::run("./no-such-file", Vec[]).unwrap_err();
+ 24 │         os::run("./no-such-file", Vec[]).unwrap_err();
     │         ──────────────────────┬──────────────────────
     │                               ╰──────────────────────── The value this call returns is never used
     │
@@ -26,3 +26,7 @@ Warning: The value this call returns is never used
 127
 ok
 0
+0 2
+0 1 2 3
+0 closed
+9
