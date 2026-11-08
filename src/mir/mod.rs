@@ -450,8 +450,9 @@ impl Program {
 
     /// Whether a value of `view` may point into memory a value of `owner`
     /// holds: always through a `&` or `&var`, and through a slice only when
-    /// `owner` itself stores elements of the slice's type.
-    fn may_point_into(&self, view: Ty, owner: Ty) -> bool {
+    /// `owner` holds an array or a Vec of the slice's elements, or is an
+    /// `element` of one itself, which a slice may view with those after it.
+    fn may_point_into(&self, view: Ty, owner: Ty, element: bool) -> bool {
         let mut stack = vec![view];
         let mut seen = Vec::new();
         while let Some(ty) = stack.pop() {
@@ -462,7 +463,8 @@ impl Program {
             match self.types.kind(ty) {
                 TyKind::Ref(_) | TyKind::RefMut(_) => return true,
                 TyKind::Slice(elem) | TyKind::SliceMut(elem)
-                    if self.stores(owner, *elem, &mut Vec::new()) =>
+                    if element && owner == *elem
+                        || self.stores(owner, *elem, true, &mut Vec::new()) =>
                 {
                     return true;
                 }
@@ -473,9 +475,27 @@ impl Program {
         false
     }
 
-    /// Whether a value of `ty` is or stores elements of type `elem` itself.
-    fn stores(&self, ty: Ty, elem: Ty, seen: &mut Vec<Ty>) -> bool {
-        if ty == elem {
+    /// Whether something can be changed through a value of `ty`: it holds a
+    /// `&var`, a `&var [T]` or a raw pointer, itself or behind a `&`.
+    fn writes(&self, ty: Ty, seen: &mut Vec<Ty>) -> bool {
+        if seen.contains(&ty) {
+            return false;
+        }
+        seen.push(ty);
+        match self.types.kind(ty) {
+            TyKind::RefMut(_) | TyKind::SliceMut(_) | TyKind::Ptr(_) => true,
+            TyKind::Ref(inner) | TyKind::Slice(inner) => self.writes(*inner, seen),
+            _ => self
+                .parts(ty)
+                .into_iter()
+                .any(|part| self.writes(part, seen)),
+        }
+    }
+
+    /// Whether a value of `ty` is or stores a value of type `elem`, or with
+    /// `run`, stores an array or a Vec of them.
+    fn stores(&self, ty: Ty, elem: Ty, run: bool, seen: &mut Vec<Ty>) -> bool {
+        if ty == elem && !run {
             return true;
         }
         if seen.contains(&ty) {
@@ -483,11 +503,12 @@ impl Program {
         }
         seen.push(ty);
         match self.types.kind(ty) {
-            TyKind::Ref(inner) | TyKind::RefMut(inner) => self.stores(*inner, elem, seen),
+            TyKind::Array(inner, _) | TyKind::Vec(inner) if run && *inner == elem => true,
+            TyKind::Ref(inner) | TyKind::RefMut(inner) => self.stores(*inner, elem, run, seen),
             _ => self
                 .parts(ty)
                 .into_iter()
-                .any(|part| self.stores(part, elem, seen)),
+                .any(|part| self.stores(part, elem, run, seen)),
         }
     }
 }

@@ -1,33 +1,63 @@
 status: compile error
 -- stderr
 Error: Cannot change 'v' while 'r' still refers into it
-   ╭─[ tests/ui/references/change_while_referenced.zr:4:5 ]
+   ╭─[ tests/ui/references/change_while_referenced.zr:8:5 ]
    │
- 3 │     var r = v.get(0);
+ 7 │     var r = v.get(0);
    │             ────┬───
    │                 ╰───── 'r' borrows here
- 4 │     v.push(3);
+ 8 │     v.push(3);
    │     ────┬────
    │         ╰────── this can free or move what 'r' points at
- 5 │     println("{}", *r.unwrap());
+ 9 │     println("{}", *r.unwrap());
    │                    ─────┬────
    │                         ╰────── 'r' is used later here
    │
    │ Help: finish with 'r' before this, or keep a copy of the value instead of a reference into 'v'
 ───╯
 Error: Cannot change 'v' while 'e' still refers into it
-   ╭─[ tests/ui/references/change_while_referenced.zr:7:5 ]
-   │
- 6 │     var e = &v[1];
-   │             ──┬──
-   │               ╰──── 'e' borrows here
- 7 │     v = Vec[9];
-   │     ─────┬────
-   │          ╰────── this can free or move what 'e' points at
- 8 │     println("{}", *e);
-   │                    ┬
-   │                    ╰── 'e' is used later here
-   │
-   │ Help: finish with 'e' before this, or keep a copy of the value instead of a reference into 'v'
-───╯
+    ╭─[ tests/ui/references/change_while_referenced.zr:11:5 ]
+    │
+ 10 │     var e = &v[1];
+    │             ──┬──
+    │               ╰──── 'e' borrows here
+ 11 │     v = Vec[9];
+    │     ─────┬────
+    │          ╰────── this can free or move what 'e' points at
+ 12 │     println("{}", *e);
+    │                    ┬
+    │                    ╰── 'e' is used later here
+    │
+    │ Help: finish with 'e' before this, or keep a copy of the value instead of a reference into 'v'
+────╯
+Error: Cannot change 'words' while 's' still refers into it
+    ╭─[ tests/ui/references/change_while_referenced.zr:15:5 ]
+    │
+ 14 │     const s = words[0..1];
+    │               ─────┬─────
+    │                    ╰─────── 's' borrows here
+ 15 │     words.push(words[1][0..1]);
+    │     ─────────────┬────────────
+    │                  ╰────────────── this can free or move what 's' points at
+ 16 │     println("{}", s);
+    │     ────────┬───────
+    │             ╰───────── 's' is used later here
+    │
+    │ Help: finish with 's' before this, or keep a copy of the value instead of a reference into 'words'
+────╯
+Error: Cannot change 'bufs' while it holds a reference into itself
+    ╭─[ tests/ui/references/change_while_referenced.zr:19:5 ]
+    │
+ 18 │     bufs[0].view = bufs[0].data[0..2];
+    │                    ─────────┬────────
+    │                             ╰────────── 'bufs' is given a reference into itself here
+ 19 │     bufs.push(Buf { data: [5, 6, 7, 8], view: "" });
+    │     ───────────────────────┬───────────────────────
+    │                            ╰───────────────────────── this can free or move what that reference points at
+ 20 │     println("{}", bufs[0].view);
+    │                   ──────┬─────
+    │                         ╰─────── 'bufs' is used later here
+    │
+    │ Help: finish with 'bufs' before this, or keep a copy of the value instead of a reference into 'bufs'
+────╯
 [-] Error: aborting due to previous error

@@ -16,4 +16,14 @@ fn reference_through_var_reference() {
     println("{}", *e);
 }
 
+fn add(v: &var Vec<i64>) {
+    v.push(1);
+}
+fn walk_and_grow(v: &var Vec<i64>) {
+    for x in v {
+        add(v);
+        println("{}", x);
+    }
+}
+
 fn main() {}

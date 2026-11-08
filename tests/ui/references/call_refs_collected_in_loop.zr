@@ -1,6 +1,16 @@
 fn at(v: &Vec<String>, i: usize) &String {
     return &v[i];
 }
+fn total(v: &Vec<i64>) i64 {
+    return v.sum();
+}
+fn walk(v: &var Vec<i64>) i64 {
+    var acc: i64 = 0;
+    for x in v {
+        acc += x + total(v);
+    }
+    return acc;
+}
 fn main() {
     var env: Vec<String> = Vec.new();
     env.push(String.from("a"));
@@ -10,4 +20,6 @@ fn main() {
         refs.push(at(&env, i));
     }
     println("{} {}", *refs[0], *refs[1]);
+    var nums: Vec<i64> = Vec[1, 2];
+    println("{}", walk(&var nums));
 }

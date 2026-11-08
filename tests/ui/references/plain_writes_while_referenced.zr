@@ -17,4 +17,8 @@ fn main() {
     const first = &v[0];
     v[2] = 9;
     println("{} {}", *first, v[2]);
+    var words: Vec<str> = Vec["ab", "cd"];
+    words[1] = words[1][0..1];
+    words.push(words[0][1..2]);
+    println("{}", words);
 }

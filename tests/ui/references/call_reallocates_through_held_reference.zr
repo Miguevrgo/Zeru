@@ -16,6 +16,21 @@ fn grow_some(o: (&var Vec<i64>)?) {
         None => {}
     }
 }
+fn add(v: &var Vec<i64>) {
+    v.push(2);
+}
+fn grow_inside(v: &var Vec<i64>) bool {
+    return v.any(fn(x) {
+        v.push(2);
+        return x == 1;
+    });
+}
+fn pass_inside(v: &var Vec<i64>) bool {
+    return v.any(fn(x) {
+        add(v);
+        return x == 1;
+    });
+}
 fn main() {
     var a: Vec<i64> = Vec[1];
     var w = W { v: &var a };

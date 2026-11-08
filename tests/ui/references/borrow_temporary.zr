@@ -1,3 +1,9 @@
+import std.collections.hashmap::{HashMap};
+
+struct P {
+    name: str,
+    n: u8,
+}
 fn total(v: &Vec<i64>) i64 {
     return v.sum();
 }
@@ -26,4 +32,12 @@ fn main() {
     }
     println("{}", text().lines());
     println("{}", format("{}", text().split()));
+    var m: HashMap<u8, str> = HashMap.new();
+    m.insert(1, "a");
+    println("{}", m.remove(&1));
+    m.insert(2, "b");
+    const k: u8 = 5;
+    var ps: Vec<P> = Vec.new();
+    ps.extend(&[P { name: "a", n: k }]);
+    println("{} {}", m.len(), ps.len());
 }

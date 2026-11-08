@@ -1,45 +1,79 @@
 status: compile error
 -- stderr
-Error: Cannot change 'a' while 'e' still refers into it
-    ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:23:5 ]
+Error: Cannot change 'v' while a reference into it is still in use
+    ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:23:12 ]
     │
- 22 │     var e = &a[0];
+ 23 │ ╭─▶     return v.any(fn(x) {
+    ┆ ┆
+ 26 │ ├─▶     });
+    │ │
+    │ ╰───────────── this can free or move what a reference points at
+    │
+    ├─[ tests/ui/references/call_reallocates_through_held_reference.zr:23:12 ]
+    │
+ 23 │     return v.any(fn(x) {
+    │            ┬
+    │            ╰── borrowed here
+    │
+    │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'v'
+────╯
+Error: Cannot change 'v' while a reference into it is still in use
+    ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:29:12 ]
+    │
+ 29 │ ╭─▶     return v.any(fn(x) {
+    ┆ ┆
+ 32 │ ├─▶     });
+    │ │
+    │ ╰───────────── this can free or move what a reference points at
+    │
+    ├─[ tests/ui/references/call_reallocates_through_held_reference.zr:29:12 ]
+    │
+ 29 │     return v.any(fn(x) {
+    │            ┬
+    │            ╰── borrowed here
+    │
+    │ Help: finish with a reference before this, or keep a copy of the value instead of a reference into 'v'
+────╯
+Error: Cannot change 'a' while 'e' still refers into it
+    ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:38:5 ]
+    │
+ 37 │     var e = &a[0];
     │             ──┬──
     │               ╰──── 'e' borrows here
- 23 │     grow(w);
+ 38 │     grow(w);
     │     ───┬───
     │        ╰───── this can free or move what 'e' points at
- 24 │     println("{}", *e);
+ 39 │     println("{}", *e);
     │                    ┬
     │                    ╰── 'e' is used later here
     │
     │ Help: finish with 'e' before this, or keep a copy of the value instead of a reference into 'a'
 ────╯
 Error: Cannot change 'b' while 'f' still refers into it
-    ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:29:5 ]
+    ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:44:5 ]
     │
- 28 │     var f = &b[0];
+ 43 │     var f = &b[0];
     │             ──┬──
     │               ╰──── 'f' borrows here
- 29 │     grow_some(o);
+ 44 │     grow_some(o);
     │     ──────┬─────
     │           ╰─────── this can free or move what 'f' points at
- 30 │     println("{}", *f);
+ 45 │     println("{}", *f);
     │                    ┬
     │                    ╰── 'f' is used later here
     │
     │ Help: finish with 'f' before this, or keep a copy of the value instead of a reference into 'b'
 ────╯
 Error: Cannot change 'c' while 'g' still refers into it
-    ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:35:5 ]
+    ╭─[ tests/ui/references/call_reallocates_through_held_reference.zr:50:5 ]
     │
- 34 │     var g = &c[0];
+ 49 │     var g = &c[0];
     │             ──┬──
     │               ╰──── 'g' borrows here
- 35 │     x.grow();
+ 50 │     x.grow();
     │     ────┬───
     │         ╰───── this can free or move what 'g' points at
- 36 │     println("{}", *g);
+ 51 │     println("{}", *g);
     │                    ┬
     │                    ╰── 'g' is used later here
     │

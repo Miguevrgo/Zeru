@@ -11,12 +11,13 @@
 //! after it (an element of a Vec, a variant's payload); and assigning to an
 //! enum whose payload it points into. An access through a reference counts
 //! as an access to what the reference points at, and a call as reallocating
-//! what each `&var` its arguments carry points at. A reference stored behind
-//! a parameter is held until the function returns, and what each function
-//! may do to its arguments, store in one a reference into itself or free a
-//! part of it, is found by checking it first. A second dataflow finds
-//! where a move out of a local may have happened, and any use of it there is
-//! an error.
+//! what each `&var` its arguments carry points at, unless an argument's type
+//! lets nothing change or a closure captures the `&var` only to read it. A
+//! reference stored behind a parameter is held until the function returns,
+//! and what each function may do to its arguments, store in one a reference
+//! into itself or free a part of it, is found by checking it first. A second
+//! dataflow finds where a move out of a local may have happened, and any use
+//! of it there is an error.
 
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
@@ -117,15 +118,17 @@ pub(super) struct Effect {
 }
 
 /// `methods` tells, for each function, whether its first parameter is
-/// `self`, and `effects` what it may do to each of its arguments.
+/// `self`, `effects` what it may do to each of its arguments, and `changes`
+/// what each closure may change through each variable it captures.
 pub(super) fn check(
     body: &Body,
     program: &Program,
     sources: &Sources,
     methods: &[bool],
     effects: &[Vec<Effect>],
+    changes: &HashMap<Ty, Vec<bool>>,
 ) -> Vec<ZeruError> {
-    let mut cx = Cx::new(body, program, sources, methods, effects);
+    let mut cx = Cx::new(body, program, sources, methods, effects, changes);
     cx.run();
     cx.errors
         .sort_by_key(|error| (error.span.start, error.span.end));
@@ -140,11 +143,12 @@ pub(super) fn effects(
     program: &Program,
     sources: &Sources,
     methods: &[bool],
+    changes: &HashMap<Ty, Vec<bool>>,
 ) -> Vec<Vec<Effect>> {
     let can = |body: &Body| {
         body.locals[1..=body.arg_count].iter().any(|decl| {
             let ty = program.types.referent(decl.ty).unwrap_or(decl.ty);
-            program.may_point_into(ty, ty)
+            program.may_point_into(ty, ty, false)
         })
     };
     let mut effects: Vec<Vec<Effect>> = bodies
@@ -160,7 +164,7 @@ pub(super) fn effects(
     let mut changed = true;
     while std::mem::take(&mut changed) {
         for (at, body) in bodies.iter().enumerate().filter(|(_, body)| can(body)) {
-            let mut cx = Cx::new(body, program, sources, methods, &effects);
+            let mut cx = Cx::new(body, program, sources, methods, &effects, changes);
             cx.run();
             let found: Vec<Effect> = (1..=body.arg_count)
                 .map(|arg| Effect {
@@ -175,6 +179,83 @@ pub(super) fn effects(
     effects
 }
 
+/// For each closure, whether it may change, through each variable it
+/// captures, what that variable refers to.
+pub(super) fn changes(bodies: &[Body], program: &Program) -> HashMap<Ty, Vec<bool>> {
+    let mut changes: HashMap<Ty, Vec<bool>> = HashMap::new();
+    for body in bodies.iter().filter(|body| !body.captures.is_empty()) {
+        let closure = program
+            .types
+            .referent(body.locals[1].ty)
+            .expect("a closure's environment");
+        let known = changes
+            .entry(closure)
+            .or_insert_with(|| vec![false; body.captures.len()]);
+        for (field, known) in known.iter_mut().enumerate() {
+            *known |= changes_through(body, program, field as u32);
+        }
+    }
+    changes
+}
+
+/// Whether the closure `body` may change what the variable it captures in
+/// `field` refers to: by an access through it that is not a read, or by
+/// reading out of it something that can change what it reaches. A copy into
+/// a local is followed through that local instead.
+fn changes_through(body: &Body, program: &Program, field: u32) -> bool {
+    let writes = |ty: Ty| program.writes(ty, &mut Vec::new());
+    let captured = [Projection::Deref, Projection::Field(field)];
+    let mut copies = Vec::new();
+    for (b, block) in body.blocks.iter().enumerate() {
+        for (at, statement) in block.statements.iter().enumerate() {
+            if let StatementKind::Assign(
+                dest,
+                Rvalue::Use(Operand::Copy(source))
+                | Rvalue::AddressOf(source)
+                | Rvalue::VecGet(source, _),
+            ) = &statement.kind
+            {
+                copies.push(((b, at), dest, source));
+            }
+        }
+    }
+    let mut held = vec![false; body.locals.len()];
+    let under = |place: &Place, held: &[bool]| {
+        held[place.local.0 as usize]
+            || place.local == Local(1)
+                && (place.projection.starts_with(&captured)
+                    || captured.starts_with(&place.projection))
+    };
+    while let Some(local) = copies.iter().find_map(|(_, dest, source)| {
+        let local = dest.as_local()?;
+        let ty = body.locals[local.0 as usize].ty;
+        (!held[local.0 as usize] && under(source, &held) && writes(ty)).then_some(local)
+    }) {
+        held[local.0 as usize] = true;
+    }
+    (0..body.blocks.len()).any(|b| {
+        (0..=body.blocks[b].statements.len()).any(|at| {
+            body.accesses(b, at).iter().any(|(place, role)| {
+                if !under(place, &held) {
+                    return false;
+                }
+                let copy = copies
+                    .iter()
+                    .find(|(site, _, source)| *site == (b, at) && *source == place);
+                match (role, copy) {
+                    (Role::Read, Some((_, dest, _))) => {
+                        dest.as_local().is_none() && writes(body.place_ty(program, dest))
+                    }
+                    (Role::Read, None) => writes(body.place_ty(program, place)),
+                    (Role::Write, _) => place.as_local().is_none(),
+                    (Role::Dead, _) => false,
+                    _ => true,
+                }
+            })
+        })
+    })
+}
+
 /// The borrow checker of one body. `made` is the loan each statement that
 /// takes one takes; `moves` each move out of a local that owns something,
 /// listed by statement in `moves_at` and by local in `moves_of`; `holders`
@@ -186,6 +267,7 @@ pub(super) fn effects(
 /// the locals that hold one of them behind the same pointer it points
 /// through; `freed` those behind which a part may be freed or moved;
 /// `readers` the loan that only reads made for each that writes;
+/// `sealed` the loans a closure holds of a variable it only reads through;
 /// `grew` that a loan's paths grew after blocks had used them.
 struct Cx<'a> {
     body: &'a Body,
@@ -193,6 +275,7 @@ struct Cx<'a> {
     sources: &'a Sources,
     methods: &'a [bool],
     effects: &'a [Vec<Effect>],
+    changes: &'a HashMap<Ty, Vec<bool>>,
     loans: Vec<Loan>,
     made: HashMap<(usize, usize), usize>,
     moves: Vec<(Local, Span)>,
@@ -206,6 +289,7 @@ struct Cx<'a> {
     linked: HashSet<Local>,
     freed: HashSet<Local>,
     readers: HashMap<usize, usize>,
+    sealed: HashSet<usize>,
     live_in: Vec<BTreeSet<Local>>,
     grew: bool,
     reported: HashSet<usize>,
@@ -219,6 +303,7 @@ impl<'a> Cx<'a> {
         sources: &'a Sources,
         methods: &'a [bool],
         effects: &'a [Vec<Effect>],
+        changes: &'a HashMap<Ty, Vec<bool>>,
     ) -> Self {
         let mut cx = Self {
             body,
@@ -226,6 +311,7 @@ impl<'a> Cx<'a> {
             sources,
             methods,
             effects,
+            changes,
             loans: Vec::new(),
             made: HashMap::new(),
             moves: Vec::new(),
@@ -239,6 +325,7 @@ impl<'a> Cx<'a> {
             linked: HashSet::new(),
             freed: HashSet::new(),
             readers: HashMap::new(),
+            sealed: HashSet::new(),
             live_in: Vec::new(),
             grew: false,
             reported: HashSet::new(),
@@ -285,7 +372,7 @@ impl<'a> Cx<'a> {
                     .push(Loan::new(place, mutable, statement.span, None));
             }
             for at in 0..=block.statements.len() {
-                for (place, role) in cx.accesses(b, at) {
+                for (place, role) in cx.body.accesses(b, at) {
                     if role == Role::Move && cx.tracked(place.local) {
                         cx.moves_at.entry((b, at)).or_default().push(cx.moves.len());
                         cx.moves_of[place.local.0 as usize].push(cx.moves.len());
@@ -349,69 +436,6 @@ impl<'a> Cx<'a> {
         let found = self.program.reaches(ty, part, &mut Vec::new());
         self.parts.borrow_mut().insert((ty, part), found);
         found
-    }
-
-    /// The places statement `at` of block `b` (its terminator, past the
-    /// statements) touches, and how, in the order it does.
-    fn accesses(&self, b: usize, at: usize) -> Vec<(Place, Role)> {
-        let block = &self.body.blocks[b];
-        let mut out = Vec::new();
-        let operand = |value: &Operand, out: &mut Vec<(Place, Role)>| match value {
-            Operand::Copy(place) => out.push((place.clone(), Role::Read)),
-            Operand::Move(place) => out.push((place.clone(), Role::Move)),
-            Operand::Constant(_) => {}
-        };
-        let Some(statement) = block.statements.get(at) else {
-            match &block.terminator.kind {
-                TerminatorKind::Call { args, dest, .. } => {
-                    for arg in args {
-                        operand(arg, &mut out);
-                    }
-                    out.extend(dest.iter().map(|dest| (dest.clone(), Role::Write)));
-                }
-                TerminatorKind::Drop { place, .. } => out.push((place.clone(), Role::Drop)),
-                TerminatorKind::SwitchInt { discr, .. } => operand(discr, &mut out),
-                TerminatorKind::Assert { cond, .. } => operand(cond, &mut out),
-                TerminatorKind::Return => out.push((Place::local(RETURN), Role::Read)),
-                TerminatorKind::Goto(_) | TerminatorKind::Unreachable => {}
-            }
-            return out;
-        };
-        for value in statement.kind.operands() {
-            operand(value, &mut out);
-        }
-        match &statement.kind {
-            StatementKind::Assign(dest, rvalue) => {
-                match rvalue {
-                    Rvalue::AddressOf(place)
-                    | Rvalue::DeepCopy(place)
-                    | Rvalue::Len(place)
-                    | Rvalue::Capacity(place)
-                    | Rvalue::Discriminant(place)
-                    | Rvalue::VecGet(place, _) => out.push((place.clone(), Role::Read)),
-                    Rvalue::VecPop(place) | Rvalue::VecRemove(place, _) | Rvalue::Take(place) => {
-                        out.push((place.clone(), Role::Realloc))
-                    }
-                    _ => {}
-                }
-                out.push((dest.clone(), Role::Write));
-            }
-            StatementKind::VecPush(place, _)
-            | StatementKind::VecInsert(place, ..)
-            | StatementKind::VecClear(place)
-            | StatementKind::VecReserve(place, _)
-            | StatementKind::VecExtend(place, _)
-            | StatementKind::VecShrinkToFit(place) => out.push((place.clone(), Role::Realloc)),
-            StatementKind::StorageDead(local) => out.push((Place::local(*local), Role::Dead)),
-            StatementKind::Asm(asm) => {
-                out.extend(asm.outputs.iter().map(|place| (place.clone(), Role::Write)))
-            }
-            StatementKind::CopyBytes(..)
-            | StatementKind::SimdStore(..)
-            | StatementKind::Flush
-            | StatementKind::Print { .. } => {}
-        }
-        out
     }
 
     /// Whether `role` on `place` reads the local it starts from.
@@ -479,7 +503,7 @@ impl<'a> Cx<'a> {
                 preds[next].push(b);
             }
             for at in 0..=self.body.blocks[b].statements.len() {
-                for (place, role) in self.accesses(b, at) {
+                for (place, role) in self.body.accesses(b, at) {
                     if !self.holders[place.local.0 as usize] {
                         continue;
                     }
@@ -553,7 +577,7 @@ impl<'a> Cx<'a> {
         let mut live = self.live_out(b);
         let mut before = vec![BTreeSet::new(); count + 1];
         for at in (0..=count).rev() {
-            let accesses = self.accesses(b, at);
+            let accesses = self.body.accesses(b, at);
             for (place, role) in &accesses {
                 if Self::defines(place, *role) {
                     live.remove(&place.local);
@@ -656,11 +680,20 @@ impl<'a> Cx<'a> {
     }
 
     /// `loans`, with the loans held by what they point into, and so on:
-    /// all that a value holding `loans` reaches.
-    fn reached(&self, mut loans: Vec<(usize, bool)>, facts: &BTreeSet<Fact>) -> Vec<(usize, bool)> {
+    /// all that a value holding `loans` reaches, or with `writing`, all it
+    /// may change, which stops at a variable a closure only reads.
+    fn reached(
+        &self,
+        mut loans: Vec<(usize, bool)>,
+        facts: &BTreeSet<Fact>,
+        writing: bool,
+    ) -> Vec<(usize, bool)> {
         let mut next = 0;
         while let Some(&(loan, _)) = loans.get(next) {
             next += 1;
+            if writing && self.sealed.contains(&loan) {
+                continue;
+            }
             for path in &self.loans[loan].paths {
                 if path.steps.contains(&Step::Deref) {
                     continue;
@@ -673,6 +706,21 @@ impl<'a> Cx<'a> {
             }
         }
         loans
+    }
+
+    /// The loans that write which a call given `arg` may change what they
+    /// point at through it: none when its type lets nothing change, and none
+    /// past a variable a closure captures only to read.
+    fn writable(&self, arg: &Operand, facts: &BTreeSet<Fact>) -> Vec<usize> {
+        let ty = self.body.operand_ty(self.program, arg);
+        if !self.program.writes(ty, &mut Vec::new()) {
+            return Vec::new();
+        }
+        self.reached(self.carried_operand(arg, facts), facts, true)
+            .into_iter()
+            .map(|(loan, _)| loan)
+            .filter(|&loan| self.loans[loan].mutable)
+            .collect()
     }
 
     /// The loans the value of `rvalue`, computed at statement `at`, holds.
@@ -801,13 +849,13 @@ impl<'a> Cx<'a> {
                         if env || self.lent(method, at, ty) =>
                     {
                         let inside = place.clone().project(Projection::Deref);
-                        Some(self.reached(self.carried(&inside, facts), facts))
+                        Some(self.reached(self.carried(&inside, facts), facts, false))
                     }
                     _ => None,
                 };
                 let loans = match (env, &inside) {
                     (true, Some(inside)) => inside.clone(),
-                    _ => self.reached(self.carried_operand(arg, facts), facts),
+                    _ => self.reached(self.carried_operand(arg, facts), facts, false),
                 };
                 if self.effects[function.0 as usize][at].links {
                     linked.extend(loans.iter().map(|&(loan, _)| loan));
@@ -816,19 +864,17 @@ impl<'a> Cx<'a> {
                 carried.extend(loans.into_iter().map(|(loan, _)| (loan, true)));
             }
             let mut escaped = Vec::new();
-            for &(loan, _) in &carried {
-                if !self.loans[loan].mutable {
-                    continue;
-                }
+            let writable: Vec<usize> = args
+                .iter()
+                .flat_map(|arg| self.writable(arg, facts))
+                .collect();
+            for loan in writable {
                 for path in self.loans[loan].paths.clone() {
                     let mut flowing: Vec<(usize, bool)> = carried
                         .iter()
                         .filter(|&&(other, _)| {
-                            let origin = self.loans[other].from.unwrap_or(other);
                             (other != loan || linked.contains(&loan))
-                                && self
-                                    .program
-                                    .may_point_into(path.ty, self.ty(&self.loans[origin].place))
+                                && self.may_point_into(path.ty, other)
                         })
                         .copied()
                         .collect();
@@ -851,6 +897,14 @@ impl<'a> Cx<'a> {
         };
         match &statement.kind {
             StatementKind::Assign(dest, rvalue) => {
+                if let (Rvalue::Aggregate(_, values), Some(changes)) =
+                    (rvalue, self.changes.get(&self.ty(dest)))
+                {
+                    for (value, _) in values.iter().zip(changes).filter(|(_, changes)| !**changes) {
+                        let sealed = self.carried_operand(value, facts);
+                        self.sealed.extend(sealed.into_iter().map(|(loan, _)| loan));
+                    }
+                }
                 let carried = self.carried_rvalue(rvalue, (b, at), facts);
                 self.store(facts, dest, carried)
             }
@@ -885,10 +939,7 @@ impl<'a> Cx<'a> {
         let mut returned = Vec::new();
         for &(loan, _) in carried {
             let origin = self.loans[loan].from.unwrap_or(loan);
-            if !self
-                .program
-                .may_point_into(into, self.ty(&self.loans[origin].place))
-            {
+            if !self.may_point_into(into, loan) {
                 continue;
             }
             let derived = *self.derived.entry((b, origin)).or_insert_with(|| {
@@ -925,6 +976,14 @@ impl<'a> Cx<'a> {
             returned.push((derived, false));
         }
         returned
+    }
+
+    /// Whether a value of `ty` may point into what `loan`, or the loan it
+    /// comes from, borrows.
+    fn may_point_into(&self, ty: Ty, loan: usize) -> bool {
+        let place = &self.loans[self.loans[loan].from.unwrap_or(loan)].place;
+        let element = matches!(place.projection.last(), Some(Projection::Index(_)));
+        self.program.may_point_into(ty, self.ty(place), element)
     }
 
     /// A loan of what `loan` borrows that only reads, for the references a
@@ -1019,7 +1078,7 @@ impl<'a> Cx<'a> {
     }
 
     fn apply_moves(&self, moved: &mut [bool], b: usize, at: usize) {
-        for (place, role) in self.accesses(b, at) {
+        for (place, role) in self.body.accesses(b, at) {
             if Self::defines(&place, role) {
                 for &site in &self.moves_of[place.local.0 as usize] {
                     moved[site] = false;
@@ -1036,7 +1095,7 @@ impl<'a> Cx<'a> {
         for (at, live) in live.iter().enumerate() {
             let span = self.span(b, at);
             let live_facts: Vec<Fact> = self.alive(&facts, live).into_iter().collect();
-            for (place, role) in self.accesses(b, at) {
+            for (place, role) in self.body.accesses(b, at) {
                 let errors = self.errors.len();
                 self.check_access(&place, role, &facts, &live_facts, (b, at));
                 if self.errors.len() == errors
@@ -1157,18 +1216,15 @@ impl<'a> Cx<'a> {
         let carried: Vec<Vec<usize>> = args
             .iter()
             .map(|arg| {
-                self.reached(self.carried_operand(arg, facts), facts)
+                self.reached(self.carried_operand(arg, facts), facts, false)
                     .into_iter()
                     .map(|(loan, _)| loan)
                     .collect()
             })
             .collect();
-        for (i, loans) in carried.iter().enumerate() {
+        for (i, arg) in args.iter().enumerate() {
             let frees = effects[i].frees;
-            for &loan in loans {
-                if !self.loans[loan].mutable {
-                    continue;
-                }
+            for loan in self.writable(arg, facts) {
                 let accessed: Vec<Path> = self.loans[loan]
                     .paths
                     .iter()
@@ -1297,7 +1353,9 @@ impl<'a> Cx<'a> {
 
     /// Whether `rule`'s access to `accessed` invalidates a loan on `loan`.
     /// An access reached through a reference a call derived from a `&`
-    /// changes nothing, since nothing is written through a `&`.
+    /// changes nothing, since nothing is written through a `&`, and one to a
+    /// value nothing that a pointer inside it points at, unless the value can
+    /// hold that.
     fn invalidates(&self, accessed: &Path, loan: &Path, rule: Rule) -> bool {
         let shared = accessed
             .anchor
@@ -1325,7 +1383,16 @@ impl<'a> Cx<'a> {
             _ => Part::Owning,
         };
         if prefix(q, l) {
-            return l[q.len()..].iter().any(step) || (deep && self.has(loan.ty, below));
+            let rest = &l[q.len()..];
+            if rest.contains(&Step::Deref)
+                && !deep
+                && !self
+                    .program
+                    .stores(accessed.ty, loan.ty, false, &mut Vec::new())
+            {
+                return false;
+            }
+            return rest.iter().any(step) || (deep && self.has(loan.ty, below));
         }
         deep && prefix(l, q) && self.has(accessed.ty, below)
     }
@@ -1391,7 +1458,7 @@ impl<'a> Cx<'a> {
             let holder = self.best_holder(loan, holder, local, live);
             let dropped = holder != RETURN
                 && self.next_use(at, holder).is_some_and(|(b, at)| {
-                    self.accesses(b, at).iter().any(|(place, role)| {
+                    self.body.accesses(b, at).iter().any(|(place, role)| {
                         *role == Role::Drop && place.as_local() == Some(holder)
                     })
                 });
@@ -1518,7 +1585,7 @@ impl<'a> Cx<'a> {
             let count = self.body.blocks[b].statements.len();
             let mut ended = false;
             for at in start..=count {
-                let accesses = self.accesses(b, at);
+                let accesses = self.body.accesses(b, at);
                 if accesses
                     .iter()
                     .any(|(place, role)| place.local == holder && self.uses(place, *role))
@@ -1547,6 +1614,71 @@ impl<'a> Cx<'a> {
     fn error(&mut self, message: impl Into<String>, span: Span) -> &mut ZeruError {
         self.errors.push(ZeruError::semantic(message, span));
         self.errors.last_mut().expect("pushed above")
+    }
+}
+
+impl Body {
+    /// The places statement `at` of block `b` (its terminator, past the
+    /// statements) touches, and how, in the order it does.
+    fn accesses(&self, b: usize, at: usize) -> Vec<(Place, Role)> {
+        let block = &self.blocks[b];
+        let mut out = Vec::new();
+        let operand = |value: &Operand, out: &mut Vec<(Place, Role)>| match value {
+            Operand::Copy(place) => out.push((place.clone(), Role::Read)),
+            Operand::Move(place) => out.push((place.clone(), Role::Move)),
+            Operand::Constant(_) => {}
+        };
+        let Some(statement) = block.statements.get(at) else {
+            match &block.terminator.kind {
+                TerminatorKind::Call { args, dest, .. } => {
+                    for arg in args {
+                        operand(arg, &mut out);
+                    }
+                    out.extend(dest.iter().map(|dest| (dest.clone(), Role::Write)));
+                }
+                TerminatorKind::Drop { place, .. } => out.push((place.clone(), Role::Drop)),
+                TerminatorKind::SwitchInt { discr, .. } => operand(discr, &mut out),
+                TerminatorKind::Assert { cond, .. } => operand(cond, &mut out),
+                TerminatorKind::Return => out.push((Place::local(RETURN), Role::Read)),
+                TerminatorKind::Goto(_) | TerminatorKind::Unreachable => {}
+            }
+            return out;
+        };
+        for value in statement.kind.operands() {
+            operand(value, &mut out);
+        }
+        match &statement.kind {
+            StatementKind::Assign(dest, rvalue) => {
+                match rvalue {
+                    Rvalue::AddressOf(place)
+                    | Rvalue::DeepCopy(place)
+                    | Rvalue::Len(place)
+                    | Rvalue::Capacity(place)
+                    | Rvalue::Discriminant(place)
+                    | Rvalue::VecGet(place, _) => out.push((place.clone(), Role::Read)),
+                    Rvalue::VecPop(place) | Rvalue::VecRemove(place, _) | Rvalue::Take(place) => {
+                        out.push((place.clone(), Role::Realloc))
+                    }
+                    _ => {}
+                }
+                out.push((dest.clone(), Role::Write));
+            }
+            StatementKind::VecPush(place, _)
+            | StatementKind::VecInsert(place, ..)
+            | StatementKind::VecClear(place)
+            | StatementKind::VecReserve(place, _)
+            | StatementKind::VecExtend(place, _)
+            | StatementKind::VecShrinkToFit(place) => out.push((place.clone(), Role::Realloc)),
+            StatementKind::StorageDead(local) => out.push((Place::local(*local), Role::Dead)),
+            StatementKind::Asm(asm) => {
+                out.extend(asm.outputs.iter().map(|place| (place.clone(), Role::Write)))
+            }
+            StatementKind::CopyBytes(..)
+            | StatementKind::SimdStore(..)
+            | StatementKind::Flush
+            | StatementKind::Print { .. } => {}
+        }
+        out
     }
 }
 

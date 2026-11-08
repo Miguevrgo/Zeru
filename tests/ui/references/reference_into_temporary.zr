@@ -1,3 +1,13 @@
+import std.collections.hashmap::{HashMap};
+
+struct P {
+    name: str,
+    n: u8,
+}
+fn take(m: &var HashMap<u8, str>, key: &String) str {
+    m.remove(&1);
+    return key[0..1];
+}
 fn mk() Vec<i64> {
     return Vec[1, 2, 3];
 }
@@ -13,4 +23,10 @@ fn main() {
         }
         None => {}
     }
+    var m: HashMap<u8, str> = HashMap.new();
+    const t = take(&var m, &String.from("ab"));
+    const k: u8 = 5;
+    var ps: Vec<P> = Vec.new();
+    ps.extend(&[P { name: String.from("cd")[0..1], n: k }]);
+    println("{} {}", t, ps.len());
 }

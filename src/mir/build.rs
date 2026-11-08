@@ -44,10 +44,11 @@ pub fn build(
         }
         bodies.push(body);
     }
-    let effects = super::borrowck::effects(&bodies, program, sources, &methods);
+    let changes = super::borrowck::changes(&bodies, program);
+    let effects = super::borrowck::effects(&bodies, program, sources, &methods, &changes);
     for body in &mut bodies {
         errors.extend(super::borrowck::check(
-            body, program, sources, &methods, &effects,
+            body, program, sources, &methods, &effects, &changes,
         ));
         super::elaborate::elaborate(body, program);
     }

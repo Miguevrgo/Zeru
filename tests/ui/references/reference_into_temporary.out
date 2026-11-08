@@ -1,16 +1,41 @@
 status: compile error
 -- stderr
 Error: Cannot keep a reference into a temporary value past its statement
-   ╭─[ tests/ui/references/reference_into_temporary.zr:5:13 ]
-   │
- 5 │     var r = mk().get(0).unwrap();
-   │             ─────┬─────
-   │                  ╰─────── this refers into a value that is freed when the statement ends
-   │
- 7 │     println("{}", *r);
-   │                    ┬
-   │                    ╰── 'r' is used later here
-   │
-   │ Help: store the value in a variable first, and take the reference from that variable
-───╯
+    ╭─[ tests/ui/references/reference_into_temporary.zr:15:13 ]
+    │
+ 15 │     var r = mk().get(0).unwrap();
+    │             ─────┬─────
+    │                  ╰─────── this refers into a value that is freed when the statement ends
+    │
+ 17 │     println("{}", *r);
+    │                    ┬
+    │                    ╰── 'r' is used later here
+    │
+    │ Help: store the value in a variable first, and take the reference from that variable
+────╯
+Error: Cannot keep a reference into a temporary value past its statement
+    ╭─[ tests/ui/references/reference_into_temporary.zr:27:28 ]
+    │
+ 27 │     const t = take(&var m, &String.from("ab"));
+    │                            ─────────┬────────
+    │                                     ╰────────── this refers into a value that is freed when the statement ends
+    │
+ 31 │     println("{} {}", t, ps.len());
+    │                      ┬
+    │                      ╰── 't' is used later here
+    │
+    │ Help: store the value in a variable first, and take the reference from that variable
+────╯
+Error: Cannot keep a reference into a temporary value past its statement
+    ╭─[ tests/ui/references/reference_into_temporary.zr:30:27 ]
+    │
+ 30 │     ps.extend(&[P { name: String.from("cd")[0..1], n: k }]);
+    │                           ───────────┬───────────
+    │                                      ╰───────────── this refers into a value that is freed when the statement ends
+ 31 │     println("{} {}", t, ps.len());
+    │                         ────┬───
+    │                             ╰───── 'ps' is used later here
+    │
+    │ Help: store the value in a variable first, and take the reference from that variable
+────╯
 [-] Error: aborting due to previous error

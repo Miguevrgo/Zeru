@@ -20,6 +20,9 @@ struct Bag {
 fn pick(a: &Vec<i64>, b: &Vec<i64>) &i64 {
     return &a[0];
 }
+fn has_first(v: &var Vec<i64>) bool {
+    return v.any(fn(x) x == v[0] && v.len() > 1);
+}
 fn main() {
     var v: Vec<i64> = Vec[5, 9, 2];
     const r = &var v;
@@ -50,4 +53,5 @@ fn main() {
         opt = v.get(2);
     }
     println("{}", opt.copy().unwrap());
+    println("{}", has_first(&var v));
 }

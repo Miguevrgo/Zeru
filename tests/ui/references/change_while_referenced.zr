@@ -1,3 +1,7 @@
+struct Buf {
+    data: Array<u8, 4>,
+    view: str,
+}
 fn main() {
     var v: Vec<i64> = Vec[1, 2];
     var r = v.get(0);
@@ -6,4 +10,12 @@ fn main() {
     var e = &v[1];
     v = Vec[9];
     println("{}", *e);
+    var words: Vec<str> = Vec["ab", "cd"];
+    const s = words[0..1];
+    words.push(words[1][0..1]);
+    println("{}", s);
+    var bufs: Vec<Buf> = Vec[Buf { data: [1, 2, 3, 4], view: "" }];
+    bufs[0].view = bufs[0].data[0..2];
+    bufs.push(Buf { data: [5, 6, 7, 8], view: "" });
+    println("{}", bufs[0].view);
 }

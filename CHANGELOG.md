@@ -72,3 +72,8 @@
 - An `if`/`match` value in unreachable code was typed void.
 - A literal, literal arithmetic or literal branches on the left of an operator ignored the right side's type.
 - A generic call with only literal arguments took `T` from a wanted `T?`.
+- False borrow error removing from a map by a temporary key when values hold views.
+- False borrow error extending a Vec from a temporary array whose elements hold views.
+- False borrow error storing a slice of a `str` element back into its Vec.
+- False borrow error from a closure that only reads a captured `&var`.
+- False borrow error passing a `&var` where a `&` is wanted while looping over it.

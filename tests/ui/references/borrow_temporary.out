@@ -8,3 +8,5 @@ status: exit 0
 3
 ["a b", "c"]
 ["a", "b", "c"]
+a
+1 1
