@@ -68,3 +68,7 @@
 - Statement `match` mixing unit and void arms; temporaries in `print`; `'a' as str`; `return Vec.new()` in a `T!`.
 - Closure parameter types from a literal argument.
 - A test failing through `!` now reports its error code.
+- `<<=` and `>>=` in constants worked in the shift amount's type.
+- An `if`/`match` value in unreachable code was typed void.
+- A literal, literal arithmetic or literal branches on the left of an operator ignored the right side's type.
+- A generic call with only literal arguments took `T` from a wanted `T?`.

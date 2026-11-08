@@ -568,7 +568,7 @@ impl FnCx<'_, '_> {
         self.lint_if(condition, then, otherwise, span);
         let cond = self.condition(condition, "If condition must be boolean, got ");
         let wraps = self.wrapper(expected);
-        let before = self.diverges;
+        let before = std::mem::take(&mut self.diverges);
         let swap = branch_order(then) > branch_order(otherwise);
         let (one, other) = if swap {
             (otherwise, then)
@@ -576,11 +576,11 @@ impl FnCx<'_, '_> {
             (then, otherwise)
         };
         let mut first = self.value_branch(one, expected);
-        let first_leaves = std::mem::replace(&mut self.diverges, before);
+        let first_leaves = std::mem::take(&mut self.diverges);
         let first_ty = (!first_leaves).then(|| self.with_none(first.ty, other, expected));
         let second = self.value_branch(other, wraps.or(first_ty).or(expected));
         let second_leaves = self.diverges;
-        self.diverges = first_leaves && second_leaves;
+        self.diverges = before || (first_leaves && second_leaves);
         let second_ty = (!second_leaves).then_some(second.ty);
         let target = wraps.or(first_ty).or(second_ty).unwrap_or(Types::VOID);
         if !first_leaves {
@@ -1094,26 +1094,15 @@ impl FnCx<'_, '_> {
 
     /// The type of what `place` holds.
     pub(super) fn place_ty(&mut self, place: &Place) -> Option<Ty> {
-        Some(match place {
-            Place::Local(local) => self.local_ty(*local),
-            Place::Field(base, at) => {
-                let base = self.place_ty(base)?;
-                match self.cx.types.kind(base).clone() {
-                    TyKind::Tuple(parts) => *parts.get(*at as usize)?,
-                    _ => self.cx.fields_of(base).get(*at as usize)?.1,
-                }
-            }
-            Place::Index(base, _) => {
-                let base = self.place_ty(base)?;
-                self.cx.types.elem(base)?
-            }
-            Place::Deref(pointer) => self.cx.types.pointee(pointer.ty)?,
-            Place::Temp(value) => value.ty,
-            Place::Capture(at) => self.captures[*at as usize].outer.ty,
+        let (locals, captures) = (&self.locals, &self.captures);
+        self.cx.place_ty(place, &|root| match *root {
+            Place::Local(local) => locals[local.0 as usize].ty,
+            Place::Capture(at) => captures[at as usize].outer.ty,
+            _ => unreachable!("a place starts at a local or a capture"),
         })
     }
 
-    /// Type two operands. A number written out takes the type of the other
+    /// Type two operands. A value written out takes the type of the other
     /// one, on either side: `3 < x` compares at the type of `x`, as `x > 3`.
     pub(super) fn operands(
         &mut self,
@@ -1121,7 +1110,7 @@ impl FnCx<'_, '_> {
         right: &Expression,
         expected: Option<Ty>,
     ) -> (Expr, Expr) {
-        if is_number_literal(left) && !is_number_literal(right) {
+        if written_value(left) && !written_value(right) {
             let right = self.expr(right, expected);
             let left = self.expr(left, Some(right.ty));
             (left, right)
@@ -2130,6 +2119,27 @@ impl FnCx<'_, '_> {
 }
 
 impl Checker<'_> {
+    /// The type of what `place` holds, `root` giving the type of the local
+    /// or capture it starts at.
+    pub(super) fn place_ty(&mut self, place: &Place, root: &dyn Fn(&Place) -> Ty) -> Option<Ty> {
+        Some(match place {
+            Place::Field(base, at) => {
+                let base = self.place_ty(base, root)?;
+                match self.types.kind(base).clone() {
+                    TyKind::Tuple(parts) => *parts.get(*at as usize)?,
+                    _ => self.fields_of(base).get(*at as usize)?.1,
+                }
+            }
+            Place::Index(base, _) => {
+                let base = self.place_ty(base, root)?;
+                self.types.elem(base)?
+            }
+            Place::Deref(pointer) => self.types.pointee(pointer.ty)?,
+            Place::Temp(value) => value.ty,
+            Place::Local(_) | Place::Capture(_) => root(place),
+        })
+    }
+
     /// Whether `operator` means something for operands of type `ty`; the
     /// bounds `Eq`, `Ord` and `Num` ask for `==`, `<` and `+`.
     pub(super) fn operator_applies(&mut self, operator: &Token, ty: Ty) -> bool {
@@ -2182,13 +2192,34 @@ pub(super) fn is_number_literal(expr: &Expression) -> bool {
     }
 }
 
+/// A number written out, `None`, or arithmetic, an array, a tuple, or the
+/// branches of an `if` or a `match` of them: it fits whichever type what is
+/// around it settles.
+pub(super) fn written_value(expr: &Expression) -> bool {
+    match &expr.kind {
+        ExpressionKind::Infix { left, right, .. } => written_value(left) && written_value(right),
+        ExpressionKind::ArrayLiteral(items)
+        | ExpressionKind::VecLiteral(items)
+        | ExpressionKind::Tuple(items) => items.iter().all(written_value),
+        ExpressionKind::ArrayRepeat { value, .. } | ExpressionKind::VecRepeat { value, .. } => {
+            written_value(value)
+        }
+        ExpressionKind::If {
+            then, otherwise, ..
+        } => written_value(then) && written_value(otherwise),
+        ExpressionKind::Match { arms, .. } => arms.iter().all(|arm| written_value(&arm.body)),
+        ExpressionKind::None => true,
+        _ => is_number_literal(expr),
+    }
+}
+
 /// When a branch is checked among the others: 0 for one with a type of
-/// its own, 1 for a number written out, which takes the others' type, and
+/// its own, 1 for a value written out, which takes the others' type, and
 /// 2 for `None`, which takes it even from a number.
 pub(super) fn branch_order(expr: &Expression) -> u8 {
     match expr.kind {
         ExpressionKind::None => 2,
-        _ => u8::from(is_number_literal(expr)),
+        _ => u8::from(written_value(expr)),
     }
 }
 

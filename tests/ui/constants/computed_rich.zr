@@ -150,6 +150,13 @@ fn counted(n: i32) i32 {
     return sum;
 }
 
+fn shifted(var x: u32, var y: i64) (u32, i64) {
+    x <<= (7 as i8);
+    x <<= (9 as i8);
+    y >>= (1 as u8);
+    return (x, y);
+}
+
 const SH: f64 = shapes();
 const ST: (i64, i32, f64, Array<i32, 4>) = stats();
 const VO: i32 = vowels("compile time evaluation");
@@ -161,6 +168,7 @@ const FS: (i64, i64, bool)! = fields("  12,345 ");
 const PA: (f64, i32, f64) = parsed();
 const CO: i32 = counted(5);
 const TR: str = "  hi ".trim();
+const SF: (u32, i64) = shifted(127, -300);
 
 fn main() {
     println("{} {}", SH, shapes());
@@ -175,4 +183,5 @@ fn main() {
     println("{} {} {}", PA, parsed(), PA == parsed());
     println("{} {}", CO, counted(5));
     println("[{}] [{}]", TR, "  hi ".trim());
+    println("{} {}", SF, shifted(127, -300));
 }

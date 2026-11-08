@@ -12,7 +12,7 @@ use crate::token::Token;
 use crate::ty::{Ty, TyKind, Types};
 
 use super::body::FnCx;
-use super::expr::is_number_literal;
+use super::expr::written_value;
 use super::{Receiver, suggest};
 
 /// The built-in ways to write text: to stdout or stderr, with or without a
@@ -1138,6 +1138,16 @@ impl FnCx<'_, '_> {
             }
         }
         if let Some(expected) = expected {
+            let none = late
+                .iter()
+                .any(|&at| matches!(args[at].kind, ExpressionKind::None));
+            let returned = self.resolve(ret);
+            let expected = match self.wrapper(Some(returned)) {
+                None if !none => self
+                    .unwrap_expected(Some(expected))
+                    .expect("an expected type"),
+                _ => expected,
+            };
             self.fits(expected, ret, false);
             given.clear();
         }
@@ -2114,22 +2124,6 @@ fn bit_op(name: &str) -> Option<BitOp> {
         .iter()
         .find(|(known, _)| *known == name)
         .map(|&(_, op)| op)
-}
-
-/// A number written out, `None`, or arithmetic, an array or a tuple of
-/// them: it fits whichever type the rest of a call settles.
-fn written_value(expr: &Expression) -> bool {
-    match &expr.kind {
-        ExpressionKind::Infix { left, right, .. } => written_value(left) && written_value(right),
-        ExpressionKind::ArrayLiteral(items)
-        | ExpressionKind::VecLiteral(items)
-        | ExpressionKind::Tuple(items) => items.iter().all(written_value),
-        ExpressionKind::ArrayRepeat { value, .. } | ExpressionKind::VecRepeat { value, .. } => {
-            written_value(value)
-        }
-        ExpressionKind::None => true,
-        _ => is_number_literal(expr),
-    }
 }
 
 /// Whether reading `place` twice reads the same thing without evaluating

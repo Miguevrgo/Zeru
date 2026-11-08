@@ -1075,7 +1075,7 @@ impl Eval<'_, '_> {
                 Value::Void
             }
             ExprKind::CompoundAssign { place, op, value } => {
-                let target = value.ty;
+                let target = self.place_ty(place);
                 let value = self.expr(value)?;
                 let loc = self.loc(place)?;
                 let old = self.get(&loc);
@@ -1143,6 +1143,29 @@ impl Eval<'_, '_> {
             said += &String::from_utf8_lossy(piece);
         }
         Some(said)
+    }
+
+    /// The type of what `place` holds, in the function running.
+    fn place_ty(&mut self, place: &Place) -> Ty {
+        let body = self.frames.last().expect("a frame runs").body.clone();
+        let closure = (body.params.first())
+            .and_then(|env| self.types().pointee(body.locals[env.0 as usize].ty));
+        let captures: Vec<Ty> = (self.cx.closures.iter())
+            .find(|info| Some(info.ty) == closure)
+            .map_or_else(Vec::new, |info| {
+                let types = &self.cx.types;
+                info.fields
+                    .iter()
+                    .filter_map(|&field| types.pointee(field))
+                    .collect()
+            });
+        self.cx
+            .place_ty(place, &|root| match *root {
+                Place::Local(local) => body.locals[local.0 as usize].ty,
+                Place::Capture(at) => captures[at as usize],
+                _ => unreachable!("a place starts at a local or a capture"),
+            })
+            .expect("a checked place")
     }
 
     fn int_ty(&self, ty: Ty) -> IntTy {

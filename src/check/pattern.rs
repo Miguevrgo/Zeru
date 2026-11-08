@@ -93,7 +93,7 @@ impl FnCx<'_, '_> {
             let (arm, shape) = (&arms[at], shapes[at].take().expect("each arm once"));
             let (pattern, body) = (&arm.pattern, &arm.body);
             let take = temporary && arm.guard.is_none();
-            self.diverges = before;
+            self.diverges = false;
             self.enter();
             let bindings: Vec<_> = shape
                 .binds
@@ -108,7 +108,7 @@ impl FnCx<'_, '_> {
                 .guard
                 .as_ref()
                 .map(|guard| self.condition(guard, "A match guard must be a bool, got "));
-            self.diverges = before;
+            self.diverges = false;
             if let Some(plain) = arm_ty {
                 let ty = self.with_none(plain, body, expected);
                 arm_ty = Some(ty);
@@ -193,7 +193,7 @@ impl FnCx<'_, '_> {
                 arm
             })
             .collect();
-        self.diverges = all_leave;
+        self.diverges = before || all_leave;
         let ty = match mismatched {
             true => Types::ERROR,
             false => arm_ty.unwrap_or(Types::VOID),

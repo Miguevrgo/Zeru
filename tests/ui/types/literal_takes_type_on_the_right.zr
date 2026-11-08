@@ -6,4 +6,8 @@ fn main() {
     const neg: i64 = 7;
     const diff = -1 - neg;
     println("{} {} {}", below, doubled, diff);
+    const big: u64 = 66;
+    const sum = (5000000000 + 1) + big;
+    const pick = (if below { 5 } else { 6 }) * big;
+    println("{} {}", sum, pick);
 }

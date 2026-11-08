@@ -1,6 +1,14 @@
 struct Box<T> {
     v: T,
 }
+fn larger<T: Ord>(a: T, b: T) T {
+    if a > b {
+        return a;
+    }
+    return b;
+}
 fn main() {
     const o: Box<i64>? = Box { v: 3 };
+    const m: f64? = larger(1.5, 2.5);
+    println("{} {}", o.unwrap().v, m);
 }

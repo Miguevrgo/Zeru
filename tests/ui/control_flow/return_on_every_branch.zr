@@ -27,6 +27,15 @@ fn d(n: i32?) i32 {
         }
     }
 }
+fn e(n: i32) i32 {
+    if n > 0 {
+        return 1;
+    } else {
+        return 2;
+    }
+    const x: i32 = (if n > 5 { 1 } else { 2 }) + match n { 0 => 3, default => 4 };
+    return x;
+}
 fn main() {
-    println("{} {} {} {}", a(1), b(0), c(1), d(None));
+    println("{} {} {} {} {}", a(1), b(0), c(1), d(None), e(3));
 }
