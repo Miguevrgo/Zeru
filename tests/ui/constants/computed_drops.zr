@@ -1,0 +1,128 @@
+struct Acc {
+    n: &var i32,
+    step: i32,
+
+    fn drop(var self) {
+        *self.n = *self.n * 10 + self.step;
+    }
+}
+
+struct Outer {
+    a: Acc,
+    b: Acc,
+    log: &var i32,
+
+    fn drop(var self) {
+        *self.log = *self.log * 10 + 9;
+        self.b.step = 5;
+    }
+}
+
+enum Holder {
+    One(Acc),
+    Two(Acc, Acc),
+    Nothing,
+}
+
+fn make(n: &var i32, step: i32) Acc {
+    return Acc { n: n, step: step };
+}
+
+fn take(a: Acc) i32 {
+    return a.step;
+}
+
+fn pick(n: &var i32, which: i32) Holder {
+    if which == 1 {
+        return Holder::One(Acc { n: n, step: 1 });
+    }
+    if which == 2 {
+        return Holder::Two(Acc { n: n, step: 2 }, Acc { n: n, step: 3 });
+    }
+    return Holder::Nothing;
+}
+
+fn pair(n: &var i32) (Acc, Acc) {
+    return (Acc { n: n, step: 4 }, Acc { n: n, step: 6 });
+}
+
+fn scopes() i32 {
+    var n = 0;
+    {
+        const _a = Acc { n: &var n, step: 1 };
+        const b = Acc { n: &var n, step: 2 };
+        var _c = Acc { n: &var n, step: 3 };
+        _c = Acc { n: &var n, step: 4 };
+        var _ = take(b);
+        var _ = make(&var n, 5).step;
+        var i = 0;
+        while i < 2 {
+            const _l = Acc { n: &var n, step: 7 };
+            i += 1;
+            if i == 1 {
+                continue;
+            }
+            break;
+        }
+    }
+    return n;
+}
+
+fn early(n: &var i32, stop: bool) i32 {
+    const _a = Acc { n: n, step: 8 };
+    if stop {
+        return 1;
+    }
+    return 2;
+}
+
+fn returns() i32 {
+    var n = 0;
+    var _ = early(&var n, true);
+    var _ = early(&var n, false);
+    {
+        const (_a, _) = (Acc { n: &var n, step: 1 }, Acc { n: &var n, step: 2 });
+        const _t = Some(Acc { n: &var n, step: 3 });
+    }
+    return n;
+}
+
+fn nested() i32 {
+    var n = 0;
+    {
+        const _o = Outer {
+            a: Acc { n: &var n, step: 1 },
+            b: Acc { n: &var n, step: 2 },
+            log: &var n,
+        };
+    }
+    return n;
+}
+
+fn taken() i32 {
+    var n = 0;
+    const got = match pick(&var n, 2) {
+        Holder::Two(x, _) => x.step,
+        Holder::One(x) => x.step,
+        Holder::Nothing => 0,
+    };
+    n = n * 10 + got;
+    const kept = pair(&var n).1;
+    n = n * 10 + kept.step;
+    var slot: Acc? = None;
+    slot = Acc { n: &var n, step: 1 };
+    var _ = replace(&var slot, None);
+    return n;
+}
+
+const S: i32 = scopes();
+const R: i32 = returns();
+const N: i32 = nested();
+const T: i32 = taken();
+
+fn main() {
+    println("{} {}", S, scopes());
+    println("{} {}", R, returns());
+    println("{} {}", N, nested());
+    println("{} {}", T, taken());
+}

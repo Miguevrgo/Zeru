@@ -2,7 +2,7 @@
 //! the width of their type, as the program would at runtime.
 
 use crate::ast::{Expression, ExpressionKind, StatementKind};
-use crate::errors::Span;
+use crate::errors::{Span, with_article};
 use crate::items::DefId;
 use crate::tir::{BinOp, Expr, ExprKind, UnOp};
 use crate::ty::{IntTy, Types};
@@ -49,9 +49,23 @@ impl Checker<'_> {
             }),
             None => checked,
         };
-        let views = cx.views();
-        if !is_constant(value) && self.errors.len() == errors {
-            checked = match self.run_constant(&checked, &views, name, span) {
+        let locals = cx.locals.clone();
+        if self.errors.len() == errors && self.owns_heap(checked.ty) {
+            let held = with_article(&self.types.show(checked.ty));
+            let why = match self.runs_drop(checked.ty) {
+                true => "have a drop",
+                false => "own memory on the heap",
+            };
+            self.error(
+                format!(
+                    "Constant '{name}' cannot hold {held}: a constant is copied wherever it is used, so nothing in its type can {why}"
+                ),
+                span,
+            )
+            .help("make it a function that returns a new value, or a const inside the function that uses it");
+            checked = Expr::error(span);
+        } else if !is_constant(value) && self.errors.len() == errors {
+            checked = match self.run_constant(&checked, locals, name, span) {
                 Some(value) => value,
                 None => Expr::error(span),
             };

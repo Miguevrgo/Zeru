@@ -7,7 +7,7 @@ Error: Computing a constant while compiling cannot make a Vec: it lives on the h
     │                       ────┬────
     │                           ╰────── Computing a constant while compiling cannot make a Vec: it lives on the heap
     │
- 44 │ const A = heap();
+ 69 │ const A = heap();
     │ ────────┬────────
     │         ╰────────── while computing 'A'
 ────╯
@@ -18,7 +18,7 @@ Error: Computing a constant while compiling cannot print
     │     ──────┬──────
     │           ╰──────── Computing a constant while compiling cannot print
     │
- 45 │ const B = noisy();
+ 70 │ const B = noisy();
     │ ─────────┬────────
     │          ╰────────── while computing 'B'
 ────╯
@@ -31,7 +31,7 @@ Error: A constant takes more than 10000000 steps to compute; it may never end
     │ │
     │ ╰─────────── A constant takes more than 10000000 steps to compute; it may never end
     │
- 46 │     const C = forever();
+ 71 │     const C = forever();
     │     ──────────┬─────────
     │               ╰─────────── while computing 'C'
 ────╯
@@ -42,7 +42,7 @@ Error: A constant's calls go more than 256 deep while computing it
     │            ─────┬─────
     │                 ╰─────── A constant's calls go more than 256 deep while computing it
     │
- 47 │ const D = deep(0);
+ 72 │ const D = deep(0);
     │ ─────────┬────────
     │          ╰────────── while computing 'D'
 ────╯
@@ -53,7 +53,7 @@ Error: Arithmetic overflow of i8 while computing a constant
     │            ──┬──
     │              ╰──── Arithmetic overflow of i8 while computing a constant
     │
- 48 │ const E = overflow();
+ 73 │ const E = overflow();
     │ ──────────┬──────────
     │           ╰──────────── while computing 'E'
 ────╯
@@ -64,7 +64,7 @@ Error: Index 5 is outside 0..3 while computing a constant
     │              ┬
     │              ╰── Index 5 is outside 0..3 while computing a constant
     │
- 49 │ const G = outside();
+ 74 │ const G = outside();
     │ ──────────┬─────────
     │           ╰─────────── while computing 'G'
 ────╯
@@ -74,17 +74,6 @@ Error: 'LOOP' is defined in terms of itself
  29 │     return LOOP + 1;
     │            ──┬─
     │              ╰─── 'LOOP' is defined in terms of itself
-────╯
-Error: Computing a constant while compiling cannot use the heap or a slice
-    ╭─[ tests/ui/constants/computed_errors.zr:32:12 ]
-    │
- 32 │     return String.new();
-    │            ──────┬─────
-    │                  ╰─────── Computing a constant while compiling cannot use the heap or a slice
-    │
- 51 │ const H = text();
-    │ ────────┬────────
-    │         ╰────────── while computing 'H'
 ────╯
 Error: Undeclared variable 'missing'
     ╭─[ tests/ui/constants/computed_errors.zr:35:12 ]
@@ -109,8 +98,77 @@ Error: Index 2 is outside 0..2 while computing a constant
     │                                ┬
     │                                ╰── Index 2 is outside 0..2 while computing a constant
     │
- 54 │ const K = past_table();
+ 79 │ const K = past_table();
     │ ───────────┬───────────
     │            ╰───────────── while computing 'K'
+────╯
+Error: Computing a constant while compiling cannot print
+    ╭─[ tests/ui/constants/computed_errors.zr:47:9 ]
+    │
+ 47 │         println("drop {}", self.n);
+    │         ─────────────┬────────────
+    │                      ╰────────────── Computing a constant while compiling cannot print
+    │
+ 81 │ const M = noisy_scope();
+    │ ────────────┬───────────
+    │             ╰───────────── while computing 'M'
+────╯
+Error: Computing a constant while compiling cannot use a pointer: this is a *i32
+    ╭─[ tests/ui/constants/computed_errors.zr:56:15 ]
+    │
+ 56 │     const p = (&a[0]) as *i32;
+    │               ───────┬───────
+    │                      ╰───────── Computing a constant while compiling cannot use a pointer: this is a *i32
+    │
+ 82 │ const P = pointer();
+    │ ──────────┬─────────
+    │           ╰─────────── while computing 'P'
+────╯
+Error: Computing a constant while compiling cannot call exit(), which ends the program
+    ╭─[ tests/ui/constants/computed_errors.zr:60:5 ]
+    │
+ 60 │     exit(3);
+    │     ───┬───
+    │        ╰───── Computing a constant while compiling cannot call exit(), which ends the program
+    │
+ 83 │ const Q = leave();
+    │ ─────────┬────────
+    │          ╰────────── while computing 'Q'
+────╯
+Error: Computing a constant while compiling cannot use a Vec or a String: they live on the heap
+    ╭─[ tests/ui/constants/computed_errors.zr:64:12 ]
+    │
+ 64 │     return "a,b".split(",").len();
+    │            ────────┬───────
+    │                    ╰───────── Computing a constant while compiling cannot use a Vec or a String: they live on the heap
+    │
+ 84 │ const R = parts();
+    │ ─────────┬────────
+    │          ╰────────── while computing 'R'
+────╯
+Error: Constant 'H' cannot hold a String: a constant is copied wherever it is used, so nothing in its type can own memory on the heap
+    ╭─[ tests/ui/constants/computed_errors.zr:76:1 ]
+    │
+ 76 │ const H = text();
+    │ ────────┬────────
+    │         ╰────────── Constant 'H' cannot hold a String: a constant is copied wherever it is used, so nothing in its type can own memory on the heap
+    │
+    │ Help: make it a function that returns a new value, or a const inside the function that uses it
+────╯
+Error: Constant 'L' cannot hold a Noisy: a constant is copied wherever it is used, so nothing in its type can have a drop
+    ╭─[ tests/ui/constants/computed_errors.zr:80:1 ]
+    │
+ 80 │ const L: Noisy = Noisy { n: 1 };
+    │ ────────────────┬───────────────
+    │                 ╰───────────────── Constant 'L' cannot hold a Noisy: a constant is copied wherever it is used, so nothing in its type can have a drop
+    │
+    │ Help: make it a function that returns a new value, or a const inside the function that uses it
+────╯
+Error: Computing a constant while compiling cannot keep a reference or a slice: what it points at is gone once compiling ends
+    ╭─[ tests/ui/constants/computed_errors.zr:85:1 ]
+    │
+ 85 │ const S = tail(&PAIRS[0]);
+    │ ─────────────┬────────────
+    │              ╰────────────── Computing a constant while compiling cannot keep a reference or a slice: what it points at is gone once compiling ends
 ────╯
 [-] Error: aborting due to previous error

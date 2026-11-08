@@ -1,18 +1,14 @@
 status: compile error
 -- stderr
-Error: Computing a constant while compiling cannot use the heap or a slice
-     ╭─[ std/builtin.zr:624:67 ]
-     │
- 624 │     return OutStream { fd: -1, buffer: [0; 4096], index: 0, text: String.new() };
-     │                                                                   ──────┬─────
-     │                                                                         ╰─────── Computing a constant while compiling cannot use the heap or a slice
-     │
-     ├─[ tests/ui/strings_printing/format_errors.zr:4:1 ]
-     │
-   4 │ const C: String = format("{}", 1);
-     │ ─────────────────┬────────────────
-     │                  ╰────────────────── while computing 'C'
-─────╯
+Error: Constant 'C' cannot hold a String: a constant is copied wherever it is used, so nothing in its type can own memory on the heap
+   ╭─[ tests/ui/strings_printing/format_errors.zr:4:1 ]
+   │
+ 4 │ const C: String = format("{}", 1);
+   │ ─────────────────┬────────────────
+   │                  ╰────────────────── Constant 'C' cannot hold a String: a constant is copied wherever it is used, so nothing in its type can own memory on the heap
+   │
+   │ Help: make it a function that returns a new value, or a const inside the function that uses it
+───╯
 Error: format takes a format string first
    ╭─[ tests/ui/strings_printing/format_errors.zr:6:13 ]
    │

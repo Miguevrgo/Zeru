@@ -169,11 +169,6 @@ impl<'c, 'a> FnCx<'c, 'a> {
         }
     }
 
-    /// Which of its locals are views.
-    pub(super) fn views(&self) -> Vec<bool> {
-        self.locals.iter().map(|local| local.view).collect()
-    }
-
     pub(super) fn fix(&mut self, id: LocalId, why: Fixed) {
         self.fixed[id.0 as usize] = Some(why);
     }

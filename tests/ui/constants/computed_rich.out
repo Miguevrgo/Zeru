@@ -7,3 +7,8 @@ status: exit 0
 [9, 1, 2] [9, 1, 2]
 [false, false, true, true, false, true, false, true, false, false, false, true, false, true, false, false, false, true, false, true, false, false, false, true, false, false, false, false, false, true, false, true, false, false, false, false, false, true, false, false, false, true, false, true, false, false, false, true, false, false]
 [false, false, true, true, false, true, false, true, false, false, false, true, false, true, false, false, false, true, false, true, false, false, false, true, false, false, false, false, false, true, false, true, false, false, false, false, false, true, false, false, false, true, false, true, false, false, false, true, false, false]
+([1, 2, 3, 40, 9, 7], 272490) ([1, 2, 3, 40, 9, 7], 272490)
+(12, 345, true) (12, 345, true)
+(3.251, 22, 0.30000000000000004) (3.251, 22, 0.30000000000000004) true
+10 10
+[hi] [hi]

@@ -1,16 +1,18 @@
 //! Running a global constant's value at compile time, so a function may
 //! compute it. The functions it calls run over their typed IR, on plain
-//! data only: numbers, bools, text, and arrays, tuples, structs, enums and
-//! optionals of them, reached directly or through references. What needs the
-//! heap, a pointer, assembly or output stops it with an error.
+//! data only: numbers, bools, text, and arrays, tuples, structs, enums,
+//! optionals and results of them, reached directly, through references or
+//! through slices. Each `drop` runs where the program would run it. What
+//! needs the heap, a pointer, assembly or output stops it with an error.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use crate::errors::{Span, ZeruError};
+use crate::items::{DefId, ItemKind};
 use crate::tir::{
-    self, BinOp, BitOp, Block, Builtin, Expr, ExprKind, FnId, LocalId, Payload, Place, Stmt,
-    StmtKind, UnOp, Unpack,
+    self, BinOp, BitOp, Builtin, Expr, ExprKind, FnId, LocalId, Payload, Place, Stmt, StmtKind,
+    UnOp, Unpack,
 };
 use crate::ty::{IntTy, Ty, TyKind, Types};
 
@@ -32,15 +34,45 @@ enum Value {
     Parts(Vec<Value>),
     Variant(u32, Vec<Value>),
     Optional(Option<Box<Value>>),
+    Outcome(bool, Box<Value>),
     Ref(Loc),
+    Slice(Loc, usize, usize),
 }
 
 /// Where a value lives: a slot of a frame, and the parts followed from it.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct Loc {
     frame: usize,
     slot: usize,
     path: Vec<usize>,
+}
+
+/// The elements of a sequence: bytes of text, or `len` elements of the
+/// array at a place from `start` on.
+enum Seq {
+    Text(Rc<[u8]>),
+    Elems(Loc, usize, usize),
+}
+
+impl Seq {
+    fn len(&self) -> usize {
+        match self {
+            Seq::Text(bytes) => bytes.len(),
+            Seq::Elems(_, _, len) => *len,
+        }
+    }
+
+    /// Element `at`: a place in the array, or a byte of text.
+    fn element(&self, at: usize) -> Element {
+        match self {
+            Seq::Text(bytes) => Element::Value(Value::Int(i128::from(bytes[at]))),
+            Seq::Elems(base, start, _) => {
+                let mut loc = base.clone();
+                loc.path.push(start + at);
+                Element::Place(loc)
+            }
+        }
+    }
 }
 
 /// Why evaluation stopped short: a jump out of a loop or a function, or a
@@ -55,17 +87,37 @@ enum Exit {
 
 type Run<T> = Result<T, Exit>;
 
-/// What a function body needs to run: which of its locals are views, its
-/// parameters and its statements.
+/// What a function body needs to run: its locals, its parameters and its
+/// statements.
 struct Body {
-    views: Vec<bool>,
+    locals: Vec<tir::Local>,
     params: Vec<LocalId>,
-    block: Block,
+    stmts: Vec<Stmt>,
 }
 
+/// A running call: its slots, those of them that own a value with a `drop`
+/// for their scope or their statement to drop, in the order they got it,
+/// those whose value was moved away, and the statement it is at.
 struct Frame {
     slots: Vec<Option<Value>>,
-    views: Rc<[bool]>,
+    body: Rc<Body>,
+    owned: Vec<(usize, Ty)>,
+    temps: Vec<(usize, Ty)>,
+    moved: HashSet<usize>,
+    at: Span,
+}
+
+impl Frame {
+    fn new(body: Rc<Body>, at: Span) -> Frame {
+        Frame {
+            slots: vec![None; body.locals.len()],
+            body,
+            owned: Vec::new(),
+            temps: Vec::new(),
+            moved: HashSet::new(),
+            at,
+        }
+    }
 }
 
 struct Eval<'c, 'a> {
@@ -73,30 +125,46 @@ struct Eval<'c, 'a> {
     bodies: HashMap<FnId, Rc<Body>>,
     frames: Vec<Frame>,
     steps: u64,
+    drops: HashMap<Ty, bool>,
+    exit: DefId,
+    swap: DefId,
 }
 
 impl Checker<'_> {
     /// The value of `expr`, the definition of the constant `name` declared
-    /// at `span`, run now and written as literals.
-    /// `views` says which of the locals the definition's own `match`
-    /// declares are views.
+    /// at `span`, run now and written as literals. `locals` are those the
+    /// definition's own `match` declares.
     pub(super) fn run_constant(
         &mut self,
         expr: &Expr,
-        views: &[bool],
+        locals: Vec<tir::Local>,
         name: &str,
         span: Span,
     ) -> Option<Expr> {
+        let body = Rc::new(Body {
+            locals,
+            params: Vec::new(),
+            stmts: Vec::new(),
+        });
         let mut eval = Eval {
+            exit: self.prelude_def("exit"),
+            swap: self.prelude_def("__zeru_vec_swap"),
             cx: self,
             bodies: HashMap::new(),
-            frames: vec![Frame {
-                slots: vec![None; views.len()],
-                views: Rc::from(views),
-            }],
+            frames: vec![Frame::new(body, span)],
             steps: 0,
+            drops: HashMap::new(),
         };
-        let value = match eval.expr(expr) {
+        let value = eval.expr(expr);
+        let ended = match value {
+            Ok(value) if refers(&value) => cannot(
+                "keep a reference or a slice: what it points at is gone once compiling ends",
+                span,
+            ),
+            Ok(value) => eval.end_temps(0, Ok(())).map(|()| value),
+            Err(exit) => Err(exit),
+        };
+        let value = match ended {
             Ok(value) => value,
             Err(Exit::Fail(message, at)) => {
                 let mut error = ZeruError::semantic(message, at);
@@ -141,6 +209,12 @@ impl Checker<'_> {
             (Value::Optional(Some(inner)), TyKind::Optional(inner_ty)) => {
                 ExprKind::Some(Box::new(self.literal(inner, inner_ty, span)))
             }
+            (Value::Outcome(true, inner), TyKind::Result(inner_ty)) => {
+                ExprKind::Ok(Box::new(self.literal(inner, inner_ty, span)))
+            }
+            (Value::Outcome(false, code), _) => {
+                ExprKind::Err(Box::new(self.literal(code, Types::I32, span)))
+            }
             _ => ExprKind::Void,
         };
         Expr { kind, ty, span }
@@ -178,6 +252,21 @@ fn cannot<T>(what: &str, span: Span) -> Run<T> {
     )
 }
 
+/// Whether `value` holds a reference or a slice.
+fn refers(value: &Value) -> bool {
+    match value {
+        Value::Ref(_) | Value::Slice(..) => true,
+        Value::Parts(parts) | Value::Variant(_, parts) => parts.iter().any(refers),
+        Value::Optional(Some(inner)) | Value::Outcome(_, inner) => refers(inner),
+        _ => false,
+    }
+}
+
+/// Whether evaluation stopped for good, so nothing more runs.
+fn stopped<T>(result: &Run<T>) -> bool {
+    matches!(result, Err(Exit::Fail(..) | Exit::Broken))
+}
+
 impl Eval<'_, '_> {
     fn types(&self) -> &Types {
         &self.cx.types
@@ -204,14 +293,16 @@ impl Eval<'_, '_> {
         self.cx.check_instance(id);
         let function = self.cx.functions[id.0 as usize].as_ref().unwrap();
         let body = Rc::new(Body {
-            views: function.locals.iter().map(|local| local.view).collect(),
+            locals: function.locals.clone(),
             params: function.params.clone(),
-            block: function.body.clone(),
+            stmts: function.body.stmts.clone(),
         });
         self.bodies.insert(id, body.clone());
         body
     }
 
+    /// Call `id`; a failure inside std is reported at the call from outside
+    /// it that led there.
     fn call(&mut self, id: FnId, args: Vec<Value>, span: Span) -> Run<Value> {
         if self.frames.len() > MAX_DEPTH {
             return fail(
@@ -219,51 +310,291 @@ impl Eval<'_, '_> {
                 span,
             );
         }
+        let def = self.cx.queued[id.0 as usize].def;
+        if def == self.exit {
+            return cannot("call exit(), which ends the program", span);
+        }
+        if def == self.swap {
+            return self.swap(args, span);
+        }
         let body = self.body(id);
         if self.cx.broken.contains(&id) {
             return Err(Exit::Broken);
         }
-        let mut slots = vec![None; body.views.len()];
+        let mut frame = Frame::new(body.clone(), span);
         for (&param, arg) in body.params.iter().zip(args) {
-            slots[param.0 as usize] = Some(arg);
+            frame.slots[param.0 as usize] = Some(arg);
         }
-        self.frames.push(Frame {
-            slots,
-            views: Rc::from(body.views.as_slice()),
-        });
-        let result = self.block(&body.block);
+        self.frames.push(frame);
+        for &param in &body.params {
+            self.own(param);
+        }
+        let result = self.stmts(&body.stmts);
+        let result = self.leave(0, result);
         self.frames.pop();
         match result {
             Ok(()) => Ok(Value::Void),
             Err(Exit::Return(value)) => Ok(value),
+            Err(Exit::Fail(message, at))
+                if self.cx.sources.in_std(at) && !self.cx.sources.in_std(span) =>
+            {
+                fail(message, span)
+            }
             Err(other) => Err(other),
         }
     }
 
-    fn block(&mut self, block: &Block) -> Run<()> {
-        for stmt in &block.stmts {
+    /// `v.swap(i, j)`, which the prelude does on the bytes behind pointers:
+    /// the two elements of the slice trade places.
+    fn swap(&mut self, args: Vec<Value>, span: Span) -> Run<Value> {
+        let mut args = args.into_iter();
+        let (Some(seq), Some(Value::Int(i)), Some(Value::Int(j))) = (
+            args.next().and_then(|slice| self.seq_of(slice)),
+            args.next(),
+            args.next(),
+        ) else {
+            unreachable!("a slice and two indices")
+        };
+        let (Element::Place(a), Element::Place(b)) = (
+            seq.element(inside(i, seq.len(), span)?),
+            seq.element(inside(j, seq.len(), span)?),
+        ) else {
+            unreachable!("a slice of elements")
+        };
+        let (first, second) = (self.get(&a), self.get(&b));
+        self.set(&a, second);
+        self.set(&b, first);
+        Ok(Value::Void)
+    }
+
+    fn stmts(&mut self, stmts: &[Stmt]) -> Run<()> {
+        for stmt in stmts {
             self.stmt(stmt)?;
         }
         Ok(())
     }
 
-    /// One statement; the temporaries it makes end with it.
+    /// A block, whose locals are dropped as it ends and whose temporaries
+    /// end with it.
+    fn block(&mut self, block: &tir::Block) -> Run<()> {
+        let frame = self.frames.last().expect("a frame runs");
+        let (owned, slots) = (frame.owned.len(), frame.slots.len());
+        let result = self.stmts(&block.stmts);
+        let result = self.leave(owned, result);
+        self.free(slots);
+        result
+    }
+
+    /// A block that gives a value, its last statement.
+    fn value_block(&mut self, block: &tir::Block) -> Run<Value> {
+        let (last, rest) = block.stmts.split_last().expect("a block's value ends it");
+        let StmtKind::Expr(last) = &last.kind else {
+            unreachable!("a block's value is an expression")
+        };
+        let owned = self.frame().owned.len();
+        let value = match self.stmts(rest) {
+            Ok(()) => self.expr(last),
+            Err(exit) => Err(exit),
+        };
+        self.leave_with(owned, value)
+    }
+
+    /// Free the slots from `slots` on, temporaries no longer used.
+    fn free(&mut self, slots: usize) {
+        let frame = self.frame();
+        frame.slots.truncate(slots);
+        frame.moved.retain(|&slot| slot < slots);
+    }
+
+    /// One statement; the temporaries it made are dropped as it ends.
     fn stmt(&mut self, stmt: &Stmt) -> Run<()> {
         self.step(stmt.span)?;
-        let mark = self.frame().slots.len();
+        let mark = self.frame().temps.len();
+        self.frame().at = stmt.span;
         let result = self.run_stmt(stmt);
-        self.frame().slots.truncate(mark);
+        self.end_temps(mark, result)
+    }
+
+    /// Drop the temporaries made from `mark` on, last made first.
+    fn end_temps(&mut self, mark: usize, result: Run<()>) -> Run<()> {
+        if stopped(&result) {
+            return result;
+        }
+        let ending = self.frame().temps.split_off(mark);
+        self.drop_all(ending)?;
         result
+    }
+
+    /// Leave the scope whose locals start at `mark` in `owned`: drop them,
+    /// last made first.
+    fn leave(&mut self, mark: usize, result: Run<()>) -> Run<()> {
+        if stopped(&result) {
+            return result;
+        }
+        let ending = self.frame().owned.split_off(mark);
+        self.drop_all(ending)?;
+        result
+    }
+
+    fn leave_with(&mut self, mark: usize, value: Run<Value>) -> Run<Value> {
+        match value {
+            Ok(value) => self.leave(mark, Ok(())).map(|()| value),
+            Err(exit) => self.leave(mark, Err(exit)).map(|()| Value::Void),
+        }
+    }
+
+    /// Drop the value in each slot of `ending` that was not moved away, last
+    /// first.
+    fn drop_all(&mut self, ending: Vec<(usize, Ty)>) -> Run<()> {
+        let frame = self.frames.len() - 1;
+        for (slot, ty) in ending.into_iter().rev() {
+            if !self.frame().moved.remove(&slot) {
+                let path = Vec::new();
+                self.drop_at(Loc { frame, slot, path }, ty)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn needs_drop(&mut self, ty: Ty) -> bool {
+        if let Some(&drops) = self.drops.get(&ty) {
+            return drops;
+        }
+        let drops = self.cx.owns_heap(ty);
+        self.drops.insert(ty, drops);
+        drops
+    }
+
+    /// Let the current scope drop the value of `local` as it ends.
+    fn own(&mut self, local: LocalId) {
+        let at = local.0 as usize;
+        let decl = &self.frames.last().expect("a frame runs").body.locals[at];
+        let (view, ty) = (decl.view, decl.ty);
+        if !view && self.needs_drop(ty) {
+            self.frame().owned.push((at, ty));
+        }
+    }
+
+    /// Run what dropping the value of type `ty` at `loc` runs: a struct's
+    /// own `drop` first, then that of each part.
+    fn drop_at(&mut self, loc: Loc, ty: Ty) -> Run<()> {
+        if !self.needs_drop(ty) {
+            return Ok(());
+        }
+        let at = self.frames.last().expect("a frame runs").at;
+        if let TyKind::Adt(def, args) = self.types().kind(ty).clone()
+            && self.cx.items.item(def).kind == ItemKind::Struct
+            && let Some(method) = self.cx.items.method(def, "drop")
+        {
+            let id = self.cx.instance(method, args, at);
+            self.call(id, vec![Value::Ref(loc.clone())], at)?;
+        }
+        for (index, part) in self.parts(&loc, ty).into_iter().enumerate() {
+            let mut inner = loc.clone();
+            inner.path.push(index);
+            self.drop_at(inner, part)?;
+        }
+        Ok(())
+    }
+
+    /// Drop the parts of the value of type `ty` at `loc` that no binding in
+    /// `bound` takes, as a `match` taking a temporary apart does.
+    fn drop_except(&mut self, loc: Loc, ty: Ty, bound: &[Loc]) -> Run<()> {
+        if bound.contains(&loc) {
+            return Ok(());
+        }
+        let within = |b: &Loc| b.frame == loc.frame && b.slot == loc.slot;
+        if !bound
+            .iter()
+            .any(|b| within(b) && b.path.starts_with(&loc.path))
+        {
+            return self.drop_at(loc, ty);
+        }
+        for (index, part) in self.parts(&loc, ty).into_iter().enumerate() {
+            let mut inner = loc.clone();
+            inner.path.push(index);
+            self.drop_except(inner, part, bound)?;
+        }
+        Ok(())
+    }
+
+    /// The types of the parts the value of type `ty` at `loc` holds.
+    fn parts(&mut self, loc: &Loc, ty: Ty) -> Vec<Ty> {
+        match self.types().kind(ty).clone() {
+            TyKind::Tuple(parts) => parts,
+            TyKind::Array(elem, len) => vec![elem; len as usize],
+            TyKind::Optional(inner) | TyKind::Result(inner) => match self.at(loc) {
+                Value::Optional(Some(_)) | Value::Outcome(true, _) => vec![inner],
+                _ => Vec::new(),
+            },
+            TyKind::Adt(def, args) if self.cx.items.item(def).kind == ItemKind::Enum => {
+                let Value::Variant(at, _) = *self.at(loc) else {
+                    unreachable!("an enum is one of its variants")
+                };
+                let fields = self.cx.variants_of(def)[at as usize].1.clone();
+                self.cx.types.subst_all(&fields, &args)
+            }
+            _ => self
+                .cx
+                .fields_of(ty)
+                .into_iter()
+                .map(|(_, ty)| ty)
+                .collect(),
+        }
+    }
+
+    /// Note that a move took the value at `loc`, which `place` names: a
+    /// local is not dropped then, and a temporary a field is moved out of
+    /// has its other parts dropped now.
+    fn give_up(&mut self, place: &Place, loc: &Loc) -> Run<()> {
+        match (place, place.base()) {
+            (Place::Local(local), _) if !self.is_view(*local) => {}
+            (Place::Field(..), Place::Temp(temp)) => {
+                let mut base = Loc {
+                    path: Vec::new(),
+                    ..loc.clone()
+                };
+                let mut ty = temp.ty;
+                for &at in &loc.path {
+                    let parts = self.cx.parts_of(ty).unwrap_or_default();
+                    for (other, &part) in parts.iter().enumerate() {
+                        if other != at {
+                            let mut inner = base.clone();
+                            inner.path.push(other);
+                            self.drop_at(inner, part)?;
+                        }
+                    }
+                    base.path.push(at);
+                    ty = parts[at];
+                }
+            }
+            _ => return Ok(()),
+        }
+        self.frames[loc.frame].moved.insert(loc.slot);
+        Ok(())
     }
 
     fn run_stmt(&mut self, stmt: &Stmt) -> Run<()> {
         match &stmt.kind {
             StmtKind::Let(local, value) => {
-                let value = self.expr(value)?;
-                self.set_local(*local, value);
+                let mark = self.frame().temps.len();
+                let held = self.expr(value)?;
+                self.set_local(*local, held);
+                for ty in value.borrowed_temps() {
+                    let frame = self.frame();
+                    if let Some(at) = frame.temps[mark..].iter().rposition(|t| t.1 == ty) {
+                        let kept = frame.temps.remove(mark + at);
+                        frame.owned.push(kept);
+                    }
+                }
+                self.own(*local);
             }
             StmtKind::Expr(expr) => {
-                self.expr(expr)?;
+                let value = self.expr(expr)?;
+                if !matches!(expr.kind, ExprKind::Read(_)) && self.needs_drop(expr.ty) {
+                    let loc = self.temp(value);
+                    self.frame().temps.push((loc.slot, expr.ty));
+                }
             }
             StmtKind::Return(value) => {
                 let value = match value {
@@ -279,14 +610,14 @@ impl Eval<'_, '_> {
                 then,
                 otherwise,
             } => {
-                if self.truth(cond)? {
+                if self.condition(cond)? {
                     self.block(then)?;
                 } else if let Some(otherwise) = otherwise {
                     self.block(otherwise)?;
                 }
             }
             StmtKind::While { cond, body } => {
-                while self.truth(cond)? {
+                while self.condition(cond)? {
                     self.step(stmt.span)?;
                     if self.turn(body)? {
                         break;
@@ -315,21 +646,19 @@ impl Eval<'_, '_> {
                 let mut seqs = Vec::new();
                 for walk in walks {
                     let loc = self.loc(&walk.seq)?;
-                    let len = match self.at(&loc) {
-                        Value::Parts(parts) => parts.len(),
-                        Value::Text(bytes) => bytes.len(),
-                        _ => return cannot("walk a Vec: it lives on the heap", stmt.span),
+                    let Some(seq) = self.seq(&loc) else {
+                        return cannot("walk a Vec: it lives on the heap", stmt.span);
                     };
-                    seqs.push((walk, loc, len));
+                    seqs.push((walk, seq));
                 }
-                let count = seqs.iter().map(|(_, _, len)| *len).min().unwrap_or(0);
+                let count = seqs.iter().map(|(_, seq)| seq.len()).min().unwrap_or(0);
                 for at in 0..count {
                     self.step(stmt.span)?;
                     if let Some(index) = index {
                         self.set_local(*index, Value::Int(at as i128));
                     }
-                    for (walk, loc, _) in &seqs {
-                        let element = self.element(loc, at, stmt.span)?;
+                    for (walk, seq) in &seqs {
+                        let element = seq.element(at);
                         self.bind(walk.var, element.clone());
                         if let Some(unpack) = &walk.unpack {
                             self.view_parts(unpack, element);
@@ -345,26 +674,25 @@ impl Eval<'_, '_> {
         Ok(())
     }
 
+    /// A condition, whose temporaries end once it is decided.
+    fn condition(&mut self, cond: &Expr) -> Run<bool> {
+        let frame = self.frames.last().expect("a frame runs");
+        let (mark, slots) = (frame.temps.len(), frame.slots.len());
+        let (truth, result) = match self.truth(cond) {
+            Ok(truth) => (truth, Ok(())),
+            Err(exit) => (false, Err(exit)),
+        };
+        self.end_temps(mark, result)?;
+        self.free(slots);
+        Ok(truth)
+    }
+
     /// One turn of a loop: whether a `break` ends it.
-    fn turn(&mut self, body: &Block) -> Run<bool> {
+    fn turn(&mut self, body: &tir::Block) -> Run<bool> {
         match self.block(body) {
             Ok(()) | Err(Exit::Continue) => Ok(false),
             Err(Exit::Break) => Ok(true),
             Err(other) => Err(other),
-        }
-    }
-
-    /// Element `at` of the array or text at `loc`: a place for an array's,
-    /// a value for a byte of text.
-    fn element(&mut self, loc: &Loc, at: usize, span: Span) -> Run<Element> {
-        match self.at(loc) {
-            Value::Text(bytes) => Ok(Element::Value(Value::Int(i128::from(bytes[at])))),
-            Value::Parts(_) => {
-                let mut loc = loc.clone();
-                loc.path.push(at);
-                Ok(Element::Place(loc))
-            }
-            _ => cannot("walk this sequence", span),
         }
     }
 
@@ -398,11 +726,13 @@ impl Eval<'_, '_> {
 
     fn is_view(&self, local: LocalId) -> bool {
         let frame = self.frames.last().expect("a frame runs");
-        frame.views.get(local.0 as usize).copied().unwrap_or(false)
+        frame.body.locals[local.0 as usize].view
     }
 
     fn set_local(&mut self, local: LocalId, value: Value) {
-        self.frame().slots[local.0 as usize] = Some(value);
+        let frame = self.frame();
+        frame.slots[local.0 as usize] = Some(value);
+        frame.moved.remove(&(local.0 as usize));
     }
 
     /// A slot of the current frame for a value that has no place of its own.
@@ -429,7 +759,7 @@ impl Eval<'_, '_> {
         for &at in &loc.path {
             value = match value {
                 Value::Parts(parts) | Value::Variant(_, parts) => &parts[at],
-                Value::Optional(Some(inner)) => inner,
+                Value::Optional(Some(inner)) | Value::Outcome(_, inner) => inner,
                 _ => unreachable!("a path follows the parts of a value"),
             };
         }
@@ -437,17 +767,40 @@ impl Eval<'_, '_> {
     }
 
     fn set(&mut self, loc: &Loc, new: Value) {
-        let mut value = self.frames[loc.frame].slots[loc.slot]
+        let frame = &mut self.frames[loc.frame];
+        if loc.path.is_empty() {
+            frame.moved.remove(&loc.slot);
+        }
+        let mut value = frame.slots[loc.slot]
             .as_mut()
             .expect("set before it is written");
         for &at in &loc.path {
             value = match value {
                 Value::Parts(parts) | Value::Variant(_, parts) => &mut parts[at],
-                Value::Optional(Some(inner)) => inner,
+                Value::Optional(Some(inner)) | Value::Outcome(_, inner) => inner,
                 _ => unreachable!("a path follows the parts of a value"),
             };
         }
         *value = new;
+    }
+
+    /// The elements of the array, slice or text at `loc`, unless it is a
+    /// Vec.
+    fn seq(&self, loc: &Loc) -> Option<Seq> {
+        match self.at(loc) {
+            Value::Parts(parts) => Some(Seq::Elems(loc.clone(), 0, parts.len())),
+            other => self.seq_of(other.clone()),
+        }
+    }
+
+    /// The elements `value` holds or refers to, unless it is a Vec.
+    fn seq_of(&self, value: Value) -> Option<Seq> {
+        match value {
+            Value::Ref(loc) => self.seq(&loc),
+            Value::Text(bytes) => Some(Seq::Text(bytes)),
+            Value::Slice(base, start, len) => Some(Seq::Elems(base, start, len)),
+            _ => None,
+        }
     }
 
     /// Where `place` is, its indices evaluated and checked.
@@ -469,44 +822,104 @@ impl Eval<'_, '_> {
                 loc.path.push(*at as usize);
                 loc
             }
-            Place::Index(base, index) => {
-                let mut loc = self.loc(base)?;
-                let at = self.int(index)?;
-                let len = match self.at(&loc) {
-                    Value::Parts(parts) => parts.len(),
-                    Value::Text(_) => return cannot("index text in place", index.span),
-                    _ => return cannot("index a Vec: it lives on the heap", index.span),
-                };
-                loc.path.push(inside(at, len, index.span)?);
-                loc
-            }
+            Place::Index(base, index) => match self.index(base, index)? {
+                Element::Place(loc) => loc,
+                Element::Value(_) => return cannot("index text in place", index.span),
+            },
             Place::Deref(pointer) => match self.expr(pointer)? {
                 Value::Ref(loc) => loc,
-                _ => return cannot("follow a pointer", pointer.span),
+                _ => unreachable!("a reference is followed"),
             },
             Place::Temp(value) => {
-                let value = self.expr(value)?;
-                self.temp(value)
+                let held = self.expr(value)?;
+                let loc = self.temp(held);
+                if !matches!(value.kind, ExprKind::Read(_)) && self.needs_drop(value.ty) {
+                    self.frame().temps.push((loc.slot, value.ty));
+                }
+                loc
             }
-            Place::Capture(_) => return cannot("run a closure", Span::default()),
+            Place::Capture(at) => {
+                let env = self.frames.last().unwrap().body.params[0];
+                let env = self.loc(&Place::Local(env))?;
+                let mut fields = match self.at(&env) {
+                    Value::Ref(closure) => closure.clone(),
+                    _ => env,
+                };
+                fields.path.push(*at as usize);
+                match self.get(&fields) {
+                    Value::Ref(target) => target,
+                    _ => unreachable!("a closure captures through references"),
+                }
+            }
         })
     }
 
-    fn read(&mut self, place: &Place, span: Span) -> Run<Value> {
+    fn read(&mut self, place: &Place) -> Run<Value> {
+        if let Some(value) = self.reinterpret(place)? {
+            return Ok(value);
+        }
         if !matches!(place, Place::Temp(_)) && shape(place).is_some() {
             let part = self.literal_part(place)?;
             return self.expr(part);
         }
-        if let Place::Index(base, index) = place {
-            let loc = self.loc(base)?;
-            if let Value::Text(bytes) = self.at(&loc) {
-                let bytes = bytes.clone();
-                let at = inside(self.int(index)?, bytes.len(), span)?;
-                return Ok(Value::Int(i128::from(bytes[at])));
-            }
-        }
-        let loc = self.loc(place)?;
+        let loc = match place {
+            Place::Index(base, index) => match self.index(base, index)? {
+                Element::Place(loc) => loc,
+                Element::Value(byte) => return Ok(byte),
+            },
+            _ => self.loc(place)?,
+        };
         Ok(self.get(&loc))
+    }
+
+    /// Element `index` of the sequence at `base`: a place in an array, or a
+    /// byte of text.
+    fn index(&mut self, base: &Place, index: &Expr) -> Run<Element> {
+        let loc = self.loc(base)?;
+        let at = self.int(index)?;
+        let Some(seq) = self.seq(&loc) else {
+            return cannot("index a Vec: it lives on the heap", index.span);
+        };
+        Ok(seq.element(inside(at, seq.len(), index.span)?))
+    }
+
+    /// `*((&x) as *T)`, which reads the bits of the number `x` as a number
+    /// of another type of the same size; none for any other place.
+    fn reinterpret(&mut self, place: &Place) -> Run<Option<Value>> {
+        let Place::Deref(pointer) = place else {
+            return Ok(None);
+        };
+        let ExprKind::Cast(address) = &pointer.kind else {
+            return Ok(None);
+        };
+        let ExprKind::AddressOf(source) = &address.kind else {
+            return Ok(None);
+        };
+        let types = self.types();
+        let (Some(from), Some(to)) = (types.pointee(address.ty), types.pointee(pointer.ty)) else {
+            return Ok(None);
+        };
+        let width = |ty: Ty| match types.as_int(ty) {
+            Some(int) => Some(int.bits()),
+            None if ty == Types::F64 => Some(64),
+            None if ty == Types::F32 => Some(32),
+            None => None,
+        };
+        let Some(bits) = width(from).filter(|&bits| width(to) == Some(bits)) else {
+            return Ok(None);
+        };
+        let loc = self.loc(source)?;
+        let raw = match self.get(&loc) {
+            Value::Float(x) if bits == 32 => u64::from((x as f32).to_bits()),
+            Value::Float(x) => x.to_bits(),
+            Value::Int(n) => (n as u64) & (u64::MAX >> (64 - bits)),
+            _ => unreachable!("a number"),
+        };
+        Ok(Some(match self.types().as_int(to) {
+            Some(int) => Value::Int(wrap(i128::from(raw), int)),
+            None if bits == 32 => Value::Float(f64::from(f32::from_bits(raw as u32))),
+            None => Value::Float(f64::from_bits(raw)),
+        }))
     }
 
     /// The part of a written-out array, tuple or struct that `place` picks,
@@ -568,13 +981,23 @@ impl Eval<'_, '_> {
     fn expr(&mut self, expr: &Expr) -> Run<Value> {
         let span = expr.span;
         let ty = expr.ty;
+        if let TyKind::Ptr(_) = self.types().kind(ty) {
+            let shown = self.types().show(ty);
+            return cannot(&format!("use a pointer: this is a {shown}"), span);
+        }
         Ok(match &expr.kind {
             ExprKind::Int(n) => Value::Int(*n),
             ExprKind::Float(x) => Value::Float(round(*x, ty)),
             ExprKind::Bool(b) => Value::Bool(*b),
             ExprKind::Str(bytes) => Value::Text(Rc::from(bytes.as_slice())),
             ExprKind::Void => Value::Void,
-            ExprKind::Read(place) | ExprKind::Move(place) => self.read(place, span)?,
+            ExprKind::Move(place) if self.needs_drop(ty) => {
+                let loc = self.loc(place)?;
+                let value = self.get(&loc);
+                self.give_up(place, &loc)?;
+                value
+            }
+            ExprKind::Read(place) | ExprKind::Move(place) => self.read(place)?,
             ExprKind::Copy(_) => return cannot("copy memory on the heap", span),
             ExprKind::AddressOf(place) => Value::Ref(self.loc(place)?),
             ExprKind::Unary(op, operand) => {
@@ -632,13 +1055,22 @@ impl Eval<'_, '_> {
             ),
             ExprKind::Some(value) => Value::Optional(Some(Box::new(self.expr(value)?))),
             ExprKind::None => Value::Optional(None),
-            ExprKind::Ok(_) | ExprKind::Err(_) => return cannot("make a T! result", span),
+            ExprKind::Ok(value) => Value::Outcome(true, Box::new(self.expr(value)?)),
+            ExprKind::Err(code) => Value::Outcome(false, Box::new(self.expr(code)?)),
             ExprKind::VecLiteral(_) | ExprKind::VecRepeat(..) => {
                 return cannot("make a Vec: it lives on the heap", span);
             }
-            ExprKind::Assign { place, value, .. } => {
+            ExprKind::Assign {
+                place,
+                value,
+                drop_old,
+            } => {
+                let target = value.ty;
                 let value = self.expr(value)?;
                 let loc = self.loc(place)?;
+                if *drop_old {
+                    self.drop_old(&loc, target)?;
+                }
                 self.set(&loc, value);
                 Value::Void
             }
@@ -653,14 +1085,17 @@ impl Eval<'_, '_> {
             }
             ExprKind::Match { scrutinee, arms } => self.match_expr(scrutinee, arms)?,
             ExprKind::Try(value) => match self.expr(value)? {
-                Value::Optional(Some(inner)) => *inner,
-                Value::Optional(None) => return Err(Exit::Return(Value::Optional(None))),
-                _ => return cannot("use a T! result", span),
+                Value::Optional(Some(inner)) | Value::Outcome(true, inner) => *inner,
+                failed @ (Value::Optional(None) | Value::Outcome(false, _)) => {
+                    return Err(Exit::Return(failed));
+                }
+                _ => unreachable!("a T? or a T!"),
             },
-            ExprKind::Block(block) => {
+            ExprKind::Block(block) if ty == Types::VOID => {
                 self.block(block)?;
                 Value::Void
             }
+            ExprKind::Block(block) => self.value_block(block)?,
             ExprKind::Print { .. } => return cannot("print", span),
             ExprKind::Assert { cond, message } => {
                 if !self.truth(cond)? {
@@ -673,12 +1108,22 @@ impl Eval<'_, '_> {
                 Value::Void
             }
             ExprKind::Unpack { target, value } => {
+                let ty = value.ty;
                 let value = self.expr(value)?;
-                self.unpack(target, value)?;
+                self.unpack(target, value, ty)?;
                 Value::Void
             }
             ExprKind::Asm(_) => return cannot("run assembly", span),
         })
+    }
+
+    /// Drop the value at `loc` an assignment replaces, unless it was moved
+    /// away.
+    fn drop_old(&mut self, loc: &Loc, ty: Ty) -> Run<()> {
+        if loc.path.is_empty() && self.frames[loc.frame].moved.contains(&loc.slot) {
+            return Ok(());
+        }
+        self.drop_at(loc.clone(), ty)
     }
 
     /// The text an assert's `message` prints, when its values are numbers,
@@ -704,28 +1149,48 @@ impl Eval<'_, '_> {
         self.types().as_int(ty).expect("an integer type")
     }
 
-    fn unpack(&mut self, target: &Unpack, value: Value) -> Run<()> {
+    /// Give each part of `value`, of type `ty`, where `target` puts it; a
+    /// part put nowhere is dropped.
+    fn unpack(&mut self, target: &Unpack, value: Value, ty: Ty) -> Run<()> {
         match target {
-            Unpack::Declare(local) => self.set_local(*local, value),
+            Unpack::Declare(local) => {
+                self.set_local(*local, value);
+                self.own(*local);
+            }
             Unpack::Store(place) => {
                 let loc = self.loc(place)?;
+                self.drop_old(&loc, ty)?;
                 self.set(&loc, value);
             }
-            Unpack::Skip => {}
+            Unpack::Skip => {
+                if self.needs_drop(ty) {
+                    let loc = self.temp(value);
+                    self.drop_at(loc, ty)?;
+                }
+            }
             Unpack::Tuple(parts) => {
-                let Value::Parts(values) = value else {
+                let (Value::Parts(values), TyKind::Tuple(tys)) =
+                    (value, self.types().kind(ty).clone())
+                else {
                     unreachable!("a tuple is taken apart")
                 };
-                for (part, value) in parts.iter().zip(values) {
-                    self.unpack(part, value)?;
+                for ((part, value), ty) in parts.iter().zip(values).zip(tys) {
+                    self.unpack(part, value, ty)?;
                 }
             }
         }
         Ok(())
     }
 
+    /// A `match`. A temporary scrutinee with a `drop` gives the bindings of
+    /// an arm with no guard that take a part of it that part, and drops the
+    /// others.
     fn match_expr(&mut self, scrutinee: &Place, arms: &[tir::Arm]) -> Run<Value> {
         let loc = self.loc(scrutinee)?;
+        let take = match scrutinee {
+            Place::Temp(value) => self.needs_drop(value.ty).then_some(value.ty),
+            _ => None,
+        };
         let slot = |this: &Self, slot: Option<u32>| {
             let mut place = loc.clone();
             place.path.extend(slot.map(|slot| slot as usize));
@@ -744,6 +1209,7 @@ impl Eval<'_, '_> {
                             Value::Bool(b) => i128::from(*b),
                             Value::Variant(at, _) => i128::from(*at),
                             Value::Optional(inner) => i128::from(inner.is_some()),
+                            Value::Outcome(ok, _) => i128::from(*ok),
                             _ => unreachable!("a tested value has a tag"),
                         };
                         test.low <= tag && tag <= test.high
@@ -753,6 +1219,8 @@ impl Eval<'_, '_> {
             let Some(at) = alternative else {
                 continue;
             };
+            let mut places = Vec::new();
+            let mut taken = Vec::new();
             for (binding, reaches) in &arm.bindings {
                 let reach = reaches[at];
                 let mut place = slot(self, reach.slot);
@@ -761,20 +1229,37 @@ impl Eval<'_, '_> {
                         place = loc.clone();
                         place.path.extend(reach.slot.map(|slot| slot as usize));
                     }
-                    Payload::SomeValue => place.path.push(0),
+                    Payload::SomeValue | Payload::OkValue | Payload::ErrValue => place.path.push(0),
                     Payload::Variant { field, .. } => place.path.push(field as usize),
-                    Payload::OkValue | Payload::ErrValue => {
-                        return cannot("use a T! result", arm.span);
-                    }
                 }
-                self.bind(*binding, Element::Place(place));
+                let decl = &self.frames.last().unwrap().body.locals[binding.0 as usize];
+                let (view, ty) = (decl.view, decl.ty);
+                if take.is_some() && arm.guard.is_none() && !view && self.needs_drop(ty) {
+                    taken.push(place.clone());
+                }
+                places.push((*binding, place));
+            }
+            if let (Some(subject), false) = (take, taken.is_empty()) {
+                self.frames[loc.frame].moved.insert(loc.slot);
+                self.drop_except(loc.clone(), subject, &taken)?;
+            }
+            for (binding, place) in places {
+                self.bind(binding, Element::Place(place));
             }
             if let Some(guard) = &arm.guard
                 && !self.truth(guard)?
             {
                 continue;
             }
-            return self.expr(&arm.body);
+            let owned = self.frame().owned.len();
+            for (binding, _) in &arm.bindings {
+                let decl = &self.frames.last().unwrap().body.locals[binding.0 as usize];
+                if !taken.is_empty() && !decl.view {
+                    self.own(*binding);
+                }
+            }
+            let value = self.expr(&arm.body);
+            return self.leave_with(owned, value);
         }
         unreachable!("every value has an arm")
     }
@@ -787,24 +1272,48 @@ impl Eval<'_, '_> {
             }
         };
         Ok(match builtin {
-            Builtin::Len => match subject(self)? {
-                Value::Parts(parts) => Value::Int(parts.len() as i128),
-                Value::Text(bytes) => Value::Int(bytes.len() as i128),
-                _ => return cannot("measure a Vec: it lives on the heap", span),
-            },
-            Builtin::IsSome | Builtin::IsNone => match subject(self)? {
-                Value::Optional(inner) => {
-                    Value::Bool(inner.is_some() == (builtin == Builtin::IsSome))
+            Builtin::Len | Builtin::VecIsEmpty => {
+                let len = match self.expr(&args[0])? {
+                    Value::Parts(parts) => parts.len(),
+                    value => match self.seq_of(value) {
+                        Some(seq) => seq.len(),
+                        None => return cannot("measure a Vec: it lives on the heap", span),
+                    },
+                };
+                match builtin {
+                    Builtin::Len => Value::Int(len as i128),
+                    _ => Value::Bool(len == 0),
                 }
-                _ => return cannot("use a T! result", span),
-            },
+            }
+            Builtin::IsSome | Builtin::IsNone | Builtin::IsOk | Builtin::IsErr => {
+                let holds = match subject(self)? {
+                    Value::Optional(inner) => inner.is_some(),
+                    Value::Outcome(ok, _) => ok,
+                    _ => unreachable!("a T? or a T!"),
+                };
+                Value::Bool(holds == matches!(builtin, Builtin::IsSome | Builtin::IsOk))
+            }
             Builtin::Unwrap => match subject(self)? {
-                Value::Optional(Some(inner)) => *inner,
+                Value::Optional(Some(inner)) | Value::Outcome(true, inner) => *inner,
                 Value::Optional(None) => {
                     return fail("unwrap() of None while computing a constant", span);
                 }
-                _ => return cannot("use a T! result", span),
+                Value::Outcome(false, code) => {
+                    let Value::Int(code) = *code else {
+                        unreachable!("an error code")
+                    };
+                    return fail(
+                        format!("unwrap() of Err({code}) while computing a constant"),
+                        span,
+                    );
+                }
+                _ => unreachable!("a T? or a T!"),
             },
+            Builtin::UnwrapErr => match subject(self)? {
+                Value::Outcome(false, code) => *code,
+                _ => return fail("unwrap_err() of Ok while computing a constant", span),
+            },
+            Builtin::Slice => self.slice(args, span)?,
             Builtin::Replace => {
                 let Value::Ref(loc) = self.expr(&args[0])? else {
                     unreachable!("replace takes a reference")
@@ -822,7 +1331,35 @@ impl Eval<'_, '_> {
                 };
                 bits(op, value, self.int_ty(args[0].ty), amount)
             }
-            _ => return cannot("use the heap or a slice", span),
+            Builtin::Flush => return cannot("print", span),
+            Builtin::Simd(_) => return cannot("use std.simd", span),
+            _ => return cannot("use a Vec or a String: they live on the heap", span),
+        })
+    }
+
+    /// `args[0][args[1]..args[2]]`, or to its end without `args[2]`: a part
+    /// of an array, a slice or text, checked to lie within it.
+    fn slice(&mut self, args: &[Expr], span: Span) -> Run<Value> {
+        let value = self.expr(&args[0])?;
+        let Some(seq) = self.seq_of(value) else {
+            return cannot("slice a Vec: it lives on the heap", span);
+        };
+        let len = seq.len();
+        let from = self.int(&args[1])?;
+        let to = match args.get(2) {
+            Some(end) => self.int(end)?,
+            None => len as i128,
+        };
+        if from > to || to > len as i128 {
+            return fail(
+                format!("Slice {from}..{to} is outside 0..{len} while computing a constant"),
+                span,
+            );
+        }
+        let (from, to) = (from as usize, to as usize);
+        Ok(match seq {
+            Seq::Text(bytes) => Value::Text(Rc::from(&bytes[from..to])),
+            Seq::Elems(base, start, _) => Value::Slice(base, start + from, to - from),
         })
     }
 
@@ -888,7 +1425,6 @@ impl Eval<'_, '_> {
                             span,
                         );
                     }
-                    BinOp::PtrAdd | BinOp::PtrSub => return cannot("do pointer arithmetic", span),
                     _ => self.fit(arith(op, a, b, Some(int)), ty, span)?,
                 }
             }

@@ -82,6 +82,7 @@ pub struct Function {
     pub captures: Vec<String>,
 }
 
+#[derive(Clone)]
 pub struct Local {
     pub name: String,
     pub ty: Ty,
@@ -234,6 +235,26 @@ impl Expr {
             ty: Types::ERROR,
             span,
         }
+    }
+
+    /// The types of the temporaries it borrows, directly or through a
+    /// slice or a view of one, outermost first: `var r = &make();` keeps
+    /// them until the block ends.
+    pub fn borrowed_temps(&self) -> Vec<Ty> {
+        let place = match &self.kind {
+            ExprKind::AddressOf(place) => place,
+            ExprKind::Builtin(Builtin::Slice, args) => match &args[0].kind {
+                ExprKind::AddressOf(place) => place,
+                _ => return Vec::new(),
+            },
+            _ => return Vec::new(),
+        };
+        let Place::Temp(value) = place.base() else {
+            return Vec::new();
+        };
+        let mut temps = vec![value.ty];
+        temps.extend(value.borrowed_temps());
+        temps
     }
 
     /// Call `f` on each expression directly inside this one, those in its

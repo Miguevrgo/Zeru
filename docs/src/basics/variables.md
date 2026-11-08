@@ -30,7 +30,8 @@ them while compiling and keeps only the result, so a table costs nothing
 when the program starts. Those functions work on plain data, numbers,
 bools, text, and arrays, tuples and structs of them; one that needs a
 `Vec`, a `String` or other memory on the heap, a pointer, or prints, is an
-error there:
+error there. A constant at the top of a file is copied wherever it is used,
+so its type cannot have a `drop` or own memory on the heap:
 
 ```zeru
 fn squares() Array<i32, 8> {

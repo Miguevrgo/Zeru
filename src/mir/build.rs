@@ -384,7 +384,7 @@ impl<'a> Builder<'a> {
                     let kept = self.temps.split_off(mark);
                     self.scopes.last_mut().unwrap().extend(kept);
                 }
-                for ty in borrowed_temps(value) {
+                for ty in value.borrowed_temps() {
                     let made = &self.temps[mark..];
                     if let Some(at) = made
                         .iter()
@@ -1804,24 +1804,4 @@ fn unchecked(op: BinOp, left: Operand, right: Operand) -> Rvalue {
         right,
         checked: false,
     }
-}
-
-/// The types of the temporaries `value` borrows, directly or through a
-/// slice or a view of one, outermost first: `var r = &make();` keeps them
-/// until the block ends.
-fn borrowed_temps(value: &Expr) -> Vec<Ty> {
-    let place = match &value.kind {
-        ExprKind::AddressOf(place) => place,
-        ExprKind::Builtin(Builtin::Slice, args) => match &args[0].kind {
-            ExprKind::AddressOf(place) => place,
-            _ => return Vec::new(),
-        },
-        _ => return Vec::new(),
-    };
-    let tir::Place::Temp(value) = place.base() else {
-        return Vec::new();
-    };
-    let mut temps = vec![value.ty];
-    temps.extend(borrowed_temps(value));
-    temps
 }

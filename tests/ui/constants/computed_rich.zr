@@ -108,12 +108,59 @@ fn primes() Array<bool, 50> {
     return sieve;
 }
 
+const TABLE: Array<i32, 6> = [5, 3, 9, 1, 7, 2];
+
+fn total(values: &[i32]) i32 {
+    var sum = 0;
+    for x in values {
+        sum += x;
+    }
+    return sum * 10 + values[values.len() - 1];
+}
+
+fn arranged() (Array<i32, 6>, i32) {
+    var a = TABLE;
+    a.sort();
+    const back = &var a[3..];
+    back[0] = 40;
+    back.sort_by(fn(x, y) y - x);
+    return (a, total(&TABLE) * 1000 + total(a[1..4]));
+}
+
+fn fields(line: str) (i64, i64, bool)! {
+    const s = line.trim();
+    const at = s.find(",").unwrap();
+    const left = s[..at].parse_int()!;
+    return (left, s[at + 1..].parse_int()!, s.starts_with("12") && s.contains("34"));
+}
+
+fn parsed() (f64, i32, f64) {
+    const sum = "3.25".parse_float().unwrap() + "1e-3".parse_float().unwrap();
+    return (sum, fields(" 1,x ").unwrap_err(), "0.1".parse_float().unwrap() * 3.0);
+}
+
+fn counted(n: i32) i32 {
+    var sum = 0;
+    const add = fn(x: i32) {
+        sum += x;
+    };
+    for i in 0..n {
+        add(i);
+    }
+    return sum;
+}
+
 const SH: f64 = shapes();
 const ST: (i64, i32, f64, Array<i32, 4>) = stats();
 const VO: i32 = vowels("compile time evaluation");
 const FI: (usize, bool)? = wrapper();
 const SW: Array<i32, 3> = swapped();
 const PR: Array<bool, 50> = primes();
+const AR: (Array<i32, 6>, i32) = arranged();
+const FS: (i64, i64, bool)! = fields("  12,345 ");
+const PA: (f64, i32, f64) = parsed();
+const CO: i32 = counted(5);
+const TR: str = "  hi ".trim();
 
 fn main() {
     println("{} {}", SH, shapes());
@@ -123,4 +170,9 @@ fn main() {
     println("{} {}", SW, swapped());
     println("{}", PR);
     println("{}", primes());
+    println("{} {}", AR, arranged());
+    println("{} {}", FS, fields("  12,345 "));
+    println("{} {} {}", PA, parsed(), PA == parsed());
+    println("{} {}", CO, counted(5));
+    println("[{}] [{}]", TR, "  hi ".trim());
 }

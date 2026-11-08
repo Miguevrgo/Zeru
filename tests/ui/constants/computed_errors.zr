@@ -41,6 +41,31 @@ fn past_table() i32 {
     var i = 2;
     return PAIRS[1][0] + PAIRS[i][0];
 }
+struct Noisy {
+    n: i32,
+    fn drop(var self) {
+        println("drop {}", self.n);
+    }
+}
+fn noisy_scope() i32 {
+    const _n = Noisy { n: 1 };
+    return 1;
+}
+fn pointer() i32 {
+    var a: Array<i32, 2> = [1, 2];
+    const p = (&a[0]) as *i32;
+    return *(p + 1);
+}
+fn leave() i32 {
+    exit(3);
+    return 1;
+}
+fn parts() usize {
+    return "a,b".split(",").len();
+}
+fn tail(x: &[i32]) &[i32] {
+    return x[1..];
+}
 const A = heap();
 const B = noisy();
 const C = forever();
@@ -52,4 +77,10 @@ const H = text();
 const I = broken();
 const J = unfinished();
 const K = past_table();
+const L: Noisy = Noisy { n: 1 };
+const M = noisy_scope();
+const P = pointer();
+const Q = leave();
+const R = parts();
+const S = tail(&PAIRS[0]);
 fn main() {}
