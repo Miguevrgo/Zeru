@@ -96,10 +96,13 @@ enum ConstState {
     Done(tir::Expr),
 }
 
+/// A function instance: `def` at `args`, first asked for at `from` by the
+/// body of `parent`.
 struct Instance {
     def: DefId,
     args: Vec<Ty>,
     from: Span,
+    parent: Option<FnId>,
 }
 
 pub struct Checker<'a> {
@@ -120,6 +123,7 @@ pub struct Checker<'a> {
     pending: VecDeque<FnId>,
     functions: Vec<Option<tir::Function>>,
     queued: Vec<Instance>,
+    checking: Option<FnId>,
     closures: Vec<ClosureInfo>,
     broken: HashSet<FnId>,
     named_closures: HashMap<DefId, Ty>,
@@ -157,6 +161,7 @@ impl<'a> Checker<'a> {
             pending: VecDeque::new(),
             functions: Vec::new(),
             queued: Vec::new(),
+            checking: None,
             closures: Vec::new(),
             broken: HashSet::new(),
             named_closures: HashMap::new(),
@@ -335,6 +340,7 @@ impl<'a> Checker<'a> {
             def: DefId(u32::MAX),
             args: Vec::new(),
             from: body.span,
+            parent: None,
         });
         self.functions.push(Some(body));
         self.closures.push(ClosureInfo {
@@ -371,11 +377,20 @@ impl<'a> Checker<'a> {
         let instance = &self.queued[id.0 as usize];
         let (def, args) = (instance.def, instance.args.clone());
         let errors = self.errors.len();
+        let outer = self.checking.replace(id);
         let function = body::check_function(self, def, &args);
+        self.checking = outer;
         if self.errors.len() > errors {
             self.broken.insert(id);
         }
         self.functions[id.0 as usize] = Some(function);
+    }
+
+    /// Whether the instance being checked was asked for, at some remove, by
+    /// an instance of `def`: a call to `def` from it is recursion.
+    fn recursive(&self, def: DefId) -> bool {
+        std::iter::successors(self.checking, |id| self.queued[id.0 as usize].parent)
+            .any(|id| self.queued[id.0 as usize].def == def)
     }
 
     /// The function instance `def` at `args`, made and queued the first time.
@@ -390,6 +405,7 @@ impl<'a> Checker<'a> {
             def,
             args: args.clone(),
             from,
+            parent: self.checking,
         });
         self.instances.insert((def, args), id);
         self.pending.push_back(id);

@@ -115,6 +115,16 @@ impl FnCx<'_, '_> {
         Some(ty)
     }
 
+    /// The type the variable `ty` takes from a number written for it, bound
+    /// now, for a closure's parameter that must be known before its body.
+    pub(super) fn settle_literal(&mut self, ty: Ty) -> Option<Ty> {
+        let TyKind::Infer(var) = *self.cx.types.kind(ty) else {
+            return None;
+        };
+        let literal = self.vars[var as usize].literal?;
+        self.bind(var, literal).then_some(literal)
+    }
+
     fn bind(&mut self, var: u32, ty: Ty) -> bool {
         if self.cx.types.has(ty, &|kind| *kind == TyKind::Infer(var)) {
             return false;
@@ -130,11 +140,13 @@ impl FnCx<'_, '_> {
             self.deferred.push(DeferredCall { def, args, span });
             return Some(FnId(u32::MAX - (self.deferred.len() as u32 - 1)));
         }
-        if args.iter().any(|&arg| {
-            self.cx
-                .types
-                .too_big(arg, super::MAX_TYPE_SIZE, super::MAX_TYPE_DEPTH)
-        }) {
+        if self.cx.recursive(def)
+            && args.iter().any(|&arg| {
+                self.cx
+                    .types
+                    .too_big(arg, super::MAX_TYPE_SIZE, super::MAX_TYPE_DEPTH)
+            })
+        {
             let name = self.cx.items.shown(def);
             self.error(
                 format!("Checking '{name}' asks for ever larger instances of it, without end"),

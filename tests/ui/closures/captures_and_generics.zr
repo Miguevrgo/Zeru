@@ -34,6 +34,10 @@ fn twice(f: fn(i32) i32, x: i32) i32 {
     return apply(f, apply(f, x));
 }
 
+fn apply_to<A, B>(a: A, f: fn(A) B) B {
+    return f(a);
+}
+
 fn sum_with<T: Num>(v: &Vec<T>, start: T) T {
     var total = start;
     const add = fn(x: T) {
@@ -82,4 +86,5 @@ fn main() {
     println("{} {}", sum_with(&bag.items, 0), sum_with(&floats, 0.5));
     const shelf: Shelf<String> = Shelf { items: Vec[String.from("ab"), String.from("c")] };
     println("{}", shelf.count_if(fn(s) s.len() == 2));
+    println("{}", apply_to(3, fn(x) x * 2));
 }

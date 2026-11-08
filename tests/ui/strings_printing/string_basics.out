@@ -1,13 +1,14 @@
 status: exit 0
 -- warnings
 Warning: Variable 'i' is never read
-   ╭─[ tests/ui/strings_printing/string_basics.zr:7:14 ]
+   ╭─[ tests/ui/strings_printing/string_basics.zr:7:9 ]
    │
  7 │     for i in 0..3 {
-   │              ──┬─
-   │                ╰─── Variable 'i' is never read
+   │         ┬
+   │         ╰── Variable 'i' is never read
    │
    │ Help: remove it, or name it '_i' to keep it unread
+   │           for _i in 0..3 {
 ───╯
 -- stdout
 hello, world! 13 true

@@ -112,7 +112,9 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
     fx.warn_unread(params.len());
     fx.warn_unchanged(params.len());
     let drop = item.owner.is_some() && name.ends_with("::drop");
-    fx.warn_unchanged_params(&params, span, drop);
+    if sig.generics.is_empty() {
+        fx.warn_unchanged_params(&params, span, drop);
+    }
     let locals = std::mem::take(&mut fx.locals);
 
     if !args.is_empty() {
@@ -1024,7 +1026,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 variable,
                 iterable,
                 body,
-            } => self.for_in(index.as_deref(), variable, iterable, body),
+            } => self.for_in(index.as_deref(), variable, iterable, body, span),
             StatementKind::Break | StatementKind::Continue => {
                 let breaking = matches!(statement.kind, StatementKind::Break);
                 let Some(breaks) = self.breaks.last_mut() else {
@@ -1133,12 +1135,14 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// `for x in &var v` lets each be written through `x`; `for i, x in v`
     /// also counts each element's index in `i`; `for (a, b) in v` takes each
     /// element apart, and `for (x, y) in zip(xs, ys)` walks two at once.
+    /// The loop is written at `span`.
     fn for_in(
         &mut self,
         index: Option<&str>,
         variable: &Names,
         iterable: &Expression,
         body: &Statement,
+        span: Span,
     ) -> StmtKind {
         if let ExpressionKind::Range {
             start,
@@ -1174,7 +1178,8 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 }
             };
             self.enter();
-            let var = self.declare(name, ty, false, false, iterable.span);
+            let head = Span::new(span.start, iterable.span.end);
+            let var = self.declare(name, ty, false, false, head);
             self.fix(var, Fixed::Counter);
             let (body, _) = self.loop_body(|this| this.branch(body));
             self.leave();

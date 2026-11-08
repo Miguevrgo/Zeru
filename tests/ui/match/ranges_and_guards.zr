@@ -74,6 +74,15 @@ fn main() {
     println("{}", r);
     println("{} {} {} {} {} {}", half(0), half(101), half(255), side(-128), side(0), side(127));
     println("{} {} {} {} {}", edge(i64.MIN), edge(i64.MAX), edge(0), wide(0), wide(u64.MAX));
+    println("{} {} {}", tens(10), tens(11), tens(101));
+}
+
+fn tens(n: i32) str {
+    return match n {
+        10 => "ten",
+        10..=100 => "tens",
+        default => "other",
+    };
 }
 
 const TOP: u8 = 255;

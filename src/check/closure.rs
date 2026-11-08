@@ -44,6 +44,7 @@ impl FnCx<'_, '_> {
             let ty = match (written, wanted) {
                 (Some(spec), _) => self.cx.resolve_type(spec, &scope, span),
                 (None, Some(ty)) if self.cx.types.is_concrete(ty) => ty,
+                (None, Some(ty)) if let Some(ty) = self.settle_literal(ty) => ty,
                 (None, _) => {
                     self.error(format!("Cannot tell the type of '{name}' here"), span)
                         .help(format!("write it, as in {name}: i32"));

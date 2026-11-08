@@ -1,13 +1,14 @@
 status: exit 0
 -- warnings
 Warning: Variable 'i' is never read
-    ╭─[ tests/ui/std/os_run_fails.zr:23:14 ]
+    ╭─[ tests/ui/std/os_run_fails.zr:23:9 ]
     │
  23 │     for i in 0..2000 {
-    │              ───┬───
-    │                 ╰───── Variable 'i' is never read
+    │         ┬
+    │         ╰── Variable 'i' is never read
     │
     │ Help: remove it, or name it '_i' to keep it unread
+    │           for _i in 0..2000 {
 ────╯
 Warning: The value this call returns is never used
     ╭─[ tests/ui/std/os_run_fails.zr:24:9 ]

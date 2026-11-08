@@ -8,6 +8,23 @@ struct W<T> {
 fn id<T>(x: T) T {
     return x;
 }
+fn d1<T>(x: T) i32 { return d2((x, x)); }
+fn d2<T>(x: T) i32 { return d3((x, x)); }
+fn d3<T>(x: T) i32 { return d4((x, x)); }
+fn d4<T>(x: T) i32 { return d5((x, x)); }
+fn d5<T>(x: T) i32 { return d6((x, x)); }
+fn d6<T>(x: T) i32 { return d7((x, x)); }
+fn d7<T>(x: T) i32 { return d8((x, x)); }
+fn d8<T>(x: T) i32 { return d9((x, x)); }
+fn d9<T>(x: T) i32 { return d10((x, x)); }
+fn d10<T>(x: T) i32 { return d11((x, x)); }
+fn d11<T>(x: T) i32 { return d12((x, x)); }
+fn d12<T>(x: T) i32 { return d13((x, x)); }
+fn d13<T>(x: T) i32 { return d14((x, x)); }
+fn d14<T>(x: T) i32 { return d15((x, x)); }
+fn d15<T>(x: T) i32 { return d16((x, x)); }
+fn d16<T>(x: T) i32 { return last((x, x)); }
+fn last<T>(x: T) i32 { return 17; }
 fn main() {
     const t = (
         "s",
@@ -84,4 +101,5 @@ fn main() {
     const w = W { v: t };
     const u = id(w.get());
     println("{}", u.69);
+    println("{}", d1(1));
 }

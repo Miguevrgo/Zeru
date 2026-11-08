@@ -21,6 +21,28 @@ fn grow(var n: i32) i32 {
     return n;
 }
 
+trait Bump {
+    fn bump(var self);
+}
+
+struct Q {
+    x: i32,
+
+    fn bump(self) {}
+}
+
+struct Holder<T: Bump> {
+    item: T,
+
+    fn poke(var self) {
+        self.item.bump();
+    }
+}
+
+fn bump_it<T: Bump>(var x: T) {
+    x.bump();
+}
+
 fn _divide(n: i32) i32 {
     return n / 0 + n % 0;
 }
@@ -33,4 +55,10 @@ fn main() {
     var p = P { x: 1 };
     p.bump();
     println("{} {} {}", p.look(), twice(2), grow(3));
+    bump_it(P { x: 1 });
+    bump_it(Q { x: 1 });
+    var held = Holder { item: Q { x: 1 } };
+    held.poke();
+    var other = Holder { item: P { x: 1 } };
+    other.poke();
 }

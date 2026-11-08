@@ -961,8 +961,9 @@ fn combinations(listed: &[Vec<String>]) -> Option<Vec<Vec<i128>>> {
     Some(combos)
 }
 
-/// Where an earlier arm already took every value `tests` takes: for one
-/// value, any it shares; for a tuple, each combination of its `combos`.
+/// Where earlier arms already took every value `tests` takes: for one
+/// value or range, all of it between them; for a tuple, each combination
+/// of its `combos`.
 fn repeated(
     tests: &[Test],
     covered: &[(Vec<Test>, Span)],
@@ -976,18 +977,12 @@ fn repeated(
         },
     ] = tests
     {
-        return covered
+        let shared: Vec<(Vec<Test>, Span)> = covered
             .iter()
-            .find_map(|(earlier, span)| match earlier[..] {
-                [
-                    Test {
-                        low: first,
-                        high: last,
-                        ..
-                    },
-                ] if first <= *high && *low <= last => Some(*span),
-                _ => None,
-            });
+            .filter(|(earlier, _)| earlier[0].low <= *high && *low <= earlier[0].high)
+            .cloned()
+            .collect();
+        return gaps(&shared, *low, *high).is_empty().then(|| shared[0].1);
     }
     let mine: Vec<&Vec<i128>> = combos?.iter().filter(|combo| takes(tests, combo)).collect();
     let mut first = None;

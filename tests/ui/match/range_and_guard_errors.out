@@ -77,4 +77,17 @@ Error: This match does not cover 0..=127
     │
     │ Help: add an arm for each, or a default arm
 ────╯
+Error: This value is already matched by an earlier arm
+    ╭─[ tests/ui/match/range_and_guard_errors.zr:45:9 ]
+    │
+ 43 │         1..=5 => 1,
+    │         ──┬──
+    │           ╰──── matched first here, so this arm never runs for it
+    │
+ 45 │         3..=8 => 3,
+    │         ──┬──
+    │           ╰──── This value is already matched by an earlier arm
+    │
+    │ Help: remove this arm, or narrow it to values no earlier arm takes
+────╯
 [-] Error: aborting due to previous error

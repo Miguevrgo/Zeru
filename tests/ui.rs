@@ -490,6 +490,10 @@ fn test_runs_each_test_alone() {
             stdout.contains("       printed before failing\n"),
             "{stdout}"
         );
+        assert!(
+            stdout.contains("main.zr:23:5: test returned error 2\n"),
+            "{stdout}"
+        );
         assert!(stdout.contains("3 passed, 2 failed in "), "{stdout}");
     }
 }

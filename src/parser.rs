@@ -463,8 +463,8 @@ impl Parser {
     }
 
     /// `test("name") { body }`: the body as a function `!name` returning `!`,
-    /// and `#name`, the one `zeru test` runs, unwrapping its result so an
-    /// error fails the test as a panic does.
+    /// and `#name`, the one `zeru test` runs, which fails as an assert does
+    /// when an error leaves the body, giving the error's code.
     fn parse_test(&mut self) -> Option<(Statement, Statement)> {
         let start = self.span();
         self.bump();
@@ -488,20 +488,38 @@ impl Parser {
             Some(result),
             self.parse_block_statement()?,
         );
-        let expression = |kind| Box::new(Expression::new(kind, span));
-        let call = |function| ExpressionKind::Call {
-            function,
-            type_args: Vec::new(),
-            arguments: Vec::new(),
+        let expression = |kind| Expression::new(kind, span);
+        let named = |name: &str| expression(ExpressionKind::Identifier(name.to_string()));
+        let call = |function, arguments| {
+            expression(ExpressionKind::Call {
+                function: Box::new(function),
+                type_args: Vec::new(),
+                arguments,
+            })
         };
-        let unwrap = call(expression(ExpressionKind::Get {
-            object: expression(call(expression(ExpressionKind::Identifier(format!(
-                "!{name}"
-            ))))),
-            name: "unwrap".to_string(),
-        }));
-        let run = Statement::new(StatementKind::Expression(*expression(unwrap)), span);
-        Some((body, function(format!("#{name}"), None, vec![run])))
+        let method = |name: &str| {
+            let get = ExpressionKind::Get {
+                object: Box::new(named("result")),
+                name: name.to_string(),
+            };
+            call(expression(get), Vec::new())
+        };
+        let result = StatementKind::Var {
+            name: "result".to_string(),
+            is_const: true,
+            value: call(named(&format!("!{name}")), Vec::new()),
+            type_annotation: None,
+        };
+        let message = expression(ExpressionKind::StringLit(
+            b"test returned error {}".to_vec(),
+        ));
+        let arguments = vec![method("is_ok"), message, method("unwrap_err")];
+        let assert = call(named("assert"), arguments);
+        let run = vec![
+            Statement::new(result, span),
+            Statement::new(StatementKind::Expression(assert), span),
+        ];
+        Some((body, function(format!("#{name}"), None, run)))
     }
 
     fn parse_statement(&mut self) -> Option<Statement> {

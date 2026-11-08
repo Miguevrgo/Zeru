@@ -5,7 +5,8 @@
 //! end a line only as a list's last item. Comments, after a statement or a
 //! `{` too, and single blank lines stay where they were; a list holding a
 //! comment breaks one item per line, and an operator chain holding one
-//! breaks before each operator. A comment elsewhere inside an expression,
+//! breaks before each operator, but for a `/* */` on one line, which stays
+//! beside its operator. A comment elsewhere inside an expression,
 //! which has no place in the new layout, is an error instead.
 //! The result is parsed again and must give the same tree and comments, or
 //! nothing changes.
@@ -489,7 +490,7 @@ impl<'s> Printer<'s> {
     /// parameters in the first parentheses from `from`.
     fn signature(
         &mut self,
-        head: String,
+        head: Doc,
         from: usize,
         params: &[(String, TypeSpec, bool)],
         ret: &Option<TypeSpec>,
@@ -507,7 +508,7 @@ impl<'s> Printer<'s> {
             |param| param.0,
             |_, param| text(param_text(param.1)),
         );
-        vec![text(head), params, text(return_text(ret))]
+        vec![head, params, text(return_text(ret))]
     }
 
     /// `cond` and the space before its block, or a line break when `cond`
@@ -614,7 +615,10 @@ impl<'s> Printer<'s> {
                     let head = text(format!("test({}) ", self.source(at)));
                     return seq(vec![head, self.block(body, close.start)]);
                 }
-                let head = format!("{public}fn {name}{}", generics(type_params));
+                let head = seq(vec![
+                    text(format!("{public}fn {name}")),
+                    generics(type_params),
+                ]);
                 let mut parts = self.signature(head, stmt.span.start, params, return_type);
                 parts.extend([text(" "), self.block(body, close.start)]);
                 seq(parts)
@@ -646,8 +650,8 @@ impl<'s> Printer<'s> {
                     lines.push(Doc::Hard);
                 }
                 lines.extend(self.lines(methods, braces.1.start, Self::extent, Self::statement));
-                let head = format!("{public}struct {name}{} ", generics(type_params));
-                self.braced(text(head), lines)
+                let head = text(format!("{public}struct {name}"));
+                self.braced(seq(vec![head, generics(type_params), text(" ")]), lines)
             }
             S::Enum { name, variants } => {
                 let braces = self.brackets(stmt.span.start, Token::LBrace);
@@ -677,7 +681,7 @@ impl<'s> Printer<'s> {
                     |p, (span, method)| {
                         let head = format!("fn {}", method.name);
                         let (params, ret) = (&method.params, &method.return_type);
-                        let mut parts = p.signature(head, span.start, params, ret);
+                        let mut parts = p.signature(text(head), span.start, params, ret);
                         parts.push(text(";"));
                         seq(parts)
                     },
@@ -764,16 +768,37 @@ impl<'s> Printer<'s> {
                 let mut parts = Vec::new();
                 let mut commented = false;
                 for (operator, right) in rest.into_iter().rev() {
+                    let (mut before, mut after) = (Vec::new(), Vec::new());
+                    while let Some(&comment) = self.comments.get(self.next)
+                        && comment.start < right.span.start
+                    {
+                        let written = self.source(comment).trim_end();
+                        if !written.starts_with("/*") || written.contains('\n') {
+                            break;
+                        }
+                        let operator = operator.to_string();
+                        match self.src[comment.end..right.span.start].contains(&operator) {
+                            true => before.push(text(format!(" {written}"))),
+                            false => after.push(text(format!("{written} "))),
+                        }
+                        self.next += 1;
+                    }
                     let comments = self.trailing(right.span.start);
                     commented |= !comments.is_empty();
-                    parts.push((comments, operator, self.expr(right)));
+                    parts.push((before, comments, operator, after, self.expr(right)));
                 }
-                let parts = parts.into_iter().flat_map(|(comments, operator, right)| {
-                    let line = if commented { Doc::Hard } else { Doc::Line };
-                    comments
+                let parts =
+                    parts
                         .into_iter()
-                        .chain([line, text(format!("{operator} ")), right])
-                });
+                        .flat_map(|(before, comments, operator, after, right)| {
+                            let line = if commented { Doc::Hard } else { Doc::Line };
+                            before
+                                .into_iter()
+                                .chain(comments)
+                                .chain([line, text(format!("{operator} "))])
+                                .chain(after)
+                                .chain([right])
+                        });
                 match commented {
                     true => seq(vec![first, Doc::Indent(Box::new(seq(parts.collect())))]),
                     false => group(seq(vec![first, nest(seq(parts.collect()))])),
@@ -1089,18 +1114,19 @@ fn types(types: &[TypeSpec]) -> String {
     types.iter().map(ty_text).collect::<Vec<_>>().join(", ")
 }
 
-fn generics(params: &[TypeParameter]) -> String {
+/// `<A, B: Ord>`, broken one per line as a call's arguments when long.
+fn generics(params: &[TypeParameter]) -> Doc {
     if params.is_empty() {
-        return String::new();
+        return text("");
     }
-    let params: Vec<String> = params
+    let params = params
         .iter()
         .map(|param| match &param.bound {
-            Some(bound) => format!("{}: {bound}", param.name),
-            None => param.name.clone(),
+            Some(bound) => text(format!("{}: {bound}", param.name)),
+            None => text(&param.name),
         })
         .collect();
-    format!("<{}>", params.join(", "))
+    list("<", params, ">", false)
 }
 
 fn param_text((name, ty, is_mut): &(String, TypeSpec, bool)) -> String {
@@ -1192,7 +1218,11 @@ fn f(
     a: i32, // first
     b: i32,
 ) i32 {
-    return a + b;
+    return a + /* mid */ b /* left */ - 1;
+}
+
+fn pick<Alphabetical: Ord, Betamaxers: Ord, Gammarays: Ord, Deltaforce: Ord, Epsilonics: Ord>() i32 {
+    return 0;
 }
 
 fn main() {
@@ -1229,7 +1259,17 @@ fn f(
     a: i32, // first
     b: i32,
 ) i32 {
-    return a + b;
+    return a + /* mid */ b /* left */ - 1;
+}
+
+fn pick<
+    Alphabetical: Ord,
+    Betamaxers: Ord,
+    Gammarays: Ord,
+    Deltaforce: Ord,
+    Epsilonics: Ord,
+>() i32 {
+    return 0;
 }
 
 fn main() {
