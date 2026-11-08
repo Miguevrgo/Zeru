@@ -1,0 +1,7 @@
+pub struct P {
+    a: i32,
+
+    pub fn drop(var self) {
+        println("a.util drops {}", self.a);
+    }
+}

@@ -889,7 +889,7 @@ impl<'a> Checker<'a> {
                 "Int" => self.types.as_int(arg).is_some(),
                 "Hash" => self.hashes(arg),
                 _ => match self.items.lookup_trait(module, bound) {
-                    Some(trait_def) => self.has_trait_methods(arg, trait_def),
+                    Some(trait_def) => self.has_trait_methods(arg, trait_def, module),
                     None => continue,
                 },
             };
@@ -903,7 +903,7 @@ impl<'a> Checker<'a> {
                     span,
                 );
                 if let Some(trait_def) = self.items.lookup_trait(module, bound) {
-                    self.explain_unmet(arg, trait_def, bound);
+                    self.explain_unmet(arg, trait_def, bound, module);
                 }
                 satisfied = false;
             }
@@ -915,18 +915,20 @@ impl<'a> Checker<'a> {
     }
 
     /// A type meets a trait by having its methods, with the same parameter
-    /// and return types; there is no other way to say that it does.
-    fn has_trait_methods(&mut self, ty: Ty, trait_def: DefId) -> bool {
-        self.is_struct(ty).is_some() && self.unmet_method(ty, trait_def).is_none()
+    /// and return types, visible to the generic in `from` that asks for it;
+    /// there is no other way to say that it does.
+    fn has_trait_methods(&mut self, ty: Ty, trait_def: DefId, from: ModuleId) -> bool {
+        self.is_struct(ty).is_some() && self.unmet_method(ty, trait_def, from).is_none()
     }
 
-    /// The first method of `trait_def` the struct `ty` lacks, or has with
-    /// other parameter or return types, with the one it has by that name
-    /// and how it reads.
+    /// The first method of `trait_def` the struct `ty` lacks, has with other
+    /// parameter or return types, or keeps private from `from`, with the one
+    /// it has by that name and how it reads.
     fn unmet_method(
         &mut self,
         ty: Ty,
         trait_def: DefId,
+        from: ModuleId,
     ) -> Option<(TraitMethod, Option<(DefId, String)>)> {
         let owner = self.is_struct(ty)?;
         let TyKind::Adt(_, args) = self.types.kind(ty).clone() else {
@@ -951,6 +953,7 @@ impl<'a> Checker<'a> {
                 && params.len() == wanted.params.len()
                 && params.iter().zip(&wanted.params).all(|(&p, &w)| same(p, w))
                 && same(ret, wanted.ret)
+                && self.items.visible(method, from)
             {
                 return None;
             }
@@ -974,15 +977,16 @@ impl<'a> Checker<'a> {
     }
 
     /// Say in the last error why `ty` does not meet `trait_def`, named
-    /// `bound`: the method it lacks, or has with other types.
-    fn explain_unmet(&mut self, ty: Ty, trait_def: DefId, bound: &str) {
+    /// `bound`, for a generic in `from`: the method it lacks, has with other
+    /// types, or keeps private.
+    fn explain_unmet(&mut self, ty: Ty, trait_def: DefId, bound: &str, from: ModuleId) {
         let shown = self.types.show(ty);
         let Some(owner) = self.is_struct(ty) else {
             let error = self.errors.last_mut().expect("reported above");
             error.help(format!("only a struct can meet a trait, not {shown}"));
             return;
         };
-        let Some((wanted, found)) = self.unmet_method(ty, trait_def) else {
+        let Some((wanted, found)) = self.unmet_method(ty, trait_def, from) else {
             return;
         };
         let asked = self.signature(&wanted.name, wanted.takes_self, &wanted.params, wanted.ret);
@@ -992,8 +996,20 @@ impl<'a> Checker<'a> {
             .filter_map(|m| items.item(m).name.rsplit("::").next().map(String::from))
             .collect();
         let head = |method: DefId| self.sources.first_line(items.item(method).decl.span);
+        let private = found
+            .as_ref()
+            .map(|(method, _)| *method)
+            .filter(|&method| !items.visible(method, from));
+        let fix = private.filter(|&method| !items.is_std(method)).map(head);
         let note = match &found {
-            Some((method, has)) => Some((format!("{shown} has {has} here"), head(*method))),
+            Some((method, has)) => {
+                let without = if private.is_some() {
+                    ", without pub"
+                } else {
+                    ""
+                };
+                Some((format!("{shown} has {has} here{without}"), head(*method)))
+            }
             None => suggest::closest(&wanted.name, &names).and_then(|near| {
                 let method = items.method(owner, near)?;
                 let text = format!("{shown} has '{near}' here, not '{}'", wanted.name);
@@ -1002,12 +1018,18 @@ impl<'a> Checker<'a> {
         };
         let error = self.errors.last_mut().expect("reported above");
         match found {
+            Some(_) if private.is_some() => {
+                error.help("only a pub method meets a bound outside its own module")
+            }
             Some(_) => error.help(format!("{bound} asks for {asked}")),
             None => error.help(format!(
                 "{shown} has no method '{}', and {bound} asks for {asked}",
                 wanted.name
             )),
         };
+        if let Some(decl) = fix {
+            error.fix(Span::new(decl.start, decl.start), "pub ");
+        }
         if let Some((text, span)) = note {
             error.note(text, span);
         }

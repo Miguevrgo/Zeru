@@ -131,5 +131,8 @@ fn main() {
 }
 ```
 
+A generic declared in another file reaches only a type's `pub` methods, so
+only those can meet its bound.
+
 Generic code is compiled once for each type it is used with, so it runs
 as fast as code written for that type by hand.

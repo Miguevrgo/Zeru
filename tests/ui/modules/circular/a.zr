@@ -1,7 +1,8 @@
 import b;
-pub fn ping(n: i32) i32 {
+import main;
+pub fn ping(n: i32) main::Total {
     if n == 0 {
-        return 0;
+        return main::Total { n: 0 };
     }
-    return b::pong(n - 1) + 1;
+    return main::Total { n: b::pong(n - 1).n + 1 };
 }

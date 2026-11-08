@@ -1,0 +1,26 @@
+import lib;
+
+trait Named {
+    fn name(self) str;
+}
+
+fn greet<T: Named>(x: T) str {
+    return x.name();
+}
+
+struct Mine {
+    v: i32,
+
+    fn name(self) str {
+        return "mine";
+    }
+}
+
+fn main() {
+    println("{}", greet(lib::make()));
+    println("{}", greet(lib::Box { v: 2 }));
+    println("{}", greet(lib::Box { v: true }));
+    println("{}", lib::greet(Mine { v: 1 }));
+    println("{}", lib::call_name(Mine { v: 2 }));
+    println("{}", lib::call_name(lib::make()));
+}

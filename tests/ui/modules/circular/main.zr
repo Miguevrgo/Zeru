@@ -1,4 +1,10 @@
 import a;
+
+pub struct Total {
+    n: i32,
+}
+
 fn main() {
-    println("{}", a::ping(3));
+    const total: Total = a::ping(3);
+    println("{}", total.n);
 }

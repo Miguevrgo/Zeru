@@ -1,10 +1,13 @@
 status: compile error
 -- stderr
-Error: 'b.util' and 'a.util' are both called 'util'; a program can import only one of them
+Error: 'b.util' and 'a.util' are both called 'util'; a file can import only one of them
    ╭─[ tests/ui/modules/same_last_name/main.zr:2:1 ]
    │
+ 1 │ import a.util;
+   │ ───────┬──────
+   │        ╰──────── 'a.util' is imported here
  2 │ import b.util;
    │ ───────┬──────
-   │        ╰──────── 'b.util' and 'a.util' are both called 'util'; a program can import only one of them
+   │        ╰──────── 'b.util' and 'a.util' are both called 'util'; a file can import only one of them
 ───╯
 [-] Error: aborting due to previous error

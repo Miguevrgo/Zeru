@@ -51,7 +51,7 @@ pub struct ZeruError {
 }
 
 /// Sort `errors` by where they point and drop the repeats, and those an
-/// earlier one already says how to fix, with the same help and edit.
+/// earlier one already says how to fix, with the same help, edit and notes.
 pub fn tidy(errors: &mut Vec<ZeruError>) {
     errors.sort_by(|a, b| (a.span.start, &a.message).cmp(&(b.span.start, &b.message)));
     errors.dedup_by(|a, b| a.span == b.span && a.message == b.message);
@@ -60,7 +60,7 @@ pub fn tidy(errors: &mut Vec<ZeruError>) {
         let Some(fix) = &error.fix else {
             return true;
         };
-        let fix = (fix.clone(), error.help.clone());
+        let fix = (fix.clone(), error.help.clone(), error.notes.clone());
         let new = !fixes.contains(&fix);
         fixes.push(fix);
         new

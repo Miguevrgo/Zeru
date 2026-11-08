@@ -1,0 +1,5 @@
+import b.util;
+
+pub fn make() util::P {
+    return util::P { a: 2, b: 3 };
+}

@@ -1,0 +1,85 @@
+status: compile error
+-- stderr
+Error: 'greet' asks for T: Named, which lib::Secret does not satisfy
+    ╭─[ tests/ui/modules/private_method_meets_no_bound/main.zr:20:19 ]
+    │
+ 20 │     println("{}", greet(lib::make()));
+    │                   ─────────┬────────
+    │                            ╰────────── 'greet' asks for T: Named, which lib::Secret does not satisfy
+    │
+    ├─[ tests/ui/modules/private_method_meets_no_bound/lib.zr:16:5 ]
+    │
+ 16 │     fn name(self) str {
+    │     ────────┬────────
+    │             ╰────────── lib::Secret has fn name(self) str here, without pub
+    │
+    │ Help: only a pub method meets a bound outside its own module
+    │           pub fn name(self) str {
+────╯
+Error: 'greet' asks for T: Named, which lib::Box<i32> does not satisfy
+    ╭─[ tests/ui/modules/private_method_meets_no_bound/main.zr:21:19 ]
+    │
+ 21 │     println("{}", greet(lib::Box { v: 2 }));
+    │                   ────────────┬───────────
+    │                               ╰───────────── 'greet' asks for T: Named, which lib::Box<i32> does not satisfy
+    │
+    ├─[ tests/ui/modules/private_method_meets_no_bound/lib.zr:24:5 ]
+    │
+ 24 │     fn name(self) str {
+    │     ────────┬────────
+    │             ╰────────── lib::Box<i32> has fn name(self) str here, without pub
+    │
+    │ Help: only a pub method meets a bound outside its own module
+    │           pub fn name(self) str {
+────╯
+Error: 'greet' asks for T: Named, which lib::Box<bool> does not satisfy
+    ╭─[ tests/ui/modules/private_method_meets_no_bound/main.zr:22:19 ]
+    │
+ 22 │     println("{}", greet(lib::Box { v: true }));
+    │                   ─────────────┬─────────────
+    │                                ╰─────────────── 'greet' asks for T: Named, which lib::Box<bool> does not satisfy
+    │
+    ├─[ tests/ui/modules/private_method_meets_no_bound/lib.zr:24:5 ]
+    │
+ 24 │     fn name(self) str {
+    │     ────────┬────────
+    │             ╰────────── lib::Box<bool> has fn name(self) str here, without pub
+    │
+    │ Help: only a pub method meets a bound outside its own module
+    │           pub fn name(self) str {
+────╯
+Error: 'lib::greet' asks for T: Named, which Mine does not satisfy
+    ╭─[ tests/ui/modules/private_method_meets_no_bound/main.zr:23:19 ]
+    │
+ 14 │     fn name(self) str {
+    │     ────────┬────────
+    │             ╰────────── Mine has fn name(self) str here, without pub
+    │
+ 23 │     println("{}", lib::greet(Mine { v: 1 }));
+    │                   ────────────┬────────────
+    │                               ╰────────────── 'lib::greet' asks for T: Named, which Mine does not satisfy
+    │
+    │ Help: only a pub method meets a bound outside its own module
+    │           pub fn name(self) str {
+────╯
+Error: 'Mine::name' is private to the main file
+    ╭─[ tests/ui/modules/private_method_meets_no_bound/main.zr:14:5 ]
+    │
+ 14 │     fn name(self) str {
+    │     ────────┬────────
+    │             ╰────────── declared here, without pub
+    │
+ 24 │     println("{}", lib::call_name(Mine { v: 2 }));
+    │                   ──────────────┬──────────────
+    │                                 ╰──────────────── in 'lib::call_name<Mine>', instantiated here
+    │
+    ├─[ tests/ui/modules/private_method_meets_no_bound/lib.zr:10:12 ]
+    │
+ 10 │     return x.name();
+    │            ────┬───
+    │                ╰───── 'Mine::name' is private to the main file
+    │
+    │ Help: mark it pub to use it outside its module
+    │           pub fn name(self) str {
+────╯
+[-] Error: aborting due to previous error

@@ -3,7 +3,9 @@ pub fn area(w: i32, h: i32) i32 {
 }
 
 #test {
+    import main;
+
     test("area multiplies") {
-        assert(area(2, 3) == 6);
+        assert(area(main::add(1, 1), 3) == 6);
     }
 }

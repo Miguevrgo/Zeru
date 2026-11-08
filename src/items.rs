@@ -60,12 +60,14 @@ pub struct Item<'a> {
     pub owner: Option<DefId>,
 }
 
-/// A parsed file and the name its importers call it by. The prelude comes
-/// first and the root file second; neither has a name.
+/// A parsed file, the path its importers name it by, and the module each of
+/// its imports names, by its path. The prelude comes first and the root file
+/// second; neither has a name.
 pub struct SourceModule {
     pub name: Option<String>,
     pub program: Program,
     pub std: bool,
+    pub imports: HashMap<String, usize>,
 }
 
 struct Module {
@@ -80,7 +82,6 @@ pub struct Items<'a> {
     pub items: Vec<Item<'a>>,
     sources: &'a Sources,
     modules: Vec<Module>,
-    by_name: HashMap<String, ModuleId>,
     methods: HashMap<(DefId, String), DefId>,
     pub errors: Vec<ZeruError>,
 }
@@ -91,7 +92,6 @@ impl<'a> Items<'a> {
             items: Vec::new(),
             sources: text,
             modules: Vec::new(),
-            by_name: HashMap::new(),
             methods: HashMap::new(),
             errors: Vec::new(),
         };
@@ -104,15 +104,12 @@ impl<'a> Items<'a> {
                 imported: HashMap::new(),
                 modules: HashMap::new(),
             });
-            if let Some(name) = &source.name {
-                items.by_name.insert(name.clone(), id);
-            }
             for statement in &source.program.statements {
                 items.declare(id, statement);
             }
         }
         for (at, source) in sources.iter().enumerate() {
-            items.import(ModuleId(at as u32), &source.program);
+            items.import(ModuleId(at as u32), source);
         }
         items
     }
@@ -196,7 +193,7 @@ impl<'a> Items<'a> {
     }
 
     fn qualified(&self, module: ModuleId, name: &str) -> String {
-        match &self.modules[module.0 as usize].name {
+        match self.module_name(module) {
             Some(module) => format!("{module}::{name}"),
             None => name.to_string(),
         }
@@ -204,15 +201,16 @@ impl<'a> Items<'a> {
 
     /// `import a.b;` lets the importer say `b::x`, and `import a.b::{x, y}`
     /// also `x` for `b::x`.
-    fn import(&mut self, module: ModuleId, program: &Program) {
-        for statement in &program.statements {
+    fn import(&mut self, module: ModuleId, source: &SourceModule) {
+        for statement in &source.program.statements {
             let StatementKind::Import { path, symbols } = &statement.kind else {
                 continue;
             };
             let short = path.last().cloned().unwrap_or_default();
-            let Some(&target) = self.by_name.get(&short) else {
+            let Some(&target) = source.imports.get(&path.join(".")) else {
                 continue;
             };
+            let target = ModuleId(target as u32);
             self.modules[module.0 as usize]
                 .modules
                 .insert(short.clone(), target);
@@ -242,16 +240,20 @@ impl<'a> Items<'a> {
                     self.errors.push(error);
                     continue;
                 }
-                let declared_here = NAMESPACES.into_iter().any(|ns| {
+                let declared_here = NAMESPACES.into_iter().find_map(|ns| {
                     self.modules[module.0 as usize]
                         .scope
-                        .contains_key(&(ns, symbol.clone()))
+                        .get(&(ns, symbol.clone()))
+                        .copied()
                 });
-                if declared_here {
-                    self.errors.push(ZeruError::semantic(
+                if let Some(local) = declared_here {
+                    let mut error = ZeruError::semantic(
                         format!("'{symbol}' is imported from '{short}' and also declared here"),
                         statement.span,
-                    ));
+                    );
+                    let decl = self.sources.first_line(self.item(local).decl.span);
+                    error.note(format!("'{symbol}' is declared here"), decl);
+                    self.errors.push(error);
                     continue;
                 }
                 if let Some((other, _)) = self.modules[module.0 as usize].imported.get(symbol) {
@@ -328,8 +330,10 @@ impl<'a> Items<'a> {
         })
     }
 
+    /// The last part of the path of `module`, which its items are named by.
     fn module_name(&self, module: ModuleId) -> Option<&str> {
-        self.modules[module.0 as usize].name.as_deref()
+        let name = self.modules[module.0 as usize].name.as_deref()?;
+        name.rsplit('.').next()
     }
 
     /// The item `path` names from inside `from`: `x`, or `module::x` of a
@@ -358,18 +362,19 @@ impl<'a> Items<'a> {
     /// The full name of a module of the program, outside std, whose last
     /// part is `short`, as another file imports it.
     pub fn program_module(&self, short: &str) -> Option<&str> {
-        self.by_name
+        self.modules
             .iter()
-            .filter(|(_, id)| !self.modules[id.0 as usize].std)
-            .map(|(name, _)| name.as_str())
+            .filter(|module| !module.std)
+            .filter_map(|module| module.name.as_deref())
             .find(|name| name.rsplit('.').next() == Some(short))
     }
 
     /// The last part of the name of `def`'s module when it is one of std's,
     /// as "simd".
     pub fn std_module_of(&self, def: DefId) -> Option<&str> {
-        let module = &self.modules[self.item(def).module.0 as usize];
-        module.name.as_deref().filter(|_| module.std)
+        let module = self.item(def).module;
+        self.module_name(module)
+            .filter(|_| self.modules[module.0 as usize].std)
     }
 
     /// The module code in `from` imports as `name`.
@@ -419,13 +424,12 @@ impl<'a> Items<'a> {
     }
 
     /// Whether code in `from` may name `def`: anything public, anything of
-    /// its own module or the root file, and the prelude's private items from
-    /// a module of the standard library.
+    /// its own module, and the prelude's private items from a module of the
+    /// standard library.
     pub fn visible(&self, def: DefId, from: ModuleId) -> bool {
         let item = self.item(def);
         item.is_pub
             || item.module == from
-            || item.module == ModuleId::ROOT
             || item.module == ModuleId::PRELUDE && self.modules[from.0 as usize].std
     }
 
@@ -433,11 +437,12 @@ impl<'a> Items<'a> {
     /// that makes it visible unless the standard library keeps it private.
     pub fn private_error(&self, def: DefId, span: Span) -> ZeruError {
         let item = self.item(def);
-        let module = self.module_name(item.module).unwrap_or_default();
-        let mut error = ZeruError::semantic(
-            format!("'{}' is private to module '{module}'", item.name),
-            span,
-        );
+        let module = match self.module_name(item.module) {
+            Some(module) => format!("module '{module}'"),
+            None => String::from("the main file"),
+        };
+        let mut error =
+            ZeruError::semantic(format!("'{}' is private to {module}", item.name), span);
         let decl = self.sources.first_line(item.decl.span);
         error.note("declared here, without pub", decl);
         if !self.modules[item.module.0 as usize].std {

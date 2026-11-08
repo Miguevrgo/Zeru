@@ -1,0 +1,31 @@
+pub trait Named {
+    fn name(self) str;
+}
+
+pub fn greet<T: Named>(x: T) str {
+    return x.name();
+}
+
+pub fn call_name<T>(x: T) str {
+    return x.name();
+}
+
+pub struct Secret {
+    v: i32,
+
+    fn name(self) str {
+        return "secret";
+    }
+}
+
+pub struct Box<T> {
+    v: T,
+
+    fn name(self) str {
+        return "box";
+    }
+}
+
+pub fn make() Secret {
+    return Secret { v: 1 };
+}

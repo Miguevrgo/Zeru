@@ -380,31 +380,39 @@ fn load(path: &Path, user_code: &str, tests: bool) -> (Sources, Vec<SourceModule
             name: None,
             program: prelude,
             std: true,
+            imports: HashMap::new(),
         },
         SourceModule {
             name: None,
             program: root,
             std: false,
+            imports: HashMap::new(),
         },
     ];
     let dir = path.parent().unwrap_or(Path::new("."));
-    let mut loaded: HashMap<String, String> = HashMap::new();
+    let mut loaded: HashMap<PathBuf, usize> = HashMap::from([(path.to_path_buf(), 1)]);
     let mut next = 1;
     let mut std_missing = false;
     while next < modules.len() {
+        let mut named: HashMap<String, (String, Span)> = HashMap::new();
         for (import, span) in imports(&modules[next].program) {
             let short = import.rsplit('.').next().unwrap_or_default().to_string();
-            match loaded.get(&short) {
-                Some(full) if *full == import => continue,
-                Some(full) => {
-                    errors.push(ZeruError::semantic(
-                        format!("'{import}' and '{full}' are both called '{short}'; a program can import only one of them"),
+            match named.get(&short) {
+                Some((full, _)) if *full == import => continue,
+                Some((full, first)) => {
+                    let mut error = ZeruError::semantic(
+                        format!(
+                            "'{import}' and '{full}' are both called '{short}'; a file can import only one of them"
+                        ),
                         span,
-                    ));
+                    );
+                    error.note(format!("'{full}' is imported here"), *first);
+                    errors.push(error);
                     continue;
                 }
                 None => {}
             }
+            named.insert(short, (import.clone(), span));
             let Some(file) = resolve_import(&import, dir) else {
                 if !std_missing {
                     errors.push(ZeruError::semantic(
@@ -415,6 +423,10 @@ fn load(path: &Path, user_code: &str, tests: bool) -> (Sources, Vec<SourceModule
                 std_missing = true;
                 continue;
             };
+            if let Some(&module) = loaded.get(&file) {
+                modules[next].imports.insert(import, module);
+                continue;
+            }
             let Ok(source) = std::fs::read_to_string(&file) else {
                 let mut error = ZeruError::semantic(
                     format!("Module '{import}' not found at {}", file.display()),
@@ -440,12 +452,15 @@ fn load(path: &Path, user_code: &str, tests: bool) -> (Sources, Vec<SourceModule
                 tests && !import.starts_with("std."),
                 import.starts_with("std."),
             );
+            let module = modules.len();
+            loaded.insert(file, module);
             modules.push(SourceModule {
-                name: Some(short.clone()),
+                name: Some(import.clone()),
                 program,
                 std: import.starts_with("std."),
+                imports: HashMap::new(),
             });
-            loaded.insert(short, import);
+            modules[next].imports.insert(import, module);
         }
         next += 1;
     }

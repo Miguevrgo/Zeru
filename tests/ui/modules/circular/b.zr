@@ -1,7 +1,8 @@
 import a;
-pub fn pong(n: i32) i32 {
+import main;
+pub fn pong(n: i32) main::Total {
     if n == 0 {
-        return 0;
+        return main::Total { n: 0 };
     }
-    return a::ping(n - 1) + 10;
+    return main::Total { n: a::ping(n - 1).n + 10 };
 }

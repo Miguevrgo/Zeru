@@ -474,7 +474,7 @@ fn test_runs_each_test_alone() {
             [
                 "main.zr:L14 add sums",
                 "main.zr:L27 helpers live in the block",
-                "shapes.zr:L6 area multiplies"
+                "shapes.zr:L8 area multiplies"
             ],
             "{mode} {stdout}"
         );

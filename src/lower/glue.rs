@@ -29,20 +29,21 @@ impl<'ctx> Lower<'_, 'ctx> {
 
     fn glue(
         &mut self,
-        what: &str,
+        what: &'static str,
         ty: Ty,
         pointers: usize,
         emit: fn(&mut Self, &[PointerValue<'ctx>], Ty),
     ) -> FunctionValue<'ctx> {
-        let name = format!("{what}.{}", self.types().show(ty));
-        if let Some(function) = self.module.get_function(&name) {
+        if let Some(&function) = self.glue.get(&(what, ty)) {
             return function;
         }
+        let name = format!("{what}.{}", self.types().show(ty));
         let params = vec![self.ptr_type().into(); pointers];
         let fn_type = self.context.void_type().fn_type(&params, false);
         let function = self
             .module
             .add_function(&name, fn_type, Some(Linkage::Internal));
+        self.glue.insert((what, ty), function);
         self.in_helper(function, |this| {
             let args: Vec<PointerValue> = function
                 .get_param_iter()

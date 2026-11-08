@@ -1,0 +1,15 @@
+import a.util;
+import fs;
+import hashmap;
+import other;
+import std.collections.hashset::{HashSet};
+import std.os;
+
+fn main() {
+    var seen: HashSet<i32> = HashSet.new();
+    const _ = seen.insert(fs::save());
+    println("{} {} {}", seen.len(), hashmap::hi(), os::args().len());
+    const p = util::P { a: 1 };
+    const q = other::make();
+    println("{} {}", p.a, q.b);
+}
