@@ -13,3 +13,6 @@ fn main() {
     var named: Pair<Point> = Pair { first: p, second: p };
     var half = math::div_euclid(7.0, 2.0);
 }
+fn low_bits<T: Int>(a: T) T {
+    return a;
+}

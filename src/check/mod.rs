@@ -697,7 +697,9 @@ impl<'a> Checker<'a> {
     /// declared.
     fn check_bound_names(&mut self, generics: &[TypeParameter], module: ModuleId, span: Span) {
         for bound in generics.iter().filter_map(|param| param.bound.as_ref()) {
-            if matches!(bound.as_str(), "Eq" | "Ord" | "Num" | "Int" | "Hash") {
+            if matches!(bound.as_str(), "Eq" | "Ord" | "Num" | "Hash")
+                || bound == "Int" && self.sources.in_std(span)
+            {
                 continue;
             }
             match self.items.lookup_trait(module, bound) {
@@ -705,7 +707,7 @@ impl<'a> Checker<'a> {
                 Some(_) => {}
                 None => {
                     let mut known = self.items.names_of(module, ItemKind::Trait, false);
-                    known.extend(["Eq", "Ord", "Num", "Int", "Hash"].map(String::from));
+                    known.extend(["Eq", "Ord", "Num", "Hash"].map(String::from));
                     let at = self.sources.word_in(span, bound);
                     let error = self.error(
                         format!("Unknown trait '{bound}' in a bound"),
@@ -911,13 +913,14 @@ impl<'a> Checker<'a> {
             };
             if !ok {
                 let (base, shown) = (self.items.shown(def), self.types.show(arg));
-                self.error(
-                    format!(
+                let message = match bound.as_str() {
+                    "Int" => format!("'{base}' takes integers, not {shown}"),
+                    _ => format!(
                         "'{base}' asks for {}: {bound}, which {shown} does not satisfy",
                         param.name
                     ),
-                    span,
-                );
+                };
+                self.error(message, span);
                 if let Some(trait_def) = self.items.lookup_trait(module, bound) {
                     self.explain_unmet(arg, trait_def, bound, module);
                 }

@@ -7,11 +7,18 @@ Error: 'Pair' asks for T: Eq, which Point does not satisfy
     │               ──────────────┬─────────────
     │                             ╰─────────────── 'Pair' asks for T: Eq, which Point does not satisfy
 ────╯
-Error: 'math::div_euclid' asks for T: Int, which f64 does not satisfy
+Error: 'math::div_euclid' takes integers, not f64
     ╭─[ tests/ui/generics/bound_not_met.zr:14:16 ]
     │
  14 │     var half = math::div_euclid(7.0, 2.0);
     │                ─────────────┬────────────
-    │                             ╰────────────── 'math::div_euclid' asks for T: Int, which f64 does not satisfy
+    │                             ╰────────────── 'math::div_euclid' takes integers, not f64
+────╯
+Error: Unknown trait 'Int' in a bound
+    ╭─[ tests/ui/generics/bound_not_met.zr:16:16 ]
+    │
+ 16 │ fn low_bits<T: Int>(a: T) T {
+    │                ─┬─
+    │                 ╰─── Unknown trait 'Int' in a bound
 ────╯
 [-] Error: aborting due to previous error

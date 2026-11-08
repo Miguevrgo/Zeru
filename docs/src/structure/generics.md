@@ -36,7 +36,7 @@ The body of a generic function, or of a method of a generic struct, is
 checked for each type it is called with, so using `T` in a way that type
 does not allow, as `a > b` for a struct, is an error at that call. A
 bound after the name, as `T: Ord`, says what `T` must allow, and the
-compiler checks it at each call, before the body. Five bounds are built
+compiler checks it at each call, before the body. Four bounds are built
 in:
 
 | Bound | Allows | Met by |
@@ -44,7 +44,6 @@ in:
 | `Eq` | `==` and `!=` | numbers, bools, `str`, `String`, enums without data, tuples and structs of those |
 | `Ord` | `<`, `<=`, `>`, `>=` | numbers, `str`, `String`, enums without data, tuples and structs of those |
 | `Num` | arithmetic, and `as` from a number | numbers |
-| `Int` | what `Num` allows, and bit operators | integers |
 | `Hash` | being a key of a `HashMap` or `HashSet` | integers, bools, `str`, `String`, enums without data, tuples and structs of those |
 
 ```zeru
