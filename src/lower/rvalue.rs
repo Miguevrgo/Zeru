@@ -544,7 +544,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
 
     /// With `checked`, the operations that can go wrong check first: `+ - *`
     /// trap on overflow, `/ %` on a zero divisor or `MIN / -1`, shifts on an
-    /// oversized amount.
+    /// oversized amount. Without, `+ - *` tell LLVM they never overflow.
     pub(super) fn int_arith(
         &mut self,
         op: BinOp,
@@ -570,9 +570,15 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         };
         let b = &self.builder;
         match op {
-            BinOp::Add | BinOp::AddWrap => b.build_int_add(l, r, "add"),
-            BinOp::Sub | BinOp::SubWrap => b.build_int_sub(l, r, "sub"),
-            BinOp::Mul | BinOp::MulWrap => b.build_int_mul(l, r, "mul"),
+            BinOp::Add if signed => b.build_int_nsw_add(l, r, "add"),
+            BinOp::Add => b.build_int_nuw_add(l, r, "add"),
+            BinOp::Sub if signed => b.build_int_nsw_sub(l, r, "sub"),
+            BinOp::Sub => b.build_int_nuw_sub(l, r, "sub"),
+            BinOp::Mul if signed => b.build_int_nsw_mul(l, r, "mul"),
+            BinOp::Mul => b.build_int_nuw_mul(l, r, "mul"),
+            BinOp::AddWrap => b.build_int_add(l, r, "add"),
+            BinOp::SubWrap => b.build_int_sub(l, r, "sub"),
+            BinOp::MulWrap => b.build_int_mul(l, r, "mul"),
             BinOp::Div if signed => b.build_int_signed_div(l, r, "div"),
             BinOp::Div => b.build_int_unsigned_div(l, r, "udiv"),
             BinOp::Rem if signed => b.build_int_signed_rem(l, r, "rem"),
