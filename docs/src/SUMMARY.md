@@ -34,6 +34,7 @@
   - [collections](std/collections.md)
   - [simd](std/simd.md)
   - [term](std/term.md)
+  - [regex](std/regex.md)
 - [Building and Tools](tools/README.md)
   - [Build Modes](tools/modes.md)
   - [The zeru Command](tools/command.md)

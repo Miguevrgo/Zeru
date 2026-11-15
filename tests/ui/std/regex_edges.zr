@@ -1,0 +1,19 @@
+import std.regex;
+
+fn main() {
+    const end = regex::compile("$").unwrap();
+    println("{} {}", [end.find("ab")], end.find_all("ab"));
+    const empty = regex::compile("a*").unwrap();
+    println("{} {}", empty.find_all("baab"), empty.replace_all("baab", "-"));
+    var long = String.new();
+    for _i in 0..20000 {
+        long.push('a');
+    }
+    const hostile = regex::compile("(a*)*(a|aa)*b").unwrap();
+    println("{}", hostile.is_match(long));
+    var deep = String.new();
+    for _i in 0..5000 {
+        deep.push('(');
+    }
+    println("{}", regex::compile(deep).unwrap_err());
+}

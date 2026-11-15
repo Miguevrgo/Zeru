@@ -1,0 +1,754 @@
+// Zeru Standard Library - regex
+// Patterns matched in time linear in the text, whatever the pattern.
+
+// The largest count `{n,m}` takes.
+const MAX_COUNT: usize = 1000;
+// The most instructions a pattern compiles to.
+const MAX_PROGRAM: usize = 100000;
+// The deepest groups and repeats may nest.
+const MAX_DEPTH: usize = 1000;
+const UNSET: usize = usize.MAX;
+
+// A compiled pattern.
+//
+// A pattern works on bytes, as `str` does. It knows:
+//
+// | Pattern | Matches |
+// |---|---|
+// | `a` | that byte; `\` before any byte other than a letter or digit takes it as it is |
+// | `.` | any byte but a line break |
+// | `[abc]`, `[a-z]`, `[^abc]` | one byte of the set, or of those outside it |
+// | `\d`, `\w`, `\s` | a digit, a letter, digit or `_`, a space, tab or line break |
+// | `\D`, `\W`, `\S` | any byte that is not one of those |
+// | `\n`, `\t`, `\r` | a line break, a tab, a carriage return |
+// | `x*`, `x+`, `x?` | `x` any number of times, once or more, at most once |
+// | `x{n}`, `x{n,}`, `x{n,m}` | `x` n times, at least n, from n to m (up to 1000) |
+// | `x|y` | `x`, or else `y` |
+// | `(x)` | `x`, as a group `captures` gives back |
+// | `^`, `$` | the start, the end of the text |
+//
+// Repeats take as much as they can, and the match found is the one that
+// starts first; between two starting there, the alternative written first.
+// Matching takes time proportional to the length of the text times the size
+// of the pattern, so no pattern makes it slow.
+//
+// # Examples
+//
+// ```zeru
+// import std.regex;
+//
+// const date = regex::compile("(\\d+)-(\\d+)-(\\d+)").unwrap();
+// println("{}", date.is_match("due 2026-11-11")); // true
+// println("{}", date.find("due 2026-11-11")); // 2026-11-11
+// ```
+pub struct Regex {
+    program: Vec<Inst>,
+    classes: Vec<Array<u64, 4>>,
+    groups: usize,
+    starts: Array<u64, 4>,
+    anywhere: bool,
+
+    // Returns whether the pattern matches somewhere in `text`.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.regex;
+    //
+    // const word = regex::compile("^\\w+$").unwrap();
+    // println("{} {}", word.is_match("zeru"), word.is_match("two words")); // true false
+    // ```
+    pub fn is_match(self, text: str) bool {
+        var run = self.start(0);
+        return self.search(&var run, text, 0);
+    }
+
+    // Returns the first match in `text`, or None when there is none.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.regex;
+    //
+    // const number = regex::compile("\\d+").unwrap();
+    // println("{}", number.find("room 101, floor 3")); // 101
+    // println("{}", number.find("no digits").is_none()); // true
+    // ```
+    pub fn find(self, text: str) str? {
+        var run = self.start(0);
+        if !self.search(&var run, text, 0) {
+            return None;
+        }
+        return text[run.best[0]..run.best[1]];
+    }
+
+    // Returns every match in `text`, left to right, none overlapping.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.regex;
+    //
+    // const number = regex::compile("\\d+").unwrap();
+    // println("{}", number.find_all("1 plus 22 is 23")); // ["1", "22", "23"]
+    // ```
+    pub fn find_all(self, text: str) Vec<str> {
+        var found: Vec<str> = Vec.new();
+        var run = self.start(0);
+        var from: usize = 0;
+        while self.next(&var run, text, &var from) {
+            found.push(text[run.best[0]..run.best[1]]);
+        }
+        return found;
+    }
+
+    // Returns the first match in `text` and what each group matched in it,
+    // in the order their `(` are written: the whole match first, then each
+    // group, None for one the match did not go through. None when nothing
+    // matches.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.regex;
+    //
+    // const mail = regex::compile("(\\w+)@(\\w+)(\\.org)?").unwrap();
+    // const parts = mail.captures("write to ana@zeru").unwrap();
+    // println("{}", parts); // ["ana@zeru", "ana", "zeru", None]
+    // ```
+    pub fn captures(self, text: str) Vec<str?>? {
+        var run = self.start(self.groups);
+        if !self.search(&var run, text, 0) {
+            return None;
+        }
+        var parts: Vec<str?> = Vec.new();
+        for group in 0..self.groups + 1 {
+            const start = run.best[2 * group];
+            const end = run.best[2 * group + 1];
+            if start == UNSET || end == UNSET {
+                parts.push(None);
+            } else {
+                parts.push(text[start..end]);
+            }
+        }
+        return parts;
+    }
+
+    // Returns `text` with every match, as `find_all` finds them, replaced by
+    // `with`.
+    //
+    // # Examples
+    //
+    // ```zeru
+    // import std.regex;
+    //
+    // const spaces = regex::compile("\\s+").unwrap();
+    // println("{}", spaces.replace_all("a  b \t c", " ")); // a b c
+    // ```
+    pub fn replace_all(self, text: str, with: str) String {
+        var out = String.new();
+        var run = self.start(0);
+        var from: usize = 0;
+        var kept: usize = 0;
+        while self.next(&var run, text, &var from) {
+            out.extend(text[kept..run.best[0]]);
+            out.extend(with);
+            kept = run.best[1];
+        }
+        out.extend(text[kept..]);
+        return out;
+    }
+
+    // What a search needs, keeping the positions of the first `groups`
+    // groups besides the whole match.
+    fn start(self, groups: usize) Run {
+        const slots = 2 * (groups + 1);
+        return Run {
+            lists: [Threads.new(self.program.len()), Threads.new(self.program.len())],
+            caps: Vec[UNSET; slots],
+            best: Vec[UNSET; slots],
+            stack: Vec.new(),
+            ended: 0,
+        };
+    }
+
+    // The next match of `find_all` from `from`, which moves past it. An
+    // empty match right where the last one ended is skipped.
+    fn next(self, run: &var Run, text: str, from: &var usize) bool {
+        while *from <= text.len() {
+            if !self.search(run, text, *from) {
+                return false;
+            }
+            const start = run.best[0];
+            const end = run.best[1];
+            if start == end && start == *from && start > 0 && run.ended == start {
+                *from = start + 1;
+                continue;
+            }
+            *from = end;
+            if start == end {
+                *from = end + 1;
+            }
+            run.ended = end;
+            return true;
+        }
+        return false;
+    }
+
+    // Whether the pattern matches in `text` starting at `from` or later,
+    // leaving the match and its groups in `run.best`: a Pike VM, every
+    // thread one place in the program, kept in priority order. While no
+    // thread is alive, it skips the bytes no match can start with.
+    fn search(self, run: &var Run, text: str, from: usize) bool {
+        var matched = false;
+        run.lists[0].clear();
+        var at = from;
+        while at <= text.len() {
+            if !matched {
+                if run.lists[0].pcs.is_empty() && !self.anywhere {
+                    while at < text.len() && !self.accepts_in(&self.starts, text[at]) {
+                        at += 1;
+                    }
+                    if at == text.len() {
+                        return false;
+                    }
+                }
+                for slot in 0..run.caps.len() {
+                    run.caps[slot] = UNSET;
+                }
+                self.add(run, 0, 0, at, text.len());
+            }
+            if matched && run.lists[0].pcs.is_empty() {
+                break;
+            }
+            run.lists[1].clear();
+            const slots = run.caps.len();
+            for k in 0..run.lists[0].pcs.len() {
+                const pc = run.lists[0].pcs[k];
+                const inst = self.program[pc];
+                if inst.op == Op::Match {
+                    for slot in 0..slots {
+                        run.best[slot] = run.lists[0].slots[k * slots + slot];
+                    }
+                    matched = true;
+                    break;
+                }
+                if at < text.len() && self.accepts(inst.x, text[at]) {
+                    for slot in 0..slots {
+                        run.caps[slot] = run.lists[0].slots[k * slots + slot];
+                    }
+                    self.add(run, 1, pc + 1, at + 1, text.len());
+                }
+            }
+            run.lists.swap(0, 1);
+            at += 1;
+        }
+        return matched;
+    }
+
+    // Add the thread at `pc` to `run.lists[list]`, following jumps and
+    // splits to the instructions that read a byte or match, with `run.caps`
+    // as its groups at text position `at`.
+    fn add(self, run: &var Run, list: usize, pc: usize, at: usize, len: usize) {
+        run.stack.push(Job { pc: pc, slot: 0, value: 0 });
+        while !run.stack.is_empty() {
+            const job = run.stack.pop().unwrap();
+            if job.pc == UNSET {
+                run.caps[job.slot] = job.value;
+                continue;
+            }
+            const threads = &var run.lists[list];
+            if threads.seen[job.pc] == threads.mark {
+                continue;
+            }
+            threads.seen[job.pc] = threads.mark;
+            const inst = self.program[job.pc];
+            match inst.op {
+                Op::Jump => run.stack.push(Job { pc: inst.x, slot: 0, value: 0 }),
+                Op::Split => {
+                    run.stack.push(Job { pc: inst.y, slot: 0, value: 0 });
+                    run.stack.push(Job { pc: inst.x, slot: 0, value: 0 });
+                }
+                Op::Save => {
+                    if inst.x < run.caps.len() {
+                        run.stack.push(Job { pc: UNSET, slot: inst.x, value: run.caps[inst.x] });
+                        run.caps[inst.x] = at;
+                    }
+                    run.stack.push(Job { pc: job.pc + 1, slot: 0, value: 0 });
+                }
+                Op::Start => {
+                    if at == 0 {
+                        run.stack.push(Job { pc: job.pc + 1, slot: 0, value: 0 });
+                    }
+                }
+                Op::End => {
+                    if at == len {
+                        run.stack.push(Job { pc: job.pc + 1, slot: 0, value: 0 });
+                    }
+                }
+                Op::Class | Op::Match => {
+                    const threads = &var run.lists[list];
+                    threads.pcs.push(job.pc);
+                    threads.slots.extend(run.caps[..]);
+                }
+            }
+        }
+    }
+
+    // The bytes a match can start with, or `anywhere` when it can start
+    // without one: empty, or at the start or end of the text.
+    fn find_starts(var self) {
+        var seen = Vec[false; self.program.len()];
+        var stack: Vec<usize> = Vec[0];
+        while !stack.is_empty() {
+            const pc = stack.pop().unwrap();
+            if seen[pc] {
+                continue;
+            }
+            seen[pc] = true;
+            const inst = self.program[pc];
+            match inst.op {
+                Op::Jump => stack.push(inst.x),
+                Op::Split => {
+                    stack.push(inst.x);
+                    stack.push(inst.y);
+                }
+                Op::Save => stack.push(pc + 1),
+                Op::Class => {
+                    for word in 0..4 {
+                        self.starts[word] = self.starts[word] | self.classes[inst.x][word];
+                    }
+                }
+                Op::Start | Op::End | Op::Match => self.anywhere = true,
+            }
+        }
+    }
+
+    fn accepts(self, class: usize, byte: u8) bool {
+        return self.accepts_in(&self.classes[class], byte);
+    }
+
+    fn accepts_in(self, set: &Array<u64, 4>, byte: u8) bool {
+        return (set[(byte >> 6) as usize] >> (byte & 63)) & 1 == 1;
+    }
+}
+
+// Returns `pattern` compiled, or 22 (EINVAL) when it is not a valid pattern:
+// a `(` or `[` left open, a repeat with nothing before it, a count above
+// 1000 or out of order, an unknown escape, groups and repeats nested more
+// than 1000 deep, or a pattern too large.
+//
+// # Errors
+//
+// ```zeru
+// import std.regex;
+//
+// println("{}", regex::compile("(ab").is_err()); // true
+// println("{}", regex::compile("*a").unwrap_err()); // 22
+// ```
+pub fn compile(pattern: str) Regex! {
+    var parser = Parser {
+        pattern: pattern,
+        at: 0,
+        nodes: Vec.new(),
+        classes: Vec.new(),
+        groups: 0,
+        depth: 0,
+    };
+    const root = parser.alternatives()!;
+    if parser.at < pattern.len() {
+        return Err(EINVAL);
+    }
+    var builder = Builder { program: Vec.new() };
+    builder.push(Op::Save, 0, 0);
+    builder.emit(&parser.nodes, root);
+    builder.push(Op::Save, 1, 0);
+    builder.push(Op::Match, 0, 0);
+    if builder.program.len() > MAX_PROGRAM {
+        return Err(EINVAL);
+    }
+    var regex = Regex {
+        program: replace(&var builder.program, Vec.new()),
+        classes: replace(&var parser.classes, Vec.new()),
+        groups: parser.groups,
+        starts: [0; 4],
+        anywhere: false,
+    };
+    regex.find_starts();
+    return regex;
+}
+
+enum Op {
+    Class,
+    Split,
+    Jump,
+    Save,
+    Start,
+    End,
+    Match,
+}
+
+// One step of a program: read a byte of class `x`, go on at `x` or else
+// `y`, go to `x`, note the position in slot `x`, check the start or the
+// end, or match.
+struct Inst {
+    op: Op,
+    x: usize,
+    y: usize,
+}
+
+// Something left to do while adding a thread: follow `pc`, or with `pc`
+// UNSET, put `value` back in slot `slot`.
+struct Job {
+    pc: usize,
+    slot: usize,
+    value: usize,
+}
+
+// The threads at one text position: the places in the program, in priority
+// order, the group positions of the k-th at `slots[k * count..]`, and
+// `seen[pc] == mark` for each place already taken.
+struct Threads {
+    pcs: Vec<usize>,
+    slots: Vec<usize>,
+    seen: Vec<usize>,
+    mark: usize,
+
+    fn new(places: usize) Threads {
+        return Threads { pcs: Vec.new(), slots: Vec.new(), seen: Vec[0; places], mark: 1 };
+    }
+
+    fn clear(var self) {
+        self.pcs.clear();
+        self.slots.clear();
+        self.mark += 1;
+    }
+}
+
+// What a search works with, kept between the searches of one call.
+struct Run {
+    lists: Array<Threads, 2>,
+    caps: Vec<usize>,
+    best: Vec<usize>,
+    stack: Vec<Job>,
+    ended: usize,
+}
+
+// A pattern as a tree, before it is compiled.
+enum Node {
+    Class(usize),
+    Start,
+    End,
+    Group(usize, usize),
+    Concat(Vec<usize>),
+    Alt(Vec<usize>),
+    Repeat(usize, usize, usize),
+}
+
+struct Parser {
+    pattern: str,
+    at: usize,
+    nodes: Vec<Node>,
+    classes: Vec<Array<u64, 4>>,
+    groups: usize,
+    depth: usize,
+
+    fn add(var self, node: Node) usize {
+        self.nodes.push(node);
+        return self.nodes.len() - 1;
+    }
+
+    fn peek(self) u8? {
+        if self.at < self.pattern.len() {
+            return self.pattern[self.at];
+        }
+        return None;
+    }
+
+    fn eat(var self, byte: u8) bool {
+        if self.peek() == byte {
+            self.at += 1;
+            return true;
+        }
+        return false;
+    }
+
+    fn alternatives(var self) usize! {
+        var choices: Vec<usize> = Vec.new();
+        choices.push(self.sequence()!);
+        while self.eat('|') {
+            choices.push(self.sequence()!);
+        }
+        if choices.len() == 1 {
+            return choices[0];
+        }
+        return self.add(Node::Alt(choices));
+    }
+
+    fn sequence(var self) usize! {
+        var parts: Vec<usize> = Vec.new();
+        while self.peek().is_some() && self.peek() != '|' && self.peek() != ')' {
+            parts.push(self.repeated()!);
+        }
+        return self.add(Node::Concat(parts));
+    }
+
+    fn repeated(var self) usize! {
+        var node = self.atom()!;
+        var stacked = self.depth;
+        while true {
+            var low: usize = 0;
+            var high = UNSET;
+            if self.eat('+') {
+                low = 1;
+            } else if self.eat('?') {
+                high = 1;
+            } else if self.eat('{') {
+                low = self.count()!;
+                high = low;
+                if self.eat(',') {
+                    high = UNSET;
+                    if self.peek() != '}' {
+                        high = self.count()!;
+                    }
+                }
+                if !self.eat('}') || high < low {
+                    return Err(EINVAL);
+                }
+            } else if !self.eat('*') {
+                return node;
+            }
+            stacked += 1;
+            if stacked > MAX_DEPTH {
+                return Err(EINVAL);
+            }
+            node = self.add(Node::Repeat(node, low, high));
+        }
+    }
+
+    fn count(var self) usize! {
+        const start = self.at;
+        var value: usize = 0;
+        while self.peek().is_some() && is_digit(self.pattern[self.at]) {
+            value = value * 10 + (self.pattern[self.at] - '0') as usize;
+            if value > MAX_COUNT {
+                return Err(EINVAL);
+            }
+            self.at += 1;
+        }
+        if self.at == start {
+            return Err(EINVAL);
+        }
+        return value;
+    }
+
+    fn atom(var self) usize! {
+        const byte = self.pattern[self.at];
+        self.at += 1;
+        if byte == '(' {
+            self.groups += 1;
+            self.depth += 1;
+            if self.depth > MAX_DEPTH {
+                return Err(EINVAL);
+            }
+            const group = self.groups;
+            const inner = self.alternatives()!;
+            self.depth -= 1;
+            if !self.eat(')') {
+                return Err(EINVAL);
+            }
+            return self.add(Node::Group(inner, group));
+        }
+        if byte == '*' || byte == '+' || byte == '?' || byte == '{' {
+            return Err(EINVAL);
+        }
+        if byte == '^' {
+            return self.add(Node::Start);
+        }
+        if byte == '$' {
+            return self.add(Node::End);
+        }
+        var set: Array<u64, 4> = [0; 4];
+        if byte == '.' {
+            set_range(&var set, 0, 255);
+            set[0] = set[0] & !(1 << 10);
+        } else if byte == '[' {
+            set = self.set()!;
+        } else if byte == '\\' {
+            set = self.escape()!;
+        } else {
+            set_range(&var set, byte, byte);
+        }
+        self.classes.push(set);
+        return self.add(Node::Class(self.classes.len() - 1));
+    }
+
+    // The bytes of `[...]`, its `[` read: single bytes, ranges `a-z`, and
+    // escapes, all but them with `^` first. A `]` right after the `[` or
+    // `[^` is a byte of the set.
+    fn set(var self) Array<u64, 4>! {
+        var set: Array<u64, 4> = [0; 4];
+        const negated = self.eat('^');
+        var first = true;
+        while true {
+            if self.peek().is_none() {
+                return Err(EINVAL);
+            }
+            const low = self.pattern[self.at];
+            if low == ']' && !first {
+                self.at += 1;
+                break;
+            }
+            first = false;
+            self.at += 1;
+            if low == '\\' {
+                const escaped = self.escape()!;
+                for word in 0..4 {
+                    set[word] = set[word] | escaped[word];
+                }
+                continue;
+            }
+            var high = low;
+            if self.peek() == '-'
+                && self.at + 1 < self.pattern.len()
+                && self.pattern[self.at + 1] != ']'
+            {
+                high = self.pattern[self.at + 1];
+                self.at += 2;
+                if high == '\\' || high < low {
+                    return Err(EINVAL);
+                }
+            }
+            set_range(&var set, low, high);
+        }
+        if negated {
+            for word in 0..4 {
+                set[word] = !set[word];
+            }
+        }
+        return set;
+    }
+
+    // The bytes the escape after a `\` stands for.
+    fn escape(var self) Array<u64, 4>! {
+        if self.peek().is_none() {
+            return Err(EINVAL);
+        }
+        const byte = self.pattern[self.at];
+        self.at += 1;
+        var set: Array<u64, 4> = [0; 4];
+        match byte {
+            'd' | 'D' => set_range(&var set, '0', '9'),
+            'w' | 'W' => {
+                set_range(&var set, '0', '9');
+                set_range(&var set, 'a', 'z');
+                set_range(&var set, 'A', 'Z');
+                set_range(&var set, '_', '_');
+            }
+            's' | 'S' => {
+                set_range(&var set, ' ', ' ');
+                set_range(&var set, '\t', '\r');
+            }
+            'n' => set_range(&var set, '\n', '\n'),
+            't' => set_range(&var set, '\t', '\t'),
+            'r' => set_range(&var set, '\r', '\r'),
+            default => {
+                if is_digit(byte) || byte >= 'a' && byte <= 'z' || byte >= 'A' && byte <= 'Z' {
+                    return Err(EINVAL);
+                }
+                set_range(&var set, byte, byte);
+            }
+        }
+        if byte == 'D' || byte == 'W' || byte == 'S' {
+            for word in 0..4 {
+                set[word] = !set[word];
+            }
+        }
+        return set;
+    }
+}
+
+struct Builder {
+    program: Vec<Inst>,
+
+    fn push(var self, op: Op, x: usize, y: usize) usize {
+        self.program.push(Inst { op: op, x: x, y: y });
+        return self.program.len() - 1;
+    }
+
+    // The instructions of node `at` of `nodes`, stopping once there are too
+    // many.
+    fn emit(var self, nodes: &Vec<Node>, at: usize) {
+        if self.program.len() > MAX_PROGRAM {
+            return;
+        }
+        match nodes[at] {
+            Node::Class(class) => {
+                self.push(Op::Class, class, 0);
+            }
+            Node::Start => {
+                self.push(Op::Start, 0, 0);
+            }
+            Node::End => {
+                self.push(Op::End, 0, 0);
+            }
+            Node::Group(inner, group) => {
+                self.push(Op::Save, 2 * group, 0);
+                self.emit(nodes, inner);
+                self.push(Op::Save, 2 * group + 1, 0);
+            }
+            Node::Concat(parts) => {
+                for part in parts {
+                    self.emit(nodes, part);
+                }
+            }
+            Node::Alt(choices) => {
+                var jumps: Vec<usize> = Vec.new();
+                for i, choice in choices {
+                    if i + 1 == choices.len() {
+                        self.emit(nodes, choice);
+                        break;
+                    }
+                    const split = self.push(Op::Split, self.program.len() + 1, 0);
+                    self.emit(nodes, choice);
+                    jumps.push(self.push(Op::Jump, 0, 0));
+                    self.program[split].y = self.program.len();
+                }
+                for jump in jumps {
+                    self.program[jump].x = self.program.len();
+                }
+            }
+            Node::Repeat(inner, low, high) => {
+                for _i in 0..low {
+                    self.emit(nodes, inner);
+                }
+                if high == UNSET {
+                    const top = self.push(Op::Split, self.program.len() + 1, 0);
+                    self.emit(nodes, inner);
+                    self.push(Op::Jump, top, 0);
+                    self.program[top].y = self.program.len();
+                    return;
+                }
+                var splits: Vec<usize> = Vec.new();
+                for _i in low..high {
+                    splits.push(self.push(Op::Split, self.program.len() + 1, 0));
+                    self.emit(nodes, inner);
+                }
+                for split in splits {
+                    self.program[split].y = self.program.len();
+                }
+            }
+        }
+    }
+}
+
+fn is_digit(byte: u8) bool {
+    return byte >= '0' && byte <= '9';
+}
+
+// Add the bytes from `low` to `high` to `set`.
+fn set_range(set: &var Array<u64, 4>, low: u8, high: u8) {
+    for byte in low..=high {
+        set[(byte >> 6) as usize] = set[(byte >> 6) as usize] | (1 << (byte & 63) as u64);
+    }
+}
