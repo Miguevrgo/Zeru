@@ -205,8 +205,6 @@ fn reached(program: &Program, bodies: &[Body]) -> Vec<bool> {
         runtime.flush,
         runtime.alloc,
         runtime.realloc,
-        runtime.str_cmp,
-        runtime.string_cmp,
     ]
     .into_iter()
     .chain(program.structs.values().filter_map(|layout| layout.drop))
@@ -504,11 +502,11 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
             TerminatorKind::Return => {
                 let body = self.body();
                 let ret = body.locals[0].ty;
-                if !self.is_scalar(ret) {
-                    self.builder.build_return(None).unwrap();
-                } else {
+                if self.is_scalar(ret) {
                     let value = self.read(&Place::local(RETURN)).imm();
                     self.builder.build_return(Some(&value)).unwrap();
+                } else {
+                    self.builder.build_return(None).unwrap();
                 }
             }
             TerminatorKind::Unreachable => {
@@ -614,7 +612,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
         let builder = self.context.create_builder();
         let entry = self
             .current
-            .and_then(|f| f.get_first_basic_block())
+            .and_then(FunctionValue::get_first_basic_block)
             .expect("a function with an entry");
         match entry.get_first_instruction() {
             Some(first) => builder.position_before(&first),

@@ -75,17 +75,17 @@ fn alias<'t>(
         .map(|&(_, ours)| ours)
 }
 
-pub(crate) fn type_alias(name: &str) -> Option<&'static str> {
+pub(super) fn type_alias(name: &str) -> Option<&'static str> {
     alias(TYPE_ALIASES, name, |_| true)
 }
 
-pub(crate) fn value_alias(name: &str) -> Option<&'static str> {
+pub(super) fn value_alias(name: &str) -> Option<&'static str> {
     alias(VALUE_ALIASES, name, |_| true)
 }
 
 /// The method another language calls `name`, or a name close to it when
 /// none of `methods` is, among `methods`.
-pub(crate) fn method_alias(name: &str, methods: &[String]) -> Option<&'static str> {
+pub(super) fn method_alias(name: &str, methods: &[String]) -> Option<&'static str> {
     let exists = |ours: &str| methods.iter().any(|m| m == ours);
     let others: Vec<String> = METHOD_ALIASES
         .iter()
@@ -208,7 +208,7 @@ pub(crate) fn std_modules() -> Vec<(String, String)> {
 
 /// The std module that declares a public `name` at its top level, one an
 /// import names `short`, as `std.math` for `math`, when that is given.
-pub(crate) fn std_home(short: Option<&str>, name: &str) -> Option<String> {
+pub(super) fn std_home(short: Option<&str>, name: &str) -> Option<String> {
     std_modules()
         .into_iter()
         .find(|(module, source)| {
@@ -221,7 +221,7 @@ pub(crate) fn std_home(short: Option<&str>, name: &str) -> Option<String> {
 /// Help for the unknown `name` written at `span`: the std module to import
 /// for it, as `module::name` or alone, or the closest of `candidates`,
 /// fixed at `at`.
-pub(crate) fn unknown_name(
+pub(super) fn unknown_name(
     sources: &Sources,
     error: &mut ZeruError,
     name: &str,
@@ -242,7 +242,7 @@ pub(crate) fn unknown_name(
 }
 
 /// The public names a file declares at its top level.
-pub(crate) fn publics(source: &str) -> Vec<String> {
+pub(super) fn publics(source: &str) -> Vec<String> {
     source
         .lines()
         .filter_map(declared)
@@ -264,7 +264,7 @@ fn declared(line: &str) -> Option<&str> {
 
 /// Where `name<...>` is written inside `within`, and what its angle
 /// brackets hold.
-pub(crate) fn generic_in(sources: &Sources, within: Span, name: &str) -> Option<(Span, String)> {
+pub(super) fn generic_in(sources: &Sources, within: Span, name: &str) -> Option<(Span, String)> {
     let start = sources.word_in(within, name)?;
     let text = sources.text(Span::new(start.end, within.end));
     let inner = text.strip_prefix('<')?;
@@ -283,7 +283,7 @@ pub(crate) fn generic_in(sources: &Sources, within: Span, name: &str) -> Option<
 
 /// Suggest in `error` importing `module`, or only `symbol` from it, at the
 /// top of the file `at` is in.
-pub(crate) fn suggest_import(
+pub(super) fn suggest_import(
     sources: &Sources,
     error: &mut ZeruError,
     at: Span,

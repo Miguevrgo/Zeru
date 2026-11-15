@@ -53,7 +53,7 @@ pub struct Body {
 pub struct LocalDecl {
     pub ty: Ty,
     pub name: Option<String>,
-    pub looped: bool,
+    looped: bool,
 }
 
 pub struct BlockData {

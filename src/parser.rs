@@ -367,9 +367,8 @@ impl Parser {
 
     /// Whether a count and its `]` follow, as after the `;` of `[x; n]`.
     fn at_repeat_count(&self) -> bool {
-        let after = self.tokens.get(self.pos + 1).map(|(token, _)| token);
         matches!(self.peek(), Token::Int(_) | Token::Identifier(_))
-            && matches!(after, Some(Token::RBracket))
+            && *self.ahead(1) == Token::RBracket
     }
 
     /// Skip the rest of a broken top-level item: through the `}` or `;` that
@@ -564,7 +563,7 @@ impl Parser {
                     "Zeru declares a variable with var, not :=",
                     "write var",
                     &format!("var {name} ="),
-                    vec![Token::Var, Token::Identifier(name.clone()), Token::Assign],
+                    vec![Token::Var, Token::Identifier(name), Token::Assign],
                 );
                 p.parse_var_statement(false)
             }
@@ -1632,7 +1631,7 @@ impl Parser {
             }
             self.expect(&Token::Arrow)?;
 
-            let leave = match self.tokens[self.pos].0 {
+            let leave = match self.peek() {
                 Token::Return => Some(("return", "return x")),
                 Token::Break => Some(("break", "break")),
                 Token::Continue => Some(("continue", "continue")),

@@ -142,7 +142,7 @@ impl Checker<'_> {
             return Types::ERROR;
         }
         let builtin = PRIMITIVES.iter().chain(&["str", "String", "Vec", "Array"]);
-        let mut candidates: Vec<String> = builtin.map(|p| p.to_string()).collect();
+        let mut candidates: Vec<String> = builtin.map(ToString::to_string).collect();
         candidates.extend(
             self.items
                 .items

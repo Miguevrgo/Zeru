@@ -28,7 +28,7 @@ use crate::ty::{Ty, TyKind, Types};
 /// A function's signature with its type parameters still open: struct
 /// parameters first, then its own.
 #[derive(Clone)]
-pub struct Sig {
+struct Sig {
     pub params: Vec<Ty>,
     pub ret: Ty,
     pub receiver: Receiver,
@@ -41,7 +41,7 @@ pub struct Sig {
 /// takes `params` and returns `ret`, so its type is a type parameter of its
 /// own, `generic`, after those written, and each closure an instance.
 #[derive(Clone)]
-pub struct Callable {
+struct Callable {
     pub param: usize,
     pub generic: usize,
     pub params: Vec<Ty>,
@@ -59,7 +59,7 @@ struct ClosureInfo {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Receiver {
+enum Receiver {
     None,
     Shared,
     Mutable,
@@ -370,7 +370,7 @@ impl<'a> Checker<'a> {
     }
 
     /// Check function instance `id`, unless it is checked already.
-    pub(super) fn check_instance(&mut self, id: FnId) {
+    fn check_instance(&mut self, id: FnId) {
         if self.functions[id.0 as usize].is_some() {
             return;
         }
@@ -394,7 +394,7 @@ impl<'a> Checker<'a> {
     }
 
     /// The function instance `def` at `args`, made and queued the first time.
-    pub(crate) fn instance(&mut self, def: DefId, args: Vec<Ty>, from: Span) -> FnId {
+    fn instance(&mut self, def: DefId, args: Vec<Ty>, from: Span) -> FnId {
         self.note_use(def, from);
         if let Some(&id) = self.instances.get(&(def, args.clone())) {
             return id;
@@ -436,7 +436,7 @@ impl<'a> Checker<'a> {
         generics
     }
 
-    pub(crate) fn sig(&mut self, def: DefId) -> Option<Sig> {
+    fn sig(&mut self, def: DefId) -> Option<Sig> {
         if let Some(sig) = self.sigs.get(&def) {
             return sig.clone();
         }
@@ -720,7 +720,7 @@ impl<'a> Checker<'a> {
     }
 
     /// The parts a tuple or struct compares and hashes by, in order.
-    pub(crate) fn parts_of(&mut self, ty: Ty) -> Option<Vec<Ty>> {
+    fn parts_of(&mut self, ty: Ty) -> Option<Vec<Ty>> {
         match self.types.kind(ty).clone() {
             TyKind::Tuple(parts) => Some(parts),
             _ if self.is_struct(ty).is_some() => {
@@ -731,7 +731,7 @@ impl<'a> Checker<'a> {
     }
 
     /// Whether `ty` is a float, or a tuple or struct with one in its parts.
-    pub(crate) fn has_float(&mut self, ty: Ty) -> bool {
+    fn has_float(&mut self, ty: Ty) -> bool {
         match self.parts_of(ty) {
             Some(parts) => parts.into_iter().any(|part| self.has_float(part)),
             None => self.types.is_float(ty),
@@ -739,7 +739,7 @@ impl<'a> Checker<'a> {
     }
 
     /// The fields of a struct at the given type arguments.
-    pub(crate) fn fields_of(&mut self, ty: Ty) -> Vec<(String, Ty)> {
+    fn fields_of(&mut self, ty: Ty) -> Vec<(String, Ty)> {
         let TyKind::Adt(def, args) = self.types.kind(ty).clone() else {
             return Vec::new();
         };
@@ -753,25 +753,25 @@ impl<'a> Checker<'a> {
             .collect()
     }
 
-    pub(crate) fn variants_of(&mut self, def: DefId) -> Vec<(String, Vec<Ty>)> {
+    fn variants_of(&mut self, def: DefId) -> Vec<(String, Vec<Ty>)> {
         self.enum_def(def).variants.clone()
     }
 
-    pub(crate) fn is_enum(&self, ty: Ty) -> Option<DefId> {
+    fn is_enum(&self, ty: Ty) -> Option<DefId> {
         match self.types.kind(ty) {
             TyKind::Adt(def, _) if self.items.item(*def).kind == ItemKind::Enum => Some(*def),
             _ => None,
         }
     }
 
-    pub(crate) fn is_struct(&self, ty: Ty) -> Option<DefId> {
+    fn is_struct(&self, ty: Ty) -> Option<DefId> {
         match self.types.kind(ty) {
             TyKind::Adt(def, _) if self.items.item(*def).kind == ItemKind::Struct => Some(*def),
             _ => None,
         }
     }
 
-    pub(crate) fn enum_has_data(&mut self, def: DefId) -> bool {
+    fn enum_has_data(&mut self, def: DefId) -> bool {
         self.enum_def(def)
             .variants
             .iter()
@@ -780,13 +780,13 @@ impl<'a> Checker<'a> {
 
     /// Whether a value of `ty` owns memory or has a `drop`: what is freed
     /// when it goes, copied deeply by `.copy()`, and moved rather than copied.
-    pub(crate) fn owns_heap(&mut self, ty: Ty) -> bool {
+    fn owns_heap(&mut self, ty: Ty) -> bool {
         self.owns_past(ty, true, &mut Vec::new())
     }
 
     /// Whether a value of `ty` has a `drop` or holds one that does, which
     /// both copies of a `.copy()` would run.
-    pub(crate) fn runs_drop(&mut self, ty: Ty) -> bool {
+    fn runs_drop(&mut self, ty: Ty) -> bool {
         self.owns_past(ty, false, &mut Vec::new())
     }
 
@@ -824,7 +824,7 @@ impl<'a> Checker<'a> {
 
     /// Note that values of `ty` exist, so its layout is needed, and for a
     /// generic struct its `drop`.
-    pub(crate) fn note_adt(&mut self, ty: Ty, span: Span) {
+    fn note_adt(&mut self, ty: Ty, span: Span) {
         if !self.types.is_concrete(ty) || !self.adts_seen.insert(ty) {
             return;
         }
@@ -868,7 +868,7 @@ impl<'a> Checker<'a> {
 
     /// Whether `ty` can be a hash map key: an integer, a bool, an enum
     /// without payloads, or a tuple or struct of those.
-    pub(super) fn hashes(&mut self, ty: Ty) -> bool {
+    fn hashes(&mut self, ty: Ty) -> bool {
         if let Some(parts) = self.parts_of(ty) {
             return parts.into_iter().all(|part| self.hashes(part));
         }
@@ -1125,7 +1125,7 @@ impl<'a> Checker<'a> {
     }
 
     /// A function the prelude defines for the compiler's use.
-    pub(super) fn prelude_def(&self, name: &str) -> DefId {
+    fn prelude_def(&self, name: &str) -> DefId {
         self.items
             .lookup_value(ModuleId::PRELUDE, name)
             .expect("the prelude defines it")

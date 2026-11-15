@@ -196,7 +196,7 @@ pub fn compile(
     keep_ir: bool,
     tests: bool,
 ) -> Result<(PathBuf, Vec<(String, String)>), CompileError> {
-    if !path.extension().is_some_and(|ext| ext == "zr") {
+    if path.extension().is_none_or(|ext| ext != "zr") {
         status(YELLOW, '\u{ea6c}', "Warning", "Zeru extension is .zr");
     }
     let stem = path

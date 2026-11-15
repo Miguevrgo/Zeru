@@ -296,7 +296,9 @@ impl Expr {
             | ExprKind::Print { values, .. } => values.iter_mut().for_each(f),
             ExprKind::Assert { cond, message } => {
                 f(cond);
-                message.iter_mut().for_each(|message| f(message));
+                if let Some(message) = message {
+                    f(message);
+                }
             }
             ExprKind::Unpack { target, value } => {
                 target.for_each_expr(f);

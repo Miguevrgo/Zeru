@@ -442,7 +442,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
         self.locals[id.0 as usize].ty
     }
 
-    pub(super) fn local_name(&self, id: LocalId) -> &str {
+    fn local_name(&self, id: LocalId) -> &str {
         &self.locals[id.0 as usize].name
     }
 

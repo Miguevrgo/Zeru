@@ -124,7 +124,7 @@ fn run_compiler(args: Cli) -> Result<(), CompileError> {
             std::process::exit(
                 status
                     .code()
-                    .unwrap_or_else(|| status.signal().map(|s| 128 + s).unwrap_or(1)),
+                    .unwrap_or_else(|| status.signal().map_or(1, |s| 128 + s)),
             );
         }
         Commands::Test { file, filter, mode } => {

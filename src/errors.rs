@@ -30,7 +30,7 @@ impl From<Span> for Range<usize> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ErrorKind {
+enum ErrorKind {
     Syntax,
     Semantic,
     Warning,

@@ -801,7 +801,7 @@ impl FnCx<'_, '_> {
     }
 
     /// What the pointer of type `ty` read from `place` points at.
-    pub(super) fn deref(&mut self, place: Place, ty: Ty, span: Span) -> (Place, Ty) {
+    pub(super) fn deref(&self, place: Place, ty: Ty, span: Span) -> (Place, Ty) {
         let pointee = self
             .cx
             .types
@@ -2205,7 +2205,7 @@ impl Checker<'_> {
 }
 
 /// A number written in the source, whose type comes from its context.
-pub(super) fn is_number_literal(expr: &Expression) -> bool {
+fn is_number_literal(expr: &Expression) -> bool {
     match &expr.kind {
         ExpressionKind::Int(_) | ExpressionKind::Float(_) => true,
         ExpressionKind::Prefix {

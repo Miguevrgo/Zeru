@@ -11,7 +11,7 @@ use inkwell::{
     values::{BasicValue, BasicValueEnum, IntValue, PointerValue},
 };
 
-use crate::ty::{Ty, TyKind, Types};
+use crate::ty::{IntTy, Ty, TyKind, Types};
 
 use super::Lower;
 
@@ -133,7 +133,9 @@ impl<'ctx> Lower<'_, 'ctx> {
     }
 
     pub(super) fn size_of(&mut self, ty: Ty) -> IntValue<'ctx> {
-        self.llvm_ty(ty).size_of().unwrap()
+        let llvm = self.llvm_ty(ty);
+        self.usize_type()
+            .const_int(self.target.get_abi_size(&llvm), false)
     }
 
     /// The address of part `at` of the aggregate of type `ty` at `base`.
@@ -225,6 +227,6 @@ impl<'ctx> Lower<'_, 'ctx> {
     }
 
     pub(super) fn is_signed(&self, ty: Ty) -> bool {
-        self.types().as_int(ty).is_none_or(|int| int.signed())
+        self.types().as_int(ty).is_none_or(IntTy::signed)
     }
 }

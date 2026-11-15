@@ -334,7 +334,7 @@ impl FnCx<'_, '_> {
         let listed: Vec<Vec<String>> = elements
             .iter()
             .map(|&element| {
-                let element = self.pointee(element);
+                let element = self.cx.types.referent(element).unwrap_or(element);
                 self.listed(element).unwrap_or_default()
             })
             .collect();
@@ -439,15 +439,6 @@ impl FnCx<'_, '_> {
             return (shapes, fix.map(|fix| (self.cx.errors.len() - 1, fix)));
         }
         (shapes, None)
-    }
-
-    /// What `ty` refers to when it is a reference, which a tuple element is
-    /// matched through; else `ty`.
-    fn pointee(&self, ty: Ty) -> Ty {
-        match *self.cx.types.kind(ty) {
-            TyKind::Ref(inner) | TyKind::RefMut(inner) => inner,
-            _ => ty,
-        }
     }
 
     /// The values of `ty` a match lists one by one, written as patterns:
@@ -691,7 +682,7 @@ impl FnCx<'_, '_> {
                 }
                 _ => alternative,
             };
-            let ty = self.pointee(ty);
+            let ty = self.cx.types.referent(ty).unwrap_or(ty);
             if self.listed(ty).is_none() && self.cx.types.as_int(ty).is_none() {
                 let shown = self.ty(ty);
                 self.error(
@@ -904,7 +895,9 @@ fn first_bindings(pattern: &Pattern, names: &mut Vec<String>) {
     match &pattern.kind {
         PatternKind::Binding(name) if name != "_" => names.push(name.clone()),
         PatternKind::Payload { fields, .. } | PatternKind::Tuple(fields) => {
-            fields.iter().for_each(|field| first_bindings(field, names));
+            for field in fields {
+                first_bindings(field, names);
+            }
         }
         PatternKind::Or(alternatives) => first_bindings(&alternatives[0], names),
         _ => {}

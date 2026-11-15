@@ -541,14 +541,12 @@ impl FnCx<'_, '_> {
                 let def = self.cx.prelude_def(&format!("__zeru_vec_{name}"));
                 self.call_def(def, vec![elem], Some(slice), args, expected, span)
             }
-            TyKind::Slice(_) => {
+            TyKind::Slice(elem) => {
                 if ty == Types::STR && STR_METHODS.contains(&name) {
                     let text = self.mk(ExprKind::Read(place), ty, object.span);
                     return self.str_method(text, name, args, expected, span);
                 }
-                if let TyKind::Slice(elem) = *self.cx.types.kind(ty)
-                    && SLICE_METHODS.contains(&name)
-                {
+                if SLICE_METHODS.contains(&name) {
                     let slice = self.mk(ExprKind::Read(place), ty, object.span);
                     let def = self.cx.prelude_def(&format!("__zeru_vec_{name}"));
                     return self.call_def(def, vec![elem], Some(slice), args, expected, span);
@@ -1241,7 +1239,7 @@ impl FnCx<'_, '_> {
         self.fits(generics[callable.generic], value.ty, true);
         let returned = self.cx.types.closure_sig(value.ty).map(|(_, ret)| ret);
         if returned == Some(Types::VOID) && callable.ret != Types::VOID {
-            let kept = self.cx.sig(def).map(|sig| sig.ret).unwrap_or(Types::VOID);
+            let kept = self.cx.sig(def).map_or(Types::VOID, |sig| sig.ret);
             let kept = self.cx.types.subst(kept, generics);
             let kept = self.resolve(kept);
             if super::closure::holds(&self.cx.types, kept, &|ty| ty == Types::VOID) {
