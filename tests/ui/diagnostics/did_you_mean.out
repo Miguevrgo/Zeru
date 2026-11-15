@@ -80,10 +80,20 @@ Error: Enum 'Color' has no variant 'Gren'
     │ Help: did you mean 'Green'?
     │           var c = Color::Green;
 ────╯
-Error: Vec<i32> has no method 'psuh'
-    ╭─[ tests/ui/diagnostics/did_you_mean.zr:27:7 ]
+Error: Enum 'Color' has no variant 'Gren'
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:26:14 ]
     │
- 27 │     v.psuh(2);
+ 26 │     var c2 = (Color::Gren /* é */);
+    │              ──────────┬──────────
+    │                        ╰──────────── Enum 'Color' has no variant 'Gren'
+    │
+    │ Help: did you mean 'Green'?
+    │           var c2 = (Color::Green /* é */);
+────╯
+Error: Vec<i32> has no method 'psuh'
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:28:7 ]
+    │
+ 28 │     v.psuh(2);
     │       ──┬─
     │         ╰─── Vec<i32> has no method 'psuh'
     │
@@ -91,18 +101,18 @@ Error: Vec<i32> has no method 'psuh'
     │           v.push(2);
 ────╯
 Error: Vec<i32> has no method 'sorted'
-    ╭─[ tests/ui/diagnostics/did_you_mean.zr:28:15 ]
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:29:15 ]
     │
- 28 │     var w = v.sorted();
+ 29 │     var w = v.sorted();
     │               ───┬──
     │                  ╰──── Vec<i32> has no method 'sorted'
     │
     │ Help: did you mean 'sort'? It changes v in place and returns nothing, so call v.sort() first, then use v
 ────╯
 Error: Vec<i32> has no method 'reversed'
-    ╭─[ tests/ui/diagnostics/did_you_mean.zr:29:7 ]
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:30:7 ]
     │
- 29 │     v.reversed();
+ 30 │     v.reversed();
     │       ────┬───
     │           ╰───── Vec<i32> has no method 'reversed'
     │
@@ -110,9 +120,9 @@ Error: Vec<i32> has no method 'reversed'
     │           v.reverse();
 ────╯
 Error: String has no method 'lenght'
-    ╭─[ tests/ui/diagnostics/did_you_mean.zr:31:21 ]
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:32:21 ]
     │
- 31 │     var size = text.lenght();
+ 32 │     var size = text.lenght();
     │                     ───┬──
     │                        ╰──── String has no method 'lenght'
     │
@@ -120,9 +130,9 @@ Error: String has no method 'lenght'
     │           var size = text.len();
 ────╯
 Error: *(u8?) has no method 'is_some'
-    ╭─[ tests/ui/diagnostics/did_you_mean.zr:34:22 ]
+    ╭─[ tests/ui/diagnostics/did_you_mean.zr:35:22 ]
     │
- 34 │     println("{}", at.is_some());
+ 35 │     println("{}", at.is_some());
     │                      ───┬───
     │                         ╰───── *(u8?) has no method 'is_some'
 ────╯

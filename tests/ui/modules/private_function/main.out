@@ -16,4 +16,20 @@ Error: 'lib::hidden' is private to module 'lib'
    │ Help: mark it pub to use it outside its module
    │           pub fn hidden() i32 {
 ───╯
+Error: 'lib::twice' is private to module 'lib'
+   ╭─[ tests/ui/modules/private_function/main.zr:4:24 ]
+   │
+ 4 │     var y = Vec[1].map(lib::twice);
+   │                        ─────┬────
+   │                             ╰────── 'lib::twice' is private to module 'lib'
+   │
+   ├─[ tests/ui/modules/private_function/lib.zr:4:1 ]
+   │
+ 4 │ fn twice(n: i32) i32 {
+   │ ──────────┬─────────
+   │           ╰─────────── declared here, without pub
+   │
+   │ Help: mark it pub to use it outside its module
+   │           pub fn twice(n: i32) i32 {
+───╯
 [-] Error: aborting due to previous error

@@ -11,13 +11,13 @@ Error: This function returns String, but this value is str
     │           return String.from("n");
 ────╯
 Error: 'add' takes 'a' as i64, but this is i32
-    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:16:17 ]
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:17:17 ]
     │
   4 │ fn add(a: i64, b: i64) i64 {
     │ ─────────────┬────────────
     │              ╰────────────── 'a' is declared here
     │
- 16 │     var a = add(small, wide);
+ 17 │     var a = add(small, wide);
     │                 ──┬──
     │                   ╰──── this is i32
     │
@@ -25,13 +25,13 @@ Error: 'add' takes 'a' as i64, but this is i32
     │           var a = add(small as i64, wide);
 ────╯
 Error: 'add' takes 'a' as i64, but this is i32
-    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:17:21 ]
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:18:21 ]
     │
   4 │ fn add(a: i64, b: i64) i64 {
     │ ─────────────┬────────────
     │              ╰────────────── 'a' is declared here
     │
- 17 │     var grown = add(small * (small + 1), wide);
+ 18 │     var grown = add(small * (small + 1), wide);
     │                     ─────────┬─────────
     │                              ╰─────────── this is i32
     │
@@ -39,9 +39,9 @@ Error: 'add' takes 'a' as i64, but this is i32
     │           var grown = add((small * (small + 1)) as i64, wide);
 ────╯
 Error: 'b' is declared as i64, but its value is i32
-    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:18:18 ]
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:19:18 ]
     │
- 18 │     var b: i64 = small;
+ 19 │     var b: i64 = small;
     │                  ──┬──
     │                    ╰──── this is i32
     │
@@ -49,9 +49,9 @@ Error: 'b' is declared as i64, but its value is i32
     │           var b: i64 = small as i64;
 ────╯
 Error: 'c' is declared as i32, but its value is i32?
-    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:20:18 ]
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:21:18 ]
     │
- 20 │     var c: i32 = o;
+ 21 │     var c: i32 = o;
     │                  ┬
     │                  ╰── this is i32?
     │
@@ -59,13 +59,13 @@ Error: 'c' is declared as i32, but its value is i32?
     │           var c: i32 = o.unwrap();
 ────╯
 Error: 'first' takes 'v' as &Vec<i32>, but this is Vec<i32>
-    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:22:19 ]
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:23:19 ]
     │
   7 │ fn first(v: &Vec<i32>) i32 {
     │ ─────────────┬────────────
     │              ╰────────────── 'v' is declared here
     │
- 22 │     var d = first(v);
+ 23 │     var d = first(v);
     │                   ┬
     │                   ╰── this is Vec<i32>
     │
@@ -73,9 +73,9 @@ Error: 'first' takes 'v' as &Vec<i32>, but this is Vec<i32>
     │           var d = first(&v);
 ────╯
 Error: 'e' is declared as bool, but its value is i32
-    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:23:19 ]
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:24:19 ]
     │
- 23 │     var e: bool = small;
+ 24 │     var e: bool = small;
     │                   ──┬──
     │                     ╰──── this is i32
     │
@@ -83,9 +83,9 @@ Error: 'e' is declared as bool, but its value is i32
     │           var e: bool = small != 0;
 ────╯
 Error: If condition must be boolean, got void
-    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:24:8 ]
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:25:8 ]
     │
- 24 │     if small = 2 {}
+ 25 │     if small = 2 {}
     │        ────┬────
     │            ╰────── this assigns, and gives nothing
     │
@@ -93,9 +93,9 @@ Error: If condition must be boolean, got void
     │           if small == 2 {}
 ────╯
 Error: Cannot add i32 and i64
-    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:25:21 ]
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:26:21 ]
     │
- 25 │     var f = small + wide;
+ 26 │     var f = small + wide;
     │             ──┬──   ──┬─
     │               ╰─────────── this is i32
     │                       │
@@ -105,19 +105,26 @@ Error: Cannot add i32 and i64
     │           var f = small as i64 + wide;
 ────╯
 Error: 'g' is declared as u8, but its value is str
-    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:26:17 ]
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:27:17 ]
     │
- 26 │     var g: u8 = "a";
+ 27 │     var g: u8 = "a";
     │                 ─┬─
     │                  ╰─── this is str
     │
     │ Help: a character is written in single quotes
     │           var g: u8 = 'a';
 ────╯
-Error: Field 'x' of 'P' is i32, but this is i64
-    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:27:20 ]
+Error: 'g2' is declared as u8, but its value is str
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:28:18 ]
     │
- 27 │     var p = P { x: wide };
+ 28 │     var g2: u8 = A;
+    │                  ┬
+    │                  ╰── this is str
+────╯
+Error: Field 'x' of 'P' is i32, but this is i64
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:29:20 ]
+    │
+ 29 │     var p = P { x: wide };
     │                    ──┬─
     │                      ╰─── this is i64
     │
@@ -125,9 +132,9 @@ Error: Field 'x' of 'P' is i32, but this is i64
     │           var p = P { x: wide as i32 };
 ────╯
 Error: 'h' is declared as Vec<i32>, but its value is &Vec<i32>
-    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:29:23 ]
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:31:23 ]
     │
- 29 │     var h: Vec<i32> = r;
+ 31 │     var h: Vec<i32> = r;
     │                       ┬
     │                       ╰── this is &Vec<i32>
     │
@@ -135,9 +142,9 @@ Error: 'h' is declared as Vec<i32>, but its value is &Vec<i32>
     │           var h: Vec<i32> = r.copy();
 ────╯
 Error: Cannot dereference type (&i32)?
-    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:30:18 ]
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:32:18 ]
     │
- 30 │     var n: i32 = *v.get(0);
+ 32 │     var n: i32 = *v.get(0);
     │                  ────┬────
     │                      ╰────── Cannot dereference type (&i32)?
     │
@@ -145,12 +152,12 @@ Error: Cannot dereference type (&i32)?
     │           var n: i32 = *v.get(0).unwrap();
 ────╯
 Error: Cannot write through a '&' reference
-    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:32:5 ]
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:34:5 ]
     │
- 31 │     var m = &v;
+ 33 │     var m = &v;
     │             ┬
     │             ╰── 'm' is a & reference, which only reads
- 32 │     m.push(2);
+ 34 │     m.push(2);
     │     ────┬────
     │         ╰────── this changes what a & reference points at
     │
@@ -158,13 +165,13 @@ Error: Cannot write through a '&' reference
     │           var m = &var v;
 ────╯
 Error: 'take' takes 'v' as &var Vec<i32>, but this is &Vec<i32>
-    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:36:10 ]
+    ╭─[ tests/ui/diagnostics/conversions_suggested.zr:38:10 ]
     │
- 34 │ fn take(v: &var Vec<i32>) {}
+ 36 │ fn take(v: &var Vec<i32>) {}
     │ ────────────┬────────────
     │             ╰────────────── 'v' is declared here
     │
- 36 │     take(v);
+ 38 │     take(v);
     │          ┬
     │          ╰── this is &Vec<i32>
     │

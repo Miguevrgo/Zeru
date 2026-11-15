@@ -1,6 +1,0 @@
-//@ checked
-fn main() {
-    const n: i32 = 40;
-    const x: i32 = 1;
-    println("{}", x << n);
-}

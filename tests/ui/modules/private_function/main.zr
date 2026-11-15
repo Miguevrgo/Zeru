@@ -1,4 +1,5 @@
 import lib;
 fn main() {
     var x = lib::hidden();
+    var y = Vec[1].map(lib::twice);
 }

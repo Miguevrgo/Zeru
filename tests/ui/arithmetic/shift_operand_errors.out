@@ -21,4 +21,11 @@ Error: Shift by 9 is out of range for u8
    │                 ───┬──
    │                    ╰──── Shift by 9 is out of range for u8
 ───╯
+Error: Shift by 64 is out of range for u64
+   ╭─[ tests/ui/arithmetic/shift_operand_errors.zr:7:5 ]
+   │
+ 7 │     x <<= 64;
+   │     ────┬───
+   │         ╰───── Shift by 64 is out of range for u64
+───╯
 [-] Error: aborting due to previous error

@@ -10,4 +10,14 @@ Error: '?' would pass None on, but this function returns i32!
    │ Help: take the value out with .unwrap(), which stops the program on None
    │           var x = f().unwrap();
 ───╯
+Error: '?' would pass None on, but this function returns i32!
+   ╭─[ tests/ui/optionals_results/question_in_result_fn.zr:6:13 ]
+   │
+ 6 │     var y = (f()?);
+   │             ───┬──
+   │                ╰──── '?' would pass None on, but this function returns i32!
+   │
+   │ Help: take the value out with .unwrap(), which stops the program on None
+   │           var y = (f().unwrap());
+───╯
 [-] Error: aborting due to previous error

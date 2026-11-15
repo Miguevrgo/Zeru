@@ -1,6 +1,9 @@
 fn hidden() i32 {
     return 1;
 }
+fn twice(n: i32) i32 {
+    return n * 2;
+}
 pub fn open() i32 {
-    return hidden();
+    return twice(hidden());
 }

@@ -10,6 +10,7 @@ fn first(v: &Vec<i32>) i32 {
 fn label(n: i32) String {
     return "n";
 }
+const A = "a";
 fn main() {
     var small: i32 = 1;
     var wide: i64 = 2;
@@ -24,6 +25,7 @@ fn main() {
     if small = 2 {}
     var f = small + wide;
     var g: u8 = "a";
+    var g2: u8 = A;
     var p = P { x: wide };
     var r = &v;
     var h: Vec<i32> = r;

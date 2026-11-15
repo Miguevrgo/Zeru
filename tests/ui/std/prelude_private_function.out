@@ -7,4 +7,11 @@ Error: Function 'syscall1' not defined
    │     ────┬───
    │         ╰───── Function 'syscall1' not defined
 ───╯
+Error: Function '__zeru_flush' not defined
+   ╭─[ tests/ui/std/prelude_private_function.zr:3:5 ]
+   │
+ 3 │     __zeru_flush();
+   │     ──────┬─────
+   │           ╰─────── Function '__zeru_flush' not defined
+───╯
 [-] Error: aborting due to previous error

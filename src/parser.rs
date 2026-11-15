@@ -1554,7 +1554,8 @@ impl Parser {
         let start = self.span();
         let saved = self.checkpoint();
         self.expect(&Token::LBrace)?;
-        if let Some(value) = self.parse_expression(Precedence::Lowest)
+        if !self.statements_ahead()
+            && let Some(value) = self.parse_expression(Precedence::Lowest)
             && self.eat(&Token::RBrace)
         {
             return Some(value);
@@ -1562,6 +1563,23 @@ impl Parser {
         self.rewind(saved);
         let body = self.parse_block_statement()?;
         Some(self.expression(ExpressionKind::Block(body), start))
+    }
+
+    /// Whether the braces just opened hold a `;` of their own, so they are
+    /// a block of statements and not one expression.
+    fn statements_ahead(&self) -> bool {
+        let mut depth = 0usize;
+        for (token, _) in &self.tokens[self.pos..] {
+            match token {
+                Token::LBrace | Token::LParen | Token::LBracket => depth += 1,
+                Token::RBrace | Token::RParen | Token::RBracket if depth == 0 => return false,
+                Token::RBrace | Token::RParen | Token::RBracket => depth -= 1,
+                Token::Semicolon if depth == 0 => return true,
+                Token::Eof => return false,
+                _ => {}
+            }
+        }
+        false
     }
 
     fn parse_match_expression(&mut self) -> Option<Expression> {
@@ -1595,7 +1613,12 @@ impl Parser {
                 false => self.parse_pattern(false)?,
             };
             let guard = match self.eat(&Token::If) {
-                true => Some(self.parse_expression(Precedence::Lowest)?),
+                true => {
+                    let outer = std::mem::replace(&mut self.in_pattern, true);
+                    let guard = self.parse_expression(Precedence::Lowest);
+                    self.in_pattern = outer;
+                    Some(guard?)
+                }
                 false => None,
             };
             if self.at(&Token::Minus) && matches!(self.ahead(1), Token::Gt) {

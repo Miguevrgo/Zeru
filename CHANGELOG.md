@@ -85,9 +85,18 @@
 - False borrow error from a closure that only reads a captured `&var`.
 - False borrow error passing a `&var` where a `&` is wanted while looping over it.
 - A constant comparing tuples or structs holding NaN disagreed with the program.
+- The compiler's own `__zeru_*` functions could be called from a program.
 - `zeru fmt` added a pair of parentheses around a parenthesised literal on every run.
+- `for i, x in a..b` reported `i` as undeclared after its own error.
+- An unreadable file was reported without its name.
 - Constants built from other constants took exponential time and memory.
 - A slice read the Vec's length before running its bounds.
 - A constant array passed to a `var` parameter was written in read-only memory.
 - `Vec[x; n]` evaluated `n` before `x`.
 - `zeru fmt` moved a `{ // comment` into an earlier empty block.
+- Crashes on a one-letter constant used as a `u8` and on errors inside parentheses.
+- A private function could be passed as a value from another module.
+- `x <<= 64` and `x /= 0` skipped the checks `x << 64` and `x / 0` get.
+- A match guard followed by `->` named the wrong mistake.
+- Nested `if` values in blocks took exponential time to parse.
+- Thousands of warnings took quadratic time to print.

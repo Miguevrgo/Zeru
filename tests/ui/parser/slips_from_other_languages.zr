@@ -17,6 +17,7 @@ fn main() {
     }
     match count {
         1 -> println("one"),
+        x if x > 1 -> println("more"),
         default => {}
     }
     var size = match count {

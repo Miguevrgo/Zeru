@@ -718,6 +718,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     ("compare it to get a bool", Some(format!("{operand} != 0")))
                 }
                 _ if target == Types::U8
+                    && text.starts_with('"')
                     && matches!(&value.kind, ExprKind::Str(b) if b.len() == 1) =>
                 {
                     (
@@ -1179,6 +1180,9 @@ impl<'c, 'a> FnCx<'c, 'a> {
             };
             self.enter();
             let head = Span::new(span.start, iterable.span.end);
+            if let Some(index) = index {
+                self.declare(index, Types::ERROR, false, false, head);
+            }
             let var = self.declare(name, ty, false, false, head);
             self.fix(var, Fixed::Counter);
             let (body, _) = self.loop_body(|this| this.branch(body));
@@ -1283,6 +1287,12 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 .items
                 .lookup_value(self.scope.module, name)
                 .is_none()
+    }
+
+    /// Whether `name` means the compiler's own function of that name, which
+    /// only the standard library calls.
+    pub(super) fn internal_name(&self, name: &str) -> bool {
+        self.local(name).is_none() && self.cx.items.std_module(self.scope.module)
     }
 
     /// Make the key a loop over a map names unchangeable, as changing it

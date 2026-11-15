@@ -454,9 +454,9 @@ impl FnCx<'_, '_> {
             let variants = self.cx.variants_of(def);
             let Some(index) = variants.iter().position(|(v, _)| v == variant) else {
                 let names: Vec<String> = variants.iter().map(|(v, _)| v.clone()).collect();
-                let at = Span::new(span.end - variant.len(), span.end);
+                let at = self.cx.sources.last_word_in(span, variant);
                 let error = self.error(format!("Enum '{owner}' has no variant '{variant}'"), span);
-                suggest::did_you_mean(error, variant, &names, Some(at));
+                suggest::did_you_mean(error, variant, &names, at);
                 if error.help.is_none() {
                     error.help(format!("its variants are {}", names.join(", ")));
                 }
@@ -481,6 +481,7 @@ impl FnCx<'_, '_> {
                 value
             }
             Some(def) => {
+                self.cx.check_visible(def, self.scope.module, span);
                 let name = name.to_string();
                 self.function_value(def, &name, span)
             }
@@ -874,6 +875,7 @@ impl FnCx<'_, '_> {
         if let Some(base @ (Token::ShiftLeft | Token::ShiftRight)) = &compound {
             let current = self.mk(ExprKind::Int(0), target_ty, target.span);
             let shifted = self.shift(current, base, value, span);
+            self.check_constant(&shifted);
             let ExprKind::Binary(op, _, amount) = shifted.kind else {
                 return shifted;
             };
@@ -911,6 +913,12 @@ impl FnCx<'_, '_> {
             }
         };
         self.consume(&mut value);
+        if matches!(compound, Some(Token::Slash | Token::Mod))
+            && self.cx.types.as_int(target_ty).is_some()
+            && self.cx.eval(&value) == Some(0)
+        {
+            self.warn("This divides by zero, so it always panics", span);
+        }
         let kind = match compound {
             Some(base) => ExprKind::CompoundAssign {
                 op: binop(&base),
@@ -1125,7 +1133,7 @@ impl FnCx<'_, '_> {
         right: &Expression,
         expected: Option<Ty>,
     ) -> (Expr, Expr) {
-        if written_value(left) && !written_value(right) {
+        if !written_value(right) && written_value(left) {
             let right = self.expr(right, expected);
             let left = self.expr(left, Some(right.ty));
             (left, right)
@@ -1680,8 +1688,7 @@ impl FnCx<'_, '_> {
     /// parentheses, or a field of a similar name.
     fn no_field(&mut self, ty: Ty, name: &str, fields: &[String], span: Span) {
         let sources = self.cx.sources;
-        let at =
-            Some(Span::new(span.end - name.len(), span.end)).filter(|&at| sources.text(at) == name);
+        let at = sources.last_word_in(span, name);
         let method = self.methods_of(ty).iter().any(|m| m == name);
         let shown = self.ty(ty);
         let what = match self.cx.is_struct(ty) {
@@ -2058,6 +2065,9 @@ impl FnCx<'_, '_> {
     /// `value?` on a `T?`, `value!` on a `T!`: the payload, or a return of
     /// the None or the error, which the function must return in kind.
     fn try_expr(&mut self, operator: &Token, value: &Expression, span: Span) -> Expr {
+        let after = self.cx.sources.text(Span::new(value.span.end, span.end));
+        let at = value.span.end + after.find(['?', '!']).unwrap_or(0);
+        let at = Span::new(at, at + 1);
         let mut value = self.expr(value, None);
         let ret = self.ret;
         let passes = |operator: &Token, ret: &TyKind| {
@@ -2067,7 +2077,6 @@ impl FnCx<'_, '_> {
             )
         };
         let returns = passes(operator, self.cx.types.kind(ret));
-        let at = Span::new(span.end - 1, span.end);
         let unwrap = |error: &mut ZeruError, kind: &TyKind| {
             let stops = match kind {
                 TyKind::Optional(_) => "None",
@@ -2212,7 +2221,7 @@ pub(super) fn is_number_literal(expr: &Expression) -> bool {
 /// around it settles.
 pub(super) fn written_value(expr: &Expression) -> bool {
     match &expr.kind {
-        ExpressionKind::Infix { left, right, .. } => written_value(left) && written_value(right),
+        ExpressionKind::Infix { left, right, .. } => written_value(right) && written_value(left),
         ExpressionKind::ArrayLiteral(items)
         | ExpressionKind::VecLiteral(items)
         | ExpressionKind::Tuple(items) => items.iter().all(written_value),

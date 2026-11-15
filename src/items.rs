@@ -283,7 +283,11 @@ impl<'a> Items<'a> {
 
     /// Whether `def` is declared in the standard library.
     pub fn is_std(&self, def: DefId) -> bool {
-        self.modules[self.item(def).module.0 as usize].std
+        self.std_module(self.item(def).module)
+    }
+
+    pub fn std_module(&self, module: ModuleId) -> bool {
+        self.modules[module.0 as usize].std
     }
 
     /// The name of `def` as a program calls it: the prelude's functions

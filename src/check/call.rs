@@ -215,7 +215,7 @@ impl FnCx<'_, '_> {
             );
             return self.reject_args(args, span);
         }
-        if name == HASH_BITS_FN && self.local(name).is_none() {
+        if name == HASH_BITS_FN && self.internal_name(name) {
             let [key] = args else {
                 self.error(format!("{name} takes one key"), span);
                 return self.error_expr(span);
@@ -227,7 +227,7 @@ impl FnCx<'_, '_> {
                 span,
             );
         }
-        if name == EXTEND_FN && self.local(name).is_none() {
+        if name == EXTEND_FN && self.internal_name(name) {
             let [vec, other] = args else {
                 self.error(format!("{name} takes a Vec and a slice"), span);
                 return self.error_expr(span);
@@ -242,14 +242,14 @@ impl FnCx<'_, '_> {
                 span,
             );
         }
-        if name == crate::tir::FLUSH_FN && self.local(name).is_none() {
+        if name == crate::tir::FLUSH_FN && self.internal_name(name) {
             return self.mk(
                 ExprKind::Builtin(Builtin::Flush, Vec::new()),
                 Types::VOID,
                 span,
             );
         }
-        if name == COPY_FN && self.local(name).is_none() {
+        if name == COPY_FN && self.internal_name(name) {
             let byte_ptr = self.cx.types.intern(TyKind::Ptr(Types::U8));
             if args.len() != 3 {
                 self.error(
@@ -635,7 +635,7 @@ impl FnCx<'_, '_> {
         let functions = items.names_of(module, ItemKind::Fn, false);
         let error = self.cx.error(format!("Function '{name}' not defined"), at);
         if let Some((owner, function)) = name.rsplit_once("::") {
-            let short = Span::new(at.end - function.len(), at.end);
+            let short = sources.last_word_in(at, function);
             match items.imported_module(module, owner) {
                 _ if matches!(owner, "String" | "Vec") => {
                     error
@@ -644,7 +644,7 @@ impl FnCx<'_, '_> {
                 }
                 Some(id) => {
                     let public = items.names_of(id, ItemKind::Fn, true);
-                    suggest::did_you_mean(error, function, &public, Some(short));
+                    suggest::did_you_mean(error, function, &public, short);
                 }
                 None if let Some(path) = items.program_module(owner) => {
                     suggest::suggest_import(sources, error, at, path, None);
@@ -659,7 +659,7 @@ impl FnCx<'_, '_> {
                             true => suggest::suggest_import(sources, error, at, &path, None),
                             false => {
                                 error.help(format!("{path} has no '{function}'"));
-                                suggest::did_you_mean(error, function, &public, Some(short));
+                                suggest::did_you_mean(error, function, &public, short);
                             }
                         }
                     }

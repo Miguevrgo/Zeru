@@ -3,6 +3,7 @@ fn f() i32? {
 }
 fn g() i32! {
     var x = f()?;
-    return x;
+    var y = (f()?);
+    return x + y;
 }
 fn main() {}

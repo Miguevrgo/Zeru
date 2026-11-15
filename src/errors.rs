@@ -1,4 +1,4 @@
-use ariadne::{Color, Label, Report, ReportKind};
+use ariadne::{Cache, Color, FnCache, Label, Report, ReportKind};
 use inkwell::support::LLVMString;
 use std::ops::Range;
 use thiserror::Error;
@@ -125,10 +125,10 @@ impl ZeruError {
         }
     }
 
-    fn report(&self, sources: &Sources) {
+    fn report(&self, sources: &Sources, files: &mut impl Cache<String>) {
         let message = &self.message;
 
-        let Some((name, text, range)) = sources
+        let Some((name, _, range)) = sources
             .locate(self.span)
             .filter(|(_, _, range)| !range.is_empty())
         else {
@@ -142,7 +142,6 @@ impl ZeruError {
             ErrorKind::Semantic => (ReportKind::Error, Color::Magenta),
             ErrorKind::Warning => (ReportKind::Warning, Color::Yellow),
         };
-        let mut files = vec![(name.to_string(), text.to_string())];
         let mut report =
             Report::<(String, Range<usize>)>::build(kind, (name.to_string(), range.clone()))
                 .with_config(
@@ -158,12 +157,9 @@ impl ZeruError {
                 .with_order(self.span.start as i32),
         );
         for (note, span) in &self.notes {
-            let Some((name, text, range)) = sources.locate(*span) else {
+            let Some((name, _, range)) = sources.locate(*span) else {
                 continue;
             };
-            if !files.iter().any(|(file, _)| file == name) {
-                files.push((name.to_string(), text.to_string()));
-            }
             report = report.with_label(
                 Label::new((name.to_string(), range))
                     .with_message(note)
@@ -177,7 +173,7 @@ impl ZeruError {
                 None => help.clone(),
             });
         }
-        report.finish().eprint(ariadne::sources(files)).unwrap();
+        report.finish().eprint(files).unwrap();
     }
 
     /// The lines the fix touches as they read once it is made, or the lines
@@ -410,9 +406,15 @@ fn json_string(text: &str) -> String {
     out
 }
 
+/// Print `errors`, each file's lines indexed once for all of them.
 pub fn report_errors(errors: &[ZeruError], sources: &Sources) {
+    let mut files = FnCache::new(|name: &String| {
+        let file = sources.files.iter().find(|file| file.name == *name);
+        file.map(|file| &sources.text[file.start..file.end])
+            .ok_or("an unknown file")
+    });
     for error in errors {
-        error.report(sources);
+        error.report(sources, &mut files);
     }
 }
 
@@ -420,6 +422,8 @@ pub fn report_errors(errors: &[ZeruError], sources: &Sources) {
 pub enum CompileError {
     #[error("[IO]: {0}")]
     Io(#[from] std::io::Error),
+    #[error("cannot read {}: {}", .0.display(), .1)]
+    Read(std::path::PathBuf, std::io::Error),
     #[error("aborting due to previous error")]
     Unknown,
     #[error("LLVM error: {0}")]

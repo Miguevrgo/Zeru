@@ -1,3 +1,4 @@
 fn main() {
     syscall1(60, 0);
+    __zeru_flush();
 }

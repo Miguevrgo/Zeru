@@ -140,10 +140,20 @@ Error: A match arm is written pattern => value
     │ Help: write =>
     │           1 => println("one"),
 ────╯
-Error: Zeru writes the arm for every other value as default
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:24:9 ]
+Error: A match arm is written pattern => value
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:20:20 ]
     │
- 24 │         _ => "some",
+ 20 │         x if x > 1 -> println("more"),
+    │                    ─┬
+    │                     ╰── A match arm is written pattern => value
+    │
+    │ Help: write =>
+    │           x if x > 1 => println("more"),
+────╯
+Error: Zeru writes the arm for every other value as default
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:25:9 ]
+    │
+ 25 │         _ => "some",
     │         ┬
     │         ╰── Zeru writes the arm for every other value as default
     │
@@ -151,9 +161,9 @@ Error: Zeru writes the arm for every other value as default
     │           default => "some",
 ────╯
 Error: Zeru reaches a field through a pointer with '.', not ->
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:28:20 ]
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:29:20 ]
     │
- 28 │     println("{}", q->x);
+ 29 │     println("{}", q->x);
     │                    ─┬
     │                     ╰── Zeru reaches a field through a pointer with '.', not ->
     │
@@ -161,9 +171,9 @@ Error: Zeru reaches a field through a pointer with '.', not ->
     │           println("{}", q.x);
 ────╯
 Error: Zeru writes a loop without end as while true
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:29:5 ]
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:30:5 ]
     │
- 29 │     loop {
+ 30 │     loop {
     │     ──┬─
     │       ╰─── Zeru writes a loop without end as while true
     │
@@ -171,9 +181,9 @@ Error: Zeru writes a loop without end as while true
     │           while true {
 ────╯
 Error: Zeru's for walks a range or a sequence
-    ╭─[ tests/ui/parser/slips_from_other_languages.zr:32:9 ]
+    ╭─[ tests/ui/parser/slips_from_other_languages.zr:33:9 ]
     │
- 32 │     for (var i = 0; i < 3; i += 1) {
+ 33 │     for (var i = 0; i < 3; i += 1) {
     │         ┬
     │         ╰── Zeru's for walks a range or a sequence
     │

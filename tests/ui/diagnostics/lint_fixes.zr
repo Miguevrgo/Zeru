@@ -44,7 +44,9 @@ fn bump_it<T: Bump>(var x: T) {
 }
 
 fn _divide(n: i32) i32 {
-    return n / 0 + n % 0;
+    var m = n;
+    m /= 0;
+    return n / 0 + n % 0 + m;
 }
 
 fn _flip(flag: bool) bool {

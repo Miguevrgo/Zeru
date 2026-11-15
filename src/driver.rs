@@ -51,6 +51,10 @@ fn std_beside(exe: &Path) -> Option<PathBuf> {
         .find(|std| std.join("builtin.zr").is_file())
 }
 
+fn read(path: &Path) -> Result<String, CompileError> {
+    std::fs::read_to_string(path).map_err(|error| CompileError::Read(path.to_path_buf(), error))
+}
+
 fn resolve_import(import: &str, root: &Path) -> Option<PathBuf> {
     let (base, relative) = match import.strip_prefix("std.") {
         Some(rest) => (std_path()?, rest),
@@ -92,7 +96,7 @@ fn analyze(
     native: bool,
     tests: bool,
 ) -> Result<(Sources, Analysis), CompileError> {
-    let user_code = std::fs::read_to_string(path)?;
+    let user_code = read(path)?;
     let (sources, modules, errors) = load(path, &user_code, tests);
     if !errors.is_empty() {
         return Ok((sources, Err(errors)));
@@ -140,7 +144,7 @@ pub fn format(files: &[PathBuf], check: bool) -> Result<(), CompileError> {
         let stdin = path.as_os_str() == "-";
         let source = match stdin {
             true => std::io::read_to_string(std::io::stdin())?,
-            false => std::fs::read_to_string(path)?,
+            false => read(path)?,
         };
         match crate::fmt::format(&source) {
             Ok(formatted) if stdin => print!("{formatted}"),

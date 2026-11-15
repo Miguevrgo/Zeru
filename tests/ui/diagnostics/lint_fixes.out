@@ -21,23 +21,30 @@ Warning: This parameter never changes; drop var
     │           fn twice(n: i32) i32 {
 ────╯
 Warning: This divides by zero, so it always panics
-    ╭─[ tests/ui/diagnostics/lint_fixes.zr:47:12 ]
+    ╭─[ tests/ui/diagnostics/lint_fixes.zr:48:5 ]
     │
- 47 │     return n / 0 + n % 0;
+ 48 │     m /= 0;
+    │     ───┬──
+    │        ╰──── This divides by zero, so it always panics
+────╯
+Warning: This divides by zero, so it always panics
+    ╭─[ tests/ui/diagnostics/lint_fixes.zr:49:12 ]
+    │
+ 49 │     return n / 0 + n % 0 + m;
     │            ──┬──
     │              ╰──── This divides by zero, so it always panics
 ────╯
 Warning: This divides by zero, so it always panics
-    ╭─[ tests/ui/diagnostics/lint_fixes.zr:47:20 ]
+    ╭─[ tests/ui/diagnostics/lint_fixes.zr:49:20 ]
     │
- 47 │     return n / 0 + n % 0;
+ 49 │     return n / 0 + n % 0 + m;
     │                    ──┬──
     │                      ╰──── This divides by zero, so it always panics
 ────╯
 Warning: This if gives the opposite of its condition
-    ╭─[ tests/ui/diagnostics/lint_fixes.zr:51:12 ]
+    ╭─[ tests/ui/diagnostics/lint_fixes.zr:53:12 ]
     │
- 51 │     return if flag { false } else { true };
+ 53 │     return if flag { false } else { true };
     │            ───────────────┬───────────────
     │                           ╰───────────────── This if gives the opposite of its condition
     │
