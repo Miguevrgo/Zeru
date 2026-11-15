@@ -228,26 +228,21 @@ impl FnCx<'_, '_> {
     }
 }
 
-/// Whether a global constant is written with literals, other constants and
-/// operators on them alone, which need no running to give its value.
+/// Whether a global constant is written out: literals, another constant, or
+/// arrays and tuples of them. Anything computed is run, so that a constant
+/// holds its value and not the expressions of those it is made from.
 fn is_constant(expr: &Expression) -> bool {
+    let literal =
+        |expr: &Expression| matches!(expr.kind, ExpressionKind::Int(_) | ExpressionKind::Float(_));
     match &expr.kind {
-        ExpressionKind::Int(_)
-        | ExpressionKind::Float(_)
-        | ExpressionKind::Boolean(_)
+        ExpressionKind::Boolean(_)
         | ExpressionKind::StringLit(_)
         | ExpressionKind::Identifier(_) => true,
-        ExpressionKind::Prefix { right: inner, .. }
-        | ExpressionKind::Cast { left: inner, .. }
-        | ExpressionKind::ArrayRepeat { value: inner, .. } => is_constant(inner),
-        ExpressionKind::Infix { left, right, .. } => is_constant(left) && is_constant(right),
+        ExpressionKind::Prefix { right: inner, .. } => literal(inner),
+        ExpressionKind::ArrayRepeat { value: inner, .. } => is_constant(inner),
         ExpressionKind::ArrayLiteral(items) | ExpressionKind::Tuple(items) => {
             items.iter().all(is_constant)
         }
-        ExpressionKind::Get { object, name } => {
-            matches!(object.kind, ExpressionKind::Identifier(_))
-                && matches!(name.as_str(), "MAX" | "MIN")
-        }
-        _ => false,
+        _ => literal(expr),
     }
 }

@@ -84,3 +84,10 @@
 - False borrow error storing a slice of a `str` element back into its Vec.
 - False borrow error from a closure that only reads a captured `&var`.
 - False borrow error passing a `&var` where a `&` is wanted while looping over it.
+- A constant comparing tuples or structs holding NaN disagreed with the program.
+- `zeru fmt` added a pair of parentheses around a parenthesised literal on every run.
+- Constants built from other constants took exponential time and memory.
+- A slice read the Vec's length before running its bounds.
+- A constant array passed to a `var` parameter was written in read-only memory.
+- `Vec[x; n]` evaluated `n` before `x`.
+- `zeru fmt` moved a `{ // comment` into an earlier empty block.

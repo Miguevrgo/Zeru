@@ -574,7 +574,11 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 continue;
             }
             let address = match arg {
-                Operand::Move(place) if self.is_slot(place) => self.place(place),
+                Operand::Move(place)
+                    if self.is_slot(place) && !self.fixed[place.local.0 as usize] =>
+                {
+                    self.place(place)
+                }
                 _ => {
                     let value = self.operand(arg);
                     let copy = self.alloca(ty, "arg");

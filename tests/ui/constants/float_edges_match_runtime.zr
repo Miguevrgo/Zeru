@@ -15,8 +15,19 @@ const B2: bool = nan() != nan();
 const B3: bool = nan() <= 1.0;
 const W: f64 = widen(0.1);
 const T: f32 = tof(1152921573326323713);
+fn parts() Array<bool, 5> {
+    return [
+        (nan(), 1) == (nan(), 1),
+        (nan(), 1) != (nan(), 1),
+        (nan(), 1) < (nan(), 2),
+        (1, nan()) >= (1, nan()),
+        (2.0, 1) > (1.0, 5),
+    ];
+}
+const P: Array<bool, 5> = parts();
 fn main() {
     println("{} {} {} {} {}", B, nan() == nan(), B2, nan() != nan(), B3);
     println("{} {}", W, widen(0.1));
     println("{} {}", T, tof(1152921573326323713));
+    println("{} {}", P, parts());
 }

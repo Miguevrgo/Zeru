@@ -1,0 +1,45 @@
+const C0: i64 = 1;
+const C1: i64 = C0 +% C0;
+const C2: i64 = C1 +% C1;
+const C3: i64 = C2 +% C2;
+const C4: i64 = C3 +% C3;
+const C5: i64 = C4 +% C4;
+const C6: i64 = C5 +% C5;
+const C7: i64 = C6 +% C6;
+const C8: i64 = C7 +% C7;
+const C9: i64 = C8 +% C8;
+const C10: i64 = C9 +% C9;
+const C11: i64 = C10 +% C10;
+const C12: i64 = C11 +% C11;
+const C13: i64 = C12 +% C12;
+const C14: i64 = C13 +% C13;
+const C15: i64 = C14 +% C14;
+const C16: i64 = C15 +% C15;
+const C17: i64 = C16 +% C16;
+const C18: i64 = C17 +% C17;
+const C19: i64 = C18 +% C18;
+const C20: i64 = C19 +% C19;
+const C21: i64 = C20 +% C20;
+const C22: i64 = C21 +% C21;
+const C23: i64 = C22 +% C22;
+const C24: i64 = C23 +% C23;
+const C25: i64 = C24 +% C24;
+const C26: i64 = C25 +% C25;
+const C27: i64 = C26 +% C26;
+const C28: i64 = C27 +% C27;
+const C29: i64 = C28 +% C28;
+const C30: i64 = C29 +% C29;
+const C31: i64 = C30 +% C30;
+const C32: i64 = C31 +% C31;
+const C33: i64 = C32 +% C32;
+const C34: i64 = C33 +% C33;
+const C35: i64 = C34 +% C34;
+const C36: i64 = C35 +% C35;
+const C37: i64 = C36 +% C36;
+const C38: i64 = C37 +% C37;
+const C39: i64 = C38 +% C38;
+const C40: i64 = C39 +% C39;
+
+fn main() {
+    println("{}", C40);
+}

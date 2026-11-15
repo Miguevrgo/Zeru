@@ -1489,20 +1489,21 @@ fn comparison(op: BinOp) -> Option<fn(i32) -> bool> {
         BinOp::Ne => |o| o != 0,
         BinOp::Lt => |o| o < 0,
         BinOp::Le => |o| o <= 0,
-        BinOp::Gt => |o| o > 0,
-        BinOp::Ge => |o| o >= 0,
+        BinOp::Gt => |o| o == 1,
+        BinOp::Ge => |o| o == 0 || o == 1,
         _ => return None,
     })
 }
 
 /// How `a` and `b` order, -1, 0 or 1, as the program compares them: the
-/// first part that differs decides, and a NaN is equal to anything.
+/// first part that differs decides, and a NaN gives 2, so that only `!=`
+/// holds.
 fn compare(a: &Value, b: &Value) -> i32 {
     let sign = |o: std::cmp::Ordering| o as i32;
     match (a, b) {
         (Value::Int(a), Value::Int(b)) => sign(a.cmp(b)),
         (Value::Bool(a), Value::Bool(b)) => sign(a.cmp(b)),
-        (Value::Float(a), Value::Float(b)) => i32::from(a > b) - i32::from(a < b),
+        (Value::Float(a), Value::Float(b)) => a.partial_cmp(b).map_or(2, sign),
         (Value::Text(a), Value::Text(b)) => sign(a.cmp(b)),
         (Value::Variant(a, _), Value::Variant(b, _)) => sign(a.cmp(b)),
         (Value::Parts(a), Value::Parts(b)) => a

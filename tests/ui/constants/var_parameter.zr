@@ -2,7 +2,17 @@ fn bump(var value: i32) i32 {
     value = value + 1;
     return value;
 }
+fn first(var values: Array<i32, 2>) i32 {
+    values[0] += 1;
+    return values[0];
+}
+fn twice(fresh: bool) i32 {
+    return first(if fresh { [1, 2] } else {
+        return 0;
+    });
+}
 fn main() {
     const a = 1;
     println("{} {}", bump(a), a);
+    println("{} {}", twice(true), twice(true));
 }

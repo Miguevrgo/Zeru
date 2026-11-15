@@ -1061,11 +1061,11 @@ impl<'a> Builder<'a> {
             ExprKind::None => Rvalue::Aggregate(Aggregate::None, Vec::new()),
             ExprKind::ArrayRepeat(value, count) => Rvalue::Repeat(self.as_operand(value), *count),
             ExprKind::VecRepeat(value, count) => {
-                let count = self.as_operand(count);
                 let value = match self.program.needs_drop(value.ty) {
                     true => Operand::Copy(Place::local(self.as_temp(value))),
                     false => self.as_operand(value),
                 };
+                let count = self.as_operand(count);
                 Rvalue::VecRepeat(value, count)
             }
             ExprKind::Assign {
@@ -1679,12 +1679,10 @@ impl<'a> Builder<'a> {
     /// when there is none, checked to lie within it; `mutable` for a slice
     /// that writes them.
     fn slice(&mut self, held: Place, args: &[Expr], mutable: bool) -> Rvalue {
-        let len = self.held(Types::USIZE, Rvalue::Len(held.clone()));
         let from = self.as_temp(&args[1]);
-        let to = match args.get(2) {
-            Some(end) => self.as_temp(end),
-            None => len,
-        };
+        let end = args.get(2).map(|end| self.as_temp(end));
+        let len = self.held(Types::USIZE, Rvalue::Len(held.clone()));
+        let to = end.unwrap_or(len);
         if self.checks {
             let ordered = self.binary(
                 BinOp::Le,

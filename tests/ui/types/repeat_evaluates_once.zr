@@ -7,4 +7,6 @@ fn main() {
     const a = [next(&var n); 3];
     const v: Vec<i32> = Vec[next(&var n); 2];
     println("{} {} {} {} {} {}", a[0], a[1], a[2], v[0], v[1], n);
+    const w: Vec<i32> = Vec[next(&var n); next(&var n) as usize];
+    println("{}", w);
 }

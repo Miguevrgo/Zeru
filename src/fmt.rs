@@ -383,6 +383,7 @@ impl<'s> Printer<'s> {
         let mut out = Vec::new();
         let mut last = None;
         if let Some(&comment) = self.comments.get(self.next)
+            && comment.start < end
             && items
                 .first()
                 .is_none_or(|item| comment.start < extent(self, item).start)
@@ -735,7 +736,11 @@ impl<'s> Printer<'s> {
     fn bare(&mut self, expr: &Expression) -> Doc {
         match &expr.kind {
             E::Int(_) | E::Float(_) | E::StringLit(_) | E::InlineAsm { .. } => {
-                text(self.source(expr.span))
+                let mut written = self.source(expr.span);
+                while let Some(inner) = written.strip_prefix('(') {
+                    written = inner.strip_suffix(')').unwrap_or(inner).trim();
+                }
+                text(written)
             }
             E::Boolean(value) => text(value.to_string()),
             E::None => text("None"),
@@ -1323,8 +1328,13 @@ fn main() {
     if a { // why
         f(match x { 1 => 2, default => 3 }, last_argument);
     }
+    if b {
+    }
+    if c { // about c
+        g();
+    }
     var s = `one
-two`; var n = - - 3;
+two`; var n = - - 3; var p = ((4)) + (2.5);
 }
 ";
         let expected = "fn main() {
@@ -1337,9 +1347,14 @@ two`; var n = - - 3;
             last_argument,
         );
     }
+    if b {}
+    if c { // about c
+        g();
+    }
     var s = `one
 two`;
     var n = - -3;
+    var p = (4) + (2.5);
 }
 ";
         let formatted = format(source).unwrap();

@@ -10,8 +10,14 @@ struct Growing {
         return 7;
     }
 }
+fn shrink(v: &var Vec<i64>) usize {
+    *v = Vec[9];
+    return 0;
+}
 fn main() {
     var g = Growing { v: Vec[1] };
     g.v[0] = g.grow();
     println("{} {}", g.v[0], g.v.len());
+    var v: Vec<i64> = Vec[1, 2, 3, 4];
+    println("{}", v[shrink(&var v)..]);
 }
