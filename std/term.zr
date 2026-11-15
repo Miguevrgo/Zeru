@@ -24,7 +24,6 @@
 // ```
 
 const SYS_IOCTL: i64 = 16;
-const SYS_POLL: i64 = 7;
 const TCGETS: i64 = 0x5401;
 const TCSETS: i64 = 0x5402;
 const TIOCGWINSZ: i64 = 0x5413;

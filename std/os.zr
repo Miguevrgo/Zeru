@@ -2,7 +2,6 @@
 
 import std.fs;
 
-const SYS_POLL: i64 = 7;
 const SYS_ACCESS: i64 = 21;
 const SYS_DUP2: i64 = 33;
 const SYS_NANOSLEEP: i64 = 35;
@@ -19,7 +18,6 @@ const SYS_PIPE2: i64 = 293;
 const SYS_GETRANDOM: i64 = 318;
 
 const EINTR: i64 = 4;
-const O_CLOEXEC: i64 = 524288;
 
 // The signal Ctrl+C sends: asks a program to stop.
 pub const SIGINT: i32 = 2;
@@ -97,7 +95,7 @@ fn find_env(table: *Vec<String>, name: str) usize? {
 // 22 (EINVAL) unless `name` can name a variable: not empty, and no "=" or
 // NUL in it.
 fn check_name(name: str) ! {
-    if name.len() == 0 {
+    if name.is_empty() {
         return Err(EINVAL);
     }
     for byte in name {
@@ -354,6 +352,9 @@ fn locate(program: str) String! {
     const dirs = path.unwrap();
     for dir in dirs.split(":") {
         var full = String.from(dir);
+        if dir.is_empty() {
+            full.push('.');
+        }
         full.push('/');
         full.extend(program);
         const c = c_string(full);
@@ -598,19 +599,17 @@ pub fn random() u64 {
 pub fn random_range(first: u64, last: u64) u64 {
     assert(first <= last, "random_range takes first <= last");
     const span = last - first;
-    if span == 18446744073709551615 {
+    if span == u64.MAX {
         return random();
     }
     const count = span + 1;
-    const zero: u64 = 0;
-    const unfair = (zero -% count) % count;
+    const unfair = (0 -% count) % count;
     while true {
         const value = random();
         if value >= unfair {
             return first + value % count;
         }
     }
-    return first;
 }
 
 // Returns the directory for temporary files: $TMPDIR when set, else
@@ -628,7 +627,7 @@ pub fn temp_dir() String {
     const dir = env("TMPDIR");
     if dir.is_some() {
         const path = dir.unwrap();
-        if path.len() > 0 {
+        if !path.is_empty() {
             return path;
         }
     }

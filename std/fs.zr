@@ -31,7 +31,6 @@ const O_TRUNC: i64 = 512;
 const O_APPEND: i64 = 1024;
 const O_DIRECTORY: i64 = 65536;
 const O_PATH: i64 = 2097152;
-const O_CLOEXEC: i64 = 524288;
 const AT_FDCWD: i64 = -100;
 const AT_SYMLINK_NOFOLLOW: i64 = 256;
 const UTIME_OMIT: i64 = 1073741822;
@@ -139,9 +138,21 @@ fn metadata_of(stat: Array<i64, 18>) Metadata {
         mode: mode & 0o7777,
         uid: ((stat[3] as u64) >> 32) as u32,
         gid: ((stat[4] as u64) & 0xffffffff) as u32,
-        accessed: stat[9] * 1000000000 + stat[10],
-        modified: stat[11] * 1000000000 + stat[12],
+        accessed: nanoseconds(stat[9], stat[10]),
+        modified: nanoseconds(stat[11], stat[12]),
     };
+}
+
+// `seconds` and `nanos` as nanoseconds, the nearest an i64 holds for a
+// date before 1677 or after 2262.
+fn nanoseconds(seconds: i64, nanos: i64) i64 {
+    if seconds >= i64.MAX / 1000000000 {
+        return i64.MAX;
+    }
+    if seconds < i64.MIN / 1000000000 {
+        return i64.MIN;
+    }
+    return seconds * 1000000000 + nanos;
 }
 
 fn stat_path(nr: i64, path: str) Metadata! {
@@ -448,21 +459,15 @@ pub struct File {
                 at += 1;
             }
             if self.start > 0 {
-                const kept = self.buffer.len() - self.start;
-                for i in 0..kept {
-                    self.buffer[i] = self.buffer[self.start + i];
-                }
-                while self.buffer.len() > kept {
-                    self.buffer.pop();
-                }
-                at = kept;
+                self.buffer = String.from(self.buffer[self.start..]);
+                at = self.buffer.len();
                 self.start = 0;
             }
             const end = __zeru_room(&var self.buffer, CHUNK);
             const n = sys_result(syscall3(SYS_READ, self.fd, end as i64, CHUNK as i64))! as usize;
             __zeru_filled(&var self.buffer, n);
             if n == 0 {
-                if self.buffer.len() == 0 {
+                if self.buffer.is_empty() {
                     return None;
                 }
                 const last = self.take(self.buffer.len(), false);
@@ -470,7 +475,6 @@ pub struct File {
                 return last;
             }
         }
-        return None;
     }
 
     // The buffered bytes from `start` up to `end`, without the "\r" of a
@@ -479,9 +483,6 @@ pub struct File {
         var stop = end;
         if newline && stop > self.start && self.buffer[stop - 1] == '\r' {
             stop -= 1;
-        }
-        if stop == self.start {
-            return String.new();
         }
         return String.from(self.buffer[self.start..stop]);
     }
@@ -526,7 +527,7 @@ pub struct File {
     // file.write("bc").unwrap();
     // println("{}", fs::read_file("out.txt").unwrap()); // abc
     // ```
-    pub fn write(var self, data: str) ! {
+    pub fn write(self, data: str) ! {
         write_all(self.fd, data)!;
     }
 

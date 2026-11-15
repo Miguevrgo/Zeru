@@ -100,3 +100,5 @@
 - A match guard followed by `->` named the wrong mistake.
 - Nested `if` values in blocks took exponential time to parse.
 - Thousands of warnings took quadratic time to print.
+- File times after 2262 or before 1677 panicked `fs::metadata` and `fs::exists`.
+- An empty entry in `PATH` was searched as `/` instead of the current directory.

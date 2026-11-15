@@ -19,6 +19,9 @@ const SYS_MREMAP: i64 = 25;
 const SYS_MUNMAP: i64 = 11;
 const SYS_EXIT: i64 = 60;
 const SYS_FCNTL: i64 = 72;
+const SYS_POLL: i64 = 7;
+
+const O_CLOEXEC: i64 = 524288;
 
 const F_DUPFD_CLOEXEC: i64 = 1030;
 
@@ -798,7 +801,7 @@ fn __zeru_pad(text: str, fill: u8, align: u8, zero: bool, width: usize) String {
     var start: usize = 0;
     if zero {
         pad = '0';
-        if text.len() > 0 && (text[0] == '-' || text[0] == '+') {
+        if !text.is_empty() && (text[0] == '-' || text[0] == '+') {
             padded.push(text[0]);
             start = 1;
         }
@@ -807,11 +810,11 @@ fn __zeru_pad(text: str, fill: u8, align: u8, zero: bool, width: usize) String {
     } else if align == '^' {
         before = gap / 2;
     }
-    for i in 0..before {
+    for _i in 0..before {
         padded.push(pad);
     }
     padded.extend(text[start..]);
-    for i in before..gap {
+    for _i in before..gap {
         padded.push(pad);
     }
     return padded;
@@ -886,7 +889,7 @@ fn __zeru_str_split(s: str, sep: str) Vec<str> {
     var parts: Vec<str> = Vec.new();
     var start: usize = 0;
     var i: usize = 0;
-    while sep.len() > 0 && i + sep.len() <= s.len() {
+    while !sep.is_empty() && i + sep.len() <= s.len() {
         if s[i..i + sep.len()] == sep {
             parts.push(s[start..i]);
             i += sep.len();
@@ -982,7 +985,7 @@ fn __zeru_optional_eq<T>(a: &T?, b: &T?) bool {
 
 // `s.is_empty()`: whether `s` has no bytes.
 fn __zeru_str_is_empty(s: str) bool {
-    return s.len() == 0;
+    return s.is_empty();
 }
 
 // `s.starts_with(prefix)`: whether `s` begins with `prefix`.
@@ -999,9 +1002,9 @@ fn __zeru_str_ends_with(s: str, suffix: str) bool {
 // (EINVAL) as the error code when it spells none, 34 (ERANGE) when it does
 // not fit an i64.
 fn __zeru_str_parse_int(s: str) i64! {
-    const negative = s.len() > 0 && s[0] == '-';
+    const negative = !s.is_empty() && s[0] == '-';
     var start: usize = 0;
-    if s.len() > 0 && (s[0] == '-' || s[0] == '+') {
+    if !s.is_empty() && (s[0] == '-' || s[0] == '+') {
         start = 1;
     }
     if start == s.len() {
@@ -1026,8 +1029,7 @@ fn __zeru_str_parse_int(s: str) i64! {
         value = value * 10 + digit;
     }
     if negative {
-        const zero: u64 = 0;
-        return (zero -% value) as i64;
+        return (0 -% value) as i64;
     }
     return value as i64;
 }
@@ -1036,8 +1038,8 @@ fn __zeru_str_parse_int(s: str) i64! {
 // to the nearest f64; 22 (EINVAL) as the error code when it spells none.
 fn __zeru_str_parse_float(s: str) f64! {
     var at: usize = 0;
-    const negative = s.len() > 0 && s[0] == '-';
-    if s.len() > 0 && (s[0] == '-' || s[0] == '+') {
+    const negative = !s.is_empty() && s[0] == '-';
+    if !s.is_empty() && (s[0] == '-' || s[0] == '+') {
         at = 1;
     }
     const start = at;
@@ -1466,7 +1468,7 @@ fn __zeru_vec_rotate_right<T>(v: &var [T], n: usize) {
 // `v.dedup()`: each run of equal elements next to each other cut down to
 // its first; the others are dropped.
 fn __zeru_vec_dedup<T: Eq>(v: &var Vec<T>) {
-    if v.len() == 0 {
+    if v.is_empty() {
         return;
     }
     var kept: usize = 0;

@@ -5,7 +5,6 @@
 
 import std.fs;
 
-const SYS_POLL: i64 = 7;
 const SYS_SOCKET: i64 = 41;
 const SYS_CONNECT: i64 = 42;
 const SYS_SENDTO: i64 = 44;
@@ -16,7 +15,6 @@ const SYS_GETSOCKNAME: i64 = 51;
 const SYS_GETPEERNAME: i64 = 52;
 const SYS_SETSOCKOPT: i64 = 54;
 const SYS_GETSOCKOPT: i64 = 55;
-const SYS_FCNTL: i64 = 72;
 const SYS_ACCEPT4: i64 = 288;
 
 const AF_UNIX: u8 = 1;
@@ -62,7 +60,7 @@ fn empty() Raw {
 // The number `text` spells in `base`; EINVAL when it is empty, holds
 // anything else or is over `max`.
 fn number(text: str, base: u64, max: u64) u64! {
-    if text.len() == 0 {
+    if text.is_empty() {
         return Err(EINVAL);
     }
     var n: u64 = 0;
@@ -89,7 +87,7 @@ fn number(text: str, base: u64, max: u64) u64! {
 // The hex groups of an IPv6 address `text` holds between colons, none for
 // an empty `text`.
 fn groups(text: str, out: &var Vec<u64>) ! {
-    if text.len() == 0 {
+    if text.is_empty() {
         return Ok();
     }
     const parts = text.split(":");
@@ -167,7 +165,7 @@ fn unix_addr(path: str) Raw! {
     if path.len() >= UNIX_PATH_MAX {
         return Err(ENAMETOOLONG);
     }
-    if path.len() == 0 {
+    if path.is_empty() {
         return Err(EINVAL);
     }
     var raw = empty();
@@ -435,7 +433,7 @@ pub fn wait(handles: &[Handle], ms: u64?) Vec<usize>! {
         entries.push(handle.fd | (POLLIN << 32));
     }
     var first: i64 = 0;
-    if entries.len() > 0 {
+    if !entries.is_empty() {
         first = (&var entries[0]) as i64;
     }
     sys_result(poll(first, entries.len(), ms))!;
