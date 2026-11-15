@@ -1825,17 +1825,27 @@ impl Parser {
 
         let kind = match operator {
             Token::LBracket => {
-                let bound = |p: &mut Self| match p.at(&Token::DotDot) || p.at(&Token::RBracket) {
+                let ends = [Token::DotDot, Token::DotDotEq, Token::RBracket];
+                let bound = |p: &mut Self| match p.at_any(&ends) {
                     true => Some(None),
                     false => p
                         .struct_literals(true, |p| p.parse_expression(Precedence::Lowest))
                         .map(|e| Some(Box::new(e))),
                 };
                 let start = bound(self)?;
-                if self.eat(&Token::DotDot) {
+                if self.at_any(&ends[..2]) {
+                    let inclusive = self.bump() == Token::DotDotEq;
                     let end = bound(self)?;
+                    if inclusive && end.is_none() {
+                        return self.error_here("'..=' takes the last element it includes");
+                    }
                     self.expect(&Token::RBracket)?;
-                    ExpressionKind::Slice { left, start, end }
+                    ExpressionKind::Slice {
+                        left,
+                        start,
+                        end,
+                        inclusive,
+                    }
                 } else {
                     let Some(index) = start else {
                         return self.error_here("Expected an index or a range");

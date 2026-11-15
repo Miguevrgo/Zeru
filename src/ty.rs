@@ -15,7 +15,6 @@ pub enum IntTy {
     I16,
     I32,
     I64,
-    Isize,
     U8,
     U16,
     U32,
@@ -25,10 +24,7 @@ pub enum IntTy {
 
 impl IntTy {
     pub fn signed(self) -> bool {
-        matches!(
-            self,
-            Self::I8 | Self::I16 | Self::I32 | Self::I64 | Self::Isize
-        )
+        matches!(self, Self::I8 | Self::I16 | Self::I32 | Self::I64)
     }
 
     pub fn bits(self) -> u32 {
@@ -36,7 +32,7 @@ impl IntTy {
             Self::I8 | Self::U8 => 8,
             Self::I16 | Self::U16 => 16,
             Self::I32 | Self::U32 => 32,
-            Self::I64 | Self::U64 | Self::Isize | Self::Usize => 64,
+            Self::I64 | Self::U64 | Self::Usize => 64,
         }
     }
 
@@ -63,7 +59,6 @@ impl IntTy {
             Self::I16 => Self::U16,
             Self::I32 => Self::U32,
             Self::I64 => Self::U64,
-            Self::Isize => Self::Usize,
             other => other,
         }
     }
@@ -72,12 +67,11 @@ impl IntTy {
         (self.min()..=self.max()).contains(&value)
     }
 
-    const ALL: [(IntTy, &'static str); 10] = [
+    const ALL: [(IntTy, &'static str); 9] = [
         (Self::I8, "i8"),
         (Self::I16, "i16"),
         (Self::I32, "i32"),
         (Self::I64, "i64"),
-        (Self::Isize, "isize"),
         (Self::U8, "u8"),
         (Self::U16, "u16"),
         (Self::U32, "u32"),
@@ -130,11 +124,11 @@ impl Types {
     pub const F32: Ty = Ty(3);
     pub const F64: Ty = Ty(4);
     pub const I32: Ty = Ty(7);
-    pub const U8: Ty = Ty(10);
-    pub const U64: Ty = Ty(13);
-    pub const USIZE: Ty = Ty(14);
-    pub const STR: Ty = Ty(15);
-    pub const STRING: Ty = Ty(16);
+    pub const U8: Ty = Ty(9);
+    pub const U64: Ty = Ty(12);
+    pub const USIZE: Ty = Ty(13);
+    pub const STR: Ty = Ty(14);
+    pub const STRING: Ty = Ty(15);
 
     pub fn new() -> Self {
         let mut types = Self {

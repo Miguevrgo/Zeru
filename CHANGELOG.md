@@ -14,6 +14,7 @@
 - `u8 as str` gives that one byte as text.
 - `!` is a type anywhere a type goes; `()!` and `void!` are errors suggesting `!`.
 - A shift amount can be any integer type.
+- `v[a..=b]` slices through `b`.
 - `var _ = x;` drops a value on purpose; `exit()` and `assert(false)` end control flow.
 - A temporary a variable borrows lives until the end of its block.
 - A field can be moved out of a temporary.
@@ -46,6 +47,7 @@
 - Heap blocks are cache-line aligned, large ones on huge pages.
 
 ### Removed
+- `isize`.
 - `push_str`: `extend` adds text to a String.
 
 ### Fixed

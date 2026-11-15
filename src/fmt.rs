@@ -995,10 +995,15 @@ impl<'s> Printer<'s> {
                     seq(vec![text(type_args), args])
                 }
                 E::Index { index, .. } => seq(vec![text("["), self.expr(index), text("]")]),
-                E::Slice { start, end, .. } => {
+                E::Slice {
+                    start,
+                    end,
+                    inclusive,
+                    ..
+                } => {
                     let mut parts = vec![text("[")];
                     parts.extend(start.iter().map(|start| self.expr(start)));
-                    parts.push(text(".."));
+                    parts.push(text(if *inclusive { "..=" } else { ".." }));
                     parts.extend(end.iter().map(|end| self.expr(end)));
                     parts.push(text("]"));
                     seq(parts)

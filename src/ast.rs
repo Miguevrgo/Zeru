@@ -1,8 +1,8 @@
 use crate::errors::Span;
 use crate::token::Token;
 
-pub const PRIMITIVES: [&str; 13] = [
-    "i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize", "f32", "f64", "bool",
+pub const PRIMITIVES: [&str; 12] = [
+    "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "usize", "f32", "f64", "bool",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -184,6 +184,7 @@ pub enum ExpressionKind {
         left: Box<Expression>,
         start: Option<Box<Expression>>,
         end: Option<Box<Expression>>,
+        inclusive: bool,
     },
     Cast {
         left: Box<Expression>,

@@ -57,13 +57,14 @@ impl FnCx<'_, '_> {
 
     /// `left[start..end]`: the elements of an array, Vec or slice, or the
     /// bytes of a str or String, from `start`, 0 if not written, up to `end`,
-    /// the length if not written, sharing their memory. A `mutable` one,
-    /// `&var left[..]`, may write them.
+    /// the length if not written, or with `inclusive`, `..=`, through `end`,
+    /// sharing their memory. A `mutable` one, `&var left[..]`, may write them.
     fn slice(
         &mut self,
         left: &Expression,
         start: &Option<Box<Expression>>,
         end: &Option<Box<Expression>>,
+        inclusive: bool,
         mutable: bool,
         span: Span,
     ) -> Expr {
@@ -102,7 +103,13 @@ impl FnCx<'_, '_> {
         };
         let mut args = vec![self.address(place, ty, mutable, left.span), from];
         if let Some(end) = end {
-            args.push(bound(self, end));
+            let mut end = bound(self, end);
+            if inclusive {
+                let one = self.mk(ExprKind::Int(1), Types::USIZE, span);
+                let past = ExprKind::Binary(BinOp::Add, Box::new(end), Box::new(one));
+                end = self.mk(past, Types::USIZE, span);
+            }
+            args.push(end);
         }
         let slice = match mutable {
             true => self.cx.types.intern(TyKind::SliceMut(elem)),
@@ -194,7 +201,12 @@ impl FnCx<'_, '_> {
                 }
             },
             ExpressionKind::Identifier(name) => self.identifier(name, span),
-            ExpressionKind::Slice { left, start, end } => self.slice(left, start, end, false, span),
+            ExpressionKind::Slice {
+                left,
+                start,
+                end,
+                inclusive,
+            } => self.slice(left, start, end, *inclusive, false, span),
             ExpressionKind::Get { .. }
             | ExpressionKind::Index { .. }
             | ExpressionKind::Dereference(_) => {
@@ -286,9 +298,12 @@ impl FnCx<'_, '_> {
                 self.borrow(place, mutable, expected, span)
             }
             ExpressionKind::BorrowRefMut(inner) => match &inner.kind {
-                ExpressionKind::Slice { left, start, end } => {
-                    self.slice(left, start, end, true, span)
-                }
+                ExpressionKind::Slice {
+                    left,
+                    start,
+                    end,
+                    inclusive,
+                } => self.slice(left, start, end, *inclusive, true, span),
                 _ => self.borrow(inner, true, expected, span),
             },
             ExpressionKind::InlineAsm {

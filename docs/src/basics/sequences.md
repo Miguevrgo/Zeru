@@ -119,8 +119,8 @@ instead of copying it. `copy()` makes a real copy. The
 ## Slices
 
 A slice is a view into part of an array or a `Vec`, without copying
-anything. `v[a..b]` takes the elements from `a` up to, not including, `b`;
-either end can be left out:
+anything. `v[a..b]` takes the elements from `a` up to, not including, `b`,
+and `v[a..=b]` includes `b`; either end can be left out:
 
 ```zeru
 const v: Vec<i32> = Vec[10, 20, 30, 40];
