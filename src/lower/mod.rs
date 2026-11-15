@@ -198,6 +198,7 @@ fn reached(program: &Program, bodies: &[Body]) -> Vec<bool> {
     let runtime = &program.runtime;
     let mut work: Vec<FnId> = [
         runtime.write_bytes,
+        runtime.write_all,
         runtime.write_int,
         runtime.write_uint,
         runtime.write_float,

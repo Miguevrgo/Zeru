@@ -46,6 +46,9 @@
 - `str` and `String` can be HashMap and HashSet keys.
 - `math::div_euclid` takes integers only.
 - Heap blocks are cache-line aligned, large ones on huge pages.
+- `sort` and `sort_by` are about 3x faster, more with many equal values.
+- `format()` and printing long text are faster.
+- Printing a float from 0.03 to 2.9e17 is about 4x faster.
 
 ### Removed
 - `isize`.

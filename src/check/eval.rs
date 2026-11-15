@@ -128,6 +128,7 @@ struct Eval<'c, 'a> {
     drops: HashMap<Ty, bool>,
     exit: DefId,
     swap: DefId,
+    size: DefId,
 }
 
 impl Checker<'_> {
@@ -149,6 +150,7 @@ impl Checker<'_> {
         let mut eval = Eval {
             exit: self.prelude_def("exit"),
             swap: self.prelude_def("__zeru_vec_swap"),
+            size: self.prelude_def("__zeru_size"),
             cx: self,
             bodies: HashMap::new(),
             frames: vec![Frame::new(body, span)],
@@ -316,6 +318,9 @@ impl Eval<'_, '_> {
         }
         if def == self.swap {
             return self.swap(args, span);
+        }
+        if def == self.size {
+            return Ok(Value::Int(1));
         }
         let body = self.body(id);
         if self.cx.broken.contains(&id) {

@@ -30,6 +30,7 @@ pub struct Program {
 pub struct Runtime {
     pub out_stream: Ty,
     pub write_bytes: FnId,
+    pub write_all: FnId,
     pub write_int: FnId,
     pub write_uint: FnId,
     pub write_float: FnId,

@@ -1162,6 +1162,7 @@ impl<'a> Checker<'a> {
         let runtime = tir::Runtime {
             out_stream: stream_ty,
             write_bytes: method(self, stream, "write_bytes")?,
+            write_all: self.prelude_fn("__zeru_write_all"),
             write_int: method(self, stream, "write_int")?,
             write_uint: method(self, stream, "write_uint")?,
             write_float: method(self, stream, "write_float")?,

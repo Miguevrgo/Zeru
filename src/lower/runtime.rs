@@ -69,7 +69,7 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
     }
 
     /// What every failed check calls: flush what was printed, write the
-    /// message to stderr, abort.
+    /// message straight to stderr, which needs no memory, abort.
     fn panic_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(function) = self.panic {
             return function;
@@ -96,13 +96,14 @@ impl<'a, 'ctx> Lower<'a, 'ctx> {
                 function.get_nth_param(0).unwrap(),
                 function.get_nth_param(1).unwrap(),
             );
-            if let (Some([_, err]), Some(flush)) = (this.streams, this.flush) {
-                this.call_fn(
-                    this.program.runtime.write_bytes,
-                    &[err.into(), text.into(), len.into()],
-                );
+            if let Some(flush) = this.flush {
                 this.builder.build_call(flush, &[], "").unwrap();
             }
+            let stderr = this.context.i32_type().const_int(2, false);
+            this.call_fn(
+                this.program.runtime.write_all,
+                &[stderr.into(), text.into(), len.into()],
+            );
             this.builder.build_call(abort, &[], "").unwrap();
             this.builder.build_unreachable().unwrap();
         });
