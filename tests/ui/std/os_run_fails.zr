@@ -34,12 +34,13 @@ fn main() {
     fs::remove_dir("shadow/true").unwrap();
     fs::remove_dir("shadow").unwrap();
 
+    const inherited = os::output("ls", Vec["/proc/self/fd"]).unwrap().stdout.split().len();
     const _file = fs::File.open("/proc/self/status").unwrap();
     const listener = net::TcpListener.bind("127.0.0.1:0").unwrap();
     const _client = net::TcpStream.connect(listener.local_addr().unwrap()).unwrap();
     const _server = listener.accept().unwrap();
     const fds = os::output("ls", Vec["/proc/self/fd"]).unwrap().stdout;
-    println("{}", fds.split().join(" "));
+    println("{}", fds.split().len() - inherited);
 
     sys(33, 1, 9, 0);
     sys(3, 1, 0, 0);
