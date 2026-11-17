@@ -77,6 +77,9 @@ println("{} names", count); // 3 names
 | `symlink(target, path)`, `hard_link(target, path)`, `read_link(path)` | links |
 | `real_path(path)`, `current_dir()`, `set_current_dir(path)` | where things are |
 
+Metadata times are nanoseconds since the Unix epoch. Values outside the
+`i64` range are rounded to the nearest endpoint.
+
 ```zeru
 import std.fs;
 

@@ -128,6 +128,7 @@ and blank lines kept where you put them. It has no settings.
 zeru fmt main.zr src/*.zr   # format in place
 zeru fmt --check main.zr    # only list files that are not formatted
 zeru fmt - < main.zr        # format stdin to stdout
+zeru fmt --check - < main.zr  # check stdin in CI
 ```
 
 `--check` exits with an error when a file needs formatting, which suits a

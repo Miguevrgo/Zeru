@@ -51,5 +51,15 @@ Warning: This if gives the opposite of its condition
     │ Help: write the condition negated
     │           return !flag;
 ────╯
+Warning: This if gives its condition
+    ╭─[ tests/ui/diagnostics/lint_fixes.zr:57:20 ]
+    │
+ 57 │     return flag && (if a || b { true } else { false });
+    │                    ─────────────────┬─────────────────
+    │                                     ╰─────────────────── This if gives its condition
+    │
+    │ Help: write the condition alone
+    │           return flag && (a || b);
+────╯
 -- stdout
 2 4 4

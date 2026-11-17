@@ -7,6 +7,7 @@
 
 #![cfg(all(target_os = "linux", target_arch = "x86_64"))]
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
@@ -79,6 +80,14 @@ fn section(out: &mut String, name: &str, text: &str) {
     }
 }
 
+fn drain(mut pipe: impl Read + Send + 'static) -> std::thread::JoinHandle<Vec<u8>> {
+    std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        pipe.read_to_end(&mut bytes).unwrap();
+        bytes
+    })
+}
+
 /// Build `source` in `mode` inside `scratch`, run it, and describe what happened.
 fn observe(source: &Path, mode: &str, scratch: &Path) -> String {
     std::fs::create_dir_all(scratch).unwrap();
@@ -111,6 +120,8 @@ fn observe(source: &Path, mode: &str, scratch: &Path) -> String {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
+    let stdout = drain(child.stdout.take().unwrap());
+    let stderr = drain(child.stderr.take().unwrap());
     let deadline = Instant::now() + Duration::from_secs(20);
     while child.try_wait().unwrap().is_none() {
         if Instant::now() > deadline {
@@ -119,9 +130,9 @@ fn observe(source: &Path, mode: &str, scratch: &Path) -> String {
         }
         std::thread::sleep(Duration::from_millis(5));
     }
-    let ran = child.wait_with_output().unwrap();
+    let ran = child.wait().unwrap();
     use std::os::unix::process::ExitStatusExt;
-    let status = match (ran.status.code(), ran.status.signal()) {
+    let status = match (ran.code(), ran.signal()) {
         (Some(code), _) => format!("exit {code}"),
         (_, Some(signal)) => format!("signal {signal}"),
         _ => "unknown".to_string(),
@@ -131,12 +142,12 @@ fn observe(source: &Path, mode: &str, scratch: &Path) -> String {
     section(
         &mut out,
         "stdout",
-        &clean(&String::from_utf8_lossy(&ran.stdout)),
+        &clean(&String::from_utf8_lossy(&stdout.join().unwrap())),
     );
     section(
         &mut out,
         "stderr",
-        &clean(&String::from_utf8_lossy(&ran.stderr)),
+        &clean(&String::from_utf8_lossy(&stderr.join().unwrap())),
     );
     out
 }
@@ -370,7 +381,7 @@ fn docs() {
             .map(|text| text.lines().filter(|l| !l.is_empty()).collect());
         let passed = match (block.tag.as_str(), text) {
             (",fails", text) => !exited && text.is_none_or(|text| shows(&seen, &text)),
-            (_, Some(text)) => shows(&seen, &text),
+            (_, Some(text)) => exited && shows(&seen, &text),
             _ => {
                 let wanted: Vec<&str> = block
                     .code

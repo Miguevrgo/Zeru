@@ -147,7 +147,7 @@ pub fn format(files: &[PathBuf], check: bool) -> Result<(), CompileError> {
             false => read(path)?,
         };
         match crate::fmt::format(&source) {
-            Ok(formatted) if stdin => print!("{formatted}"),
+            Ok(formatted) if stdin && !check => print!("{formatted}"),
             Ok(formatted) if formatted == source => {}
             Ok(_) if check => {
                 status(RED, '\u{ea6c}', "Unformatted", path.display());

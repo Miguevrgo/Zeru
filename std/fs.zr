@@ -146,13 +146,16 @@ fn metadata_of(stat: Array<i64, 18>) Metadata {
 // `seconds` and `nanos` as nanoseconds, the nearest an i64 holds for a
 // date before 1677 or after 2262.
 fn nanoseconds(seconds: i64, nanos: i64) i64 {
-    if seconds >= i64.MAX / 1000000000 {
+    const billion: i64 = 1000000000;
+    const last = i64.MAX / billion;
+    const first = i64.MIN / billion - 1;
+    if seconds > last || seconds == last && nanos > i64.MAX % billion {
         return i64.MAX;
     }
-    if seconds < i64.MIN / 1000000000 {
+    if seconds < first || seconds == first && nanos < billion + i64.MIN % billion {
         return i64.MIN;
     }
-    return seconds * 1000000000 + nanos;
+    return seconds *% billion +% nanos;
 }
 
 fn stat_path(nr: i64, path: str) Metadata! {

@@ -342,6 +342,9 @@ fn c_string(text: str) String {
 // The file `program` names: itself when it holds a "/", else the first
 // file of that name in the directories of $PATH that may be run.
 fn locate(program: str) String! {
+    if program.is_empty() {
+        return Err(ENOENT);
+    }
     if program.contains("/") {
         return String.from(program);
     }
@@ -350,6 +353,7 @@ fn locate(program: str) String! {
         path = String.from("/usr/local/bin:/usr/bin:/bin");
     }
     const dirs = path.unwrap();
+    var error = ENOENT;
     for dir in dirs.split(":") {
         var full = String.from(dir);
         if dir.is_empty() {
@@ -358,11 +362,15 @@ fn locate(program: str) String! {
         full.push('/');
         full.extend(program);
         const c = c_string(full);
-        if fs::is_file(full) && syscall2(SYS_ACCESS, (&c[0]) as i64, 1) == 0 {
+        const access = syscall2(SYS_ACCESS, (&c[0]) as i64, 1);
+        if access == 0 && fs::is_file(full) {
             return full;
         }
+        if access == -(EACCES as i64) {
+            error = EACCES;
+        }
     }
-    return Err(ENOENT);
+    return Err(error);
 }
 
 // The NUL-terminated copies of `texts` packed in one String, and the

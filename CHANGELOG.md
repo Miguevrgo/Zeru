@@ -56,6 +56,10 @@
 - `push_str`: `extend` adds text to a String.
 
 ### Fixed
+- Boolean `if` simplifications preserve operator precedence.
+- `fmt --check -` reports unformatted standard input.
+- File metadata preserves timestamps throughout the representable nanosecond range.
+- Process lookup reports permission denied for non-executable files in `PATH`.
 - Matching a tuple of references freed the bound payload.
 - Borrow checker accepted reads of freed memory: stores through parameters, calls linking a value to itself, drops after what they refer into, `&` arguments returned through `self`.
 - False borrow errors through `&&`, closures in loops, `var self` methods with `&` arguments.

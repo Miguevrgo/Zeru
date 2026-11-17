@@ -30,7 +30,12 @@ fn main() {
     const path = os::env("PATH").unwrap();
     os::set_env("PATH", format("{}/shadow:{}", fs::current_dir().unwrap(), path)).unwrap();
     println("{} {}", os::run("true", Vec[]).unwrap(), os::run("", Vec[]).unwrap_err());
+    fs::write_file("shadow/blocked", "").unwrap();
+    fs::set_permissions("shadow/blocked", 0o644).unwrap();
+    os::set_env("PATH", "shadow").unwrap();
+    println("{}", os::output("blocked", Vec[]).unwrap_err() == EACCES);
     os::set_env("PATH", path).unwrap();
+    fs::remove_file("shadow/blocked").unwrap();
     fs::remove_dir("shadow/true").unwrap();
     fs::remove_dir("shadow").unwrap();
 

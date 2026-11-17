@@ -59,6 +59,8 @@ println("{}", clock.elapsed() >= 10_000_000); // true
 | `kill(pid, signal) !` | sends `SIGINT`, `SIGTERM` or `SIGKILL` |
 
 The program is looked up in `PATH` unless the name has a `/`.
+If a candidate lacks execute permission, the search continues. If it finds
+no executable, it reports `EACCES` for the denied candidate.
 
 ```zeru
 import std.os;

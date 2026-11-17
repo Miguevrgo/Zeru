@@ -53,6 +53,10 @@ fn _flip(flag: bool) bool {
     return if flag { false } else { true };
 }
 
+fn _enabled(flag: bool, a: bool, b: bool) bool {
+    return flag && (if a || b { true } else { false });
+}
+
 fn main() {
     var p = P { x: 1 };
     p.bump();

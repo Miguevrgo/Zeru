@@ -1509,7 +1509,7 @@ impl FnCx<'_, '_> {
             (_, E::Boolean(true), E::Boolean(false)) => {
                 self.warn("This if gives its condition", whole)
                     .help("write the condition alone")
-                    .fix(whole, text);
+                    .fix(whole, operand(&text));
                 return;
             }
             (_, E::Boolean(false), E::Boolean(true)) => {
