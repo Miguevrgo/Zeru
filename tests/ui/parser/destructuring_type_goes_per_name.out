@@ -7,6 +7,6 @@ Error: A type goes after each name it is for
    │                   ┬
    │                   ╰── A type goes after each name it is for
    │
-   │ Help: write var (a: usize, b: usize) = ..
+   │ Help: write var (n: usize, depth: usize) = ..
 ───╯
 [-] Error: aborting due to previous error

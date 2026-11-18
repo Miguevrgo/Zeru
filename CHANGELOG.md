@@ -111,5 +111,6 @@
 - `&[1, 2]`, `&Vec[1, 2]` and `&Vec[x; n]` ignored the element type of the slice they were passed as.
 - A literal shifted, as `(1 << n) - big`, ignored the other side's type.
 - `Vec.from(..)` named the wrong type or asked for an element type; moving a borrowed loop element got a garbled label.
+- A typed tuple declaration got a help with made-up names; a stray token in `#test { }` was called top level.
 - A `for`, `while`, `var` or `const` as a match arm got no help.
 - A value too wide for where it goes was fixed with a cast that drops its high bits.

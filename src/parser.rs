@@ -442,6 +442,10 @@ impl Parser {
                     self.slip(1, "Zeru declares a function with fn", "write fn", "fn", vec![Token::Fn]);
                     self.parse_function_statement()
                 }
+                token if tests => {
+                    let message = format!("Unexpected '{token}' in '#test {{ }}', expected test(\"name\") {{ .. }}, fn, struct, enum, trait, const or import");
+                    self.error_here(message)
+                }
                 token => {
                     let message = format!("Unexpected '{token}' at top level, expected fn, struct, enum, trait, const or import");
                     self.error_here(message)
@@ -613,9 +617,31 @@ impl Parser {
         let start = self.span();
         self.bump();
         let names = self.parse_names(true)?;
-        if matches!(names, Names::Tuple(_)) && self.at(&Token::Colon) {
-            if let Some(error) = self.error("A type goes after each name it is for", self.span()) {
-                error.help("write var (a: usize, b: usize) = ..");
+        if let Names::Tuple(parts) = &names
+            && self.at(&Token::Colon)
+        {
+            let colon = self.span();
+            self.bump();
+            let keyword = if is_const { "const" } else { "var" };
+            let typed = match self.parse_type() {
+                Some(TypeSpec::Tuple(types)) if types.len() == parts.len() => parts
+                    .iter()
+                    .zip(&types)
+                    .map(|(part, ty)| match part {
+                        Names::One(name, None) => {
+                            Some(format!("{name}: {}", crate::fmt::ty_text(ty)))
+                        }
+                        _ => None,
+                    })
+                    .collect::<Option<Vec<_>>>(),
+                _ => None,
+            };
+            let help = match typed {
+                Some(typed) => format!("write {keyword} ({}) = ..", typed.join(", ")),
+                None => format!("write {keyword} (a: usize, b: usize) = .."),
+            };
+            if let Some(error) = self.error("A type goes after each name it is for", colon) {
+                error.help(help);
             }
             return None;
         }
