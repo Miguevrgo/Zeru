@@ -39,7 +39,7 @@ fn apply(f: fn(i32) i32, x: i32) i32 { return f(x); }  // takes a closure
 ## Closures ([more](basics/closures.md))
 
 ```zeru,ignore
-var square = fn(x: i32) i32 { return x * x; };  // a block, anywhere
+const square = fn(x: i32) i32 { return x * x; };  // a block, anywhere
 apply(fn(x) x * 2, 3)                           // one expression, as a whole argument
 apply(double, 3)                                // a function by its name
 each(&v, fn(x) { total += x; })                 // changes total: captured as &var
