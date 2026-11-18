@@ -1915,7 +1915,7 @@ impl FnCx<'_, '_> {
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
-        let hint = self.vec_hint(expected);
+        let hint = self.vec_hint(expected).or(self.element_hint(expected));
         let count = self.value(count, Some(Types::USIZE));
         let count = self.coerce_or(count, Types::USIZE, span, |want, got| {
             format!("Vec[x; n] takes n as {want}, not {got}")
@@ -2226,6 +2226,11 @@ fn is_number_literal(expr: &Expression) -> bool {
 /// around it settles.
 pub(super) fn written_value(expr: &Expression) -> bool {
     match &expr.kind {
+        ExpressionKind::Infix {
+            left,
+            operator: Token::ShiftLeft | Token::ShiftRight,
+            ..
+        } => written_value(left),
         ExpressionKind::Infix { left, right, .. } => written_value(right) && written_value(left),
         ExpressionKind::ArrayLiteral(items)
         | ExpressionKind::VecLiteral(items)

@@ -108,6 +108,7 @@
 - An empty entry in `PATH` was searched as `/` instead of the current directory.
 - `zeru fmt` broke a long `if` value inside its arithmetic, and refused an `if` value nested in a branch.
 - An unused `for` variable was reported on the sequence, without a fix.
-- `&[1, 2]` and `&Vec[1, 2]` ignored the element type of the slice they were passed as.
+- `&[1, 2]`, `&Vec[1, 2]` and `&Vec[x; n]` ignored the element type of the slice they were passed as.
+- A literal shifted, as `(1 << n) - big`, ignored the other side's type.
 - A `for`, `while`, `var` or `const` as a match arm got no help.
 - A value too wide for where it goes was fixed with a cast that drops its high bits.

@@ -9,5 +9,7 @@ fn main() {
     const big: u64 = 66;
     const sum = (5000000000 + 1) + big;
     const pick = (if below { 5 } else { 6 }) * big;
-    println("{} {}", sum, pick);
+    const bits: usize = 40;
+    const mask = (1 << bits) - big;
+    println("{} {} {}", sum, pick, mask);
 }

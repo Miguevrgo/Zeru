@@ -1548,9 +1548,16 @@ pub(super) enum Fixed {
 /// `text` as an operand: in parentheses unless it is names, calls and
 /// indexing alone.
 pub(super) fn operand(text: &str) -> String {
-    match text
-        .chars()
-        .all(|c| c.is_alphanumeric() || "_.[]()".contains(c))
+    let mut depth = 0;
+    let closes = text.char_indices().find_map(|(at, c)| {
+        depth += i32::from(c == '(') - i32::from(c == ')');
+        (depth == 0).then_some(at)
+    });
+    let enclosed = text.starts_with('(') && closes == Some(text.len() - 1);
+    match enclosed
+        || text
+            .chars()
+            .all(|c| c.is_alphanumeric() || "_.[]()".contains(c))
     {
         true => text.to_string(),
         false => format!("({text})"),

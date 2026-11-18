@@ -36,5 +36,5 @@ fn main() {
     const text = String.from("abc");
     const view: str = &text;
     println("{}", view);
-    println("{} {}", wide(&[4_000_000_000, 1]), wide(&Vec[2]));
+    println("{} {} {}", wide(&[4_000_000_000, 1]), wide(&Vec[2]), wide(&Vec[2; 3]));
 }
