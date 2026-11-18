@@ -827,7 +827,10 @@ impl FnCx<'_, '_> {
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
-        let pointee = expected.and_then(|ty| self.cx.types.pointee(ty));
+        let pointee = expected.and_then(|ty| match self.cx.types.kind(ty) {
+            TyKind::Slice(_) | TyKind::SliceMut(_) => Some(ty),
+            _ => self.cx.types.pointee(ty),
+        });
         let (place, ty) = self.place_expecting(inner, pointee);
         if ty == Types::VOID {
             self.error(
@@ -1878,7 +1881,7 @@ impl FnCx<'_, '_> {
 
     /// `Vec[a, b]`: a Vec holding these elements.
     fn vec_literal(&mut self, elements: &[Expression], expected: Option<Ty>, span: Span) -> Expr {
-        let hint = self.vec_hint(expected);
+        let hint = self.vec_hint(expected).or(self.element_hint(expected));
         if elements.is_empty() {
             return match hint {
                 Some(elem) => {
@@ -2022,7 +2025,9 @@ impl FnCx<'_, '_> {
     /// The element type an expected array asks for.
     fn element_hint(&self, expected: Option<Ty>) -> Option<Ty> {
         match expected.map(|ty| self.cx.types.kind(ty)) {
-            Some(TyKind::Array(elem, _)) => Some(*elem),
+            Some(TyKind::Array(elem, _) | TyKind::Slice(elem) | TyKind::SliceMut(elem)) => {
+                Some(*elem)
+            }
             _ => None,
         }
     }

@@ -17,6 +17,9 @@ fn largest<T: Ord>(values: &[T]) T {
 fn first(values: &[i32]) &i32 {
     return &values[0];
 }
+fn wide(values: &[u64]) u64 {
+    return values.sum();
+}
 fn main() {
     var list: Vec<i32> = Vec[1, 2, 3];
     const fixed: Array<i32, 2> = [10, 20];
@@ -33,4 +36,5 @@ fn main() {
     const text = String.from("abc");
     const view: str = &text;
     println("{}", view);
+    println("{} {}", wide(&[4_000_000_000, 1]), wide(&Vec[2]));
 }

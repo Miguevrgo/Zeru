@@ -111,7 +111,7 @@ them, is plain data too and is copied on assignment. A struct holding a
 Structs compare field by field, in the order the fields are written, like
 tuples: `==` when every field is equal, and `<` by the first field that
 differs. A struct whose fields all compare can be sorted, and one whose
-fields are all integers, bools or enums without data can be a hash map
+fields are all integers, bools, text or enums without data can be a hash map
 key:
 
 ```zeru

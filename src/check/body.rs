@@ -798,15 +798,20 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 "count with a var of your own and while, to change it as it goes".to_string(),
                 None,
             ),
-            Fixed::Element => (
-                format!("Cannot change '{name}', which reads each element"),
-                "walk the sequence with &var to change its elements".to_string(),
-                match text.strip_prefix('&') {
-                    Some(rest) if !rest.starts_with("var ") => Some((at(1), "var ".to_string())),
-                    Some(_) => None,
-                    None => Some((at(0), "&var ".to_string())),
-                },
-            ),
+            Fixed::Element => {
+                let walked = text.find(" in ").map_or(0, |at| at + 4);
+                (
+                    format!("Cannot change '{name}', which reads each element"),
+                    "walk the sequence with &var to change its elements".to_string(),
+                    match text[walked..].strip_prefix('&') {
+                        Some(rest) if !rest.starts_with("var ") => {
+                            Some((at(walked + 1), "var ".to_string()))
+                        }
+                        Some(_) => None,
+                        None => Some((at(walked), "&var ".to_string())),
+                    },
+                )
+            }
             Fixed::Key => (
                 format!("Cannot change the key '{name}'"),
                 "a key of a map or set is fixed, since where it is kept depends on its value; remove it and insert the new one".to_string(),
@@ -871,6 +876,9 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// The name of `local` and the `&` that makes it a reference where it
     /// is declared, as in `var r = &v;` or `r: &T`.
     fn ampersand_of(&self, local: LocalId) -> Option<(String, Span)> {
+        if self.fixed[local.0 as usize] == Some(Fixed::Element) {
+            return None;
+        }
         let name = self.local_name(local);
         let declared = self.declared[local.0 as usize];
         let sources = self.cx.sources;
@@ -1223,8 +1231,9 @@ impl<'c, 'a> FnCx<'c, 'a> {
             .map(|(iterable, names)| (self.sequence(iterable), names.clone()))
             .collect();
         self.enter();
+        let head = Span::new(span.start, iterable.span.end);
         let index = index.map(|index| {
-            let local = self.declare(index, Types::USIZE, false, false, iterable.span);
+            let local = self.declare(index, Types::USIZE, false, false, head);
             self.fix(local, Fixed::Counter);
             local
         });
@@ -1244,14 +1253,11 @@ impl<'c, 'a> FnCx<'c, 'a> {
                         );
                         (self.declare("", item, false, view, iterable.span), None)
                     }
-                    Names::One(name, _) => (
-                        self.element(name, item, writable, view, iterable.span),
-                        None,
-                    ),
+                    Names::One(name, _) => (self.element(name, item, writable, view, head), None),
                     Names::Skip => (self.declare("", item, writable, view, iterable.span), None),
                     Names::Tuple(parts) => {
                         let var = self.declare("", item, writable, view, iterable.span);
-                        let unpack = self.view_names(parts, item, writable, iterable.span);
+                        let unpack = self.view_names(parts, item, writable, head);
                         if walked != Walked::List {
                             self.fix_key(&unpack);
                         }
@@ -1520,7 +1526,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
 /// Why a local cannot be assigned: declared `const`, a parameter not
 /// declared `var`, a loop counter, an element a `for` reads, a key of a
 /// map or set, or what a `match` arm binds.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub(super) enum Fixed {
     Const,
     Param,

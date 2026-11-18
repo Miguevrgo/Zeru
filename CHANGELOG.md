@@ -106,3 +106,6 @@
 - Thousands of warnings took quadratic time to print.
 - File times after 2262 or before 1677 panicked `fs::metadata` and `fs::exists`.
 - An empty entry in `PATH` was searched as `/` instead of the current directory.
+- `zeru fmt` broke a long `if` value inside its arithmetic, and refused an `if` value nested in a branch.
+- An unused `for` variable was reported on the sequence, without a fix.
+- `&[1, 2]` and `&Vec[1, 2]` ignored the element type of the slice they were passed as.

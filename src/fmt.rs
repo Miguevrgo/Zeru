@@ -867,25 +867,27 @@ impl<'s> Printer<'s> {
                 self.expr(left),
                 text(format!(" as {}", ty_text(target))),
             ]),
-            E::If {
-                condition,
-                then,
-                otherwise,
-            } => {
-                let condition = self.expr(condition);
-                let mut branch = |branch: &Expression| match branch.kind {
-                    E::If { .. } | E::Block(_) => self.expr(branch),
-                    _ => seq(vec![text("{ "), self.expr(branch), text(" }")]),
-                };
-                let (then, otherwise) = (branch(then), branch(otherwise));
-                seq(vec![
-                    text("if "),
+            E::If { .. } => {
+                let mut parts = Vec::new();
+                let mut at = expr;
+                while let E::If {
                     condition,
-                    text(" "),
                     then,
-                    text(" else "),
                     otherwise,
-                ])
+                } = &at.kind
+                {
+                    let condition = self.expr(condition);
+                    let then = self.branch(then);
+                    parts.extend([text("if "), condition, text(" "), then, text(" else ")]);
+                    match otherwise.kind {
+                        E::If { .. } if !self.parens.contains(&otherwise.span) => at = otherwise,
+                        _ => {
+                            parts.push(self.branch(otherwise));
+                            break;
+                        }
+                    }
+                }
+                group(seq(parts))
             }
             E::Match { value, arms } => {
                 let head = seq(vec![text("match "), self.expr(value), text(" ")]);
@@ -951,6 +953,20 @@ impl<'s> Printer<'s> {
                 }
                 seq(parts)
             }
+        }
+    }
+
+    /// A branch of an `if` giving a value: `{ value }` while the whole `if`
+    /// fits on the line, else the value on a line of its own.
+    fn branch(&mut self, branch: &Expression) -> Doc {
+        match branch.kind {
+            E::Block(_) => self.expr(branch),
+            _ => seq(vec![
+                text("{"),
+                nest(seq(vec![Doc::Line, self.expr(branch)])),
+                Doc::Line,
+                text("}"),
+            ]),
         }
     }
 
@@ -1165,6 +1181,8 @@ fn main() {
     if p.sum()>2 { println(\"{}\", (p.x + 1) * 2); }
     var long = some_function(first_argument_value, second_argument_value, third_argument_value, 4444);
     var chained = p.first_link().second_link().third_link_of_the_chain().fourth_link_in_it().done_now();
+    var pick = if p.x > 0 { first_argument_value + second_argument_value } else if p.y > 0 { third_argument_value } else { 4444 };
+    var inner = if p.x > 0 { if p.y > 0 { 1 } else { 2 } } else { 3 };
     p.items.push(match p.x { 1 | 2 => 3, default => { exit(4); } });
     // the end
 }
@@ -1201,6 +1219,14 @@ fn main() {
         .third_link_of_the_chain()
         .fourth_link_in_it()
         .done_now();
+    var pick = if p.x > 0 {
+        first_argument_value + second_argument_value
+    } else if p.y > 0 {
+        third_argument_value
+    } else {
+        4444
+    };
+    var inner = if p.x > 0 { if p.y > 0 { 1 } else { 2 } } else { 3 };
     p.items.push(match p.x {
         1 | 2 => 3,
         default => {
