@@ -1631,18 +1631,23 @@ impl Parser {
             }
             self.expect(&Token::Arrow)?;
 
-            let leave = match self.peek() {
-                Token::Return => Some(("return", "return x")),
-                Token::Break => Some(("break", "break")),
-                Token::Continue => Some(("continue", "continue")),
+            let statement = match self.peek() {
+                Token::Return if *self.ahead(1) == Token::Comma => Some(("return", "return;")),
+                Token::Return => Some(("return", "return x;")),
+                Token::Break => Some(("break", "break;")),
+                Token::Continue => Some(("continue", "continue;")),
+                Token::For => Some(("for", "for x in xs { .. }")),
+                Token::While => Some(("while", "while c { .. }")),
+                Token::Var => Some(("var", "var x = ..; ..")),
+                Token::Const => Some(("const", "const x = ..; ..")),
                 _ => None,
             };
-            if let Some((keyword, example)) = leave {
+            if let Some((keyword, example)) = statement {
                 if let Some(error) = self.error(
                     format!("A {keyword} in a match arm goes inside a block"),
                     self.span(),
                 ) {
-                    error.help(format!("wrap it in braces, as in => {{ {example}; }}"));
+                    error.help(format!("wrap it in braces, as in => {{ {example} }}"));
                 }
                 return None;
             }

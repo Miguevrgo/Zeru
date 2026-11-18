@@ -109,3 +109,5 @@
 - `zeru fmt` broke a long `if` value inside its arithmetic, and refused an `if` value nested in a branch.
 - An unused `for` variable was reported on the sequence, without a fix.
 - `&[1, 2]` and `&Vec[1, 2]` ignored the element type of the slice they were passed as.
+- A `for`, `while`, `var` or `const` as a match arm got no help.
+- A value too wide for where it goes was fixed with a cast that drops its high bits.

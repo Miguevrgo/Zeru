@@ -667,6 +667,14 @@ impl<'c, 'a> FnCx<'c, 'a> {
         Some(
             match (types.kind(got).clone(), types.kind(target).clone()) {
                 _ if literal && (types.is_number(target) || target == Types::BOOL) => return None,
+                _ if matches!((types.as_int(got), types.as_int(target)),
+                    (Some(from), Some(to)) if to.bits() < from.bits()) =>
+                {
+                    (
+                        "convert it with as, which keeps only the low bits, or give what it goes into a wider type",
+                        None,
+                    )
+                }
                 _ if types.is_number(got) && types.is_number(target) => (
                     "convert it with as",
                     Some(format!("{} as {shown}", cast.unwrap_or(operand))),

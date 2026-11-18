@@ -9,4 +9,13 @@ Error: A return in a match arm goes inside a block
    │
    │ Help: wrap it in braces, as in => { return x; }
 ───╯
+Error: A for in a match arm goes inside a block
+    ╭─[ tests/ui/match/leaving_arm_needs_block.zr:10:20 ]
+    │
+ 10 │         Some(x) => for i in 0..x { println("{}", i); },
+    │                    ─┬─
+    │                     ╰─── A for in a match arm goes inside a block
+    │
+    │ Help: wrap it in braces, as in => { for x in xs { .. } }
+────╯
 [-] Error: aborting due to previous error

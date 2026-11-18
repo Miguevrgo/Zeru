@@ -128,8 +128,7 @@ Error: Field 'x' of 'P' is i32, but this is i64
     │                    ──┬─
     │                      ╰─── this is i64
     │
-    │ Help: convert it with as
-    │           var p = P { x: wide as i32 };
+    │ Help: convert it with as, which keeps only the low bits, or give what it goes into a wider type
 ────╯
 Error: 'h' is declared as Vec<i32>, but its value is &Vec<i32>
     ╭─[ tests/ui/diagnostics/conversions_suggested.zr:31:23 ]

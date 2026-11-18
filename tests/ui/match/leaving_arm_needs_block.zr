@@ -5,6 +5,12 @@ fn first(o: i64?) i64 {
     }
     return 0;
 }
+fn count(o: i64?) {
+    match o {
+        Some(x) => for i in 0..x { println("{}", i); },
+        None => {}
+    }
+}
 fn main() {
     println("{}", first(None));
 }
