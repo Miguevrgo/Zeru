@@ -49,6 +49,8 @@ Error: String has no function 'pop'
  9 │     var v = String.pop();
    │             ──────┬─────
    │                   ╰─────── String has no function 'pop'
+   │
+   │ Help: make one with String.new() and add to it with extend
 ───╯
 Error: str has no method 'shout'
     ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:10:19 ]

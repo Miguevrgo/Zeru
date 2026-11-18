@@ -475,7 +475,8 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     Some(Fixed::Binding) => {
                         "a match on a variable only lends its parts; to take them, match a value made for the match, as a call's result"
                     }
-                    _ => "what it borrows from keeps it",
+                    Some(Fixed::Element) => "each element stays in the list the loop walks",
+                    _ => "it only views a value owned elsewhere, which keeps it",
                 };
                 self.cannot_move(message, why, expr, false);
                 return;

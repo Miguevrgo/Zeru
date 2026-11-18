@@ -374,7 +374,7 @@ impl FnCx<'_, '_> {
         {
             if type_name == "Vec" {
                 let expected = self.unwrap_expected(expected);
-                return self.vec_static(name, type_args, args, expected, span);
+                return self.vec_static("Vec", name, type_args, args, expected, span);
             }
             if self.enum_dot(object, name, span) {
                 return self.reject_args(args, span);
@@ -388,7 +388,7 @@ impl FnCx<'_, '_> {
                     let def = self.cx.prelude_def("__zeru_string_from");
                     return self.call_def(def, Vec::new(), None, args, expected, span);
                 }
-                return self.vec_static(name, &[], args, Some(Types::STRING), span);
+                return self.vec_static("String", name, &[], args, Some(Types::STRING), span);
             }
             if let Some(def) = self.cx.items.lookup_type(self.scope.module, type_name)
                 && self.cx.items.item(def).kind == ItemKind::Struct
@@ -1415,6 +1415,7 @@ impl FnCx<'_, '_> {
 
     fn vec_static(
         &mut self,
+        owner: &str,
         name: &str,
         type_args: &[TypeSpec],
         args: &[Expression],
@@ -1436,6 +1437,13 @@ impl FnCx<'_, '_> {
                 return self.reject_args(args, span);
             }
         }
+        if !matches!(name, "new" | "with_capacity") {
+            self.error(format!("{owner} has no function '{name}'"), span)
+                .help(format!(
+                    "make one with {owner}.new() and add to it with extend"
+                ));
+            return self.reject_args(args, span);
+        }
         let (ty, elem) = match expected.map(|ty| (ty, self.cx.types.kind(ty).clone())) {
             Some((ty, TyKind::Vec(elem))) => (ty, elem),
             Some((ty, _)) if self.cx.types.is_error(ty) => {
@@ -1449,12 +1457,7 @@ impl FnCx<'_, '_> {
         };
         let builtin = match name {
             "new" => Builtin::VecNew,
-            "with_capacity" => Builtin::VecWithCapacity,
-            _ => {
-                let shown = self.ty(ty);
-                self.error(format!("{shown} has no function '{name}'"), span);
-                return self.error_expr(span);
-            }
+            _ => Builtin::VecWithCapacity,
         };
         let values = self.vec_args(name, elem, args, span);
         self.mk(ExprKind::Builtin(builtin, values), ty, span)

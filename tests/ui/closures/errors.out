@@ -121,7 +121,7 @@ Error: Cannot move 'w', which is borrowed
     │
  45 │     var same = words.map(fn(w) w);
     │                                ┬
-    │                                ╰── what it borrows from keeps it
+    │                                ╰── it only views a value owned elsewhere, which keeps it
     │
     │ Help: move a copy of it instead
     │           var same = words.map(fn(w) w.copy());

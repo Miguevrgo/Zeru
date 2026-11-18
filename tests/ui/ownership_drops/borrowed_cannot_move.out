@@ -5,7 +5,7 @@ Error: Cannot move 'v', which is borrowed
    │
  5 │         eat(v);
    │             ┬
-   │             ╰── what it borrows from keeps it
+   │             ╰── each element stays in the list the loop walks
    │
    │ Help: move a copy of it instead
    │           eat(v.copy());
@@ -15,7 +15,7 @@ Error: Cannot move 'self', which is borrowed
     │
  13 │         return self;
     │                ──┬─
-    │                  ╰─── what it borrows from keeps it
+    │                  ╰─── it only views a value owned elsewhere, which keeps it
     │
     │ Help: move a copy of it instead
     │           return self.copy();
