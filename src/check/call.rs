@@ -1045,6 +1045,9 @@ impl FnCx<'_, '_> {
             .rsplit("::")
             .next()
             .unwrap_or_default();
+        if self.cx.items.std_module_of(def) == Some("fs") && name == "embed_file" {
+            return self.embed_file(args, span);
+        }
         if self.cx.items.std_module_of(def) == Some("simd")
             && let Some(op) = super::simd::simd_op(name)
         {
@@ -1059,6 +1062,42 @@ impl FnCx<'_, '_> {
         self.inference_root(expected, span, |this| {
             this.generic_call(def, known, receiver, args, expected, span)
         })
+    }
+
+    /// `fs::embed_file("path")`: the bytes of the file at `path`, from the
+    /// folder of the file that calls it, read while compiling.
+    fn embed_file(&mut self, args: &[Expression], span: Span) -> Expr {
+        let [arg] = args else {
+            self.arity_error("fs::embed_file", 1, args, span);
+            return self.reject_args(args, span);
+        };
+        let ExpressionKind::StringLit(written) = &arg.kind else {
+            self.error(
+                "fs::embed_file reads its file while compiling, so the path must be written as text",
+                arg.span,
+            );
+            return self.reject_args(args, span);
+        };
+        let written = String::from_utf8_lossy(written).to_string();
+        let caller = self.cx.sources.position(span).map_or("", |(file, ..)| file);
+        let path = std::path::Path::new(caller)
+            .parent()
+            .unwrap_or(std::path::Path::new(""))
+            .join(&written);
+        match std::fs::read(&path) {
+            Ok(bytes) => self.mk(ExprKind::Str(bytes), Types::STR, span),
+            Err(error) => {
+                let why = error.to_string();
+                let why = why
+                    .split(" (os error")
+                    .next()
+                    .unwrap_or_default()
+                    .to_lowercase();
+                self.error(format!("Cannot embed '{written}': {why}"), arg.span)
+                    .label(format!("looked for {}", path.display()));
+                self.error_expr(span)
+            }
+        }
     }
 
     fn generic_call(

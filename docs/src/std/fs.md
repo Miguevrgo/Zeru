@@ -30,6 +30,18 @@ for line in text.lines() {
 - call ann
 ```
 
+`embed_file(path) str` reads a file while compiling instead, and keeps
+its bytes inside the program, as a string literal would be. The path is
+written as text and found from the folder of the file that calls it, so
+the program reads the same data from any folder, and a missing file is a
+compile error:
+
+```zeru,ignore
+import std.fs;
+
+const INPUT: str = fs::embed_file("../input/day01.txt");
+```
+
 ## File
 
 For a big file, or to read it a line at a time, open a `File`. It is

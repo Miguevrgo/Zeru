@@ -1,0 +1,4 @@
+status: exit 0
+-- stdout
+3 three
+true

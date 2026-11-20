@@ -1,0 +1,26 @@
+status: compile error
+-- stderr
+Error: Cannot embed 'missing.txt': no such file or directory
+   ╭─[ tests/ui/std/embed_file_errors.zr:5:34 ]
+   │
+ 5 │     println("{}", fs::embed_file("missing.txt").len());
+   │                                  ──────┬──────
+   │                                        ╰──────── looked for tests/ui/std/missing.txt
+───╯
+Error: fs::embed_file reads its file while compiling, so the path must be written as text
+   ╭─[ tests/ui/std/embed_file_errors.zr:6:34 ]
+   │
+ 6 │     println("{}", fs::embed_file(name).len());
+   │                                  ──┬─
+   │                                    ╰─── fs::embed_file reads its file while compiling, so the path must be written as text
+───╯
+Error: fs::embed_file reads its file while compiling, so it is not a value
+   ╭─[ tests/ui/std/embed_file_errors.zr:7:18 ]
+   │
+ 7 │     const read = fs::embed_file;
+   │                  ───────┬──────
+   │                         ╰──────── fs::embed_file reads its file while compiling, so it is not a value
+   │
+   │ Help: call it where the text is needed, as in fs::embed_file("input.txt")
+───╯
+[-] Error: aborting due to previous error

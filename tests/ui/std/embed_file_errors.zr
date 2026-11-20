@@ -1,0 +1,8 @@
+import std.fs;
+
+fn main() {
+    const name = "words.txt";
+    println("{}", fs::embed_file("missing.txt").len());
+    println("{}", fs::embed_file(name).len());
+    const read = fs::embed_file;
+}

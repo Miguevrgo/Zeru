@@ -230,6 +230,28 @@ pub fn read_file(path: str) String! {
     return text;
 }
 
+// Returns the bytes of the file at `path` as text kept inside the program.
+//
+// The file is read while compiling, not when the program runs: `path` is
+// written as text and found from the folder of the file that calls it, so
+// the program works from any folder. A file that cannot be read is a
+// compile error.
+//
+// # Examples
+//
+// ```zeru,ignore
+// import std.fs;
+//
+// const INPUT: str = fs::embed_file("../input/day01.txt");
+//
+// fn main() {
+//     println("{}", INPUT.lines().len());
+// }
+// ```
+pub fn embed_file(path: str) str {
+    assert(false, "fs::embed_file is read while compiling; call it by name");
+}
+
 // Writes `data` to the file at `path`, creating it or replacing what it
 // held.
 //

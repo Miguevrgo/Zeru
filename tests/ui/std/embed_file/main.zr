@@ -1,0 +1,8 @@
+import std.fs;
+
+const WORDS: str = fs::embed_file("words.txt");
+
+fn main() {
+    println("{} {}", WORDS.split().len(), WORDS.lines()[1]);
+    println("{}", fs::embed_file("words.txt") == WORDS);
+}

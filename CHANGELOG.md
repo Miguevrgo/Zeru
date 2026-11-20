@@ -40,6 +40,7 @@
 - `std.term`: raw mode, cursor, clearing, `key(ms)`.
 - `std.simd`: vectors as wide as the target's registers.
 - `std.regex`: `compile`, then `is_match`, `find`, `find_all`, `captures`, `replace_all`, in linear time.
+- `fs::embed_file(path)`: a file's bytes as a `str`, read while compiling, from the caller's folder.
 - Vec `map`, `filter`, `any`, `all`, `sort_by`, `extend`; slices `join`; arrays have the slice methods.
 - `str` has the slice methods (`sum`, `min`, `max`, `windows`, `chunks`) since it is a `&[u8]`.
 - `str.is_empty()`, `len()` on arrays, `is_empty()` on arrays and slices.

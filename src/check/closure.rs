@@ -278,6 +278,14 @@ impl FnCx<'_, '_> {
         let Some(sig) = self.cx.sig(def) else {
             return self.error_expr(span);
         };
+        if self.cx.items.std_module_of(def) == Some("fs") && name.ends_with("embed_file") {
+            self.error(
+                "fs::embed_file reads its file while compiling, so it is not a value",
+                span,
+            )
+            .help("call it where the text is needed, as in fs::embed_file(\"input.txt\")");
+            return self.error_expr(span);
+        }
         if !sig.generics.is_empty() || !sig.callables.is_empty() {
             self.error(format!("'{name}' is generic, so it is not a value"), span)
                 .help(format!("call it inside a closure, as in fn(x) {name}(x)"));
