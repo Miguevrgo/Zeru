@@ -61,5 +61,15 @@ Warning: This if gives its condition
     │ Help: write the condition alone
     │           return flag && (a || b);
 ────╯
+Warning: This is i32 already, so the cast does nothing
+    ╭─[ tests/ui/diagnostics/lint_fixes.zr:61:12 ]
+    │
+ 61 │     return n as i32 + 1 as i32 + -2 as i32;
+    │            ────┬───
+    │                ╰───── This is i32 already, so the cast does nothing
+    │
+    │ Help: drop the cast
+    │           return n + 1 as i32 + -2 as i32;
+────╯
 -- stdout
 2 4 4

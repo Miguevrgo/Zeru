@@ -57,6 +57,10 @@ fn _enabled(flag: bool, a: bool, b: bool) bool {
     return flag && (if a || b { true } else { false });
 }
 
+fn _same(n: i32) i32 {
+    return n as i32 + 1 as i32 + -2 as i32;
+}
+
 fn main() {
     var p = P { x: 1 };
     p.bump();

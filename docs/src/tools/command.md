@@ -55,6 +55,7 @@ is likely a mistake. A warning never stops a build:
 | code after `return`, `break`, `continue`, `exit` or `assert(false)` | `return; println("done");` |
 | a comparison known before it runs | `x == x`, `n >= 0` with `n` unsigned |
 | a value assigned to itself | `x = x;` |
+| a cast to the type the value already has | `n as i32` with `n` an `i32` |
 | a function that calls itself on every path | `fn f() i32 { return f(); }` |
 | longer code for what the language or std has | `v.len() == 0`, `flag == true`, `if c { true } else { false }`, `if a < b { a } else { b }` |
 

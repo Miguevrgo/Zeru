@@ -1620,6 +1620,7 @@ impl FnCx<'_, '_> {
         let scope = self.scope.clone();
         let to = self.cx.resolve_type(target, &scope, span);
         let byte = to == Types::STR && matches!(value.kind, ExpressionKind::Int(_));
+        let literal = is_number_literal(value);
         let value = self.expr(value, byte.then_some(Types::U8));
         if self.cx.types.is_error(value.ty) || self.cx.types.is_error(to) {
             return self.error_expr(span);
@@ -1665,6 +1666,15 @@ impl FnCx<'_, '_> {
             && !self.cx.types.is_number(value.ty)
         {
             self.note_changed(local);
+        }
+        if value.ty == to && !literal && !self.in_instance {
+            let (text, shown) = (self.cx.sources.text(value.span).to_string(), self.ty(to));
+            self.warn(
+                format!("This is {shown} already, so the cast does nothing"),
+                span,
+            )
+            .help("drop the cast")
+            .fix(span, text);
         }
         self.mk(ExprKind::Cast(Box::new(value)), to, span)
     }

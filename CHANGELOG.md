@@ -30,7 +30,7 @@
 - `zeru test` runs a `#test` block per file, each test alone; its asserts are checked in every build mode.
 - `--native` builds for the processor compiling.
 - `--release-fast` takes `+`, `-` and `*` as never overflowing, so loops optimize further.
-- Warnings: unused, unreachable, redundant code; a `var` that never changes; a `var` parameter or `var self` that never changes (not in generic code); division by zero; shorter forms (`is_empty`).
+- Warnings: unused, unreachable, redundant code; a `var` that never changes; a `var` parameter or `var self` that never changes (not in generic code); a cast to the type a value already has; division by zero; shorter forms (`is_empty`).
 - Every error explains the lines involved and comes with a fix where one change fixes it.
 - Errors recognise slips from other languages and suggest the name or import meant.
 - `zeru fmt` keeps comments inside lists, calls, signatures and operator chains; wraps long generics.
