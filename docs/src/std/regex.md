@@ -41,9 +41,12 @@ ASCII letters. Repeats take as much as they can, and of the matches the
 one found is the one that starts first. A Zeru string needs `\\` for each
 `\` of the pattern, or a raw string: `` regex::compile(`\d+`) ``.
 
-## Always fast
+## Speed
 
-Matching takes time proportional to the length of the text times the size
-of the pattern. No pattern, however written, makes it slow down on a long
-text, so patterns from users or files are safe to run. The price is that
+A search (`is_match`, `find`, `captures`) takes time proportional to the
+length of the text times the size of the pattern. No pattern, however
+written, makes it slow down on a long text, so patterns from users or files
+are safe to run. `find_all` and `replace_all` search again after each match,
+so a pattern that looks far ahead, as `a.*b|a` on a text of `a`s, takes time
+growing with the square of the text. The price is that
 there are no back references (`\1`) and no lookahead.

@@ -375,10 +375,15 @@ impl FnCx<'_, '_> {
         }
         match expected.map(|t| self.cx.types.kind(t)) {
             Some(TyKind::F32) => {
+                let text = self.cx.sources.text(span).replace('_', "");
+                let nearest = match (text.parse::<f64>(), text.parse::<f32>()) {
+                    (Ok(wide), Ok(narrow)) if wide == value => f64::from(narrow),
+                    _ => value,
+                };
                 if (value as f32).is_infinite() {
                     self.error(format!("Literal {value:e} does not fit in f32"), span);
                 }
-                self.mk(ExprKind::Float(value), Types::F32, span)
+                self.mk(ExprKind::Float(nearest), Types::F32, span)
             }
             _ => self.mk(ExprKind::Float(value), Types::F64, span),
         }
@@ -2243,9 +2248,9 @@ fn is_number_literal(expr: &Expression) -> bool {
     }
 }
 
-/// A number written out, `None`, or arithmetic, an array, a tuple, or the
-/// branches of an `if` or a `match` of them: it fits whichever type what is
-/// around it settles.
+/// A number written out, `None`, a `parse()`, or arithmetic, an array, a
+/// tuple, or the branches of an `if` or a `match` of them: it fits whichever
+/// type what is around it settles.
 pub(super) fn written_value(expr: &Expression) -> bool {
     match &expr.kind {
         ExpressionKind::Infix {
@@ -2265,7 +2270,25 @@ pub(super) fn written_value(expr: &Expression) -> bool {
         } => written_value(then) && written_value(otherwise),
         ExpressionKind::Match { arms, .. } => arms.iter().all(|arm| written_value(&arm.body)),
         ExpressionKind::None => true,
-        _ => is_number_literal(expr),
+        _ => is_number_literal(expr) || parses(expr),
+    }
+}
+
+/// `s.parse()` with no type written, maybe unwrapped: it reads the number
+/// type around it.
+fn parses(expr: &Expression) -> bool {
+    match &expr.kind {
+        ExpressionKind::Try { value, .. } => parses(value),
+        ExpressionKind::Call {
+            function,
+            type_args,
+            arguments,
+        } if type_args.is_empty() && arguments.is_empty() => match &function.kind {
+            ExpressionKind::Get { object, name } if name == "unwrap" => parses(object),
+            ExpressionKind::Get { name, .. } => name == "parse",
+            _ => false,
+        },
+        _ => false,
     }
 }
 

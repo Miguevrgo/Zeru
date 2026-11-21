@@ -475,7 +475,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                     Some(Fixed::Binding) => {
                         "a match on a variable only lends its parts; to take them, match a value made for the match, as a call's result"
                     }
-                    Some(Fixed::Element) => "each element stays in the list the loop walks",
+                    Some(Fixed::Element(_)) => "each element stays in the list the loop walks",
                     _ => "it only views a value owned elsewhere, which keeps it",
                 };
                 self.cannot_move(message, why, expr, false);
@@ -784,7 +784,6 @@ impl<'c, 'a> FnCx<'c, 'a> {
     fn fixed_error(&mut self, name: String, why: Fixed, declared: Span, span: Span) {
         let sources = self.cx.sources;
         let text = sources.text(declared);
-        let at = |offset: usize| Span::new(declared.start + offset, declared.start + offset);
         let (message, help, fix) = match why {
             Fixed::Const => (
                 format!("Cannot change '{name}', which is declared with const"),
@@ -807,17 +806,15 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 "count with a var of your own and while, to change it as it goes".to_string(),
                 None,
             ),
-            Fixed::Element => {
-                let walked = text.find(" in ").map_or(0, |at| at + 4);
+            Fixed::Element(sequence) => {
+                let at = |offset| Span::new(sequence.start + offset, sequence.start + offset);
                 (
                     format!("Cannot change '{name}', which reads each element"),
                     "walk the sequence with &var to change its elements".to_string(),
-                    match text[walked..].strip_prefix('&') {
-                        Some(rest) if !rest.starts_with("var ") => {
-                            Some((at(walked + 1), "var ".to_string()))
-                        }
+                    match sources.text(sequence).strip_prefix('&') {
+                        Some(rest) if !rest.starts_with("var ") => Some((at(1), "var ".to_string())),
                         Some(_) => None,
-                        None => Some((at(walked), "&var ".to_string())),
+                        None => Some((at(0), "&var ".to_string())),
                     },
                 )
             }
@@ -885,7 +882,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// The name of `local` and the `&` that makes it a reference where it
     /// is declared, as in `var r = &v;` or `r: &T`.
     fn ampersand_of(&self, local: LocalId) -> Option<(String, Span)> {
-        if self.fixed[local.0 as usize] == Some(Fixed::Element) {
+        if matches!(self.fixed[local.0 as usize], Some(Fixed::Element(_))) {
             return None;
         }
         let name = self.local_name(local);
@@ -1237,7 +1234,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
         };
         let sequences: Vec<_> = sequences
             .into_iter()
-            .map(|(iterable, names)| (self.sequence(iterable), names.clone()))
+            .map(|(iterable, names)| (self.sequence(iterable), names.clone(), iterable.span))
             .collect();
         self.enter();
         let head = Span::new(span.start, iterable.span.end);
@@ -1248,7 +1245,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
         });
         let walks = sequences
             .into_iter()
-            .map(|((seq, item, writable, walked), names)| {
+            .map(|((seq, item, writable, walked), names, sequence)| {
                 let names = match walked {
                     Walked::Set => Names::Tuple(vec![names, Names::Skip]),
                     _ => names,
@@ -1262,11 +1259,14 @@ impl<'c, 'a> FnCx<'c, 'a> {
                         );
                         (self.declare("", item, false, view, iterable.span), None)
                     }
-                    Names::One(name, _) => (self.element(name, item, writable, view, head), None),
+                    Names::One(name, _) => {
+                        let var = self.element(name, item, writable, view, head, sequence);
+                        (var, None)
+                    }
                     Names::Skip => (self.declare("", item, writable, view, iterable.span), None),
                     Names::Tuple(parts) => {
                         let var = self.declare("", item, writable, view, iterable.span);
-                        let unpack = self.view_names(parts, item, writable, head);
+                        let unpack = self.view_names(parts, item, writable, head, sequence);
                         if walked != Walked::List {
                             self.fix_key(&unpack);
                         }
@@ -1463,20 +1463,35 @@ impl<'c, 'a> FnCx<'c, 'a> {
     }
 
     /// The local a `for` names `name` for each element, or a part of one.
-    fn element(&mut self, name: &str, ty: Ty, writable: bool, view: bool, span: Span) -> LocalId {
+    fn element(
+        &mut self,
+        name: &str,
+        ty: Ty,
+        writable: bool,
+        view: bool,
+        span: Span,
+        sequence: Span,
+    ) -> LocalId {
         let local = self.declare(name, ty, writable, view, span);
         if !writable {
-            self.fix(local, Fixed::Element);
+            self.fix(local, Fixed::Element(sequence));
         }
         local
     }
 
     /// The parts of each element of type `ty` a `for` names, each a view of
     /// the element's part or a copy of it, as the element itself would be.
-    fn view_names(&mut self, names: &[Names], ty: Ty, writable: bool, span: Span) -> Unpack {
+    fn view_names(
+        &mut self,
+        names: &[Names],
+        ty: Ty,
+        writable: bool,
+        span: Span,
+        sequence: Span,
+    ) -> Unpack {
         self.unpack(names, ty, span, &mut |fx, _, name, part| {
             let view = writable || fx.cx.owns_heap(part);
-            fx.element(name, part, writable, view, span)
+            fx.element(name, part, writable, view, span, sequence)
         })
     }
 
@@ -1541,7 +1556,8 @@ pub(super) enum Fixed {
     Param,
     Lent,
     Counter,
-    Element,
+    /// Read from the sequence written at the span.
+    Element(Span),
     Key,
     Binding,
 }

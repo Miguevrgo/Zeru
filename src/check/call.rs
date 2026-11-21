@@ -1,6 +1,8 @@
 //! Calls: functions, methods, generic inference, the constructors of enums,
 //! results and Vecs, the built-in methods, and `print`.
 
+use std::os::unix::ffi::OsStrExt;
+
 use crate::ast::{Expression, ExpressionKind, Spec, TypeSpec, format_pieces};
 use crate::errors::{Span, ZeruError};
 use crate::items::{DefId, ItemKind};
@@ -1143,12 +1145,10 @@ impl FnCx<'_, '_> {
             );
             return self.reject_args(args, span);
         };
-        let written = String::from_utf8_lossy(written).to_string();
-        let caller = self.cx.sources.position(span).map_or("", |(file, ..)| file);
-        let path = std::path::Path::new(caller)
-            .parent()
-            .unwrap_or(std::path::Path::new(""))
-            .join(&written);
+        let caller = self.cx.sources.path(span).and_then(|file| file.parent());
+        let written = std::path::Path::new(std::ffi::OsStr::from_bytes(written));
+        let path = caller.unwrap_or(std::path::Path::new("")).join(written);
+        let written = written.display();
         match std::fs::read(&path) {
             Ok(bytes) => self.mk(ExprKind::Str(bytes), Types::STR, span),
             Err(error) => {

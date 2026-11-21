@@ -3,4 +3,10 @@ fn main() {
     for item in a {
         item = 9;
     }
+    const xs: Vec<i32> = Vec[1, 2];
+    var ys: Vec<i32> = Vec[3, 4];
+    for (x, y) in
+        zip(&xs, &ys) {
+        y += x;
+    }
 }

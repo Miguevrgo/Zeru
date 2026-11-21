@@ -10,4 +10,14 @@ Error: Cannot change 'item', which reads each element
    │ Help: walk the sequence with &var to change its elements
    │           for item in &var a {
 ───╯
+Error: Cannot change 'y', which reads each element
+    ╭─[ tests/ui/control_flow/for_in_element_is_constant.zr:10:9 ]
+    │
+ 10 │         y += x;
+    │         ───┬──
+    │            ╰──── Cannot change 'y', which reads each element
+    │
+    │ Help: walk the sequence with &var to change its elements
+    │           zip(&xs, &var ys) {
+────╯
 [-] Error: aborting due to previous error

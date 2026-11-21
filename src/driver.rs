@@ -65,14 +65,14 @@ fn resolve_import(import: &str, root: &Path) -> Option<PathBuf> {
 
 /// Parse `source`, with what its `#test { }` holds when `tests`.
 fn parse_file(
-    name: String,
+    path: &Path,
     source: &str,
     sources: &mut Sources,
     errors: &mut Vec<ZeruError>,
     tests: bool,
     std: bool,
 ) -> Program {
-    let start = sources.push(name, source, std);
+    let start = sources.push(path, source, std);
     let mut parser = Parser::new(Lexer::at(source, start));
     let mut program = parser.parse_program();
     errors.append(&mut parser.errors);
@@ -159,7 +159,7 @@ pub fn format(files: &[PathBuf], check: bool) -> Result<(), CompileError> {
             }
             Err(errors) => {
                 let mut sources = Sources::default();
-                sources.push(path.display().to_string(), &source, false);
+                sources.push(path, &source, false);
                 report_errors(&errors, &sources);
                 failed = true;
             }
@@ -351,21 +351,14 @@ fn load(path: &Path, user_code: &str, tests: bool) -> (Sources, Vec<SourceModule
     let mut sources = Sources::default();
     let mut errors = Vec::new();
     let prelude = parse_file(
-        String::from("std/builtin.zr"),
+        Path::new("std/builtin.zr"),
         include_str!("../std/builtin.zr"),
         &mut sources,
         &mut errors,
         false,
         true,
     );
-    let root = parse_file(
-        path.display().to_string(),
-        user_code,
-        &mut sources,
-        &mut errors,
-        tests,
-        false,
-    );
+    let root = parse_file(path, user_code, &mut sources, &mut errors, tests, false);
     let root_end = sources.end();
     if !tests
         && !root.statements.iter().any(
@@ -449,7 +442,7 @@ fn load(path: &Path, user_code: &str, tests: bool) -> (Sources, Vec<SourceModule
                 continue;
             };
             let program = parse_file(
-                file.display().to_string(),
+                &file,
                 &source,
                 &mut sources,
                 &mut errors,

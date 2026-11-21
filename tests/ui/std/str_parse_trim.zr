@@ -66,4 +66,12 @@ fn main() {
         "2147483648".parse().unwrap_err(),
         "-0".parse<u8>().unwrap(),
     );
+    const m: f64 = 2.0;
+    println(
+        "{} {} {} {}",
+        "1.5".parse().unwrap() * m,
+        "1.0000000596046448".parse<f32>().unwrap(),
+        "1.000000059604644775390625".parse<f32>().unwrap(),
+        "-1.00000005960464477539062501".parse<f32>().unwrap(),
+    );
 }

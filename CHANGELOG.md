@@ -39,7 +39,7 @@
 ### Std
 - `std.term`: raw mode, cursor, clearing, `key(ms)`.
 - `std.simd`: vectors as wide as the target's registers.
-- `std.regex`: `compile`, then `is_match`, `find`, `find_all`, `captures`, `replace_all`, in linear time.
+- `std.regex`: `compile`, then `is_match`, `find`, `find_all`, `captures`, `replace_all`; each search in linear time.
 - `fs::embed_file(path)`: a file's bytes as a `str`, read while compiling, from the caller's folder.
 - Vec `map`, `filter`, `any`, `all`, `sort_by`, `extend`; slices `join`; arrays have the slice methods.
 - `str` has the slice methods (`sum`, `min`, `max`, `windows`, `chunks`) since it is a `&[u8]`.
@@ -59,6 +59,8 @@
 - `parse_int`, `parse_float`: `parse()` reads every number type.
 
 ### Fixed
+- f32 literals could round to the wrong f32.
+- The `&var` fix for a `for` over `zip` edited the wrong place.
 - Boolean `if` simplifications preserve operator precedence.
 - `fmt --check -` reports unformatted standard input.
 - File metadata preserves timestamps throughout the representable nanosecond range.

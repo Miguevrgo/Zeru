@@ -1035,8 +1035,9 @@ fn __zeru_str_parse_int<T: Int>(s: str) T! {
 }
 
 // `s.parse()` into a float type: the number `s` spells, as `-12.5` or
-// `3e-4`, rounded to the nearest f64; 22 (EINVAL) as the error code when it
-// spells none.
+// `3e-4`, rounded to the nearest T; 22 (EINVAL) as the error code when it
+// spells none. A T narrower than f64 is rounded from the number itself
+// when the nearest f64 lies halfway between two of them.
 fn __zeru_str_parse_float<T: Num>(s: str) T! {
     var at: usize = 0;
     const negative = !s.is_empty() && s[0] == '-';
@@ -1108,6 +1109,14 @@ fn __zeru_str_parse_float<T: Num>(s: str) T! {
             if above != value {
                 value = __zeru_closer(value, above, s[start..end], exponent + digits);
             }
+        }
+    }
+    const narrow = value as T as f64;
+    const other = 2.0 * value - narrow;
+    if narrow != value && other - other == 0.0 && other as T as f64 == other {
+        const side = __zeru_compare(value, false, s[start..end], exponent + digits);
+        if side != 0 && (side > 0) == (other > narrow) {
+            value = other;
         }
     }
     if negative {
@@ -1207,18 +1216,28 @@ fn __zeru_nearest(mantissa: u64, exponent: i64) f64 {
 }
 
 // `low` or `high`, the f64 just above it, whichever is nearer the number
-// 0.d * 10^point, `d` being what `digits` spells once its point and leading
-// zeros are skipped, a tie going to the even one: the digits are compared
-// one by one with those of the halfway point between the two.
+// 0.d * 10^point, a tie going to the even one.
 fn __zeru_closer(low: f64, high: f64, digits: str, point: i64) f64 {
-    const bits = *((&low) as *u64);
+    const side = __zeru_compare(low, true, digits, point);
+    if side > 0 || side == 0 && *((&low) as *u64) % 2 == 1 {
+        return high;
+    }
+    return low;
+}
+
+// -1, 0 or 1 as the number 0.d * 10^point, `d` being what `digits` spells
+// once its point and leading zeros are skipped, is below, equal to or above
+// `value`, or the halfway point between it and the f64 just above it when
+// `half`: the digits are compared one by one with those of that value.
+fn __zeru_compare(value: f64, half: bool, digits: str, point: i64) i32 {
+    const bits = *((&value) as *u64);
     var m = bits & 4503599627370495;
     var k: i64 = -1074;
     if bits >> 52 != 0 {
         m = m | 4503599627370496;
         k = (bits >> 52) as i64 - 1075;
     }
-    var r = __zeru_big(2 * m + 1);
+    var r = __zeru_big(2 * m + half as u64);
     var s = __zeru_big(1);
     if k >= 1 {
         r.mul_pow2(k - 1);
@@ -1231,7 +1250,7 @@ fn __zeru_closer(low: f64, high: f64, digits: str, point: i64) f64 {
         r.mul_pow10(0 - point);
     }
     if !__zeru_under(&r, &s, false) {
-        return low;
+        return -1;
     }
     var started = false;
     for c in digits {
@@ -1247,15 +1266,15 @@ fn __zeru_closer(low: f64, high: f64, digits: str, point: i64) f64 {
         }
         if c != digit {
             if c > digit {
-                return high;
+                return 1;
             }
-            return low;
+            return -1;
         }
     }
-    if r.len > 0 || m % 2 == 0 {
-        return low;
+    if r.len > 0 {
+        return -1;
     }
-    return high;
+    return 0;
 }
 
 // -1, 0 or 1 as a * 10^ten is below, equal to or above b * 2^two.

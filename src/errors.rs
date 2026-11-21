@@ -217,6 +217,7 @@ pub struct Sources {
 }
 
 struct SourceFile {
+    path: std::path::PathBuf,
     name: String,
     std: bool,
     start: usize,
@@ -227,7 +228,7 @@ struct SourceFile {
 impl Sources {
     /// Append a file and return where it starts, so it can be lexed on its own
     /// while still reporting spans as offsets into the whole program.
-    pub fn push(&mut self, name: impl Into<String>, source: &str, std: bool) -> usize {
+    pub fn push(&mut self, path: &std::path::Path, source: &str, std: bool) -> usize {
         let start = self.text.len();
         self.text.push_str(source);
         self.text.push('\n');
@@ -235,7 +236,8 @@ impl Sources {
             .chain(source.match_indices('\n').map(|(at, _)| at + 1))
             .collect();
         self.files.push(SourceFile {
-            name: name.into(),
+            path: path.to_path_buf(),
+            name: path.display().to_string(),
             std,
             start,
             end: self.text.len(),
@@ -261,6 +263,11 @@ impl Sources {
         let line = file.lines.partition_point(|&start| start <= offset);
         let column = offset - file.lines[line - 1] + 1;
         Some((&file.name, line as u32, column as u32))
+    }
+
+    /// The path of the file a span is in, as it was opened.
+    pub fn path(&self, span: Span) -> Option<&std::path::Path> {
+        Some(&self.file(span)?.path)
     }
 
     /// Where `name` is first written as a whole word inside `within`.

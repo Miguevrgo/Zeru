@@ -1,5 +1,5 @@
 // Zeru Standard Library - regex
-// Patterns matched in time linear in the text, whatever the pattern.
+// Patterns searched in time linear in the text, whatever the pattern.
 
 // The largest count `{n,m}` takes.
 const MAX_COUNT: usize = 1000;
@@ -29,8 +29,10 @@ const UNSET: usize = usize.MAX;
 //
 // Repeats take as much as they can, and the match found is the one that
 // starts first; between two starting there, the alternative written first.
-// Matching takes time proportional to the length of the text times the size
-// of the pattern, so no pattern makes it slow.
+// A search takes time proportional to the length of the text times the size
+// of the pattern, so no pattern makes it slow. `find_all` and `replace_all`
+// search again after each match, so a pattern that looks far ahead, as
+// `a.*b|a` on a text of `a`s, takes time growing with the square of the text.
 //
 // # Examples
 //
