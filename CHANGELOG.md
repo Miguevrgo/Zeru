@@ -44,6 +44,7 @@
 - Vec `map`, `filter`, `any`, `all`, `sort_by`, `extend`; slices `join`; arrays have the slice methods.
 - `str` has the slice methods (`sum`, `min`, `max`, `windows`, `chunks`) since it is a `&[u8]`.
 - `str.is_empty()`, `len()` on arrays, `is_empty()` on arrays and slices.
+- `str.parse()` reads the number type its result goes to, `i32` when nothing says; `parse<u8>()` names it.
 - `format()` returns the text `print` would write.
 - `str` and `String` can be HashMap and HashSet keys.
 - `math::div_euclid` takes integers only.
@@ -55,6 +56,7 @@
 ### Removed
 - `isize`.
 - `push_str`: `extend` adds text to a String.
+- `parse_int`, `parse_float`: `parse()` reads every number type.
 
 ### Fixed
 - Boolean `if` simplifications preserve operator precedence.

@@ -25,7 +25,7 @@ fn number(text: str, key: str) i64! {
     if value.is_none() {
         return Err(UNKNOWN_KEY);
     }
-    const parsed = value.unwrap().parse_int();
+    const parsed: i64! = value.unwrap().parse();
     if parsed.is_err() {
         return Err(NOT_A_NUMBER);
     }
@@ -98,5 +98,5 @@ fn main() {
         }
     }
     println("{} reads the same backwards: {}", word, mirrored);
-    println("{} {}", "3.75".parse_float().unwrap() * 2.0, word.ends_with("vel"));
+    println("{} {}", "3.75".parse<f64>().unwrap() * 2.0, word.ends_with("vel"));
 }

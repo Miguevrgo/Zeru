@@ -14,6 +14,9 @@ fn main() {
     o.extend(5);
     n.extend(5);
     n.join(",");
+    n.windows(1).sum();
+    var p = "1".parse(2);
+    var q = "1".parse<bool>();
     var bytes: Vec<u8> = Vec[1, 2];
     var found = bytes.contains(bytes[0]);
 }

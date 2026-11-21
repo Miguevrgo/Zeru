@@ -8,7 +8,7 @@ fn total(values: &[i64]) i64 {
 
 fn main() {
     for line in "L23\nR4\nL105".lines() {
-        const n = line[1..].parse_int().unwrap();
+        const n = line[1..].parse().unwrap();
         println("{} {}", line[..1], n);
     }
     const word = String.from("zeru lang");

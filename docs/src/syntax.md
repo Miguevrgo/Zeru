@@ -13,7 +13,7 @@ const (q, r) = divide(7, 2);      // a tuple taken apart; (q: i32, _) works too
 const LIMIT: i32 = 10;            // also at top level
 const TABLE: Array<u32, 256> = make_table();   // top level: computed while compiling
 const input = "42";
-const input = input.parse_int();  // a new name hiding the old one
+const input = input.parse();      // a new name hiding the old one
 var _ = list.pop();               // a value dropped on purpose
 
 i8 i16 i32 i64 u8 u16 u32 u64 usize f32 f64 bool str
@@ -87,7 +87,7 @@ var t = (1, true);  t.0;
 ```zeru,ignore
 var s: str = "hello";               s.len();  s[0];  s[1..3];
 s.is_empty();  b as str;           // b: u8, its one-byte text
-s.split();  s.split(",");  s.lines();  s.contains("a");  s.find("a");  s.trim();  s.starts_with("he");  s.parse_int();
+s.split();  s.split(",");  s.lines();  s.contains("a");  s.find("a");  s.trim();  s.starts_with("he");  s.parse();  s.parse<f64>();
 var owned = String.from("hi");      owned.extend("!");  owned.push('?');
 var csv = s.split(",").join(";");  // a String, the parts with ";" between
 println("{} and {}", 1, "two");     println("{}", v);  // [1, 2]

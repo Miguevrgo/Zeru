@@ -46,17 +46,18 @@ The methods:
 | `starts_with(t)`, `ends_with(t)` | whether the text begins or ends with `t` |
 | `contains(t)` | whether `t` appears in the text |
 | `find(t)` | the byte where `t` first starts, or `None` |
-| `parse_int()`, `parse_float()` | the number the text spells, or an error (`i64!`, `f64!`) |
+| `parse()` | the number the text spells as a `T!`, `T` being the number type the result goes to, `i32` when nothing says |
 | `map(f)`, `filter(keep)`, `any(f)`, `all(f)` | run a [closure](closures.md#vec-methods) on each byte |
 
 ```zeru
 const line = "  width = 80 ";
 const parts = line.trim().split(" = ");
 println("{} is {}", parts[0], parts[1]); // width is 80
-const width = parts[1].parse_int().unwrap();
+const width: u16 = parts[1].parse().unwrap();
 println("{}", width * 2); // 160
-println("{}", "3.5".parse_float().unwrap() + 1.0); // 4.5
-println("{}", "1x".parse_int().is_err()); // true
+println("{}", "3.5".parse<f64>().unwrap() + 1.0); // 4.5
+println("{}", "1x".parse().is_err()); // true
+println("{}", "300".parse<u8>().unwrap_err()); // 34
 ```
 
 `str` and `&[u8]` are the same type, so the [slice](sequences.md#slices)

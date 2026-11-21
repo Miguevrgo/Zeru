@@ -34,6 +34,6 @@ fn main() {
     println("[{}] {}", greeting, copy);
     const t: str = copy;
     println("{}", t);
-    const n = String.from("42").parse_int();
+    const n = String.from("42").parse();
     println("{}", n.unwrap());
 }

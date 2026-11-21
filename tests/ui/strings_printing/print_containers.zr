@@ -1,5 +1,5 @@
 fn parse(s: str) i64! {
-    return s.parse_int();
+    return s.parse();
 }
 
 fn make() Vec<str> {

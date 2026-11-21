@@ -38,7 +38,7 @@ fn main() {
     const gid = os::output("id", Vec["-g"]).unwrap();
     println(
         "{} {}",
-        uid.stdout.trim().parse_int().unwrap() == os::uid() as i64,
-        gid.stdout.trim().parse_int().unwrap() == os::gid() as i64,
+        uid.stdout.trim().parse<i64>().unwrap() == os::uid() as i64,
+        gid.stdout.trim().parse<i64>().unwrap() == os::gid() as i64,
     );
 }

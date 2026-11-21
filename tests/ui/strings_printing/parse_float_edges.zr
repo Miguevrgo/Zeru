@@ -1,5 +1,5 @@
 fn show(text: str) {
-    match text.parse_float() {
+    match text.parse<f64>() {
         Ok(v) => println("{} -> {}", text, v),
         Err(e) => println("{} -> error {}", text, e),
     }
@@ -35,5 +35,5 @@ fn main() {
     }
     ones.extend("e-1100");
     tenth.extend("1e1100");
-    println("{} {}", ones.parse_float().unwrap(), tenth.parse_float().unwrap());
+    println("{} {}", ones.parse<f64>().unwrap(), tenth.parse<f64>().unwrap());
 }

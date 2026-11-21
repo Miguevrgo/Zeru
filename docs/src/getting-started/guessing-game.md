@@ -11,7 +11,7 @@ Here it is whole. The rest of the page goes through it piece by piece.
 import std.os;
 
 fn main() {
-    const secret = os::random_range(1, 100) as i64;
+    const secret = os::random_range(1, 100) as i32;
     println("Guess the number between 1 and 100.");
     var tries = 0;
     while true {
@@ -21,7 +21,7 @@ fn main() {
             println("Bye!");
             return;
         }
-        const guess = line.unwrap().trim().parse_int();
+        const guess = line.unwrap().trim().parse();
         if guess.is_err() {
             println("That is not a number.");
             continue;
@@ -68,13 +68,13 @@ need no import at all.
 ## The secret number
 
 ```zeru,ignore
-var secret = os::random_range(1, 100) as i64;
+var secret = os::random_range(1, 100) as i32;
 ```
 
 `var` declares a variable. `os::random_range(1, 100)` returns a random `u64`
-from 1 to 100, both included. The guess will be an `i64`, a signed 64-bit
+from 1 to 100, both included. The guess will be an `i32`, a signed 32-bit
 integer, and Zeru never converts between number types on its own, so
-`as i64` converts the secret once here and the two can be compared later.
+`as i32` converts the secret once here and the two can be compared later.
 
 ## The loop
 
@@ -115,7 +115,7 @@ The [Errors](../errors/README.md) chapter covers both in detail.
 ## Turning text into a number
 
 ```zeru,ignore
-var guess = line.unwrap().trim().parse_int();
+var guess = line.unwrap().trim().parse();
 if guess.is_err() {
     println("That is not a number.");
     continue;
@@ -123,8 +123,9 @@ if guess.is_err() {
 ```
 
 `trim()` removes the spaces and line break around the text, and
-`parse_int()` reads it as a number. Text that is not a number is an error,
-so `parse_int` returns an `i64!`. This time the program does not stop on
+`parse()` reads it as a number, an `i32` here since nothing asks for
+another type. Text that is not a number is an error, so `parse` returns an
+`i32!`. This time the program does not stop on
 an error: it checks with `is_err()`, tells the player, and `continue` goes
 back to the start of the loop.
 

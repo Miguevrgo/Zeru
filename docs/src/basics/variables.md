@@ -54,7 +54,7 @@ on, which is handy when a value changes type:
 
 ```zeru
 const input = "42";
-const input = input.parse_int().unwrap();
+const input = input.parse().unwrap();
 println("{}", input + 1); // 43
 ```
 

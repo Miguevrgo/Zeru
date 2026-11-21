@@ -234,7 +234,9 @@ impl FnCx<'_, '_> {
             ExpressionKind::Prefix { operator, right } => {
                 self.prefix(operator, right, expected, span)
             }
-            ExpressionKind::Try { operator, value } => self.try_expr(operator, value, span),
+            ExpressionKind::Try { operator, value } => {
+                self.try_expr(operator, value, expected, span)
+            }
             ExpressionKind::Block(statements) => {
                 let block = self.block(statements);
                 self.mk(ExprKind::Block(block), Types::VOID, span)
@@ -670,7 +672,7 @@ impl FnCx<'_, '_> {
     }
 
     /// The same, a temporary taking the type `expected` when it can.
-    fn place_expecting(&mut self, e: &Expression, expected: Option<Ty>) -> (Place, Ty) {
+    pub(super) fn place_expecting(&mut self, e: &Expression, expected: Option<Ty>) -> (Place, Ty) {
         let span = e.span;
         if let ExpressionKind::Identifier(name) = &e.kind
             && let Some(variable) = self.variable(name)
@@ -1642,7 +1644,7 @@ impl FnCx<'_, '_> {
             let (from, to) = (self.ty(got), self.ty(target));
             let error = self.error(format!("Cannot cast {from} to {to}"), span);
             if text_like && to_number {
-                error.help("read a number out of text with .parse_int() or .parse_float()");
+                error.help("read a number out of text with .parse()");
             } else if number && target == Types::BOOL {
                 error
                     .help("compare it to get a bool")
@@ -2069,11 +2071,21 @@ impl FnCx<'_, '_> {
 
     /// `value?` on a `T?`, `value!` on a `T!`: the payload, or a return of
     /// the None or the error, which the function must return in kind.
-    fn try_expr(&mut self, operator: &Token, value: &Expression, span: Span) -> Expr {
+    fn try_expr(
+        &mut self,
+        operator: &Token,
+        value: &Expression,
+        expected: Option<Ty>,
+        span: Span,
+    ) -> Expr {
         let after = self.cx.sources.text(Span::new(value.span.end, span.end));
         let at = value.span.end + after.find(['?', '!']).unwrap_or(0);
         let at = Span::new(at, at + 1);
-        let mut value = self.expr(value, None);
+        let wrapped = expected.map(|ok| match operator {
+            Token::Question => self.cx.types.intern(TyKind::Optional(ok)),
+            _ => self.cx.types.intern(TyKind::Result(ok)),
+        });
+        let mut value = self.expr(value, wrapped);
         let ret = self.ret;
         let passes = |operator: &Token, ret: &TyKind| {
             matches!(

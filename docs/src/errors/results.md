@@ -64,8 +64,8 @@ fn parse_pair(text: str) (i64, i64)! {
     if parts.len() != 2 {
         return Err(EINVAL);
     }
-    const a = parts[0].trim().parse_int()!;
-    const b = parts[1].trim().parse_int()!;
+    const a: i64 = parts[0].trim().parse()!;
+    const b: i64 = parts[1].trim().parse()!;
     return (a, b);
 }
 
@@ -111,5 +111,5 @@ be dropped unseen: a call like `fs::remove_file("old.txt");` on its own is
 a compile error. Pass the error on with `!`, `unwrap()` it, or keep the
 result in a variable to look at later.
 
-A result is not a number either, so `parse_int() + 1` is a compile error
+A result is not a number either, so `parse() + 1` is a compile error
 that points at the missing `!` or `unwrap()`.

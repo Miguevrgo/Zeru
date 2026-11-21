@@ -82,7 +82,7 @@ fn main() {
     }
 
     test("text becomes a number") {
-        const n = "42".parse_int()!;
+        const n: i64 = "42".parse()!;
         assert(n == twice(20));
     }
 

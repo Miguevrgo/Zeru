@@ -880,7 +880,7 @@ fn __zeru_c_text(text: *u8) str {
 fn __zeru_test_index() i64 {
     var stack: i64 = 0;
     asm ("movq __zeru_stack(%rip), $0" : "=r" (stack));
-    return __zeru_str_parse_int(__zeru_c_text(*((stack as *i64) + 2) as *u8)).unwrap();
+    return __zeru_str_parse_int<i64>(__zeru_c_text(*((stack as *i64) + 2) as *u8)).unwrap();
 }
 
 // `s.split(sep)`: the parts of `s` between each `sep`; an empty `sep` gives
@@ -998,10 +998,10 @@ fn __zeru_str_ends_with(s: str, suffix: str) bool {
     return suffix.len() <= s.len() && s[s.len() - suffix.len()..] == suffix;
 }
 
-// `s.parse_int()`: the integer `s` spells, with an optional sign; 22
-// (EINVAL) as the error code when it spells none, 34 (ERANGE) when it does
-// not fit an i64.
-fn __zeru_str_parse_int(s: str) i64! {
+// `s.parse()` into an integer type: the integer `s` spells, with an
+// optional sign; 22 (EINVAL) as the error code when it spells none, 34
+// (ERANGE) when it does not fit a T.
+fn __zeru_str_parse_int<T: Int>(s: str) T! {
     const negative = !s.is_empty() && s[0] == '-';
     var start: usize = 0;
     if !s.is_empty() && (s[0] == '-' || s[0] == '+') {
@@ -1010,33 +1010,34 @@ fn __zeru_str_parse_int(s: str) i64! {
     if start == s.len() {
         return Err(EINVAL);
     }
-    var limit: u64 = 9223372036854775807;
-    if negative {
-        limit += 1;
-    }
-    var value: u64 = 0;
+    var magnitude: u64 = 0;
+    var fits = true;
     for i in start..s.len() {
         if s[i] < '0' || s[i] > '9' {
             return Err(EINVAL);
         }
         const digit = (s[i] - '0') as u64;
-        if value > (limit - digit) / 10 {
-            if s[i..].all(fn(c) c >= '0' && c <= '9') {
-                return Err(34);
-            }
-            return Err(EINVAL);
+        fits = fits && magnitude <= (u64.MAX - digit) / 10;
+        magnitude = magnitude *% 10 +% digit;
+    }
+    if fits && negative {
+        const value = (0 -% magnitude) as T;
+        if value <= 0 && value as i64 == (0 -% magnitude) as i64 {
+            return value;
         }
-        value = value * 10 + digit;
+    } else if fits {
+        const value = magnitude as T;
+        if value >= 0 && value as u64 == magnitude {
+            return value;
+        }
     }
-    if negative {
-        return (0 -% value) as i64;
-    }
-    return value as i64;
+    return Err(34);
 }
 
-// `s.parse_float()`: the number `s` spells, as `-12.5` or `3e-4`, rounded
-// to the nearest f64; 22 (EINVAL) as the error code when it spells none.
-fn __zeru_str_parse_float(s: str) f64! {
+// `s.parse()` into a float type: the number `s` spells, as `-12.5` or
+// `3e-4`, rounded to the nearest f64; 22 (EINVAL) as the error code when it
+// spells none.
+fn __zeru_str_parse_float<T: Num>(s: str) T! {
     var at: usize = 0;
     const negative = !s.is_empty() && s[0] == '-';
     if !s.is_empty() && (s[0] == '-' || s[0] == '+') {
@@ -1078,7 +1079,7 @@ fn __zeru_str_parse_float(s: str) f64! {
     }
     const end = at;
     if at < s.len() && (s[at] == 'e' || s[at] == 'E') {
-        var power = match __zeru_str_parse_int(s[at + 1..]) {
+        var power = match __zeru_str_parse_int<i64>(s[at + 1..]) {
             Ok(power) => power,
             Err(error) if error != 34 => {
                 return Err(error);
@@ -1112,7 +1113,7 @@ fn __zeru_str_parse_float(s: str) f64! {
     if negative {
         value = -value;
     }
-    return value;
+    return value as T;
 }
 
 const POW10: Array<f64, 23> = [

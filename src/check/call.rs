@@ -39,8 +39,7 @@ const STR_METHODS: &[&str] = &[
     "trim",
     "starts_with",
     "ends_with",
-    "parse_int",
-    "parse_float",
+    "parse",
 ];
 
 /// The Vec methods written in the prelude besides the slice ones, each
@@ -402,7 +401,9 @@ impl FnCx<'_, '_> {
             }
         }
 
-        let (place, ty) = self.place(object);
+        let hint = expected
+            .filter(|_| name == "unwrap" && matches!(object.kind, ExpressionKind::Call { .. }));
+        let (place, ty) = self.place_expecting(object, hint);
         let types = &self.cx.types;
         if types.is_error(ty) {
             return self.reject_args(args, span);
@@ -451,6 +452,20 @@ impl FnCx<'_, '_> {
             self.error(format!("join() needs a list of str, not {shown}"), span);
             return self.error_expr(span);
         }
+        if name == "sum"
+            && let Some(elem) = self.cx.types.elem(ty)
+            && let Some(at) = name_at
+            && matches!(self.cx.types.kind(elem), TyKind::Slice(_))
+        {
+            let shown = self.ty(elem);
+            self.error(
+                format!("sum() adds numbers, and each element here is a {shown}"),
+                span,
+            )
+            .help("sum each one with map")
+            .fix(Span::new(at.start, span.end), "map(fn(w) w.sum())");
+            return self.reject_args(args, span);
+        }
 
         match self.cx.types.kind(ty).clone() {
             TyKind::Slice(_) | TyKind::SliceMut(_)
@@ -481,7 +496,7 @@ impl FnCx<'_, '_> {
             TyKind::Vec(elem) if elem == Types::U8 && STR_METHODS.contains(&name) => {
                 let text = self.mk(ExprKind::Read(place), ty, object.span);
                 let text = self.view(text);
-                self.str_method(text, name, args, expected, span)
+                self.str_method(text, name, type_args, args, expected, span)
             }
             TyKind::Vec(elem) => {
                 let mutable = SLICE_MUT_METHODS.contains(&name) || VEC_MUTATORS.contains(&name);
@@ -544,7 +559,7 @@ impl FnCx<'_, '_> {
             TyKind::Slice(elem) => {
                 if ty == Types::STR && STR_METHODS.contains(&name) {
                     let text = self.mk(ExprKind::Read(place), ty, object.span);
-                    return self.str_method(text, name, args, expected, span);
+                    return self.str_method(text, name, type_args, args, expected, span);
                 }
                 if SLICE_METHODS.contains(&name) {
                     let slice = self.mk(ExprKind::Read(place), ty, object.span);
@@ -912,16 +927,66 @@ impl FnCx<'_, '_> {
         &mut self,
         text: Expr,
         name: &str,
+        type_args: &[TypeSpec],
         args: &[Expression],
         expected: Option<Ty>,
         span: Span,
     ) -> Expr {
+        if name == "parse" {
+            return self.parse(text, type_args, args, expected, span);
+        }
         let name = match name {
             "split" if args.is_empty() => "split_blank",
             _ => name,
         };
         let def = self.cx.prelude_def(&format!("__zeru_str_{name}"));
         self.call_def(def, Vec::new(), Some(text), args, expected, span)
+    }
+
+    /// `s.parse()`: the number type written, as in `s.parse<u8>()`, else
+    /// the one the result goes to, else i32, as for a number literal.
+    fn parse(
+        &mut self,
+        text: Expr,
+        type_args: &[TypeSpec],
+        args: &[Expression],
+        expected: Option<Ty>,
+        span: Span,
+    ) -> Expr {
+        let target = match type_args {
+            [] => {
+                let wanted = self.unwrap_expected(expected).map(|ty| self.resolve(ty));
+                wanted.filter(|&ty| self.cx.types.is_number(ty))
+            }
+            [spec] => {
+                let scope = self.scope.clone();
+                Some(self.cx.resolve_type(spec, &scope, span))
+            }
+            _ => {
+                self.error(
+                    "parse takes one type argument, the number type to read",
+                    span,
+                );
+                return self.reject_args(args, span);
+            }
+        };
+        if !args.is_empty() {
+            self.arity_error("'str.parse'", 0, args, span);
+            return self.reject_args(args, span);
+        }
+        let target = target.unwrap_or(Types::I32);
+        let reads = match self.cx.types.kind(target) {
+            TyKind::Int(_) => "__zeru_str_parse_int",
+            TyKind::F32 | TyKind::F64 => "__zeru_str_parse_float",
+            TyKind::Error => return self.reject_args(args, span),
+            _ => {
+                let shown = self.ty(target);
+                self.error(format!("parse reads a number, not {shown}"), span);
+                return self.reject_args(args, span);
+            }
+        };
+        let def = self.cx.prelude_def(reads);
+        self.call_def(def, vec![target], Some(text), args, expected, span)
     }
 
     /// A slice of `kind` over all of what `receiver` points at.

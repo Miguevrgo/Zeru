@@ -48,7 +48,7 @@ fn tokenize(text: str) Vec<Token>! {
             while i < text.len() && (text[i] >= '0' && text[i] <= '9' || text[i] == '.') {
                 i += 1;
             }
-            tokens.push(Token::Num(text[start..i].parse_float()!));
+            tokens.push(Token::Num(text[start..i].parse()!));
             continue;
         }
         match c {

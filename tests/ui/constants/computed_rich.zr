@@ -130,13 +130,13 @@ fn arranged() (Array<i32, 6>, i32) {
 fn fields(line: str) (i64, i64, bool)! {
     const s = line.trim();
     const at = s.find(",").unwrap();
-    const left = s[..at].parse_int()!;
-    return (left, s[at + 1..].parse_int()!, s.starts_with("12") && s.contains("34"));
+    const left: i64 = s[..at].parse()!;
+    return (left, s[at + 1..].parse()!, s.starts_with("12") && s.contains("34"));
 }
 
 fn parsed() (f64, i32, f64) {
-    const sum = "3.25".parse_float().unwrap() + "1e-3".parse_float().unwrap();
-    return (sum, fields(" 1,x ").unwrap_err(), "0.1".parse_float().unwrap() * 3.0);
+    const sum: f64 = "3.25".parse().unwrap() + "1e-3".parse().unwrap();
+    return (sum, fields(" 1,x ").unwrap_err(), "0.1".parse().unwrap() * 3.0);
 }
 
 fn counted(n: i32) i32 {

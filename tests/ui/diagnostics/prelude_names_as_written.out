@@ -90,10 +90,37 @@ Error: join() needs a list of str, not Vec<i32>
     │     ─────┬─────
     │          ╰─────── join() needs a list of str, not Vec<i32>
 ────╯
-Error: 'str.contains' takes 't' as str, but this is u8
-    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:18:32 ]
+Error: sum() adds numbers, and each element here is a &[i32]
+    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:17:5 ]
     │
- 18 │     var found = bytes.contains(bytes[0]);
+ 17 │     n.windows(1).sum();
+    │     ─────────┬────────
+    │              ╰────────── sum() adds numbers, and each element here is a &[i32]
+    │
+    │ Help: sum each one with map
+    │           n.windows(1).map(fn(w) w.sum());
+────╯
+Error: 'str.parse' takes 0 arguments, but 1 was given
+    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:18:23 ]
+    │
+ 18 │     var p = "1".parse(2);
+    │                       ┬
+    │                       ╰── not taken
+    │
+    │ Help: remove what it does not take
+    │           var p = "1".parse();
+────╯
+Error: parse reads a number, not bool
+    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:19:13 ]
+    │
+ 19 │     var q = "1".parse<bool>();
+    │             ────────┬────────
+    │                     ╰────────── parse reads a number, not bool
+────╯
+Error: 'str.contains' takes 't' as str, but this is u8
+    ╭─[ tests/ui/diagnostics/prelude_names_as_written.zr:21:32 ]
+    │
+ 21 │     var found = bytes.contains(bytes[0]);
     │                                ────┬───
     │                                    ╰───── this is u8
     │

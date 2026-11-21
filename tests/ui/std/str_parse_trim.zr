@@ -20,7 +20,7 @@ fn main() {
         "99999999999999999999x",
         "12345678901234567890.5",
     ] {
-        const r = t.parse_int();
+        const r = t.parse<i64>();
         if r.is_ok() {
             println("{} -> {}", t, r.unwrap());
         } else {
@@ -43,11 +43,27 @@ fn main() {
         "1e999999999",
         "-1e-999999999",
     ] {
-        const r = t.parse_float();
+        const r = t.parse<f64>();
         if r.is_ok() {
             println("{} -> {}", t, r.unwrap());
         } else {
             println("{} -> err {}", t, r.unwrap_err());
         }
     }
+    const small: u8 = "255".parse().unwrap();
+    const big: u64 = "18446744073709551615".parse().unwrap();
+    const half: f32 = "0.5".parse().unwrap();
+    var total = 0;
+    for line in "1\n2\n3".lines() {
+        total += line.parse().unwrap();
+    }
+    println("{} {} {} {} {}", small, big, half, total, "-128".parse<i8>().unwrap());
+    println(
+        "{} {} {} {} {}",
+        "256".parse<u8>().unwrap_err(),
+        "-1".parse<u8>().unwrap_err(),
+        "-129".parse<i8>().unwrap_err(),
+        "2147483648".parse().unwrap_err(),
+        "-0".parse<u8>().unwrap(),
+    );
 }
