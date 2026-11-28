@@ -20,4 +20,9 @@ fn main() {
     println("{} {}", find(2) == 2, find(-1) == find(-2));
     const q: P? = P { x: 1 };
     println("{}", q.is_some());
+    const wanted: String? = String.from("beta");
+    const name = String.from("beta");
+    println("{} {} {}", wanted == name, name != wanted, name);
+    const after = String.from("gamma");
+    println("{} {}", name, after);
 }

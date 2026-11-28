@@ -1163,6 +1163,14 @@ impl FnCx<'_, '_> {
         let TyKind::Optional(inner) = *self.cx.types.kind(ty) else {
             unreachable!("an optional")
         };
+        let optional = |fx: &Self, e: &Expr| matches!(fx.cx.types.kind(e.ty), TyKind::Optional(_));
+        if optional(self, &l) != optional(self, &r) {
+            let (a, b) = match optional(self, &l) {
+                true => (l, r),
+                false => (r, l),
+            };
+            return self.optional_eq_value(a, b, ty, inner, negated, span);
+        }
         let (l, r) = match (self.coerce(l, ty), self.coerce(r, ty)) {
             (Ok(l), Ok(r)) => (l, r),
             (l, r) => {
@@ -1183,6 +1191,40 @@ impl FnCx<'_, '_> {
         };
         let a = self.address(Place::Temp(Box::new(l)), ty, false, span);
         let b = self.address(Place::Temp(Box::new(r)), ty, false, span);
+        let equal = self.mk(ExprKind::Call(id, vec![a, b]), Types::BOOL, span);
+        not_if(negated, equal)
+    }
+
+    /// `a == b` with `a` a `T?` and `b` a `T`, which is only borrowed: `a`
+    /// holds a value equal to `b`.
+    fn optional_eq_value(
+        &mut self,
+        a: Expr,
+        b: Expr,
+        ty: Ty,
+        inner: Ty,
+        negated: bool,
+        span: Span,
+    ) -> Expr {
+        let b = match self.coerce(b, inner) {
+            Ok(b) => b,
+            Err(b) => {
+                let (at, bt) = (self.ty(a.ty), self.ty(b.ty));
+                self.error(format!("Cannot compare {at} and {bt}"), span);
+                return self.error_expr(span);
+            }
+        };
+        if !self.cx.operator_applies(&Token::Eq, inner) {
+            let shown = self.ty(inner);
+            self.error(format!("Operator '==' cannot be applied to {shown}"), span);
+            return self.error_expr(span);
+        }
+        let def = self.cx.prelude_def("__zeru_optional_eq_value");
+        let Some(id) = self.call_instance(def, vec![inner], span) else {
+            return self.error_expr(span);
+        };
+        let a = self.address(Place::Temp(Box::new(a)), ty, false, span);
+        let b = self.address(Place::Temp(Box::new(b)), inner, false, span);
         let equal = self.mk(ExprKind::Call(id, vec![a, b]), Types::BOOL, span);
         not_if(negated, equal)
     }

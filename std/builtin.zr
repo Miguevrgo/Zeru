@@ -983,6 +983,14 @@ fn __zeru_optional_eq<T>(a: &T?, b: &T?) bool {
     };
 }
 
+// `a == b` on a T? and a T: `a` holds a value equal to `b`.
+fn __zeru_optional_eq_value<T>(a: &T?, b: &T) bool {
+    return match a {
+        Some(x) => x == *b,
+        None => false,
+    };
+}
+
 // `s.is_empty()`: whether `s` has no bytes.
 fn __zeru_str_is_empty(s: str) bool {
     return s.is_empty();
