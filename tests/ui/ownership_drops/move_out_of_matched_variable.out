@@ -1,13 +1,23 @@
 status: compile error
 -- stderr
-Error: Cannot move 'text', which is borrowed
-   ╭─[ tests/ui/ownership_drops/move_out_of_matched_variable.zr:4:23 ]
+Error: Cannot move 'x', which is borrowed
+   ╭─[ tests/ui/ownership_drops/move_out_of_matched_variable.zr:7:36 ]
    │
- 4 │         Some(text) => text,
-   │                       ──┬─
-   │                         ╰─── a match on a variable only lends its parts; to take them, match a value made for the match, as a call's result
+ 7 │         (Some(x), Some(_)) => take(x),
+   │                                    ┬
+   │                                    ╰── a match only lends the parts of a variable or of what a reference points at; to take them, match a value made for the match, as a call's result
    │
    │ Help: move a copy of it instead
-   │           Some(text) => text.copy(),
+   │           (Some(x), Some(_)) => take(x.copy()),
 ───╯
+Error: Cannot move 'text', which is borrowed
+    ╭─[ tests/ui/ownership_drops/move_out_of_matched_variable.zr:15:23 ]
+    │
+ 15 │         Some(text) => text,
+    │                       ──┬─
+    │                         ╰─── a match only lends the parts of a variable or of what a reference points at; to take them, match a value made for the match, as a call's result
+    │
+    │ Help: move a copy of it instead
+    │           Some(text) => text.copy(),
+────╯
 [-] Error: aborting due to previous error

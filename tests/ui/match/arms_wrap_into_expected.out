@@ -1,3 +1,4 @@
 status: exit 0
 -- stdout
+ab ab
 2 true 10 4

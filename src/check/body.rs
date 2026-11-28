@@ -495,7 +495,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 let message = format!("Cannot move '{name}', which is borrowed");
                 let why = match self.fixed[local.0 as usize] {
                     Some(Fixed::Binding) => {
-                        "a match on a variable only lends its parts; to take them, match a value made for the match, as a call's result"
+                        "a match only lends the parts of a variable or of what a reference points at; to take them, match a value made for the match, as a call's result"
                     }
                     Some(Fixed::Element(_)) => "each element stays in the list the loop walks",
                     _ => "it only views a value owned elsewhere, which keeps it",

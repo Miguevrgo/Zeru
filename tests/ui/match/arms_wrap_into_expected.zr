@@ -11,6 +11,12 @@ fn check(x: i64) i64! {
     };
 }
 fn main() {
+    const owned = String.from("ab");
+    const name: str = match owned.len() {
+        2 => owned,
+        default => "",
+    };
+    println("{} {}", name, owned);
     println(
         "{} {} {} {}",
         half(4).unwrap(),

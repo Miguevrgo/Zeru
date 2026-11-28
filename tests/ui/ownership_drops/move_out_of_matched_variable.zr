@@ -1,3 +1,14 @@
+fn take(s: String) usize {
+    return s.len();
+}
+
+fn both(a: &String?, b: &String?) usize {
+    return match (a, b) {
+        (Some(x), Some(_)) => take(x),
+        default => 0,
+    };
+}
+
 fn main() {
     var read: String? = String.from("go");
     var line = match read {

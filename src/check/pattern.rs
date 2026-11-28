@@ -86,6 +86,19 @@ impl FnCx<'_, '_> {
         let mut mismatched = false;
         let mut checked: Vec<Option<Arm>> = arms.iter().map(|_| None).collect();
         let temporary = matches!(scrutinee, Place::Temp(_));
+        let parts = match self.cx.types.kind(subject) {
+            TyKind::Tuple(parts) => parts.clone(),
+            _ => Vec::new(),
+        };
+        let through_reference = |fx: &Self, reaches: &[Reach]| {
+            reaches.iter().any(|reach| {
+                !matches!(reach.payload, Payload::Whole)
+                    && reach
+                        .slot
+                        .and_then(|slot| parts.get(slot as usize))
+                        .is_some_and(|&part| fx.cx.types.referent(part).is_some())
+            })
+        };
         let mut shapes: Vec<_> = patterns.into_iter().map(Some).collect();
         let mut order: Vec<usize> = (0..arms.len()).collect();
         order.sort_by_key(|&at| branch_order(&arms[at].body));
@@ -99,9 +112,10 @@ impl FnCx<'_, '_> {
                 .binds
                 .into_iter()
                 .map(|(name, ty, payloads)| {
+                    let take = take && !through_reference(self, &payloads);
                     let local = self.declare(&name, ty, false, !take, pattern.span);
                     self.fix(local, Fixed::Binding);
-                    (local, payloads)
+                    (local, payloads, take)
                 })
                 .collect();
             let guard = arm
@@ -123,8 +137,8 @@ impl FnCx<'_, '_> {
             }
             let wanted = arm_ty.or(expected);
             let mut result = self.expr(body, wanted);
-            for (binding, _) in &bindings {
-                self.settle_binding(*binding, &scrutinee, take);
+            for &(binding, _, take) in &bindings {
+                self.settle_binding(binding, &scrutinee, take);
             }
             let leaves = self.diverges;
             all_leave &= leaves;
@@ -137,6 +151,9 @@ impl FnCx<'_, '_> {
                     arm_ty = Some(Types::VOID);
                 }
                 None => {
+                    if let Some(want) = expected.filter(|&want| want != result.ty) {
+                        result = self.coerce(result, want).unwrap_or_else(|result| result);
+                    }
                     arm_ty = Some(result.ty);
                     first_block =
                         matches!(body.kind, ExpressionKind::Block(_)).then_some(body.span);
@@ -174,7 +191,10 @@ impl FnCx<'_, '_> {
             self.consume(&mut result);
             checked[at] = Some(Arm {
                 tags: shape.tags,
-                bindings,
+                bindings: bindings
+                    .into_iter()
+                    .map(|(binding, payloads, _)| (binding, payloads))
+                    .collect(),
                 guard,
                 body: result,
                 span: pattern.span,
