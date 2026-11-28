@@ -34,4 +34,11 @@ Error: 'either' takes 'a' and 'b' as one type T, but 'a' is i32 and 'b' is str
     │                              │
     │                              ╰─── this makes T str
 ────╯
+Error: Literal 3 is not String
+    ╭─[ tests/ui/generics/literal_checked_after_inference.zr:19:22 ]
+    │
+ 19 │     names.push(id(id(3)));
+    │                      ┬
+    │                      ╰── Literal 3 is not String
+────╯
 [-] Error: aborting due to previous error

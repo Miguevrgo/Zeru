@@ -15,4 +15,6 @@ fn main() {
     println("{}", pair(id(2.5), big));
     println("{}", pair(id(-3), big));
     println("{}", either(1, "x"));
+    var names: Vec<String> = Vec.new();
+    names.push(id(id(3)));
 }

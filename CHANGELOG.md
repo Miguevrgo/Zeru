@@ -60,6 +60,7 @@
 - `parse_int`, `parse_float`: `parse()` reads every number type.
 
 ### Fixed
+- An integer literal passed through nested generic calls into a non-number type reached LLVM.
 - f32 literals could round to the wrong f32.
 - The `&var` fix for a `for` over `zip` edited the wrong place.
 - Boolean `if` simplifications preserve operator precedence.

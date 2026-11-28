@@ -284,16 +284,19 @@ impl FnCx<'_, '_> {
         if self.cx.types.contains_var(expr.ty) {
             let ty = self.resolve(expr.ty);
             match expr.kind {
-                ExprKind::Int(value) => {
+                ExprKind::Int(value)
+                    if self.cx.types.as_int(ty).is_some() || self.cx.types.is_float(ty) =>
+                {
                     let magnitude = value.unsigned_abs() as u64;
                     *expr = self.int_literal(magnitude, value < 0, Some(ty), expr.span);
                 }
                 ExprKind::Float(value) if self.cx.types.is_float(ty) => {
                     *expr = self.float_literal(value, Some(ty), expr.span);
                 }
-                ExprKind::Float(value) => {
-                    let shown = self.cx.types.show(ty);
-                    self.error(format!("Literal {value} is not {shown}"), expr.span);
+                ExprKind::Int(_) | ExprKind::Float(_) => {
+                    let (written, shown) =
+                        (self.cx.sources.text(expr.span), self.cx.types.show(ty));
+                    self.error(format!("Literal {written} is not {shown}"), expr.span);
                     expr.ty = Types::ERROR;
                     return false;
                 }
