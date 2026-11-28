@@ -1368,7 +1368,7 @@ impl<'a> Cx<'a> {
     /// An access reached through a reference a call derived from a `&`
     /// changes nothing, since nothing is written through a `&`, and one to a
     /// value nothing that a pointer inside it points at, unless the value can
-    /// hold that.
+    /// hold that; one to a reference never what it points at.
     fn invalidates(&self, accessed: &Path, loan: &Path, rule: Rule) -> bool {
         let shared = accessed
             .anchor
@@ -1397,6 +1397,11 @@ impl<'a> Cx<'a> {
         };
         if prefix(q, l) {
             let rest = &l[q.len()..];
+            if rest.first() == Some(&Step::Deref)
+                && self.program.types.referent(accessed.ty).is_some()
+            {
+                return false;
+            }
             if rest.contains(&Step::Deref)
                 && !deep
                 && !self

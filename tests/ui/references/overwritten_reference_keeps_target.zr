@@ -1,0 +1,31 @@
+enum Doc {
+    Text(String),
+    Seq(Vec<Doc>),
+}
+
+fn count(roots: &Vec<&Doc>) usize {
+    var todo: Vec<&Doc> = Vec.new();
+    var total: usize = 0;
+    for i in 0..roots.len() {
+        todo.push(roots[i]);
+        while !todo.is_empty() {
+            const doc = todo.pop().unwrap();
+            match doc {
+                Doc::Seq(children) => {
+                    for at in 0..children.len() {
+                        todo.push(&children[at]);
+                    }
+                }
+                Doc::Text(text) => total += text.len(),
+            }
+        }
+    }
+    return total;
+}
+
+fn main() {
+    const tree = Doc::Seq(Vec[Doc::Text(String.from("ab")), Doc::Seq(Vec[Doc::Text(String.from("c"))])]);
+    const leaf = Doc::Text(String.from("xyz"));
+    const roots = Vec[&tree, &leaf];
+    println("{}", count(&roots));
+}
