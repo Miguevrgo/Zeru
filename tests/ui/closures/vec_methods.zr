@@ -43,4 +43,12 @@ fn main() {
     const text = "a-b-c";
     println("{} {}", text.filter(fn(c) c != '-'), text.map(fn(c) c == '-'));
     println("{} {}", text.any(fn(c) c == 'b'), text.all(fn(c) c != ' '));
+
+    const words = Vec[String.from("long"), String.from("no")];
+    var refs: Vec<&String> = Vec.new();
+    for word in words {
+        refs.push(&word);
+    }
+    const short = refs.filter(fn(w) w.len() < 3);
+    println("{} {}", short.len(), short[0]);
 }

@@ -451,6 +451,11 @@ impl<'c, 'a> FnCx<'c, 'a> {
         self.locals[id.0 as usize].view
     }
 
+    /// Whether local `id` is an element a `for` walks, or a view of one.
+    pub(super) fn is_element(&self, id: LocalId) -> bool {
+        self.is_view(id) || matches!(self.fixed[id.0 as usize], Some(Fixed::Element(_)))
+    }
+
     pub(super) fn local_ty(&mut self, id: LocalId) -> Ty {
         self.resolve(self.locals[id.0 as usize].ty)
     }

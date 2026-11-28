@@ -60,6 +60,9 @@
 - `parse_int`, `parse_float`: `parse()` reads every number type.
 
 ### Fixed
+- `filter` on a `Vec<&T>` copied what the references point at.
+- A closure's return type lost to the type a generic call's result goes into.
+- `zeru fmt -` into a closed pipe was an internal compiler error.
 - `f<4>()` reported chained comparisons instead of a number given as a type argument.
 - A reference into a computed constant copied the whole constant while compiling.
 - `==` on a struct or tuple did not say which field cannot be compared.

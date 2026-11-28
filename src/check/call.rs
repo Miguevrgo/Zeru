@@ -425,8 +425,14 @@ impl FnCx<'_, '_> {
             }
             return self.copy_referent(place, reference, inner, span);
         }
-        let through = self.cx.types.referent(ty).is_some();
-        let (place, ty) = self.through_ref(place, ty, object.span);
+        let element = name == "copy"
+            && self.in_instance
+            && matches!(place, Place::Local(local) if self.is_element(local));
+        let through = !element && self.cx.types.referent(ty).is_some();
+        let (place, ty) = match element {
+            true => (place, ty),
+            false => self.through_ref(place, ty, object.span),
+        };
         if name == "copy" && args.is_empty() {
             if self.copies_drop(ty, span) {
                 return self.error_expr(span);
@@ -1238,6 +1244,18 @@ impl FnCx<'_, '_> {
             if self.cx.errors.len() == errors {
                 given.push(at);
             }
+        }
+        let (ready, closures): (Vec<usize>, Vec<usize>) = closures.into_iter().partition(|&at| {
+            let callable = callable(at).expect("partitioned above");
+            callable.params.iter().all(|&param| {
+                let param = self.cx.types.subst(param, &generics);
+                let param = self.resolve(param);
+                !self.cx.types.contains_var(param)
+            })
+        });
+        for at in ready {
+            let callable = callable(at).expect("partitioned above").clone();
+            checked[at] = Some(self.callable_argument(&args[at], &callable, &generics, def));
         }
         if let Some(expected) = expected {
             let none = late

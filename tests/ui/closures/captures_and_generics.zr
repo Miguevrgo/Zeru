@@ -38,6 +38,17 @@ fn apply_to<A, B>(a: A, f: fn(A) B) B {
     return f(a);
 }
 
+fn half(x: i32) i32? {
+    if x % 2 == 0 {
+        return x / 2;
+    }
+    return None;
+}
+
+fn halved(x: i32) i32? {
+    return apply_to(x, fn(v) half(v));
+}
+
 fn sum_with<T: Num>(v: &Vec<T>, start: T) T {
     var total = start;
     const add = fn(x: T) {
@@ -87,4 +98,5 @@ fn main() {
     const shelf: Shelf<String> = Shelf { items: Vec[String.from("ab"), String.from("c")] };
     println("{}", shelf.count_if(fn(s) s.len() == 2));
     println("{}", apply_to(3, fn(x) x * 2));
+    println("{} {}", halved(4).unwrap(), halved(3).is_none());
 }
