@@ -95,6 +95,53 @@ pub struct Block {
     pub stmts: Vec<Stmt>,
 }
 
+impl Block {
+    /// Call `f` on each expression its statements hold, those of the blocks
+    /// inside them included.
+    pub fn for_each_expr(&mut self, f: &mut impl FnMut(&mut Expr)) {
+        for stmt in &mut self.stmts {
+            match &mut stmt.kind {
+                StmtKind::Let(_, value) | StmtKind::Expr(value) | StmtKind::Return(Some(value)) => {
+                    f(value)
+                }
+                StmtKind::Return(None) | StmtKind::Break | StmtKind::Continue => {}
+                StmtKind::If {
+                    cond,
+                    then,
+                    otherwise,
+                } => {
+                    f(cond);
+                    then.for_each_expr(f);
+                    if let Some(otherwise) = otherwise {
+                        otherwise.for_each_expr(f);
+                    }
+                }
+                StmtKind::While { cond, body } => {
+                    f(cond);
+                    body.for_each_expr(f);
+                }
+                StmtKind::ForRange {
+                    start, end, body, ..
+                } => {
+                    f(start);
+                    f(end);
+                    body.for_each_expr(f);
+                }
+                StmtKind::ForEach { walks, body, .. } => {
+                    for walk in walks {
+                        walk.seq.for_each_expr(f);
+                        if let Some(unpack) = &mut walk.unpack {
+                            unpack.for_each_expr(f);
+                        }
+                    }
+                    body.for_each_expr(f);
+                }
+                StmtKind::Block(block) => block.for_each_expr(f),
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Stmt {
     pub kind: StmtKind,

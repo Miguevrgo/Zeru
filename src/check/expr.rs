@@ -131,6 +131,7 @@ impl FnCx<'_, '_> {
         let expected = expected.map(|ty| self.resolve(ty));
         let errors = self.cx.errors.len();
         let expr = self.expr_inner(e, expected);
+        let expr = self.known(expr);
         let named = matches!(e.kind, ExpressionKind::Identifier(_));
         if self.cx.errors.len() == errors && !named {
             self.check_constant(&expr);
@@ -373,6 +374,7 @@ impl FnCx<'_, '_> {
         if let Some(var) = self.literal_var(expected, Types::F64) {
             return self.mk(ExprKind::Float(value), var, span);
         }
+        let expected = expected.map(|ty| self.resolve(ty));
         match expected.map(|t| self.cx.types.kind(t)) {
             Some(TyKind::F32) => {
                 let text = self.cx.sources.text(span).replace('_', "");
@@ -407,6 +409,7 @@ impl FnCx<'_, '_> {
         if let Some(var) = self.literal_var(expected, Types::I32) {
             return self.mk(ExprKind::Int(signed), var, span);
         }
+        let expected = expected.map(|ty| self.resolve(ty));
         if let Some(ty) = expected.filter(|&t| self.cx.types.is_float(t)) {
             let exact = match self.cx.types.kind(ty) {
                 TyKind::F32 => (value as f32) as u128 == u128::from(value),

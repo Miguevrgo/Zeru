@@ -1,24 +1,28 @@
 //! Inference of a generic call's type arguments: each unknown
 //! one is an inference variable, bound by unifying the types it meets, and
 //! once the outermost call is checked every variable is written back into
-//! the typed IR or reported.
+//! the typed IR or reported. The type arguments of `var x = T.new()` are
+//! variables too, which live until the end of the function.
 
+use crate::ast::{Expression, ExpressionKind};
 use crate::errors::Span;
-use crate::items::DefId;
-use crate::tir::{Expr, ExprKind, FnId};
+use crate::items::{DefId, ItemKind};
+use crate::tir::{Block, Expr, ExprKind, FnId};
 use crate::ty::{Ty, TyKind, Types};
 
 use super::body::FnCx;
 
 /// An inference variable: what it stands for once known, the type a number
 /// written for it takes if nothing else decides, and the type parameter and
-/// the call it was made for.
+/// the call it was made for. A `local` one is a type argument of a variable
+/// declared as `var x = T.new()`, which the rest of the function decides.
 pub(super) struct Var {
     value: Option<Ty>,
     literal: Option<Ty>,
     param: String,
     call: String,
     span: Span,
+    local: bool,
 }
 
 /// A call whose instance waits on variables an enclosing call binds. Until
@@ -38,8 +42,55 @@ impl FnCx<'_, '_> {
             param: param.to_string(),
             call: call.to_string(),
             span,
+            local: false,
         });
         self.cx.types.intern(TyKind::Infer(var))
+    }
+
+    /// For `var x = T.new()` with no type written: `T` with a local variable
+    /// for each of its type arguments, so the uses of `x` that follow decide
+    /// them. `Vec` and generic structs only, through `new` or `with_capacity`.
+    pub(super) fn open_type(&mut self, value: &Expression) -> Option<Ty> {
+        let ExpressionKind::Call {
+            function,
+            type_args,
+            ..
+        } = &value.kind
+        else {
+            return None;
+        };
+        let ExpressionKind::Get { object, name } = &function.kind else {
+            return None;
+        };
+        let ExpressionKind::Identifier(type_name) = &object.kind else {
+            return None;
+        };
+        if !type_args.is_empty()
+            || !matches!(name.as_str(), "new" | "with_capacity")
+            || self.local(type_name).is_some()
+        {
+            return None;
+        }
+        let open = |this: &mut Self, param: &str| {
+            let ty = this.new_var(param, type_name, value.span);
+            this.vars.last_mut().expect("just made").local = true;
+            ty
+        };
+        if type_name == "Vec" {
+            let elem = open(self, "T");
+            return Some(self.cx.types.intern(TyKind::Vec(elem)));
+        }
+        let def = self.cx.items.lookup_type(self.scope.module, type_name)?;
+        let item = self.cx.items.item(def);
+        let params: Vec<String> = super::generics_of(item.decl)
+            .iter()
+            .map(|param| param.name.clone())
+            .collect();
+        if item.kind != ItemKind::Struct || params.is_empty() {
+            return None;
+        }
+        let args = params.iter().map(|param| open(self, param)).collect();
+        Some(self.cx.types.intern(TyKind::Adt(def, args)))
     }
 
     /// `ty` with every variable bound so far replaced by what it stands for.
@@ -105,10 +156,14 @@ impl FnCx<'_, '_> {
     /// written) only if nothing else decides it.
     pub(super) fn literal_var(&mut self, expected: Option<Ty>, default: Ty) -> Option<Ty> {
         let ty = self.resolve(expected?);
-        let TyKind::Infer(var) = *self.cx.types.kind(ty) else {
+        let TyKind::Infer(at) = *self.cx.types.kind(ty) else {
             return None;
         };
-        let var = &mut self.vars[var as usize];
+        if self.vars[at as usize].local {
+            self.bind(at, default);
+            return None;
+        }
+        let var = &mut self.vars[at as usize];
         if var.literal != Some(Types::F64) {
             var.literal = Some(default);
         }
@@ -168,9 +223,10 @@ impl FnCx<'_, '_> {
     }
 
     /// Check what `check` gives with variables of its own, unless `expected`
-    /// holds an enclosing call's: then those are resolved with the enclosing
-    /// call's. The numbers written then decide what is left, floats first,
-    /// so a float anywhere among unified variables makes them all `f64`.
+    /// holds an enclosing call's (a local variable is none): then those are
+    /// resolved with the enclosing call's. The numbers written then decide
+    /// what is left, floats first, so a float anywhere among unified
+    /// variables makes them all `f64`.
     /// Each variable left unbound is reported.
     pub(super) fn inference_root(
         &mut self,
@@ -178,10 +234,13 @@ impl FnCx<'_, '_> {
         span: Span,
         check: impl FnOnce(&mut Self) -> Expr,
     ) -> Expr {
-        if expected.is_some_and(|ty| self.cx.types.contains_var(ty)) {
+        let vars = &self.vars;
+        let enclosing =
+            |kind: &TyKind| matches!(kind, TyKind::Infer(v) if !vars[*v as usize].local);
+        if expected.is_some_and(|ty| self.cx.types.has(ty, &enclosing)) {
             return check(self);
         }
-        let (vars, deferred, errors) = (self.vars.len(), self.deferred.len(), self.cx.errors.len());
+        let (vars, errors) = (self.vars.len(), self.cx.errors.len());
         let mut expr = check(self);
         if self.vars.len() == vars {
             return expr;
@@ -198,7 +257,8 @@ impl FnCx<'_, '_> {
             .filter(|&var| {
                 let ty = self.cx.types.intern(TyKind::Infer(var as u32));
                 let ty = self.resolve(ty);
-                self.cx.types.contains_var(ty)
+                let own = |kind: &TyKind| matches!(kind, TyKind::Infer(v) if *v as usize >= vars);
+                self.cx.types.has(ty, &own)
             })
             .collect();
         let resolved = open.is_empty() && self.write_back(&mut expr);
@@ -211,8 +271,6 @@ impl FnCx<'_, '_> {
                 self.cx.error(message, *span);
             }
         }
-        self.vars.truncate(vars);
-        self.deferred.truncate(deferred);
         if resolved {
             expr
         } else {
@@ -253,7 +311,87 @@ impl FnCx<'_, '_> {
                 None => resolved = false,
             }
         }
+        if let ExprKind::Block(block) = &mut expr.kind {
+            block.for_each_expr(&mut |child| resolved &= self.write_back(child));
+        }
         expr.for_each_child(&mut |child| resolved &= self.write_back(child));
         resolved
     }
+
+    /// `expr` with its type as far as known, unless that is still a local
+    /// variable: a value taken out of a `var x = T.new()` before anything
+    /// said what `x` holds, which is then reported, and the variable taken
+    /// as an error from there on.
+    pub(super) fn known(&mut self, mut expr: Expr) -> Expr {
+        expr.ty = self.resolve(expr.ty);
+        if !matches!(self.cx.types.kind(expr.ty), TyKind::Infer(_))
+            || !self.open(expr.ty, expr.span)
+        {
+            return expr;
+        }
+        self.error_expr(expr.span)
+    }
+
+    /// Whether `ty` still holds a local variable, which is then reported at
+    /// `span` and taken as an error from there on.
+    pub(super) fn open(&mut self, ty: Ty, span: Span) -> bool {
+        let ty = self.resolve(ty);
+        let Some(var) = (0..self.vars.len() as u32).find(|&var| {
+            self.vars[var as usize].local
+                && self.cx.types.has(ty, &|kind| *kind == TyKind::Infer(var))
+        }) else {
+            return false;
+        };
+        let call = self.vars[var as usize].call.clone();
+        self.bind(var, Types::ERROR);
+        self.error(
+            format!("Cannot tell what this is yet: nothing before it says what the {call} holds"),
+            span,
+        )
+        .help(name_it(&call, "add to it before this"));
+        true
+    }
+
+    /// At the end of a body, the types its `var x = T.new()` variables were
+    /// left with: each local variable no use decided is reported, unless an
+    /// earlier error may be why; with no error, all are written into the
+    /// body and its locals.
+    pub(super) fn settle_locals(&mut self, block: &mut Block) {
+        let quiet = self.cx.errors.len() > self.errors_before;
+        let mut reported = Vec::new();
+        for var in 0..self.vars.len() {
+            let ty = self.cx.types.intern(TyKind::Infer(var as u32));
+            let ty = self.resolve(ty);
+            let Var {
+                call, span, local, ..
+            } = &self.vars[var];
+            if !*local || !self.cx.types.contains_var(ty) || reported.contains(span) {
+                continue;
+            }
+            let (call, span) = (call.clone(), *span);
+            reported.push(span);
+            if !quiet {
+                self.error(format!("Cannot tell what this {call} holds"), span)
+                    .help(name_it(&call, "add to it later in this function"));
+            }
+        }
+        if quiet || !reported.is_empty() {
+            return;
+        }
+        block.for_each_expr(&mut |expr| {
+            self.write_back(expr);
+        });
+        for at in 0..self.locals.len() {
+            let ty = self.resolve(self.locals[at].ty);
+            self.locals[at].ty = ty;
+            self.cx.note_types_in(ty, self.declared[at]);
+        }
+    }
+}
+
+/// The help for a `T.new()` whose type arguments are still unknown: `first`,
+/// or name them.
+fn name_it(call: &str, first: &str) -> String {
+    let example = if call == "Vec" { "i32" } else { ".." };
+    format!("{first}, or name what it holds, as in {call}.new<{example}>()")
 }

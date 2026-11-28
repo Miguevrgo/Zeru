@@ -26,7 +26,7 @@ pub(super) struct FnCx<'c, 'a> {
     borrowed: Vec<bool>,
     read: Vec<bool>,
     changed: Vec<bool>,
-    declared: Vec<Span>,
+    pub(super) declared: Vec<Span>,
     names: Vec<(String, LocalId)>,
     marks: Vec<usize>,
     pub(super) diverges: bool,
@@ -41,6 +41,8 @@ pub(super) struct FnCx<'c, 'a> {
     pub(super) own_name: Option<String>,
     /// The expression statement being checked, whose value nothing uses.
     pub(super) statement: Span,
+    /// How many errors there were before this function.
+    pub(super) errors_before: usize,
 }
 
 /// A variable of the code around a closure, which its body may capture:
@@ -109,6 +111,7 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
     if let Some(error) = fx.end_body(&mut body_block, span, &what, at, also) {
         error.label("it can end after this");
     }
+    fx.settle_locals(&mut body_block);
     fx.warn_unread(params.len());
     fx.warn_unchanged(params.len());
     let drop = item.owner.is_some() && name.ends_with("::drop");
@@ -144,6 +147,7 @@ pub(super) fn check_function(cx: &mut Checker, def: DefId, args: &[Ty]) -> tir::
 
 impl<'c, 'a> FnCx<'c, 'a> {
     pub(super) fn new(cx: &'c mut Checker<'a>, scope: Scope, ret: Ty) -> Self {
+        let errors_before = cx.errors.len();
         Self {
             cx,
             scope,
@@ -168,6 +172,7 @@ impl<'c, 'a> FnCx<'c, 'a> {
             naming: None,
             own_name: None,
             statement: Span::default(),
+            errors_before,
         }
     }
 
@@ -370,8 +375,8 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// scrutinee. With `take`, the bindings take their values out of a
     /// temporary scrutinee, which is gone after the `match`.
     pub(super) fn settle_binding(&mut self, binding: LocalId, scrutinee: &Place, take: bool) {
-        let view = !take
-            && (self.borrowed[binding.0 as usize] || self.cx.owns_heap(self.local_ty(binding)));
+        let ty = self.local_ty(binding);
+        let view = !take && (self.borrowed[binding.0 as usize] || self.cx.owns_heap(ty));
         self.locals[binding.0 as usize].view = view;
         if view {
             self.note_borrow(scrutinee);
@@ -379,19 +384,19 @@ impl<'c, 'a> FnCx<'c, 'a> {
     }
 
     /// The variables a closure written here may capture, the nearest last.
-    pub(super) fn visible(&self) -> Vec<Outer> {
+    pub(super) fn visible(&mut self) -> Vec<Outer> {
         let mut visible = self.outer.clone();
-        visible.extend(
-            self.names
-                .iter()
-                .filter(|(name, _)| !name.is_empty())
-                .map(|(name, id)| Outer {
-                    name: name.clone(),
-                    ty: self.locals[id.0 as usize].ty,
-                    fixed: self.fixed[id.0 as usize],
-                    declared: self.declared[id.0 as usize],
-                }),
-        );
+        for (name, id) in self.names.clone() {
+            if name.is_empty() {
+                continue;
+            }
+            visible.push(Outer {
+                name,
+                ty: self.local_ty(id),
+                fixed: self.fixed[id.0 as usize],
+                declared: self.declared[id.0 as usize],
+            });
+        }
         visible
     }
 
@@ -402,6 +407,14 @@ impl<'c, 'a> FnCx<'c, 'a> {
             return Some((at as u32, self.captures[at].outer.ty));
         }
         let outer = self.outer.iter().rev().find(|o| o.name == name)?.clone();
+        if self.cx.types.contains_var(outer.ty) {
+            self.error(
+                format!("Cannot tell what '{name}' holds yet, and this closure uses it"),
+                outer.declared,
+            )
+            .help("add to it before the closure, or give the variable a type");
+            return Some((0, Types::ERROR));
+        }
         let ty = outer.ty;
         self.captures.push(Captured {
             outer,
@@ -438,8 +451,8 @@ impl<'c, 'a> FnCx<'c, 'a> {
         self.locals[id.0 as usize].view
     }
 
-    pub(super) fn local_ty(&self, id: LocalId) -> Ty {
-        self.locals[id.0 as usize].ty
+    pub(super) fn local_ty(&mut self, id: LocalId) -> Ty {
+        self.resolve(self.locals[id.0 as usize].ty)
     }
 
     fn local_name(&self, id: LocalId) -> &str {
@@ -458,7 +471,11 @@ impl<'c, 'a> FnCx<'c, 'a> {
     /// view or behind a pointer cannot be moved out at all, since what holds
     /// it would keep a second owner of it.
     pub(super) fn consume(&mut self, expr: &mut Expr) {
-        if !self.cx.owns_heap(expr.ty) {
+        let ty = self.resolve(expr.ty);
+        if !self.cx.owns_heap(ty) {
+            if matches!(&expr.kind, ExprKind::Read(place) if !matches!(place, Place::Temp(_))) {
+                self.open(ty, expr.span);
+            }
             return;
         }
         match &mut expr.kind {
@@ -935,10 +952,13 @@ impl<'c, 'a> FnCx<'c, 'a> {
                 type_annotation,
                 ..
             } => {
-                let expected = type_annotation.as_ref().map(|spec| {
-                    let scope = self.scope.clone();
-                    self.cx.resolve_type(spec, &scope, span)
-                });
+                let expected = match type_annotation {
+                    Some(spec) => {
+                        let scope = self.scope.clone();
+                        Some(self.cx.resolve_type(spec, &scope, span))
+                    }
+                    None => self.open_type(value),
+                };
                 if matches!(value.kind, ExpressionKind::Closure(_)) {
                     self.naming = Some(name.clone());
                 }

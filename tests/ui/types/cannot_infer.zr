@@ -1,3 +1,33 @@
-fn main() {
+import std.collections.binary_heap::{BinaryHeap};
+
+fn never_added() {
     var v = Vec.new();
+    var h = BinaryHeap.new();
+    println("{} {}", v.len(), h.len());
 }
+
+fn taken_before_added() {
+    var v = Vec.new();
+    const first = v.pop().unwrap();
+    v.push(1);
+}
+
+fn printed_before_added() {
+    var v = Vec.new();
+    println("{}", v);
+    v.push(1);
+}
+
+fn number_decides_at_once() {
+    var v = Vec.new();
+    v.push(1);
+    const small: u8 = v[0];
+}
+
+fn captured_before_added() {
+    var v = Vec.new();
+    const count = fn() v.len();
+    v.push(1);
+}
+
+fn main() {}

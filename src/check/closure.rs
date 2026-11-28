@@ -45,6 +45,7 @@ impl FnCx<'_, '_> {
                 (Some(spec), _) => self.cx.resolve_type(spec, &scope, span),
                 (None, Some(ty)) if self.cx.types.is_concrete(ty) => ty,
                 (None, Some(ty)) if let Some(ty) = self.settle_literal(ty) => ty,
+                (None, Some(ty)) if self.open(ty, span) => Types::ERROR,
                 (None, _) => {
                     self.error(format!("Cannot tell the type of '{name}' here"), span)
                         .help(format!("write it, as in {name}: i32"));
@@ -116,7 +117,9 @@ impl FnCx<'_, '_> {
             }
             ClosureBody::Expression(body) => inner.short_body(body, known),
         };
-        let ret = inner.ret;
+        let mut body = body;
+        inner.settle_locals(&mut body);
+        let ret = inner.resolve(inner.ret);
         inner.warn_unread(locals.len());
         inner.warn_unchanged(locals.len());
         let captures = std::mem::take(&mut inner.captures);
@@ -218,7 +221,7 @@ impl FnCx<'_, '_> {
     /// that holds a closure.
     pub(super) fn names_closure(&self, name: &str) -> bool {
         let ty = match self.local(name) {
-            Some(local) => self.local_ty(local),
+            Some(local) => self.locals[local.0 as usize].ty,
             None => match self.outer.iter().rev().find(|outer| outer.name == name) {
                 Some(outer) => outer.ty,
                 None => return false,

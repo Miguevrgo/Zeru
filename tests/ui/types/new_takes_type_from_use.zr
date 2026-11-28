@@ -1,0 +1,48 @@
+import std.collections.binary_heap::{BinaryHeap};
+import std.collections.hashmap::{HashMap};
+
+struct Pos { x: i32, y: i32 }
+
+fn total(v: &Vec<i64>) i64 {
+    var sum: i64 = 0;
+    for x in v {
+        sum += x;
+    }
+    return sum;
+}
+
+fn names() Vec<str> {
+    const v = Vec.with_capacity(2);
+    return v;
+}
+
+fn wrap<T>(x: T) Vec<T> {
+    var v = Vec.new();
+    v.push(x);
+    return v;
+}
+
+fn main() {
+    var heap = BinaryHeap.new();
+    heap.push((2, Pos { x: 1, y: 2 }));
+    heap.push((5, Pos { x: 3, y: 4 }));
+    const top = heap.pop().unwrap();
+    println("{} {}", top.0, top.1.x);
+
+    var seen = HashMap.new();
+    seen.insert(top.1.y, true);
+    println("{}", seen.len());
+
+    var wide = Vec.new();
+    println("{}", total(&wide));
+    wide.push(5000000000);
+    println("{}", total(&wide));
+
+    var small = Vec.new();
+    small.push(1);
+    const same: i32 = small[0];
+
+    var texts = Vec.new();
+    texts = names();
+    println("{} {} {}", same, texts.len(), wrap(String.from("owned"))[0]);
+}

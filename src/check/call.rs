@@ -1474,6 +1474,9 @@ impl FnCx<'_, '_> {
         {
             return self.unit_ok(ret, span);
         }
+        if expected.is_some_and(|ty| self.open(ty, span)) {
+            return self.error_expr(span);
+        }
         let message = match args {
             [] => "Ok() is the success of a ! function, which has no value to give",
             _ => "Write the value itself, not Ok(..): it becomes a T! wherever one is wanted",
@@ -2106,7 +2109,7 @@ impl FnCx<'_, '_> {
                 _ if value.ty == Types::STRING => self.view(value),
                 _ => value,
             };
-            if !self.printable(value.ty) {
+            if !self.open(value.ty, value.span) && !self.printable(value.ty) {
                 let shown = self.ty(value.ty);
                 self.error(
                     format!("Cannot {verb} {shown}: {name} takes numbers, bools, text, and lists, tuples, optionals and results of them", verb = name.trim_end_matches("ln").trim_start_matches('e')),

@@ -25,6 +25,7 @@
 - A private method meets no bound outside its own file.
 - Modules are keyed by file: import cycles through the main file and two modules with the same last name work.
 - Stack overflow panics with a message when checks are on.
+- `var x = Vec.new()` (or `T.new()`, `with_capacity` of a generic struct) takes its type from the first use that says it.
 
 ### Tooling
 - `zeru test` runs a `#test` block per file, each test alone; its asserts are checked in every build mode.

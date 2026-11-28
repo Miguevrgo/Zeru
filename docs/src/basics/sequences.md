@@ -47,7 +47,7 @@ import. Make an empty one with `Vec.new()`, write its values as
 `n` can be worked out as the program runs:
 
 ```zeru
-var names: Vec<str> = Vec.new();
+var names = Vec.new();
 names.push("ann");
 names.push("bob");
 const numbers = Vec[5, 3, 8];
@@ -55,6 +55,13 @@ const size: usize = 3;
 const seen = Vec[false; size * size];
 println("{} {} {}", names.len(), numbers[2], seen.len()); // 2 8 9
 ```
+
+An empty Vec takes what it holds from the type it goes into, from
+`Vec.new<str>()`, or, for a variable, from the first use that says it, as
+the first `push` above. A use that needs to know before that is an error,
+and a number decides at once: after `v.push(1)`, `v` holds `i32`. The same
+goes for `new` and `with_capacity` of any generic struct, as
+`BinaryHeap.new()`.
 
 Plain brackets are always an array: `[5, 3, 8]` has a fixed length and
 lives in place, `Vec[5, 3, 8]` grows on the heap. A value that owns memory,

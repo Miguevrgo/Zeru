@@ -1,12 +1,57 @@
 status: compile error
 -- stderr
 Error: Cannot tell what this Vec holds
-   ╭─[ tests/ui/types/cannot_infer.zr:2:13 ]
+   ╭─[ tests/ui/types/cannot_infer.zr:4:13 ]
    │
- 2 │     var v = Vec.new();
+ 4 │     var v = Vec.new();
    │             ────┬────
    │                 ╰────── Cannot tell what this Vec holds
    │
-   │ Help: name the element type, as in Vec.new<i32>()
+   │ Help: add to it later in this function, or name what it holds, as in Vec.new<i32>()
 ───╯
+Error: Cannot tell what this BinaryHeap holds
+   ╭─[ tests/ui/types/cannot_infer.zr:5:13 ]
+   │
+ 5 │     var h = BinaryHeap.new();
+   │             ────────┬───────
+   │                     ╰───────── Cannot tell what this BinaryHeap holds
+   │
+   │ Help: add to it later in this function, or name what it holds, as in BinaryHeap.new<..>()
+───╯
+Error: Cannot tell what this is yet: nothing before it says what the Vec holds
+    ╭─[ tests/ui/types/cannot_infer.zr:11:19 ]
+    │
+ 11 │     const first = v.pop().unwrap();
+    │                   ────────┬───────
+    │                           ╰───────── Cannot tell what this is yet: nothing before it says what the Vec holds
+    │
+    │ Help: add to it before this, or name what it holds, as in Vec.new<i32>()
+────╯
+Error: Cannot tell what this is yet: nothing before it says what the Vec holds
+    ╭─[ tests/ui/types/cannot_infer.zr:17:19 ]
+    │
+ 17 │     println("{}", v);
+    │                   ┬
+    │                   ╰── Cannot tell what this is yet: nothing before it says what the Vec holds
+    │
+    │ Help: add to it before this, or name what it holds, as in Vec.new<i32>()
+────╯
+Error: 'small' is declared as u8, but its value is i32
+    ╭─[ tests/ui/types/cannot_infer.zr:24:23 ]
+    │
+ 24 │     const small: u8 = v[0];
+    │                       ──┬─
+    │                         ╰─── this is i32
+    │
+    │ Help: convert it with as, which keeps only the low bits, or give what it goes into a wider type
+────╯
+Error: Cannot tell what 'v' holds yet, and this closure uses it
+    ╭─[ tests/ui/types/cannot_infer.zr:28:5 ]
+    │
+ 28 │     var v = Vec.new();
+    │     ─────────┬────────
+    │              ╰────────── Cannot tell what 'v' holds yet, and this closure uses it
+    │
+    │ Help: add to it before the closure, or give the variable a type
+────╯
 [-] Error: aborting due to previous error
