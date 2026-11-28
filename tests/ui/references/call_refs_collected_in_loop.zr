@@ -1,6 +1,11 @@
 fn at(v: &Vec<String>, i: usize) &String {
     return &v[i];
 }
+fn collect(into: &var Vec<&String>, v: &Vec<String>) {
+    for i in 0..v.len() {
+        into.push(&v[i]);
+    }
+}
 fn total(v: &Vec<i64>) i64 {
     return v.sum();
 }
@@ -20,6 +25,9 @@ fn main() {
         refs.push(at(&env, i));
     }
     println("{} {}", *refs[0], *refs[1]);
+    var more: Vec<&String> = Vec.new();
+    collect(&var more, &env);
+    println("{} {}", more.len(), *more[1]);
     var nums: Vec<i64> = Vec[1, 2];
     println("{}", walk(&var nums));
 }

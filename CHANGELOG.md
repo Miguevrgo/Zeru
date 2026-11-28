@@ -60,6 +60,7 @@
 - `parse_int`, `parse_float`: `parse()` reads every number type.
 
 ### Fixed
+- Pushing references into a `&var Vec` parameter in a loop was rejected as changing what they point into.
 - `filter` on a `Vec<&T>` copied what the references point at.
 - A closure's return type lost to the type a generic call's result goes into.
 - `zeru fmt -` into a closed pipe was an internal compiler error.

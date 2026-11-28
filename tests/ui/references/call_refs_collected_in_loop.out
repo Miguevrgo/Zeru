@@ -1,4 +1,5 @@
 status: exit 0
 -- stdout
 a b
+2 b
 9

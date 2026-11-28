@@ -263,7 +263,8 @@ fn changes_through(body: &Body, program: &Program, field: u32) -> bool {
 /// follows; `start` the loans the parameters hold as the function starts;
 /// `derived` the loan a call's result holds for each loan of its arguments;
 /// `behind` the loans a local holds behind the pointer it is, and where,
-/// stored there for its caller to see, and so held until it ends; `linked`
+/// stored there for its caller to see, and so held until it ends, which a
+/// copy of the pointer shares; `linked`
 /// the locals that hold one of them behind the same pointer it points
 /// through; `freed` those behind which a part may be freed or moved;
 /// `readers` the loan that only reads made for each that writes;
@@ -904,6 +905,18 @@ impl<'a> Cx<'a> {
                         let sealed = self.carried_operand(value, facts);
                         self.sealed.extend(sealed.into_iter().map(|(loan, _)| loan));
                     }
+                }
+                if let (Some(copy), Rvalue::Use(Operand::Copy(source) | Operand::Move(source))) =
+                    (dest.as_local(), rvalue)
+                    && let Some(source) = source.as_local()
+                {
+                    let behind: Vec<((Local, usize), Path)> = self
+                        .behind
+                        .iter()
+                        .filter(|((root, _), _)| *root == source)
+                        .map(|(&(_, loan), path)| ((copy, loan), path.clone()))
+                        .collect();
+                    self.behind.extend(behind);
                 }
                 let carried = self.carried_rvalue(rvalue, (b, at), facts);
                 self.store(facts, dest, carried)
