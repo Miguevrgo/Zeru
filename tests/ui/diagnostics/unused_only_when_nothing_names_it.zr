@@ -1,0 +1,20 @@
+struct Tree<T> {
+    items: Vec<T>,
+
+    pub fn check(self) usize {
+        return self.count(0);
+    }
+
+    fn count(self, at: usize) usize {
+        return self.items.len() + at;
+    }
+}
+
+fn forgotten() i32 {
+    return 1;
+}
+
+fn main() {
+    const t: Tree<i32> = Tree { items: Vec.new() };
+    println("{}", t.items.len());
+}

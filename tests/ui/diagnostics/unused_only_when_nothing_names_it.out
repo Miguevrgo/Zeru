@@ -1,0 +1,14 @@
+status: exit 0
+-- warnings
+Warning: Function 'forgotten' is never used
+    ╭─[ tests/ui/diagnostics/unused_only_when_nothing_names_it.zr:13:4 ]
+    │
+ 13 │ fn forgotten() i32 {
+    │    ────┬────
+    │        ╰────── Function 'forgotten' is never used
+    │
+    │ Help: remove it, or name it '_forgotten' to keep it unused
+    │           fn _forgotten() i32 {
+────╯
+-- stdout
+0

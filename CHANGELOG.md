@@ -60,6 +60,7 @@
 - `parse_int`, `parse_float`: `parse()` reads every number type.
 
 ### Fixed
+- A function called only from a generic function no program instantiates was reported as never used.
 - A `match` giving a value ignored a declared type its first arm converts to, as `str` from a `String`.
 - Moving a binding reached through a reference in a tuple `match` blamed the wrong value.
 - `x == v` with `x: T?` freed `v` when `T` owns memory.

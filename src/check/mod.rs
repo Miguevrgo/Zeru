@@ -190,8 +190,17 @@ impl<'a> Checker<'a> {
     }
 
     /// Warn about each private function and constant nothing names. A name
-    /// that starts with `_` is left alone.
+    /// that starts with `_` is left alone, and so is one written in a
+    /// generic function never checked, since no call made an instance of it.
     fn warn_unused_items(&mut self) {
+        let unchecked: Vec<Span> = (0..self.items.items.len() as u32)
+            .map(DefId)
+            .filter(|&def| {
+                !self.generics_of_fn(def).is_empty()
+                    && !self.instances.keys().any(|(instance, _)| *instance == def)
+            })
+            .map(|def| self.items.item(def).decl.span)
+            .collect();
         for (at, item) in self.items.items.iter().enumerate() {
             let def = DefId(at as u32);
             let (StatementKind::Function { name, .. } | StatementKind::Var { name, .. }) =
@@ -205,6 +214,9 @@ impl<'a> Checker<'a> {
                 || self.is_main(def)
                 || name.starts_with(['_', '#', '!'])
                 || item.owner.is_some() && name == "drop"
+                || unchecked
+                    .iter()
+                    .any(|&body| body != item.decl.span && self.sources.word_in(body, name).is_some())
             {
                 continue;
             }
