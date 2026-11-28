@@ -5,7 +5,7 @@ Error: Operator '==' cannot be applied to Bag
     │
  14 │     println("{}", a == b);
     │                   ───┬──
-    │                      ╰──── Operator '==' cannot be applied to Bag
+    │                      ╰──── its field 'items' is Vec<i32>, which '==' does not apply to
 ────╯
 Error: 'HashMap' asks for K: Hash, which Spot does not satisfy
     ╭─[ tests/ui/structs/compare_needs_comparable_fields.zr:15:5 ]

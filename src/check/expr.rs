@@ -1370,10 +1370,17 @@ impl FnCx<'_, '_> {
         if !self.cx.operator_applies(operator, l_ty) {
             let shown = self.ty(l_ty);
             let sources = self.cx.sources;
+            let blocking = self.cx.blocking_part(operator, l_ty).map(|(name, part)| {
+                let part = self.cx.types.show(part);
+                format!("its {name} is {part}, which '{operator}' does not apply to")
+            });
             let error = self.error(
                 format!("Operator '{operator}' cannot be applied to {shown}"),
                 span,
             );
+            if let Some(blocking) = blocking {
+                error.label(blocking);
+            }
             if *operator == Token::Plus && (l_ty == Types::STR || l_ty == Types::STRING) {
                 let (a, b) = (sources.text(left.span), sources.text(right.span));
                 error
@@ -2201,6 +2208,26 @@ impl Checker<'_> {
 
     /// Whether `operator` means something for operands of type `ty`; the
     /// bounds `Eq`, `Ord` and `Num` ask for `==`, `<` and `+`.
+    /// The first field or part of `ty`, a struct or a tuple, that
+    /// `operator` does not apply to, named, and its type.
+    pub(super) fn blocking_part(&mut self, operator: &Token, ty: Ty) -> Option<(String, Ty)> {
+        let named: Vec<(String, Ty)> = match self.types.kind(ty).clone() {
+            TyKind::Tuple(parts) => parts
+                .into_iter()
+                .enumerate()
+                .map(|(at, part)| (format!("part {at}"), part))
+                .collect(),
+            _ => self
+                .fields_of(ty)
+                .into_iter()
+                .map(|(name, field)| (format!("field '{name}'"), field))
+                .collect(),
+        };
+        named
+            .into_iter()
+            .find(|&(_, part)| !self.operator_applies(operator, part))
+    }
+
     pub(super) fn operator_applies(&mut self, operator: &Token, ty: Ty) -> bool {
         if let Token::Eq | Token::NotEq | Token::Lt | Token::Gt | Token::Leq | Token::Geq = operator
             && let Some(parts) = self.parts_of(ty)

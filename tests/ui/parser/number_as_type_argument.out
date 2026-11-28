@@ -1,0 +1,12 @@
+status: compile error
+-- stderr
+Error: A type argument is a type, not a number
+   ╭─[ tests/ui/parser/number_as_type_argument.zr:6:24 ]
+   │
+ 6 │     println("{}", fill<4>(7));
+   │                        ┬
+   │                        ╰── A type argument is a type, not a number
+   │
+   │ Help: pass the number as an argument instead
+───╯
+[-] Error: aborting due to previous error

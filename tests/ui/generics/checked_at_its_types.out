@@ -5,7 +5,7 @@ Error: Operator '>' cannot be applied to P
     │
   5 │     if a > b {
     │        ──┬──
-    │          ╰──── Operator '>' cannot be applied to P
+    │          ╰──── its field 'x' is Vec<i32>, which '>' does not apply to
     │
  20 │     var r = bigger(p, q);
     │             ──────┬─────

@@ -810,6 +810,11 @@ impl Eval<'_, '_> {
 
     /// Where `place` is, its indices evaluated and checked.
     fn loc(&mut self, place: &Place) -> Run<Loc> {
+        if !matches!(place, Place::Temp(_)) && shape(place).is_some() {
+            let part = self.literal_part(place)?;
+            let held = self.expr(part)?;
+            return Ok(self.temp(held));
+        }
         Ok(match place {
             Place::Local(local) if self.is_view(*local) => {
                 match self.frames.last().unwrap().slots[local.0 as usize].clone() {

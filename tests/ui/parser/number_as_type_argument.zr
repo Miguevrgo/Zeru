@@ -1,0 +1,7 @@
+fn fill<T>(x: u64) T {
+    return x as T;
+}
+
+fn main() {
+    println("{}", fill<4>(7));
+}

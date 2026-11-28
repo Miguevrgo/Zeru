@@ -1378,6 +1378,20 @@ impl Parser {
                 token_precedence(self.peek()),
                 Precedence::Equals | Precedence::LessGreater
             );
+            if comparison
+                && *self.peek() == Token::Gt
+                && matches!(self.tokens.get(self.pos + 1), Some((Token::LParen, _)))
+                && let ExpressionKind::Infix {
+                    operator: Token::Lt,
+                    right,
+                    ..
+                } = &left.kind
+                && let ExpressionKind::Int(_) = right.kind
+            {
+                let error = self.error("A type argument is a type, not a number", right.span)?;
+                error.help("pass the number as an argument instead");
+                return None;
+            }
             if comparison && (compared || precedence == Precedence::Equals) {
                 let error = self.error("Comparison operators cannot be chained", self.span())?;
                 error.help("compare twice and join them, as in a < b && b < c");

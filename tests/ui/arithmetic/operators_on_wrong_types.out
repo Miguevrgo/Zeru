@@ -19,7 +19,7 @@ Error: Operator '==' cannot be applied to Point
    │
  9 │     var c = p == q;
    │             ───┬──
-   │                ╰──── Operator '==' cannot be applied to Point
+   │                ╰──── its field 'x' is Vec<i32>, which '==' does not apply to
 ───╯
 Error: Operator '<' cannot be applied to bool
     ╭─[ tests/ui/arithmetic/operators_on_wrong_types.zr:11:13 ]
