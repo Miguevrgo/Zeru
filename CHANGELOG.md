@@ -60,6 +60,7 @@
 - `parse_int`, `parse_float`: `parse()` reads every number type.
 
 ### Fixed
+- A call was taken to keep every reference it was given behind each `&var` argument, even when it keeps none.
 - A work stack of references read from a parameter was rejected when a `match` reused its temporary.
 - Pushing references into a `&var Vec` parameter in a loop was rejected as changing what they point into.
 - `filter` on a `Vec<&T>` copied what the references point at.

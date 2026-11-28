@@ -110,11 +110,13 @@ const EXACT: usize = 16;
 
 /// What a call may do to what one of its arguments reaches: `links`, store
 /// in it a reference into what the same pointer points at; `frees`, free or
-/// move a part of it.
+/// move a part of it; `from`, store behind it references other arguments
+/// carry, bit `j` for argument `j`.
 #[derive(Clone, Copy, PartialEq)]
 pub(super) struct Effect {
     links: bool,
     frees: bool,
+    from: u64,
 }
 
 /// `methods` tells, for each function, whether its first parameter is
@@ -151,14 +153,18 @@ pub(super) fn effects(
             program.may_point_into(ty, ty, false)
         })
     };
+    let flows = flows(bodies, program);
     let mut effects: Vec<Vec<Effect>> = bodies
         .iter()
-        .map(|body| {
-            let effect = Effect {
-                links: false,
-                frees: !can(body),
-            };
-            vec![effect; body.arg_count]
+        .zip(&flows)
+        .map(|(body, from)| {
+            from.iter()
+                .map(|&from| Effect {
+                    links: false,
+                    frees: !can(body),
+                    from,
+                })
+                .collect()
         })
         .collect();
     let mut changed = true;
@@ -170,6 +176,7 @@ pub(super) fn effects(
                 .map(|arg| Effect {
                     links: cx.linked.contains(&Local(arg as u32)),
                     frees: cx.freed.contains(&Local(arg as u32)),
+                    from: flows[at][arg - 1],
                 })
                 .collect();
             changed |= found != effects[at];
@@ -177,6 +184,128 @@ pub(super) fn effects(
         }
     }
     effects
+}
+
+/// The bit of argument `arg` in a set of arguments; past 64 arguments, all.
+fn bit(arg: usize) -> u64 {
+    match arg < 64 {
+        true => 1 << arg,
+        false => u64::MAX,
+    }
+}
+
+/// For each function, for each argument, the arguments it may store
+/// references from behind it: anything made from argument `j`, stored
+/// through a pointer made from argument `i`, sets bit `j` for `i`. Which
+/// arguments each local may be made from is followed with no regard to
+/// order, so it may find more than happens, never less. A value that
+/// cannot hold a reference stores none.
+fn flows(bodies: &[Body], program: &Program) -> Vec<Vec<u64>> {
+    let mut flows: Vec<Vec<u64>> = bodies.iter().map(|body| vec![0; body.arg_count]).collect();
+    let mut changed = true;
+    while std::mem::take(&mut changed) {
+        for (at, body) in bodies.iter().enumerate() {
+            let found = flows_of(body, program, &flows);
+            changed |= found != flows[at];
+            flows[at] = found;
+        }
+    }
+    flows
+}
+
+/// The flows of `body`, given those of the functions it calls.
+fn flows_of(body: &Body, program: &Program, flows: &[Vec<u64>]) -> Vec<u64> {
+    let holds = |place: &Place| {
+        let ty = body.place_ty(program, place);
+        program.reaches(ty, Part::Ref, &mut Vec::new())
+    };
+    let mut made: Vec<u64> = (0..body.locals.len())
+        .map(|local| match (1..=body.arg_count).contains(&local) {
+            true => bit(local - 1),
+            false => 0,
+        })
+        .collect();
+    let mut from = vec![0; body.arg_count];
+    let mut changed = true;
+    while std::mem::take(&mut changed) {
+        let mut store = |made: &mut Vec<u64>, pointer: Option<u64>, target: Local, value: u64| {
+            let slot = match pointer {
+                Some(origins) => {
+                    for (arg, from) in from.iter_mut().enumerate() {
+                        if origins & bit(arg) != 0 && *from | value != *from {
+                            *from |= value;
+                            changed = true;
+                        }
+                    }
+                    return;
+                }
+                None => &mut made[target.0 as usize],
+            };
+            if *slot | value != *slot {
+                *slot |= value;
+                changed = true;
+            }
+        };
+        for (b, block) in body.blocks.iter().enumerate() {
+            let of = |made: &[u64], value: &Operand| match value {
+                Operand::Copy(place) | Operand::Move(place) => made[place.local.0 as usize],
+                Operand::Constant(_) => 0,
+            };
+            if let TerminatorKind::Call {
+                function,
+                args,
+                dest,
+                ..
+            } = &block.terminator.kind
+            {
+                let all = args.iter().fold(0, |all, arg| all | of(&made, arg));
+                for (a, arg) in args.iter().enumerate() {
+                    let given = flows[function.0 as usize]
+                        .get(a)
+                        .copied()
+                        .unwrap_or(u64::MAX)
+                        | bit(a);
+                    let value = args
+                        .iter()
+                        .enumerate()
+                        .filter(|&(k, _)| given & bit(k) != 0)
+                        .fold(0, |value, (_, other)| value | of(&made, other));
+                    let origins = of(&made, arg);
+                    store(&mut made, Some(origins), RETURN, value);
+                }
+                if let Some(dest) = dest.as_ref().filter(|dest| holds(dest)) {
+                    let pointer = dest
+                        .projection
+                        .contains(&Projection::Deref)
+                        .then(|| made[dest.local.0 as usize]);
+                    store(&mut made, pointer, dest.local, all);
+                }
+            }
+            for (at, statement) in block.statements.iter().enumerate() {
+                let accesses = body.accesses(b, at);
+                let value = accesses
+                    .iter()
+                    .filter(|(_, role)| matches!(role, Role::Read | Role::Move))
+                    .fold(0, |value, (place, _)| value | made[place.local.0 as usize]);
+                if let StatementKind::CopyBytes(to, ..) | StatementKind::SimdStore(to, _) =
+                    &statement.kind
+                {
+                    let origins = of(&made, to);
+                    store(&mut made, Some(origins), RETURN, value);
+                }
+                for (target, _) in accesses.iter().filter(|(place, role)| {
+                    matches!(role, Role::Write | Role::Realloc) && holds(place)
+                }) {
+                    let pointer = target
+                        .projection
+                        .contains(&Projection::Deref)
+                        .then(|| made[target.local.0 as usize]);
+                    store(&mut made, pointer, target.local, value);
+                }
+            }
+        }
+    }
+    from
 }
 
 /// For each closure, whether it may change, through each variable it
@@ -837,6 +966,7 @@ impl<'a> Cx<'a> {
             let method = self.methods[function.0 as usize];
             let mut returnable = Vec::new();
             let mut carried = Vec::new();
+            let mut sources: Vec<(usize, usize)> = Vec::new();
             let mut linked = Vec::new();
             for (at, arg) in args.iter().enumerate() {
                 let ty = self.body.operand_ty(self.program, arg);
@@ -862,19 +992,30 @@ impl<'a> Cx<'a> {
                     linked.extend(loans.iter().map(|&(loan, _)| loan));
                 }
                 returnable.extend(inside.unwrap_or_else(|| loans.clone()));
+                sources.extend(loans.iter().map(|&(loan, _)| (loan, at)));
                 carried.extend(loans.into_iter().map(|(loan, _)| (loan, true)));
             }
             let mut escaped = Vec::new();
-            let writable: Vec<usize> = args
+            let writable: Vec<(usize, usize)> = args
                 .iter()
-                .flat_map(|arg| self.writable(arg, facts))
+                .enumerate()
+                .flat_map(|(at, arg)| {
+                    self.writable(arg, facts)
+                        .into_iter()
+                        .map(move |loan| (loan, at))
+                })
                 .collect();
-            for loan in writable {
+            let effects = &self.effects[function.0 as usize];
+            for (loan, into) in writable {
+                let from = effects.get(into).map_or(u64::MAX, |effect| effect.from) | bit(into);
                 for path in self.loans[loan].paths.clone() {
                     let mut flowing: Vec<(usize, bool)> = carried
                         .iter()
                         .filter(|&&(other, _)| {
                             (other != loan || linked.contains(&loan))
+                                && sources
+                                    .iter()
+                                    .any(|&(l, arg)| l == other && from & bit(arg) != 0)
                                 && self.may_point_into(path.ty, other)
                         })
                         .copied()

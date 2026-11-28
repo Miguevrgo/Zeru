@@ -1,0 +1,29 @@
+struct Counter {
+    name: str,
+    total: usize,
+
+    fn add(var self, text: str) {
+        self.total += text.len();
+    }
+
+    fn add_owned(var self) {
+        const owned = String.from("abc");
+        self.add(owned);
+    }
+
+    fn each(var self, words: &Vec<String>, count: fn(&var Counter, str)) {
+        for word in words {
+            count(&var self, word);
+        }
+    }
+}
+
+fn main() {
+    var c = Counter { name: "c", total: 0 };
+    c.add_owned();
+    const words = Vec[String.from("ab"), String.from("c")];
+    c.each(&words, fn(counter, word) {
+        counter.total += word.len();
+    });
+    println("{} {}", c.name, c.total);
+}
